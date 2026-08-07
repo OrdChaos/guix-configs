@@ -1,0 +1,3 @@
+// niri 配置（阶段 7 填充）。
+// 修改流程：configctl home build → git commit → configctl home switch
+// 见 docs/system.md 第 27 章。
