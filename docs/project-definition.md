@@ -458,7 +458,16 @@ guix-configs
 │               └── development.scm
 │
 ├── tools/
-│   └── disk-install.scm
+│   ├── disk-install.scm
+│   └── test-vm.sh
+│
+├── tests/
+│   ├── test-model.scm
+│   ├── test-plan.scm
+│   ├── test-validate.scm
+│   ├── test-device.scm
+│   ├── test-modules-load.scm
+│   └── run-tests.scm
 │
 ├── files/
 │   ├── niri/
@@ -684,3 +693,5 @@ backup service
 27. 驱动通过 kernel、firmware、module 和 service 声明进入 system generation，不使用独立安装器。
 
 28. 打印机队列声明式创建，不持久化 CUPS 命令式状态。
+
+29. 自定义 record 使用 `(guix records)` 的 `define-record-type*`（具名字段、`default`、`inherit`），不使用裸 SRFI-9。

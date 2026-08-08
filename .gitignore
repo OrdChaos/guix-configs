@@ -1,0 +1,27 @@
+# ── 虚拟机产物 ──────────────────────────────────────────────
+# qcow2 测试盘、OVMF 变量固件、QEMU monitor socket（tools/test-vm.sh 生成）
+vms/
+
+# ── 日志 ───────────────────────────────────────────────────
+# 本地安装/调试时留存的 shell 记录，仅作临时排错参考
+*.log
+
+# ── Guix 构建产物 ──────────────────────────────────────────
+# guix build 默认在当前目录留下的结果符号链接
+result
+result-*
+
+# 在仓库根目录就地创建的 guix shell 环境 profile
+.guix-profile
+.guix-profile-*
+
+# ── Node 临时脚本 ──────────────────────────────────────────
+# 防止随手写的 node 草稿混进仓库；
+*.mjs
+
+# ── 机密明文 ───────────────────────────────────────────────
+# secrets/ 下只允许提交 age 加密后的文件（*.age）和占位 .gitkeep；
+# 真正的解密 identity（host.key）放在 /persist/system/keys/age/，
+# 见 docs/secrets.md。这里兜底拦截误放进来的明文私钥。
+secrets/**/*.key
+secrets/**/identity*

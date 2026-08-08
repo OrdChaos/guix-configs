@@ -25,6 +25,16 @@ guix time-machine \
   -- configctl install --host vm /dev/vda
 ```
 
+注意：LiveCD 的根是内存盘，`/gnu/store` 也在内存里。磁盘安装完成、目标挂载到 `/mnt` 之后、执行任何 time-machine 或 `system init` 之前，必须先执行：
+
+```bash
+cow-store /mnt
+```
+
+把 store 转移到目标磁盘上，否则下载和构建会写满内存盘（低内存 VM 尤其如此）。
+
+已验证的副作用：在 cow-store 环境下执行 `system init`，`/mnt/var/guix` 处于 bind 挂载的 busy 状态，init 无法将其替换为全新目录，导致系统 profile 注册（`/var/guix/profiles/system-N-link`）不落盘——首次启动后 `/etc/profile` 找不到系统 profile，PATH 残缺。因此**首次启动进入新系统后，应立即执行一次 `guix system reconfigure`**，让 profile 注册、bootcfg 生成和 bootloader 安装在正常环境下完整重做一遍。
+
 ## 30.3 安装阶段
 
 ```text

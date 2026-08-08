@@ -35,9 +35,24 @@ docs/                 设计文档
 # 进入开发环境
 guix time-machine -C channels.lock.scm -- shell -m manifests/development.scm
 
-# 构建 VM 系统配置（阶段 3 起可用）
-guix time-machine -C channels.lock.scm -- system build \
-  -L modules -e '(@ (guixcfg hosts vm) %os)'
+# 运行单元测试（代码依赖 (guix records)，须经锁定频道的 guix repl 运行）
+guix time-machine -C channels.lock.scm -- repl tests/run-tests.scm
+
+# 磁盘安装器：inspect / plan 是只读操作，可以随时跑
+guix time-machine -C channels.lock.scm -- repl tools/disk-install.scm -- inspect /dev/sda
+guix time-machine -C channels.lock.scm -- repl tools/disk-install.scm -- plan vm /dev/vda
+
+# apply 是破坏性操作，只在测试 VM 里运行（tools/test-vm.sh 启动 VM）:
+#   tools/test-vm.sh /path/to/guix-system-install-x86_64-linux.iso
+#   VM 内: mount -t 9p -o trans=virtio guix-configs /root/src
+#          cd /root/src && guix repl tools/disk-install.scm -- apply vm /dev/vda
+
+# 构建 VM 系统配置（host 模块文件末尾的裸 %os 让它同时是入口文件）
+guix time-machine -C channels.lock.scm -- system build -L modules modules/guixcfg/hosts/vm.scm
+
+# 安装（init 只接受“配置文件 + 目标”两个位置参数，不支持 -e）：
+#   GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
+#     guix time-machine -C channels.lock.scm -- system init -L modules modules/guixcfg/hosts/vm.scm /mnt
 ```
 
 ## 规则速记

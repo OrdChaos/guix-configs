@@ -19,6 +19,12 @@ modules/guixcfg/hosts/laptop.scm
 (guixcfg hosts laptop)
 ```
 
+Host 文件末尾带一个裸的 `%os` 表达式。`guix system` 加载文件时取最后一个顶层表达式的值，因此同一个文件既是模块又是 `guix system init/reconfigure` 的入口（daviwil 模式），不需要单独的入口文件：
+
+```bash
+guix system init -L modules modules/guixcfg/hosts/vm.scm /mnt
+```
+
 Host 负责：
 
 ```text

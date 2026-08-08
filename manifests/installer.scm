@@ -5,8 +5,8 @@
 
 (specifications->manifest
  (list "git"
-       "parted"
+       "gptfdisk"       ; sgdisk
        "cryptsetup"
        "btrfs-progs"
        "dosfstools"
-       "util-linux"))   ; lsblk、wipefs、udevadm 等设备工具
+       "util-linux"))   ; lsblk、findmnt、udevadm 等设备工具

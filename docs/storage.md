@@ -483,6 +483,10 @@ mapper name
 GUIX_CONFIG_FACTS=/persist/system/facts/host.scm
 ```
 
+在 `configctl` 可用之前，配置在构建期依次读取 `GUIX_CONFIG_FACTS` 环境变量和上述固定路径，文件不存在时回退到语义名称。LiveCD 安装期间目标系统的 facts 位于 `/mnt/persist/...`，因此安装时必须带上环境变量，例如 `GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm guix system init ...`。
+
+已实证的例外：**initrd 里没有 udev**（Guix initrd 手工 mknod 设备节点，不运行 udevd），因此 `/dev/disk/by-partlabel/` 等符号链接在 initrd 阶段不存在。mapped-device 的 source 是字符串路径时 initrd 原样使用、不等待不解析，必然失败；source 是 LUKS UUID 时 initrd 会扫描块设备匹配 LUKS 头（`find-partition-by-luks-uuid`，带重试），无需 udev。因此 LUKS mapped-device 的 source **必须**使用 facts 中的 `luks-uuid`，不能只用 PARTLABEL。by-partlabel 仅在完整系统（有 udev）中可用，例如 ESP 的 file-system 声明。
+
 该文件：
 
 - 不进入 Git；
@@ -543,7 +547,7 @@ swapfile 大小
 - 显式传入 host；
 - 显式传入整块设备；
 - 拒绝分区设备；
-- 解析并显示 by-id；
+- 解析并显示 by-id（无 by-id 时退到 by-path。注意：virtio 盘的 by-id 要求 QEMU 侧配置磁盘 serial；eudev 的 path_id 不支持 virtio，by-path 对 virtio 盘不可用）；
 - 拒绝已挂载设备；
 - 拒绝当前系统盘；
 - 拒绝 LiveCD 介质；
