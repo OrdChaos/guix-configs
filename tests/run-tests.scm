@@ -16,6 +16,7 @@
 (primitive-load "tests/test-plan.scm")
 (primitive-load "tests/test-validate.scm")
 (primitive-load "tests/test-device.scm")
+(primitive-load "tests/test-root-generation.scm")
 (primitive-load "tests/test-modules-load.scm")
 
 (let ((runner (test-runner-current)))

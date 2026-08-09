@@ -16,6 +16,7 @@
              (guixcfg storage validate)
              (guixcfg storage device)
              (guixcfg storage install)
+             (guixcfg storage commit)
              (guixcfg hosts vm)   ; inspect 的参考容量下限
              (ice-9 format)
              (ice-9 match))
@@ -25,6 +26,9 @@
   disk-install inspect <device>        探测设备并打印事实与安全检查结果（只读）
   disk-install plan <host> <device>    打印安装计划（只读，不执行）
   disk-install apply <host> <device>   执行安装（破坏性，需要 root 和人工确认）
+  disk-install commit-root [target]    system init 后提交 root generation
+                                       （@root-installing → @root-template + @root-0，
+                                       target 默认 /mnt；之后即可 umount 并重启）
 
 host 可选: vm, laptop~%"))
 
@@ -69,11 +73,16 @@ host 可选: vm, laptop~%"))
 (define (cmd-apply host device)
   (run-install (load-policy host) device))
 
+(define (cmd-commit-root target)
+  (commit-root-generation target))
+
 (define (main args)
   (match (cdr args)
          (("inspect" device)   (cmd-inspect device))
          (("plan" host device) (cmd-plan host device))
          (("apply" host device) (cmd-apply host device))
+         (("commit-root")      (cmd-commit-root "/mnt"))
+         (("commit-root" target) (cmd-commit-root target))
          (_ (usage) (exit 1))))
 
 (main (command-line))

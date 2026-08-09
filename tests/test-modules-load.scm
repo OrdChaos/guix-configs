@@ -21,7 +21,10 @@
     (guixcfg storage filesystem)
     (guixcfg storage subvolume)
     (guixcfg storage install)
+    (guixcfg storage commit)
     (guixcfg storage root-generation)
+    (guixcfg boot initrd)
+    (guixcfg services ephemeral-root)
     (guixcfg system common)
     (guixcfg system packages)
     (guixcfg system file-systems)
@@ -36,22 +39,29 @@
 (test-begin "modules-compile")
 
 (test-assert "全部模块可编译加载，且无未绑定变量警告"
-  (let ((warnings (open-output-string)))
-    (let ((ok
-           (every (lambda (name)
-                    (catch #t
-                      (lambda ()
-                        (parameterize ((current-warning-port warnings))
-                          (compile-file (module-file name) #:to 'value))
-                        #t)
-                      (lambda (key . args)
-                        (format (current-error-port) "模块编译失败: ~a (~a ~a)~%"
-                                name key args)
-                        #f)))
-                  %all-modules)))
-      (let ((text (get-output-string warnings)))
-        (when (string-contains text "unbound")
-          (format (current-error-port) "~a" text))
-        (and ok (not (string-contains text "unbound")))))))
+             (let ((warnings (open-output-string)))
+               (let ((ok
+                      (every (lambda (name)
+                               (catch #t
+                                 (lambda ()
+                                   (parameterize ((current-warning-port warnings))
+                                                 (compile-file (module-file name) #:to 'value))
+                                   #t)
+                                 (lambda (key . args)
+                                   (format (current-error-port) "模块编译失败: ~a (~a ~a)~%"
+                                           name key args)
+                                   #f)))
+                             %all-modules)))
+                 (let ((text (get-output-string warnings)))
+                   (when (string-contains text "unbound")
+                     (format (current-error-port) "~a" text))
+                   (and ok (not (string-contains text "unbound")))))))
+
+;; operating-system 的 services 等字段是延迟求值的，compile-file 不会
+;; 触发字段校验；这里显式实例化 %os，让“services 字段必须是服务列表”
+;; 这类错误在测试期暴露，而不是留到 system build。
+(test-assert "hosts/vm.scm 的 %os 可实例化（services 字段合法）"
+             (let ((os (module-ref (resolve-module '(guixcfg hosts vm)) '%os)))
+               (list? ((@ (gnu system) operating-system-services) os))))
 
 (test-end)

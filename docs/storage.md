@@ -105,6 +105,7 @@ Btrfs 中创建：
 ```text
 @persist-gnu-store
 @persist-var-guix
+@persist-boot
 @persist-system
 @persist-data-app
 @persist-data-home
@@ -122,9 +123,20 @@ Btrfs 中创建：
 @persist-var-guix
     → /var/guix
 
+@persist-boot
+    → /boot
+
 @persist-system
     → /persist/system
+```
 
+`@persist-boot` 存在的原因：GRUB 核心镜像的 prefix 是
+`grub-install` 探测 `/boot` 当时所在子卷后写死的。
+若 `/boot` 位于可替换的 `@root-N`，每次新建 root generation 后
+GRUB 都找不到 `normal.mod` 而进入 rescue。
+bootloader 状态因此属于“永不替换的持久数据”，独立于 root generation。
+
+```text
 @persist-data-app
     → /persist/data-app
 

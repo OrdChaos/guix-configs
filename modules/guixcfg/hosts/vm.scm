@@ -8,6 +8,8 @@
                #:use-module (gnu services networking)      ; dhcpcd-service-type
                #:use-module (gnu packages bash)            ; bash
                #:use-module (guixcfg storage model)
+               #:use-module (guixcfg boot initrd)          ; ephemeral-root-initrd
+               #:use-module (guixcfg services ephemeral-root)
                #:use-module (guixcfg system common)
                #:use-module (guixcfg system file-systems)
                #:use-module (guixcfg system packages)
@@ -40,6 +42,10 @@
    (list ;; QEMU user-mode 网络需要 DHCP（当前 master 中 dhcp-client-service-type
     ;; 已由 dhcpcd-service-type 取代）。
          (service dhcpcd-service-type))
+   ;; 无状态根的用户态服务：启动确认（last-good）与旧 generation 清理
+   ;; （docs/storage.md 第 17.4、17.8 节）。
+   (ephemeral-root-shepherd-services
+    (host-storage-policy-keep-root-generations %vm-storage-policy))
    %base-services))
 
 (define %os
@@ -55,9 +61,11 @@
    
    (mapped-devices %cryptroot-mapped-devices)
    
-   ;; root 暂时固定为 @root-installing；
-   ;; 阶段 4 引入 root generation 后由启动流程选择 @root-N。
-   (file-systems (append (system-file-systems %root-installing-name)
+   ;; 无状态根（docs/storage.md 第 17 章）：initrd 启动时按
+   ;; @persist-system/root-generations/state.scm 选择/创建 @root-N，
+   ;; 挂到 /selected-root 后由 boot-system bind 成系统根。
+   (initrd ephemeral-root-initrd)
+   (file-systems (append (system-file-systems %ephemeral-root-file-system)
                          %base-file-systems))
    
    (swap-devices %swap-spaces)

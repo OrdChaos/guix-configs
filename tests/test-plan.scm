@@ -32,10 +32,12 @@
             (test-assert "ready 在最后"         (eq? 'ready (last %test-ids))))
 
 (test-group "内容完整性"
-            (test-equal "8 个建子卷步骤，对应 8 个持久子卷"
-                        8 (length (filter (lambda (id) (eq? id 'make-subvolume)) %test-ids)))
-            (test-equal "8 个挂载子卷步骤"
-                        8 (length (filter (lambda (id) (eq? id 'mount-subvolume)) %test-ids)))
+            (test-equal "建子卷步骤数等于持久子卷数"
+                        (length %persist-subvolumes)
+                        (length (filter (lambda (id) (eq? id 'make-subvolume)) %test-ids)))
+            (test-equal "挂载子卷步骤数等于持久子卷数"
+                        (length %persist-subvolumes)
+                        (length (filter (lambda (id) (eq? id 'mount-subvolume)) %test-ids)))
             (test-assert "挂载点都在 /mnt 下"
                          (every (lambda (step)
                                   (or (not (memq (plan-step-id step) '(mount-root mount-subvolume mount-esp)))

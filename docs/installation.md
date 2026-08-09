@@ -31,7 +31,7 @@ guix time-machine \
 cow-store /mnt
 ```
 
-把 store 转移到目标磁盘上，否则下载和构建会写满内存盘（低内存 VM 尤其如此）。
+把 store 转移到目标磁盘上，否则下载和构建会写满内存盘（低内存 VM 尤其如此）。安装器在磁盘安装结束时会检测 `/gnu/store` 是否仍在 tmpfs 上，是则醒目提醒执行这一步。
 
 已验证的副作用：在 cow-store 环境下执行 `system init`，`/mnt/var/guix` 处于 bind 挂载的 busy 状态，init 无法将其替换为全新目录，导致系统 profile 注册（`/var/guix/profiles/system-N-link`）不落盘——首次启动后 `/etc/profile` 找不到系统 profile，PATH 残缺。因此**首次启动进入新系统后，应立即执行一次 `guix system reconfigure`**，让 profile 注册、bootcfg 生成和 bootloader 安装在正常环境下完整重做一遍。
 
@@ -58,6 +58,19 @@ cow-store /mnt
 → @root-template
 → @root-0
 ```
+
+其中「@root-template → @root-0」即安装期提交（docs/storage.md 第 17.3 节），
+在 `guix system init` 成功之后、卸载 `/mnt` 之前执行：
+
+```bash
+guix repl tools/disk-install.scm -- commit-root /mnt
+```
+
+它把 `@root-installing` 固化为只读 `@root-template` 和可写 `@root-0`，
+并写入初始 root generation 状态（`first-boot`）。提交后首次启动
+由 initrd 里的无状态根逻辑接管：Normal 模式每次启动从模板新建
+`@root-N`；内核命令行 `rootmode=keep[:N]` / `rootmode=recovery`
+可复用指定 generation 或回退到 last-good。
 
 ## 30.4 仓库复制
 

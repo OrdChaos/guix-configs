@@ -100,13 +100,19 @@
 
 (define %swap-subvolume-name "@persist-swap")   ; swapfile 所在子卷（第 13.5 节）
 
-;; 固定的 8 个持久子卷。顺序即创建顺序。
-;; 除 /gnu/store 和 /var/guix 两个标准路径外，挂载点一律位于 /persist（第 10.2 节）。
+;; 固定的 9 个持久子卷。顺序即创建顺序。
+;; 除 /gnu/store、/var/guix 和 /boot 外，挂载点一律位于 /persist（第 10.2 节）。
 (define %persist-subvolumes
   (list (subvolume (name "@persist-gnu-store")
                    (mount-point "/gnu/store"))
         (subvolume (name "@persist-var-guix")
                    (mount-point "/var/guix"))
+        ;; /boot 必须在永不替换的持久子卷上：GRUB 核心镜像的 prefix 是
+        ;; grub-install 探测 /boot 当时位置后写死的，若 /boot 住在
+        ;; @root-N 上，每次新建 root generation 后 GRUB 都找不到
+        ;; normal.mod（掉 rescue）。
+        (subvolume (name "@persist-boot")
+                   (mount-point "/boot"))
         (subvolume (name "@persist-system")
                    (mount-point "/persist/system"))
         (subvolume (name "@persist-data-app")

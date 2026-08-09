@@ -130,10 +130,26 @@
           (dir (string-append target "/persist/system/facts")))
       (mkdir-p dir)
       (call-with-output-file (string-append dir "/host.scm")
-        (lambda (port)
-          (write facts port)
-          (newline port)))
+                             (lambda (port)
+                               (write facts port)
+                               (newline port)))
       (format #t "  机器事实: ~s~%" facts))))
+
+;;; ────────────────────────────────────────────────────────────
+;;; 安装后提醒：LiveCD 的 /gnu/store 在内存盘（tmpfs）上。
+;;; 若忘记 herd start cow-store /mnt 就直接 guix system init，
+;;; 下载和构建会写满内存盘（docs/installation.md 第 30.2 节）。
+
+(define (warn-if-store-in-ram)
+  "若 /gnu/store 仍在 tmpfs 上，醒目提醒先 herd start cow-store /mnt。"
+  (let ((fstype (first-command-line "findmnt" "-no" "FSTYPE" "/gnu/store")))
+    (when (equal? fstype "tmpfs")
+      (format #t "~%==================================================~%")
+      (format #t "  注意: /gnu/store 目前在内存盘 (tmpfs) 上。~%")
+      (format #t "  执行 guix system init 之前，请先运行:~%")
+      (format #t "~%    herd start cow-store /mnt~%")
+      (format #t "~%  否则下载和构建会写满内存盘。~%")
+      (format #t "==================================================~%"))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 完整安装流程。
@@ -168,4 +184,7 @@
     (confirm-device! device)
     
     ;; 4. 逐步执行
-    (execute-plan plan)))
+    (execute-plan plan)
+    
+    ;; 5. 若 store 还在内存盘，提醒先 cow-store 再 init
+    (warn-if-store-in-ram)))

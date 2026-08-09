@@ -8,6 +8,7 @@
                #:use-module (gnu system mapped-devices)  ; mapped-device、luks-device-mapping
                #:use-module (gnu system uuid)            ; uuid
                #:export (%cryptroot-mapped-devices
+                         %ephemeral-root-file-system
                          system-file-systems
                          %swap-spaces))
 
@@ -23,8 +24,8 @@
 
 (define %machine-facts
   (if (file-exists? %facts-path)
-      (call-with-input-file %facts-path read)
-      '()))
+    (call-with-input-file %facts-path read)
+    '()))
 
 (define (machine-fact key)
   (assq-ref %machine-facts key))
@@ -33,7 +34,7 @@
 ;; LUKS 头，无需 udev 符号链接；没有 facts 时退回固定 PARTLABEL。
 (define %cryptroot-source
   (cond ((machine-fact 'luks-uuid) => (lambda (u) (uuid u)))
-        (else (string-append "/dev/disk/by-partlabel/" %system-partlabel))))
+    (else (string-append "/dev/disk/by-partlabel/" %system-partlabel))))
 
 (define %cryptroot-mapped-devices
   (list (mapped-device
@@ -67,14 +68,28 @@ create-mount-point?：阶段 4 起每个新 root generation 都是空子卷，
    (check? #f)))
 
 (define (root-file-system root-subvolume)
-  "root 文件系统。ROOT-SUBVOLUME 是子卷名：
-阶段 3 用 @root-installing；阶段 4 起由启动流程换成当前 @root-N。"
+  "固定子卷的 root 文件系统（调试用）。
+正常系统用 %ephemeral-root-file-system：root generation 由 initrd
+在启动时选择（docs/storage.md 第 17 章）。"
   (file-system
    (device %mapper-path)
    (mount-point "/")
    (type "btrfs")
    (options (string-append "subvol=" root-subvolume))
    (dependencies %cryptroot-mapped-devices)
+   (needed-for-boot? #t)
+   (check? #f)))
+
+;; 无状态根：initrd 启动时把选中的 @root-N 挂到 staging 目录，
+;; 这里把它 bind 成系统根。type "none" + bind-mount 由 boot-system
+;; 处理（mount-flags->bit-mask 支持 bind-mount）；内核命令行
+;; root=/selected-root 与之一致（路径以 / 开头时原样使用）。
+(define %ephemeral-root-file-system
+  (file-system
+   (device "/selected-root")
+   (mount-point "/")
+   (type "none")
+   (flags '(bind-mount))
    (needed-for-boot? #t)
    (check? #f)))
 
@@ -86,9 +101,10 @@ create-mount-point?：阶段 4 起每个新 root generation 都是空子卷，
    (create-mount-point? #t)   ; 新 root generation 上没有 /efi 目录
    (check? #f)))
 
-(define (system-file-systems root-subvolume)
-  "完整文件系统列表（不含 %base-file-systems，由 host 追加）。"
-  (cons* (root-file-system root-subvolume)
+(define (system-file-systems root-fs)
+  "完整文件系统列表（不含 %base-file-systems，由 host 追加）。
+ROOT-FS 是根文件系统记录，正常传 %ephemeral-root-file-system。"
+  (cons* root-fs
          %esp-file-system
          (map persist-subvolume->file-system %persist-subvolumes)))
 
