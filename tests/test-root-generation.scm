@@ -158,3 +158,64 @@
                                                0)))
 
 (test-end)
+
+;;; ── 状态文件 IO：原子写与 .prev 回退（真实文件系统，写 /tmp）
+
+(test-begin "root-generation-io")
+
+(define %tmp-state
+  (string-append "/tmp/guixcfg-test-state-"
+                 (number->string (getpid)) ".scm"))
+
+(test-group "write-state!/read-state"
+            (dynamic-wind
+             (const #t)
+             (lambda ()
+               ;; 首次写入
+               (write-state! %tmp-state %sample-state)
+               (test-equal "写入后可读回"
+                           (state->alist %sample-state)
+                           (state->alist (read-state %tmp-state)))
+               
+               ;; 覆盖写入：旧内容成为 .prev
+               (let ((newer (confirm-boot %sample-state)))
+                 (write-state! %tmp-state newer)
+                 (test-eq "覆盖后读到新状态"
+                          'ok (root-state-boot-status (read-state %tmp-state)))
+                 
+                 ;; 主文件损坏（模拟断电半截文件）→ 回退 .prev
+                 (call-with-output-file %tmp-state
+                                        (lambda (port) (display "((broken" port)))
+                 (test-eq "主文件损坏时回退 .prev"
+                          'trying
+                          (root-state-boot-status (read-state %tmp-state))))
+               
+               ;; 主文件不存在但 .prev 在 → 也能读
+               (delete-file %tmp-state)
+               (test-eq "主文件缺失时回退 .prev"
+                        'trying
+                        (root-state-boot-status (read-state %tmp-state)))
+               
+               ;; 都不在 → 报错
+               (delete-file (string-append %tmp-state ".prev"))
+               (test-error "全部缺失时报错" #t (read-state %tmp-state)))
+             (lambda ()
+               (false-if-exception (delete-file %tmp-state))
+               (false-if-exception
+                (delete-file (string-append %tmp-state ".prev")))
+               (false-if-exception
+                (delete-file (string-append %tmp-state ".new"))))))
+
+(test-group "prune-created-at"
+            (let ((pruned (prune-created-at %sample-state '(1 2))))
+              (test-equal "只保留现存 generation 的元数据"
+                          '((2 . 200) (1 . 100))
+                          (root-state-created-at pruned))
+              (test-equal "其余字段不变"
+                          3 (root-state-next-generation pruned)))
+            (test-equal "全部删除时 created-at 清空"
+                        '()
+                        (root-state-created-at
+                         (prune-created-at %sample-state '()))))
+
+(test-end)

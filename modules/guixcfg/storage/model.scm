@@ -29,6 +29,7 @@
                          <subvolume>
                          subvolume make-subvolume subvolume?
                          subvolume-name subvolume-mount-point subvolume-options
+                         subvolume-mount-at-install?
                          %persist-subvolumes
                          persist-subvolume-name?
                          ;; root generation
@@ -96,7 +97,14 @@
                      (name        subvolume-name)         ; Btrfs 子卷名，必须带 @persist- 前缀
                      (mount-point subvolume-mount-point)  ; 挂载点
                      (options     subvolume-options       ; 挂载选项列表，如 '("compress=zstd")
-                                  (default '())))
+                                  (default '()))
+                     ;; 安装期（init 之前）是否挂载到目标。
+                     ;; @persist-var-guix 必须为 #f：guix system init 会
+                     ;; delete-file-recursively 目标的 /var/guix，挂载点
+                     ;; 删不掉（EBUSY）导致注册不可靠；改为 init 后在
+                     ;; commit-root 里把内容收进子卷（见 storage/commit.scm）。
+                     (mount-at-install? subvolume-mount-at-install?
+                                        (default #t)))
 
 (define %swap-subvolume-name "@persist-swap")   ; swapfile 所在子卷（第 13.5 节）
 
@@ -106,7 +114,8 @@
   (list (subvolume (name "@persist-gnu-store")
                    (mount-point "/gnu/store"))
         (subvolume (name "@persist-var-guix")
-                   (mount-point "/var/guix"))
+                   (mount-point "/var/guix")
+                   (mount-at-install? #f))   ; init 后再收养，见 record 注释
         ;; /boot 必须在永不替换的持久子卷上：GRUB 核心镜像的 prefix 是
         ;; grub-install 探测 /boot 当时位置后写死的，若 /boot 住在
         ;; @root-N 上，每次新建 root generation 后 GRUB 都找不到

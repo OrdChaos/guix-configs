@@ -4,13 +4,20 @@
 ;;;
 ;;; 时机：disk-install apply → herd start cow-store /mnt → guix system init
 ;;; 之后、umount /mnt 之前执行（此时 /mnt 仍挂着 @root-installing）。
+;;;
+;;; /var/guix 的特殊处理：init 期间 @persist-var-guix 刻意不挂载
+;;; （见 model.scm 的 mount-at-install? 注释）——guix system init 会
+;;; delete-file-recursively 目标的 /var/guix 重新开始，挂载点删不掉
+;;; （EBUSY）会让 profile 注册不可靠。因此 init 让 /var/guix 以普通
+;;; 目录建在 @root-installing 里（对 init 来说完全是原生环境），
+;;; 提交时再把内容收进 @persist-var-guix 子卷。
 
 (define-module (guixcfg storage commit)
                #:use-module (guixcfg storage model)
                #:use-module (guixcfg storage root-generation)
                #:use-module (guixcfg storage subvolume)
                #:use-module (guixcfg storage device)
-               #:use-module (guix build utils)  ; mkdir-p
+               #:use-module (guix build utils)  ; mkdir-p、delete-file-recursively
                #:use-module (srfi srfi-13)  ; string-contains
                #:use-module (ice-9 format)
                #:export (commit-root-generation))
@@ -49,8 +56,25 @@
            (state-file-path (string-append target "/persist/system")))))
 
 ;;; ────────────────────────────────────────────────────────────
+;;; /var/guix 收养：把 init 写好的注册信息从 @root-installing 搬进
+;;; @persist-var-guix，模板里留空目录作运行时挂载点。
+
+(define (adopt-var-guix!)
+  "移动 /var/guix 内容到 @persist-var-guix。调用时 Btrfs 顶层已挂载。"
+  (let ((src (string-append (top-path %root-installing-name) "/var/guix"))
+        (dst (top-path "@persist-var-guix")))
+    (unless (file-exists? (string-append src "/db"))
+      (error "init 未生成 /var/guix/db，疑似 init 未执行，收养中止" src))
+    ;; 跨子卷不能 rename，复制后删除（内容只有 db 和少量链接，很小）。
+    (invoke "cp" "-a" (string-append src "/.") (string-append dst "/"))
+    (delete-file-recursively src)
+    (mkdir-p src)          ; 留空目录作运行时挂载点
+    (format #t "已将 /var/guix 收养进 @persist-var-guix~%")))
+
+;;; ────────────────────────────────────────────────────────────
 ;;; 提交本体（docs/storage.md 第 17.3 节）：
-;;; 先建 .new 快照，验证成功后事务性改名，最后删除 @root-installing。
+;;; 收养 /var/guix → 建 .new 快照 → 验证后事务性改名 → 删除
+;;; @root-installing → 写初始状态。
 
 (define (commit-root-generation target)
   "把 TARGET（通常 /mnt）上的安装期 root 固化为 template + @root-0。"
@@ -67,7 +91,11 @@
            (error "顶层已存在最终 generation，疑似重复提交" name)))
        (list %root-template-name (root-generation-name 0)))
       
-      ;; 1. 创建 .new 快照：template 只读，@root-0 可写
+      ;; 1. 收养 /var/guix（必须在快照之前：模板应含空的 /var/guix
+      ;;    挂载点，而子卷应含 init 写入的注册内容）
+      (adopt-var-guix!)
+      
+      ;; 2. 创建 .new 快照：template 只读，@root-0 可写
       (format #t "创建只读模板快照 ~a.new~%" %root-template-name)
       (invoke "btrfs" "subvolume" "snapshot" "-r"
               (top-path %root-installing-name) (top-path (template-new-name)))
@@ -75,7 +103,7 @@
       (invoke "btrfs" "subvolume" "snapshot"
               (top-path %root-installing-name) (top-path (root-zero-new-name)))
       
-      ;; 2. 验证后事务性提交（改名是单目录项操作）
+      ;; 3. 验证后事务性提交（改名是单目录项操作）
       (unless (and (file-exists? (top-path (template-new-name)))
                    (file-exists? (top-path (root-zero-new-name))))
         (error "快照验证失败，中止提交"))
@@ -85,19 +113,16 @@
       (format #t "已提交 ~a 与 ~a~%"
               %root-template-name (root-generation-name 0))
       
-      ;; 3. 删除安装期 root（仍挂在 TARGET 上没关系，卸载后自动释放）
+      ;; 4. 删除安装期 root（仍挂在 TARGET 上没关系，卸载后自动释放）
       (invoke "btrfs" "subvolume" "delete" (top-path %root-installing-name))
       (format #t "已删除 ~a~%" %root-installing-name)
       
-      ;; 4. 写入初始状态（第 17.7 节）：@root-0 就绪但从未启动
+      ;; 5. 写入初始状态（第 17.7 节）：@root-0 就绪但从未启动（原子写）
       (let* ((persist-system (top-path "@persist-system"))
              (dir (string-append persist-system "/" %root-generations-dir-name))
              (state (initial-state (current-time))))
         (mkdir-p dir)
-        (call-with-output-file (state-file-path persist-system)
-                               (lambda (port)
-                                 (write (state->alist state) port)
-                                 (newline port)))
+        (write-state! (state-file-path persist-system) state)
         (format #t "初始状态: ~s~%" (state->alist state)))
       
       (execute-unmount-top)

@@ -98,6 +98,9 @@
                            (target . "/mnt")))))
      
      ;; 每个持久子卷挂到 /mnt 下对应位置。
+     ;; 例外：mount-at-install? 为 #f 的子卷（@persist-var-guix）在
+     ;; init 期间不挂载——init 需要看到原生的目标目录，
+     ;; 其内容由 commit-root 收进子卷（见 storage/commit.scm）。
      (map (lambda (sv)
             (plan-step (id 'mount-subvolume)
                        (summary (string-append "挂载 " (subvolume-name sv)
@@ -105,7 +108,7 @@
                        (detail `((name . ,(subvolume-name sv))
                                  (target . ,(string-append "/mnt" (subvolume-mount-point sv)))
                                  (options . ,(subvolume-options sv))))))
-          %persist-subvolumes)
+          (filter subvolume-mount-at-install? %persist-subvolumes))
      
      (list
       (plan-step (id 'mount-esp)

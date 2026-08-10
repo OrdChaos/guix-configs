@@ -63,13 +63,12 @@
          (unless (zero? (apply system* btrfs args))
            (error "btrfs 命令失败" args)))
        
-       ;; 1. 挂顶层，读状态
+       ;; 1. 挂顶层，读状态（主文件损坏时 read-state 自动回退 .prev）
        (mkdir-p top)
        (mount mapper top "btrfs" 0 "subvolid=5")
        (unless (file-exists? state-path)
          (error "root generation 状态文件不存在" state-path))
-       (let* ((state (alist->state
-                      (call-with-input-file state-path read)))
+       (let* ((state (read-state state-path))
               ;; 2. 启动模式：rootmode=normal/keep[:N]/recovery
               (mode  (or (and=> (find-long-option "rootmode"
                                                   (linux-command-line))
@@ -101,17 +100,18 @@
                         new-path)
              (rename-file new-path final-path)))
          
-         ;; 4. 写回状态（current/next/boot-status=trying）
-         (call-with-output-file state-path
-                                (lambda (port)
-                                  (write (state->alist (boot-plan-state-after plan)) port)
-                                  (newline port)))
-         
-         ;; 5. 收顶层，把选中子卷挂到 staging
-         (umount top)
+         ;; 4. 先把选中子卷挂到 staging——只有目标确实存在且可挂载，
+         ;;    事务才允许继续（比如 rootmode=keep:999 在这里就会失败，
+         ;;    而不会先把 current=999 写进状态再死）。
          (mkdir-p staging)
          (mount mapper staging "btrfs" 0
                 (string-append "subvol=" target))
+         
+         ;; 5. 状态提交是本次 root 选择事务的最后一步（原子写）。
+         (write-state! state-path (boot-plan-state-after plan))
+         
+         ;; 6. 收顶层
+         (umount top)
          #t))))
 
 (define* (ephemeral-root-initrd file-systems

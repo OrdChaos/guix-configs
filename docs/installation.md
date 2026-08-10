@@ -33,7 +33,7 @@ cow-store /mnt
 
 把 store 转移到目标磁盘上，否则下载和构建会写满内存盘（低内存 VM 尤其如此）。安装器在磁盘安装结束时会检测 `/gnu/store` 是否仍在 tmpfs 上，是则醒目提醒执行这一步。
 
-已验证的副作用：在 cow-store 环境下执行 `system init`，`/mnt/var/guix` 处于 bind 挂载的 busy 状态，init 无法将其替换为全新目录，导致系统 profile 注册（`/var/guix/profiles/system-N-link`）不落盘——首次启动后 `/etc/profile` 找不到系统 profile，PATH 残缺。因此**首次启动进入新系统后，应立即执行一次 `guix system reconfigure`**，让 profile 注册、bootcfg 生成和 bootloader 安装在正常环境下完整重做一遍。
+cow-store 环境下 `system init` 的另一个坑：init 会先 `delete-file-recursively` 删除目标的 `/var/guix` 重新开始注册，而挂载点删不掉（EBUSY）。因此 **`@persist-var-guix` 在 init 期间刻意不挂载**（`mount-at-install? #f`），让 `/var/guix` 以普通目录建在 `@root-installing` 里——init 看到的是完全原生的环境，profile 注册、store 数据库全部正常落盘。安装期提交（`commit-root`）在快照之前把这份内容收进 `@persist-var-guix` 子卷，模板里留下空目录作运行时挂载点。
 
 ## 30.3 安装阶段
 

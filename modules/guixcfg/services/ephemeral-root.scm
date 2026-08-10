@@ -3,10 +3,14 @@
 ;;;   ephemeral-root-confirm   启动成功进入系统后，把 current 标记为
 ;;;                            last-good（boot-status: trying → ok）。
 ;;;                            这是第 17.4 节的“健康检查通过”；
-;;;                            目前以“shepherd 完成启动”为健康标准。
+;;;                            目前以 shepherd 启动到 user-processes
+;;;                            为健康标准（见 one-shot-program-service）。
 ;;;   ephemeral-root-cleanup   按 host policy 的 keep-root-generations
 ;;;                            清理旧 @root-N（第 17.8 节），
-;;;                            永不删除 current / last-good。
+;;;                            永不删除 current / last-good；
+;;;                            顺带清理对应的 created-at 元数据。
+;;;   状态文件一律经 (guixcfg storage root-generation) 的
+;;;   read-state / write-state! 读写（原子写 + .prev 回退）。
 ;;;
 ;;; 启动时的选择/创建逻辑在 initrd 里（(guixcfg boot initrd)）；
 ;;; 状态机纯模型在 (guixcfg storage root-generation)，两侧共用。
@@ -50,12 +54,9 @@
        (use-modules (guixcfg storage root-generation))
        (let ((path (state-file-path #$%persist-system-mount)))
          (when (file-exists? path)
-           (let ((state (alist->state (call-with-input-file path read))))
+           (let ((state (read-state path)))
              (when (eq? (root-state-boot-status state) 'trying)
-               (call-with-output-file path
-                                      (lambda (port)
-                                        (write (state->alist (confirm-boot state)) port)
-                                        (newline port)))
+               (write-state! path (confirm-boot state))
                (format #t "ephemeral-root: @root-~a 已确认为 last-good~%"
                        (root-state-current-generation state))))))))))
 
@@ -81,8 +82,7 @@
              (btrfs (string-append #$btrfs-progs "/bin/btrfs")))
          (if (not (file-exists? state-path))
            (format #t "ephemeral-root: 状态文件不存在，跳过清理~%")
-           (let ((state (alist->state
-                         (call-with-input-file state-path read))))
+           (let ((state (read-state state-path)))
              (mkdir-p top)
              (mount mapper top "btrfs" 0 "subvolid=5")
              (let* ((names (or (scandir top) '()))
@@ -96,18 +96,29 @@
                   (system* btrfs "subvolume" "delete"
                            (string-append top "/"
                                           (root-generation-name n))))
-                victims))
+                victims)
+               ;; 顺带清掉已删除 generation 的 created-at 元数据，
+               ;; 并原子写回状态文件。
+               (let ((remaining (lset-difference = existing victims)))
+                 (write-state! state-path
+                               (prune-created-at state remaining))))
              (umount top))))))))
 
-(define (one-shot-program-service name program documentation)
-  "运行 PROGRAM 一次的 shepherd 服务。"
-  (shepherd-service
-   (provision (list name))
-   (requirement '(file-systems))      ; /persist 已由 initrd 挂载
-   (one-shot? #t)
-   (documentation documentation)
-   (start #~(lambda () (zero? (system* #$program))))
-   (stop #~(const #f))))
+(define* (one-shot-program-service name program documentation
+                                   #:key (requirement '(user-processes)))
+         "运行 PROGRAM 一次的 shepherd 服务。"
+         (shepherd-service
+          (provision (list name))
+          ;; 健康门槛（docs/storage.md 第 17.4 节）：不能只依赖 file-systems
+          ;; ——那时网络/显示管理器等关键服务还没起，过早把 current 标成
+          ;; last-good 会让“上次能启动”失去意义。user-processes 是
+          ;; shepherd 启动顺序中较晚的锚点；更精细的健康检查
+          ;; （关键服务状态、会话可用）随桌面阶段再细化。
+          (requirement requirement)
+          (one-shot? #t)
+          (documentation documentation)
+          (start #~(lambda () (zero? (system* #$program))))
+          (stop #~(const #f))))
 
 (define (ephemeral-root-shepherd-services keep)
   "无状态根的全部用户态服务。KEEP 是保留的旧 generation 数量。
@@ -126,4 +137,10 @@ after a successful boot.")))
                                'ephemeral-root-cleanup
                                (ephemeral-root-cleanup-program keep)
                                "Delete old @root-N subvolumes beyond the \
-configured retention.")))))
+configured retention."
+                               ;; 状态文件是 read-modify-write，必须排在
+                               ;; confirm 之后，否则两个服务并发读写会
+                               ;; 互相覆盖（cleanup 的旧状态会抹掉
+                               ;; confirm 刚写入的 last-good）。
+                               #:requirement '(user-processes
+                                               ephemeral-root-confirm))))))

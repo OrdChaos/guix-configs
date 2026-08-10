@@ -318,6 +318,19 @@ Btrfs swapfile 必须满足：
 @root-installing
 ```
 
+安装期提交还会把 init 写在 `@root-installing` 里的 `/var/guix`
+（profile 注册、store 数据库）收进 `@persist-var-guix` 子卷，
+模板中留下空目录作运行时挂载点——init 期间该子卷刻意不挂载，
+因为 `guix system init` 会删除目标的 `/var/guix` 重新开始，
+挂载点删不掉会导致注册不可靠。
+
+已知边界：`@root-template` 包含**首次安装时**的 `/etc`。
+Guix activation 每次启动会重建配置中存在的 `/etc` 条目，
+但**不会删除后来从配置中移除的文件**（`activate-etc` 只增改不清理）。
+因此从配置中删除的 `/etc` 文件会在 fresh root 上残留，
+直到模板刷新。模板刷新（reconfigure 后用当前系统重建
+`@root-template`）属于 configctl 阶段的计划项。
+
 ## 17.4 首次启动
 
 首次启动：
@@ -390,6 +403,44 @@ source-template
 system-revision
 ```
 
+### 17.7.1 状态文件的事务性
+
+状态文件的读写只允许经过 `(guixcfg storage root-generation)` 的
+`read-state` / `write-state!`：
+
+```text
+state.scm.new
+    ↓ write + fsync
+    ↓ rename（原子替换）
+state.scm
+```
+
+覆盖前把现有文件保留为：
+
+```text
+state.scm.prev
+```
+
+主文件损坏（如断电导致半截文件）时读取方自动回退 `.prev`。
+
+启动时的 root 选择事务中，**状态提交是最后一步**：
+
+```text
+读取状态
+→ plan-boot 决策
+→ 必要时创建 @root-N（.new → rename）
+→ 成功挂载目标子卷到 staging
+→ write-state! 提交状态
+→ 卸载 Btrfs 顶层
+```
+
+目标子卷不存在或不可挂载时（例如 `rootmode=keep:999`），
+状态文件保持原样，不产生半截事务。
+
+### 17.7.2 created-at 的生命周期
+
+`created-at` 只作为 metadata。清理服务删除旧 `@root-N` 时，
+顺带用 `prune-created-at` 清掉对应条目，避免随时间无限增长。
 ## 17.8 清理
 
 根据 host policy 保留一定数量的旧 root generations。

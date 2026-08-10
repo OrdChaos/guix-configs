@@ -39,8 +39,12 @@
                          boot-plan-create-from-template?
                          boot-plan-state-after
                          plan-boot
+                         ;; 状态文件 IO（原子写、.prev 回退）
+                         read-state
+                         write-state!
                          ;; 用户态确认与清理
                          confirm-boot
+                         prune-created-at
                          generations-to-delete))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -93,6 +97,50 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
               (created-at `((0 . ,now)))
               (boot-status 'first-boot)
               (source-template "@root-template")))
+
+;;; ────────────────────────────────────────────────────────────
+;;; 状态文件 IO。
+;;;
+;;; 写入必须是事务式的：call-with-output-file 会先 truncate 原文件，
+;;; 断电会得到空文件/半截 Scheme，下次启动直接死在 initrd。
+;;; 因此：写 .new → fsync → rename（原子替换），并保留上一份 .prev
+;;; 作为损坏时的回退。initrd、用户态服务、安装期提交三处都必须走这里，
+;;; 不允许直接 call-with-output-file 写状态文件。
+
+(define (state-prev-path path)
+  (string-append path ".prev"))
+
+(define (write-state! path state)
+  "把 STATE 原子地写入 PATH：state.scm.new → fsync → rename，
+并在覆盖前把现有文件复制为 .prev 备份。"
+  (let ((new  (string-append path ".new"))
+        (prev (state-prev-path path)))
+    (when (file-exists? path)
+      (copy-file path prev))
+    (call-with-output-file new
+                           (lambda (port)
+                             (write (state->alist state) port)
+                             (newline port)
+                             ;; 落盘后再 rename，保证 rename 指向的内容完整
+                             (fsync port)))
+    (rename-file new path)))
+
+(define (read-state path)
+  "读取 PATH 的状态；主文件损坏时回退到 .prev。都不存在/都损坏则报错。"
+  (define (try p)
+    (alist->state (call-with-input-file p read)))
+  (if (file-exists? path)
+    (catch #t
+      (lambda () (try path))
+      (lambda (key . args)
+        (let ((prev (state-prev-path path)))
+          (if (file-exists? prev)
+            (try prev)
+            (apply throw key args)))))
+    (let ((prev (state-prev-path path)))
+      (if (file-exists? prev)
+        (try prev)
+        (error "root generation 状态文件不存在" path)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 序列化：与 facts 文件相同的 alist 形式（write/read 往返）。
@@ -231,6 +279,15 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
   (root-state (inherit state)
               (last-good-generation (root-state-current-generation state))
               (boot-status 'ok)))
+
+(define (prune-created-at state existing)
+  "把 created-at 中已不存在于 EXISTING（磁盘上现存的 generation 编号
+列表）的元数据清掉。由清理服务在删除旧 @root-N 后调用，
+避免 created-at 随时间无限增长。"
+  (root-state (inherit state)
+              (created-at
+               (filter (lambda (pair) (member (car pair) existing))
+                       (root-state-created-at state)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 清理（docs/storage.md 第 17.8 节）。

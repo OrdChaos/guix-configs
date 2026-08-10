@@ -35,8 +35,9 @@
             (test-equal "建子卷步骤数等于持久子卷数"
                         (length %persist-subvolumes)
                         (length (filter (lambda (id) (eq? id 'make-subvolume)) %test-ids)))
-            (test-equal "挂载子卷步骤数等于持久子卷数"
-                        (length %persist-subvolumes)
+            (test-equal "挂载子卷步骤数等于安装期挂载的持久子卷数"
+                        (length (filter subvolume-mount-at-install?
+                                        %persist-subvolumes))
                         (length (filter (lambda (id) (eq? id 'mount-subvolume)) %test-ids)))
             (test-assert "挂载点都在 /mnt 下"
                          (every (lambda (step)
