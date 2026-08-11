@@ -6,6 +6,7 @@
 (define-module (guixcfg storage root-generation)
                #:use-module (guix records)  ; define-record-type*
                #:use-module (guixcfg storage model)  ; root-generation-name 等命名
+               #:use-module (guixcfg utils atomic-file)
                #:use-module (srfi srfi-1)   ; fold、delete、take 等列表工具
                #:use-module (srfi srfi-13)  ; 字符串工具
                #:export (;; 状态文件位置
@@ -100,27 +101,27 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
 ;;;
 ;;; 写入必须是事务式的：call-with-output-file 会先 truncate 原文件，
 ;;; 断电会得到空文件/半截 Scheme，下次启动直接死在 initrd。
-;;; 因此：写 .new → fsync → rename（原子替换），并保留上一份 .prev
-;;; 作为损坏时的回退。initrd、用户态服务、安装期提交三处都必须走这里，
-;;; 不允许直接 call-with-output-file 写状态文件。
+;;; 因此：先把“能够成功解析的上一状态”原子写到 .prev，再写 .new →
+;;; fsync → rename 主文件，并 fsync 父目录。损坏的主文件绝不会覆盖最后一份
+;;; 好的 .prev。initrd、用户态服务、安装期提交三处都必须走这里。
 
 (define (state-prev-path path)
   (string-append path ".prev"))
 
 (define (write-state! path state)
-  "把 STATE 原子地写入 PATH：state.scm.new → fsync → rename，
-并在覆盖前把现有文件复制为 .prev 备份。"
-  (let ((new  (string-append path ".new"))
-        (prev (state-prev-path path)))
-    (when (file-exists? path)
-      (copy-file path prev))
-    (call-with-output-file new
-                           (lambda (port)
-                             (write (state->alist state) port)
-                             (newline port)
-                             ;; 落盘后再 rename，保证 rename 指向的内容完整
-                             (fsync port)))
-    (rename-file new path)))
+  "把 STATE crash-durable 地写入 PATH，并保留上一份【可解析】状态为 .prev。"
+  (let ((previous (and (or (file-exists? path)
+                           (file-exists? (state-prev-path path)))
+                       (false-if-exception (read-state path)))))
+    (when previous
+      (atomic-write-file! (state-prev-path path)
+                          (lambda (port)
+                            (write (state->alist previous) port)
+                            (newline port))))
+    (atomic-write-file! path
+                        (lambda (port)
+                          (write (state->alist state) port)
+                          (newline port)))))
 
 (define (read-state path)
   "读取 PATH 的状态；主文件损坏时回退到 .prev。都不存在/都损坏则报错。"

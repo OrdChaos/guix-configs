@@ -1,20 +1,21 @@
 ;;; UKI 部署核心（deploy-core）：把 Boot Plan 部署成 ESP 上的
 ;;; Limine 菜单 + UKI。本模块【不依赖】Guix 的 <bootloader> /
 ;;; <menu-entry> 框架——输入是我们自己的 <boot-plan> 记录；
-;;; 框架转换在 (guixcfg boot uki-bootloader) 适配层完成
-;;; （GCD006 重写框架时只需改适配层）。
+;;; 框架转换在 (guixcfg boot uki-bootloader) 适配层完成。
 ;;;
 ;;; ESP 布局（全部归我们管理，记入 .deployed，其余文件一律不碰）：
-;;;   /EFI/Guix/CURRENT.EFI     当前 generation（normal）
-;;;   /EFI/Guix/LAST-GOOD.EFI   最后确认启动成功的 generation
-;;;                             （数据源：(guixcfg boot boot-state)
-;;;                             注册表；部署成功 ≠ 启动成功）
-;;;   /EFI/Guix/RECOVERY.EFI    当前 generation + rootmode=recovery
-;;;   /EFI/BOOT/BOOTX64.EFI     Limine（UEFI fallback，无启动项也能进菜单）
-;;;   /limine.conf              Limine 配置（三项菜单，chainload UKI）
+;;;   /EFI/Guix/A/*.EFI          完整 deployment 槽 A
+;;;   /EFI/Guix/B/*.EFI          完整 deployment 槽 B
+;;;   /EFI/Guix/.deployed        所有权清单
+;;;   /EFI/BOOT/BOOTX64.EFI      Limine（UEFI fallback）
+;;;   /limine.conf               当前激活槽的唯一提交点
+;;;
+;;; 每次只重建【非活动】槽。所有 UKI 构建、签名、fsync 完成后，先原子
+;;; 更新 Limine fallback，最后原子替换 limine.conf 指向新槽。因此任意
+;;; 构建失败或掉电都不会让菜单看见“半套新 UKI + 半套旧 UKI”。
 ;;;
 ;;; Secure Boot：/persist/system/keys/secure-boot/db.{key,crt} 存在时
-;;; 用 sbsign 签 UKI 与 Limine；不存在则全部不签（开发期）。
+;;; ukify 直接签 UKI，sbsign 签 Limine；不存在则全部不签（开发期）。
 
 (define-module (guixcfg boot uki)
                #:use-module (guixcfg boot boot-state)
@@ -47,74 +48,141 @@
 (define-record-type* <boot-plan>
                      boot-plan make-boot-plan
                      boot-plan?
-                     (label   boot-plan-label)    ; 显示名（字符串）
-                     (kernel  boot-plan-kernel)   ; bzImage（store 路径）
-                     (initrd  boot-plan-initrd)   ; initrd（store 路径）
-                     (cmdline boot-plan-cmdline)) ; 内核命令行（产生字符串的 gexp）
+                     (label   boot-plan-label)
+                     (kernel  boot-plan-kernel)
+                     (initrd  boot-plan-initrd)
+                     (cmdline boot-plan-cmdline))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 部署脚本：以 root 在部署期运行。
 
 (define (make-uki-deploy-program current)
-  "生成 UKI 部署脚本（program-file）。CURRENT 是当前 generation 的
-<boot-plan>。Last Good 由脚本在部署期从 boot-state 注册表解析，
-不由调用方提供。"
+  "生成 UKI 部署脚本。CURRENT 是当前 generation 的 <boot-plan>。
+Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
   (program-file
    "deploy-uki"
    (with-imported-modules
     (source-module-closure '((guix build utils)
                              (guix build syscalls)
                              (guixcfg boot boot-state)
-                             (guixcfg storage root-generation))
+                             (guixcfg storage root-generation)
+                             (guixcfg utils atomic-file))
                            #:select? (lambda (name)
                                        (or (guix-module-name? name)
                                            (eq? (car name) 'guixcfg))))
     #~(begin
-       (use-modules (guix build utils)
-                    (guix build syscalls)     ; mount、umount（统计历史 root）
+       (use-modules ((guix build utils) #:hide (delete))
+                    (guix build syscalls)
                     (guixcfg boot boot-state)
                     (guixcfg storage root-generation)
-                    (guixcfg storage model)   ; parse-root-generation
-                    (ice-9 ftw)              ; scandir
-                    (srfi srfi-1)            ; second/third/fourth
+                    (guixcfg storage model)
+                    (guixcfg utils atomic-file)
+                    (ice-9 ftw)
+                    (ice-9 rdelim)
+                    (srfi srfi-1)
                     (srfi srfi-13))
-       
-       ;; 参数：mount-point（init 时 /mnt，reconfigure 时 /）、efi 挂载点
+
+       ;; 参数：mount-point（init 时 /mnt，reconfigure 时 /）、efi 挂载点。
        (define mount-point (cadr (command-line)))
        (define efi-target (caddr (command-line)))
-       ;; 注意命名不能叫 mount——会遮蔽 (guix build syscalls) 的 mount 过程
+       ;; 不能命名为 mount，会遮蔽 (guix build syscalls) 的 mount。
        (define mnt (string-trim-right mount-point #\/))
        (define esp (if (file-exists? (string-append mnt efi-target))
                      (string-append mnt efi-target)
                      efi-target))
-       
+
        (define ukify-bin #$(file-append ukify "/bin/ukify"))
        (define stub-bin
          #$(file-append systemd-stub "/libexec/" (systemd-stub-name)))
        (define sbsign-bin #$(file-append sbsigntools "/bin/sbsign"))
        (define limine-bin
          #$(file-append limine "/share/limine/BOOTX64.EFI"))
-       
-       ;; Secure Boot 密钥存在则签名
+
+       ;; Secure Boot 密钥存在则签名。
        (define keydir (string-append mnt #$%secure-boot-keydir))
        (define db-key (string-append keydir "/db.key"))
        (define db-crt (string-append keydir "/db.crt"))
        (define signed? (and (file-exists? db-key) (file-exists? db-crt)))
-       
+
        (define uki-dir (string-append esp "/" #$%uki-esp-subdir))
        (define boot-dir (string-append esp "/EFI/BOOT"))
+       (define config-file (string-append esp "/limine.conf"))
+       (define deployed-file (string-append uki-dir "/.deployed"))
        (mkdir-p uki-dir)
        (mkdir-p boot-dir)
-       
-       ;; .osrel 段内容（UKI 规范）
-       (define os-release
-         (string-append (getcwd) "/os-release"))
+
+       (define (remove-path! path)
+         (when (file-exists? path)
+           (if (eq? (stat:type (lstat path)) 'directory)
+             (delete-file-recursively path)
+             (delete-file path))))
+
+       ;; limine.conf 是 active-slot 的事实来源；.deployed 不是提交标记。
+       ;; 旧版 flat layout 的配置不含 /A/ 或 /B/，视为“尚无活动槽”。
+       (define (active-slot)
+         (and (file-exists? config-file)
+              (call-with-input-file config-file
+                (lambda (port)
+                  (let loop ()
+                    (let ((line (read-line port)))
+                      (cond
+                        ((eof-object? line) #f)
+                        ((string-contains line "/EFI/Guix/A/") "A")
+                        ((string-contains line "/EFI/Guix/B/") "B")
+                        (else (loop)))))))))
+
+       (define active (active-slot))
+       (define target-slot (if (and active (string=? active "A")) "B" "A"))
+       (define target-dir (string-append uki-dir "/" target-slot))
+       (define staging-dir (string-append uki-dir "/." target-slot ".new"))
+
+       ;; Last Good：两个轴独立确认、Recovery 时有意组合；这里只解析 Guix 轴。
+       ;; 新格式同时保存实际启动 cmdline，避免旧 generation 丢失 host 特有参数。
+       (define boot-state-path
+         (string-append mnt "/persist/system/boot-states.scm"))
+       (define last-good-number (read-boot-states boot-state-path))
+       (define last-good
+         (resolve-generation mnt
+                             last-good-number
+                             (read-boot-command-line boot-state-path)))
+
+       ;; 历史 root 深度：临时挂 Btrfs 顶层，异常也保证卸载。
+       (define prev-count
+         (let ((state-path (string-append mnt
+                                          "/persist/system/root-generations/state.scm")))
+           (if (not (file-exists? state-path))
+             0
+             (let ((top "/run/guixcfg-deploy-top")
+                   (mounted? #f))
+               (dynamic-wind
+                 (lambda ()
+                   (mkdir-p top)
+                   (mount #$(string-append "/dev/mapper/" %luks-mapper-name)
+                          top "btrfs" 0 "subvolid=5")
+                   (set! mounted? #t))
+                 (lambda ()
+                   (min 3
+                        (length
+                         (filter-map parse-root-generation
+                                     (or (scandir top) '())))))
+                 (lambda ()
+                   (when mounted?
+                     (umount top))))))))
+
+       ;; ── 1. 在非活动 staging 槽中构建完整 UKI 集合 ────────────────
+       ;; 任何失败都不会改变当前 limine.conf 指向的活动槽。
+       (remove-path! staging-dir)
+       (remove-path! target-dir)          ; target-slot 必定是非活动槽
+       (mkdir-p staging-dir)
+
+       (define os-release (string-append staging-dir "/.os-release"))
        (call-with-output-file os-release
-                              (lambda (port)
-                                (display "NAME=\"Guix System\"\nID=guix\n" port)))
-       
+         (lambda (port)
+           (display "NAME=\"Guix System\"\nID=guix\n" port)
+           (fsync port)))
+
        (define (build-uki kernel initrd cmdline out-name)
-         (let ((out (string-append uki-dir "/" out-name)))
+         (let ((out (string-append staging-dir "/" out-name)))
            (apply invoke ukify-bin "build"
              "--linux" kernel
              "--initrd" initrd
@@ -127,50 +195,12 @@
                       "--secureboot-certificate" db-crt)
                 '())
               (list "--output" out)))
+           ;; ukify 已关闭输出 fd；显式 fsync 后才允许发布这个槽。
+           (fsync-path! out)
            out))
-       
-       (define (sign-efi file)
-         (when signed?
-           (invoke sbsign-bin "--key" db-key "--cert" db-crt
-                   "--output" file file)))
-       
-       ;; 烘入脚本的当前条目（boot-plan 各字段）
+
        (define current-cmdline #$(boot-plan-cmdline current))
-       
-       ;; Last Good：boot-state 注册表 → system-N-link → 条目
-       ;; （部署成功 ≠ 启动成功；注册表只由用户态 confirm 更新）
-       (define last-good
-         (resolve-generation mnt (read-boot-states
-                                  (string-append mnt
-                                                 "/persist/system/boot-states.scm"))))
-       
-       ;; 历史启动可用深度：挂 Btrfs 顶层数现存 root
-       ;; （Previous 1 即最新那次，不需要排除任何项）。
-       ;; PREV-K 只在确实存在时生成/显示（部署期保守估计；此后只会
-       ;; 更多不会更少——rotation 只增、cleanup 保底 keep 个）。
-       ;; init 首次部署时状态文件尚不存在（commit-root 才写），按 0 计。
-       (define prev-count
-         (let ((state-path (string-append mnt
-                                          "/persist/system/root-generations/state.scm")))
-           (if (not (file-exists? state-path))
-             0
-             (let ((top "/run/guixcfg-deploy-top"))
-               (mkdir-p top)
-               (mount #$(string-append "/dev/mapper/" %luks-mapper-name)
-                      top "btrfs" 0 "subvolid=5")
-               (let ((names (scandir top)))
-                 (umount top)
-                 (min 3
-                      (length
-                       (filter-map parse-root-generation
-                                   (or names '())))))))))
-       
-       ;; 1. 构建 UKI
-       ;;    CURRENT：当前系统 + fresh root（normal）
-       ;;    PREV-K：当前系统 + 往前第 K 个 root（previous:K 是
-       ;;            运行期相对选择器，initrd 启动时解析，不过期）
-       ;;    RECOVERY：last-good 系统 + last-good root
-       ;;            （rootmode=recovery；无 last-good 记录时不生成）
+
        (build-uki #$(boot-plan-kernel current)
                   #$(boot-plan-initrd current)
                   current-cmdline
@@ -188,59 +218,92 @@
                     (third last-good)
                     (string-append (fourth last-good) " rootmode=recovery")
                     "RECOVERY.EFI"))
-       
-       ;; 2. Limine：二进制 + 配置
-       ;;    菜单：正常启动 / Previous boots（折叠子菜单，前 3 次）/
-       ;;    Recovery（last-good 系统 + last-good root）。
-       ;;    注意菜单文本避免 CJK——Limine 内置字体没有中文字形。
-       (copy-file limine-bin (string-append boot-dir "/BOOTX64.EFI"))
-       (sign-efi (string-append boot-dir "/BOOTX64.EFI"))
-       (call-with-output-file (string-append esp "/limine.conf")
-                              (lambda (port)
-                                (format port "\
+
+       (delete-file os-release)
+       ;; 先持久化 staging 内的目录项，再把完整目录发布为 target-slot。
+       (fsync-path! staging-dir)
+       (rename-file staging-dir target-dir)
+       (fsync-path! uki-dir)
+
+       ;; ── 2. 准备新的 Limine fallback 与配置，但尚不切菜单 ─────────
+       (define fallback-file (string-append boot-dir "/BOOTX64.EFI"))
+       (define fallback-new (string-append fallback-file ".new"))
+       (define fallback-unsigned (string-append fallback-file ".unsigned"))
+       (remove-path! fallback-new)
+       (remove-path! fallback-unsigned)
+       (if signed?
+         (begin
+           (copy-file limine-bin fallback-unsigned)
+           (invoke sbsign-bin "--key" db-key "--cert" db-crt
+                   "--output" fallback-new fallback-unsigned)
+           (delete-file fallback-unsigned))
+         (copy-file limine-bin fallback-new))
+       (fsync-path! fallback-new)
+
+       (define config-new (string-append config-file ".new"))
+       (call-with-output-file config-new
+         (lambda (port)
+           (format port "\
 timeout: 3
 
 /GNU Guix
     protocol: efi_chainload
-    image_path: boot():/EFI/Guix/CURRENT.EFI
-")
-                                ;; 历史启动子菜单：只有实际存在的 root 才出现
-                                (when (> prev-count 0)
-                                  (format port "\n/Previous boots\n")
-                                  (for-each
-                                   (lambda (k)
-                                     (format port "\
+    image_path: boot():/EFI/Guix/~a/CURRENT.EFI
+" target-slot)
+           (when (> prev-count 0)
+             (format port "\n/Previous boots\n")
+             (for-each
+              (lambda (k)
+                (format port "\
     //Previous boot ~a
         protocol: efi_chainload
-        image_path: boot():/EFI/Guix/PREV-~a.EFI
-" k k))
-                                   (iota prev-count 1)))
-                                (when last-good
-                                  (format port "\
+        image_path: boot():/EFI/Guix/~a/PREV-~a.EFI
+" k target-slot k))
+              (iota prev-count 1)))
+           (when last-good
+             (format port "\
 /GNU Guix (Recovery)
     protocol: efi_chainload
-    image_path: boot():/EFI/Guix/RECOVERY.EFI
-"))))
-       
-       ;; 3. .deployed 清单：只清理我们部署过且这次不再需要的文件
-       (define deployed-file (string-append uki-dir "/.deployed"))
-       (define wanted
-         (append (list "CURRENT.EFI"
-                       "../../EFI/BOOT/BOOTX64.EFI"
-                       "../../../limine.conf")
-                 (map (lambda (k)
-                        (string-append "PREV-" (number->string k) ".EFI"))
-                      (iota prev-count 1))
-                 (if last-good '("RECOVERY.EFI") '())))
+    image_path: boot():/EFI/Guix/~a/RECOVERY.EFI
+" target-slot))
+           (fsync port)))
+
+       ;; ── 3. 提交 ─────────────────────────────────────────────────
+       ;; fallback 先换：即使随后掉电，新 Limine 仍读取旧 limine.conf。
+       ;; limine.conf 是最终 commit point：它一旦切换，新槽已完整持久化。
+       (atomic-replace-file! fallback-new fallback-file)
+       (atomic-replace-file! config-new config-file)
+
+       ;; ── 4. 所有权清单与旧 flat layout 清理 ─────────────────────
+       ;; 只删除旧版 .deployed 曾记录、且名字属于旧 flat UKI 白名单的文件；
+       ;; 不信任清单里的任意 ../ 路径。A/B 两槽都保留，由下一次部署覆盖
+       ;; 非活动槽，因此总能留下上一套完整 deployment。
+       (define (legacy-flat-uki? name)
+         (or (string=? name "CURRENT.EFI")
+             (string=? name "RECOVERY.EFI")
+             (and (string-prefix? "PREV-" name)
+                  (string-suffix? ".EFI" name)
+                  (not (string-contains name "/")))))
        (when (file-exists? deployed-file)
-         (for-each
-          (lambda (old)
-            (unless (member old wanted)
-              (delete-file (string-append uki-dir "/" old))))
-          (call-with-input-file deployed-file read)))
-       (call-with-output-file deployed-file
-                              (lambda (port) (write wanted port) (newline port)))
-       
-       (format #t "UKI 部署完成（~a签名，Recovery 项：~a）~%"
+         (let ((old (false-if-exception
+                     (call-with-input-file deployed-file read))))
+           (when (list? old)
+             (for-each
+              (lambda (name)
+                (when (and (string? name) (legacy-flat-uki? name))
+                  (remove-path! (string-append uki-dir "/" name))))
+              old))))
+       (atomic-write-file! deployed-file
+                           (lambda (port)
+                             (write '("A" "B"
+                                      "../../EFI/BOOT/BOOTX64.EFI"
+                                      "../../limine.conf")
+                                    port)
+                             (newline port)))
+
+       (format #t
+               "UKI deployment ~a 已提交（~a签名，Recovery：~a；原活动槽：~a）~%"
+               target-slot
                (if signed? "已" "未")
-               (if last-good "有" "无"))))))
+               (if last-good "有" "无")
+               (or active "legacy/none"))))))

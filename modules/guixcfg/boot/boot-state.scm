@@ -1,27 +1,28 @@
 ;;; Boot State 注册表：记录“最后一次确认启动成功”的 Guix system
-;;; generation（Current/Last Good 菜单语义的数据源）。
+;;; generation 与当次实际 kernel command line（Recovery 的 Guix 轴）。
 ;;;
 ;;; 与 root generation 状态（storage/root-generation.scm）的分工：
 ;;;   root-generations/state.scm   → 哪个 @root-N 可回退（Btrfs 轴）
 ;;;   boot-states.scm              → 哪个 Guix system 可回退（声明式系统轴）
-;;; 两轴正交（docs/storage.md 第 18 章）。
+;;; 两轴正交。Recovery 有意把两个轴各自最近确认值组合起来；它是人工
+;;; 救援入口，不把这对组合提升为正常启动可见的稳定状态。
 ;;;
 ;;; 语义关键：部署成功 ≠ 启动成功。注册表只在用户态确认
-;;; （services/ephemeral-root 的 confirm，见 docs/storage.md 17.4）
-;;; 之后更新，不由部署流程更新。
-;;;
-;;; 注册表只保存 Guix profile generation 编号——
-;;; /var/guix/profiles/system-N-link 本身就是 Guix 维护的 GC root，
-;;; kernel/initrd/cmdline 都能从它解析，不需要复制任何路径。
+;;; （services/ephemeral-root 的 confirm）之后更新，不由部署流程更新。
 
 (define-module (guixcfg boot boot-state)
-               #:use-module (guix records)
+               #:use-module (guixcfg utils atomic-file)
                #:use-module (ice-9 ftw)      ; scandir
                #:use-module (ice-9 regex)    ; string-match
+               #:use-module (ice-9 rdelim)   ; read-line
+               #:use-module (srfi srfi-1)    ; filter
+               #:use-module (srfi srfi-13)   ; string-tokenize/string-join
                #:export (%boot-states-path
                          read-boot-states
+                         read-boot-command-line
                          write-boot-states!
                          boot-states-last-good
+                         current-kernel-command-line
                          resolve-generation
                          current-system-generation))
 
@@ -29,41 +30,87 @@
 (define %boot-states-path "/persist/system/boot-states.scm")
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 原子读写（与 root-generation 的 state.scm 同一模式：
-;;; 写 .new → fsync → rename；读取时主文件损坏回退 .prev）。
+;;; crash-durable 读写：先把能够成功解析的旧状态原子写入 .prev，再把
+;;; .new → fsync → rename 为主文件并 fsync 父目录。损坏主文件不会污染 .prev。
 
-(define (write-boot-states! path last-good)
-  "LAST-GOOD 是 Guix profile generation 编号（整数）或 #f。"
-  (let ((new  (string-append path ".new"))
-        (prev (string-append path ".prev")))
-    (when (file-exists? path)
-      (copy-file path prev))
-    (call-with-output-file new
-                           (lambda (port)
-                             (write `((last-good . ,last-good)) port)
-                             (newline port)
-                             (fsync port)))
-    (rename-file new path)))
+(define (boot-states-last-good state)
+  "从 boot-state alist 中取得 last-good generation。"
+  (assq-ref state 'last-good))
 
-(define (read-boot-states path)
-  "读取注册表，返回 last-good 编号或 #f。文件不存在或损坏均视为 #f。"
+(define (write-boot-states! path last-good command-line)
+  "记录 LAST-GOOD Guix profile generation 和当次实际 COMMAND-LINE。
+COMMAND-LINE 已去除 rootmode=，Recovery 部署时会追加 rootmode=recovery。"
+  (let ((previous (and (or (file-exists? path)
+                           (file-exists? (string-append path ".prev")))
+                       (false-if-exception (read-boot-state-alist path)))))
+    (when previous
+      (atomic-write-file! (string-append path ".prev")
+                          (lambda (port)
+                            (write previous port)
+                            (newline port))))
+    (atomic-write-file! path
+                        (lambda (port)
+                          (write `((last-good . ,last-good)
+                                   (command-line . ,command-line))
+                                 port)
+                          (newline port)))))
+
+(define (read-boot-state-alist path)
   (define (try p)
-    (assq-ref (call-with-input-file p read) 'last-good))
+    (let* ((state (call-with-input-file p read))
+           (last-good (and (list? state) (assq-ref state 'last-good)))
+           (command-line (and (list? state) (assq-ref state 'command-line))))
+      (unless (and (list? state)
+                   (assq 'last-good state)
+                   (or (not last-good) (integer? last-good))
+                   (or (not command-line) (string? command-line)))
+        (error "boot-state 格式错误" p state))
+      state))
   (if (file-exists? path)
     (catch #t
       (lambda () (try path))
       (lambda (key . args)
         (let ((prev (string-append path ".prev")))
-          (and (file-exists? prev) (try prev)))))
-    #f))
+          (if (file-exists? prev)
+            (try prev)
+            (apply throw key args)))))
+    (let ((prev (string-append path ".prev")))
+      (and (file-exists? prev) (try prev)))))
+
+(define (read-boot-states path)
+  "读取注册表，返回 last-good generation 编号或 #f。"
+  (let ((state (read-boot-state-alist path)))
+    (and state (boot-states-last-good state))))
+
+(define (read-boot-command-line path)
+  "读取 last-good 启动时记录的完整 kernel command line；旧格式返回 #f。"
+  (let ((state (read-boot-state-alist path)))
+    (and state
+         (let ((value (assq-ref state 'command-line)))
+           (and (string? value) value)))))
+
+(define (current-kernel-command-line)
+  "读取 /proc/cmdline，并去掉 rootmode= 参数。
+rootmode 属于本项目菜单选择语义，不应固化进 Guix generation 的
+last-good 启动参数；Recovery 会显式追加 rootmode=recovery。"
+  (call-with-input-file "/proc/cmdline"
+    (lambda (port)
+      (let ((line (read-line port)))
+        (and (string? line)
+             (string-join
+              (filter (lambda (arg)
+                        (not (string-prefix? "rootmode=" arg)))
+                      (string-tokenize line))
+              " "))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; generation 编号 → 可部署条目。
 
-(define (resolve-generation mount number)
+(define* (resolve-generation mount number #:optional command-line)
   "把 Guix profile generation NUMBER 解析成可构建 UKI 的条目：
-(list system-path kernel initrd cmdline)。MOUNT 是系统根挂载点
-（运行时为 \"\"，init 时为 \"/mnt\"）。解析失败返回 #f。"
+(list system-path kernel initrd cmdline)。MOUNT 是系统根挂载点。
+若有 COMMAND-LINE，优先使用确认启动时记录的完整参数；旧状态文件没有
+该字段时退回最小兼容命令行。解析失败返回 #f。"
   (and number
        (let* ((link (string-append mount "/var/guix/profiles/system-"
                                    (number->string number) "-link"))
@@ -76,9 +123,10 @@
                      (list system
                            kernel
                            initrd
-                           (string-append
-                            "root=/selected-root gnu.system=" system
-                            " gnu.load=" system "/boot"))))))))
+                           (or command-line
+                               (string-append
+                                "root=/selected-root gnu.system=" system
+                                " gnu.load=" system "/boot")))))))))
 
 (define (current-system-generation)
   "返回当前运行系统对应的 Guix profile generation 编号（或 #f）。

@@ -167,7 +167,9 @@ init 完成后由 `commit-root` 把内容收进子卷——init 会删除目标�
 ├── keys/
 │   ├── age/
 │   │   └── host.key
-│   └── secure-boot/
+│   ├── secure-boot/
+│   └── tpm/                 # PCR policy signing private material（解锁后使用）
+├── tpm/                     # enrollment 管理/审计状态（解锁后使用）
 ├── ssh/
 ├── machine-id
 ├── facts/
@@ -184,7 +186,12 @@ init 完成后由 `commit-root` 把内容收进子卷——init 会删除目标�
 - 安装时发现的机器事实；
 - root generation 状态；
 - 安装 revision；
-- 必要的 TPM enrollment 状态。
+- TPM 的**解锁后**管理/审计状态与 PCR policy signing 私有材料。
+
+注意：TPM 自动解锁在打开 LUKS 之前发生，因此 sealed/encrypted credential、
+LUKS token metadata、PCR policy 的公开验证材料等“解锁前必需数据”不能只存在
+`/persist/system`。它们优先进入 LUKS2 JSON token/header，必要时才放 ESP 或
+TPM NV；详细信任模型见 `docs/boot.md` 第 16.4 节。
 
 ## 13.2 `/persist/data-app`
 
@@ -402,28 +409,38 @@ source-template
 ```
 
 （Guix 系统侧的 last-good 不在此处——那是 Boot State 注册表
-`/persist/system/boot-states.scm` 的职责，见第 18 章两轴正交；
-唯一能启动旧系统的入口是 Recovery：last-good 系统 + last-good root。）
+`/persist/system/boot-states.scm` 的职责，见第 18 章两轴正交；唯一能启动旧
+Guix generation 的入口是 Recovery。Recovery 有意把两个轴各自最近确认值组合，
+不要求该组合曾作为一次正常启动被验证；旧 root 的定位是救援材料，而不是稳定状态。）
 
 ### 17.7.1 状态文件的事务性
 
 状态文件的读写只允许经过 `(guixcfg storage root-generation)` 的
 `read-state` / `write-state!`：
 
+先读取上一份**可解析**状态；若存在，则原子刷新：
+
+```text
+state.scm.prev.new
+    ↓ write + fsync
+    ↓ rename
+state.scm.prev
+    ↓ fsync(parent directory)
+```
+
+然后提交新主文件：
+
 ```text
 state.scm.new
     ↓ write + fsync
     ↓ rename（原子替换）
 state.scm
+    ↓ fsync(parent directory)
 ```
 
-覆盖前把现有文件保留为：
-
-```text
-state.scm.prev
-```
-
-主文件损坏（如断电导致半截文件）时读取方自动回退 `.prev`。
+主文件损坏时读取方自动回退 `.prev`。损坏的主文件不会被复制/rename 去覆盖
+最后一份有效 `.prev`，因此“已有坏主文件 + 写新状态 + 中途掉电”也仍保留
+可恢复状态。
 
 启动时的 root 选择事务中，**状态提交是最后一步**：
 
@@ -443,6 +460,7 @@ state.scm.prev
 
 `created-at` 只作为 metadata。清理服务删除旧 `@root-N` 时，
 顺带用 `prune-created-at` 清掉对应条目，避免随时间无限增长。
+
 ## 17.8 清理
 
 根据 host policy 保留一定数量的旧 root generations。
@@ -511,6 +529,25 @@ UKI / system closure
     ↓
 在某个 @root-N 中启动
 ```
+
+
+## 18.4 Recovery 中的关系
+
+两个 generation 轴保持独立：
+
+```text
+Current / Previous boots
+  当前 Guix system generation
+  + fresh/历史 root
+
+Recovery
+  最近确认的 Guix system generation
+  + 最近确认的 root generation
+```
+
+Recovery 的组合是**救援语义**而不是新的稳定状态身份。两个 last-good 可能来自
+不同启动，只允许 Recovery 使用；正常入口不会因此回到旧 Guix generation。
+这允许旧 root 专注于找回误删/未持久化数据，而不把它扩展成另一套长期系统状态。
 
 ---
 

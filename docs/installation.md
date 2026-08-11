@@ -50,10 +50,13 @@ cow-store 环境下 `system init` 的另一个坑：init 会先 `delete-file-rec
 → swapfile
 → @root-installing
 → 挂载 /mnt
-→ guix system init（含 UKI/Limine 部署）
+→ herd start cow-store /mnt
+→ （可选）生成 Secure Boot PK/KEK/db
+→ guix system init（含 UKI/Limine 部署；有密钥则直接签名）
 → commit-root（收养 /var/guix → @root-template/@root-0 → 初始状态
    → 重跑部署刷新 ESP 菜单）
-→ （可选）Secure Boot 密钥与固件注册
+→ （可选）构建 Secure Boot 注册材料并写入固件
+→ reboot
 ```
 
 ### 30.3.1 磁盘安装
@@ -63,18 +66,49 @@ guix shell gptfdisk cryptsetup btrfs-progs dosfstools util-linux -- \
   guix repl tools/disk-install.scm -- apply vm /dev/vda
 ```
 
+这里有意使用 LiveCD 当前的普通 `guix repl`，而不是 `guix time-machine`：
+此阶段 `/gnu/store` 还在 LiveCD 的内存盘上，只需要纯 storage policy 与磁盘
+操作模块；Rosenthal/Nonguix 等 channel 依赖直到 `herd start cow-store /mnt`
+之后的 `system init` 才加载。
+
 ### 30.3.2 系统安装
+
+首先把 Guix store 转移到目标盘：
 
 ```bash
 herd start cow-store /mnt
+```
+
+如果本次安装准备启用 Secure Boot，并希望第一次生成的 UKI 就已经签名，
+应当在 `system init` **之前**生成密钥：
+
+```bash
+guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/secure-boot-keygen.scm -- \
+  guix repl tools/secure-boot-keygen.scm \
+  /mnt/persist/system/keys/secure-boot
+```
+
+该步骤只生成：
+
+```text
+PK.key  PK.crt
+KEK.key KEK.crt
+db.key  db.crt
+```
+
+不生成固件 enrollment 材料，也不会依赖 `efitools`。
+
+然后安装系统：
+
+```bash
 GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
   guix time-machine -C channels.lock.scm -- system init \
   -L modules modules/guixcfg/hosts/vm.scm /mnt
 ```
 
-init 末尾会运行 UKI 部署脚本（生成 UKI、Limine 配置与 fallback）。
-此时 ESP 菜单只有 `GNU Guix` 一项：root 状态文件要 `commit-root`
-才写、last-good 要第一次健康启动才有——零历史时的正确形态。
+如果 `db.key` 与 `db.crt` 已存在，UKI 和 Limine 会在部署时自动签名；
+不存在时则生成未签名的开发期启动环境。
 
 ### 30.3.3 安装期提交
 
@@ -85,34 +119,78 @@ guix repl tools/disk-install.scm -- commit-root /mnt
 依次执行：收养 `/var/guix` 进 `@persist-var-guix` → 快照固化
 `@root-template` / `@root-0` → 删除 `@root-installing` → 写初始
 root generation 状态（`first-boot`，原子写）→ **重跑 UKI 部署**，
-让 ESP 菜单立即带上 Previous 项。然后：
-
-```bash
-swapoff -a && umount -R /mnt && reboot
-```
+让 ESP 菜单立即带上 Previous 项。之后不要立即卸载重启：后面
+可能还要在 LiveCD 里执行 Secure Boot enrollment（30.3.4）。
 
 首次启动由 initrd 里的无状态根逻辑接管。菜单语义见 docs/boot.md
 第 16.1 节；`rootmode=` 参数见 docs/storage.md 第 17.6 节。
 
-### 30.3.4 Secure Boot（可选，实机建议先无 Secure Boot 验证一轮）
+### 30.3.4 Secure Boot 固件注册（可选）
+
+注册材料与密钥生成分离。
+
+只有在 PK/KEK/db 已生成、且 UKI/Limine 已使用 `db` 密钥完成签名后，
+才构建 enrollment keystore：
 
 ```bash
-# 生成密钥（LiveCD 内，目标盘的 /persist/system/keys/secure-boot/）
-guix time-machine -C channels.lock.scm -- shell -m manifests/installer.scm -- \
-  guix repl tools/secure-boot-keygen.scm /mnt/persist/system/keys/secure-boot
-
-# 构建合并 keystore（自有 + 微软证书 + 固件默认值）
-guix time-machine -C channels.lock.scm -- shell -m manifests/installer.scm -- \
-  guix repl tools/secure-boot-enroll.scm /mnt/persist/system/keys/secure-boot
-
-# 注册进固件（Setup Mode；PK 最后写，写入即启用）
-guix time-machine -C channels.lock.scm -- shell -m manifests/installer.scm -- sh -c '
-  sbkeysync --keystore /mnt/persist/system/keys/secure-boot/keystore --verbose &&
-  sbkeysync --keystore /mnt/persist/system/keys/secure-boot/keystore --verbose --pk'
+guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/secure-boot-enroll.scm -- \
+  guix repl tools/secure-boot-enroll.scm \
+  /mnt/persist/system/keys/secure-boot
 ```
 
-密钥存在后，每次部署（init/reconfigure）自动用 db 密钥签 UKI 与
-Limine。信任模型与 OpROM 注意事项见 docs/boot.md 第 16.3 节。
+该步骤负责：
+
+```text
+自有 PK/KEK/db
++ Microsoft compatibility certificates
++ KEKDefault/dbDefault
+→ keystore/{PK,KEK,db}/*.auth
+```
+
+然后在固件 Setup Mode 下注册：
+
+```bash
+guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/secure-boot-enroll.scm -- \
+  sh -c '
+    sbkeysync \
+      --keystore /mnt/persist/system/keys/secure-boot/keystore \
+      --verbose &&
+    sbkeysync \
+      --keystore /mnt/persist/system/keys/secure-boot/keystore \
+      --verbose --pk
+  '
+```
+
+PK 最后写入。
+
+如果 LiveCD 中因 `efitools` 没有 substitute 而触发本地构建，并在 Guix
+daemon 的 `mountIntoChroot` 阶段失败（`bind mount ... guix-build-efitools
+... No such file or directory`），**不需要因此阻塞系统安装**。该错误发生在
+真正编译 `efitools` 之前：前面的依赖拿到了 substitute，而 `efitools` 恰好
+没有，于是触发了本地 sandbox build——问题属于 installer LiveCD 的
+cow-store / `/gnu/store` / guix-daemon build sandbox 挂载环境，不是
+`efitools` 源码本身无法编译。`guix time-machine` 只更换 Guix client 与
+package definition，并不会替换 LiveCD 上正在运行的 guix-daemon；也不要
+手工创建 `/tmp/guix-build-*` 或 `.drv.chroot` 来绕过。正确做法：保持
+Secure Boot 关闭，先启动安装好的 Guix System，再在目标系统中运行同一
+enrollment 流程，此时路径改为：
+
+```text
+/persist/system/keys/secure-boot
+```
+
+如果密钥是在第一次启动以后才生成的，则在 enrollment 前必须先
+`guix system reconfigure` 一次，以重新生成已经签名的 UKI/Limine。
+
+最后：
+
+```bash
+swapoff -a
+umount -R /mnt
+reboot
+```
 
 ## 30.4 仓库复制
 

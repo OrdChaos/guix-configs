@@ -71,11 +71,10 @@
 ;;;     (字段 访问器 (可选修饰如 default)))
 ;;; 构造时写字段名，顺序随意：(host-storage-policy (name 'vm) (esp-size ...))。
 
-;; Host policy 的“类型”定义在本模块（它是存储模型的一部分），
-;; 但每台机器的 policy“实例”定义在各自的 host 模块中
-;; （(guixcfg hosts vm) / (guixcfg hosts laptop)），
-;; 因为 host 才是最终组装点（docs/project-definition.md 第 21 章），
-;; 共享模块不反向依赖 host（原则 6）。
+;; Host policy 的“类型”定义在本模块（它是存储模型的一部分）；具体实例
+;; 集中定义在 (guixcfg storage policies)。这样早期 disk-install 只加载纯存储
+;; 依赖，不会为了取得 policy 反向加载完整 host OS/UKI/channel 图。host 模块
+;; 仍可重新导出对应 policy 作为最终组装点的兼容接口。
 
 (define-record-type* <host-storage-policy>
                      host-storage-policy make-host-storage-policy

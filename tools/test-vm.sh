@@ -135,6 +135,8 @@ VM 启动后，在 guest 里粘贴这一行（挂载仓库共享目录）：
 然后（guix shell 提供 ISO 里没有的 sgdisk 等工具）：
   guix shell gptfdisk cryptsetup btrfs-progs dosfstools util-linux -- \
     guix repl tools/disk-install.scm -- apply vm /dev/vda
+  （这里故意不用 time-machine：disk-install 的早期依赖只到 storage/policies，
+   不应加载 Rosenthal/Nonguix；先把 /gnu/store 切到目标盘再进入锁定频道。）
 
 磁盘安装完成后，先把 store 挪到目标盘（LiveCD 的 /gnu/store 在内存里，
 直接跑 time-machine/system init 会把内存写满）：
@@ -144,7 +146,7 @@ VM 启动后，在 guest 里粘贴这一行（挂载仓库共享目录）：
 让它同时是合法入口。GUIX_CONFIG_FACTS 指向目标盘上的机器事实文件）：
   GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
     guix time-machine -C channels.lock.scm -- system init \
-    -L modules modules/guixcfg/hosts/vm-uki.scm /mnt
+    -L modules modules/guixcfg/hosts/vm.scm /mnt
 
 然后提交安装期 root：
   guix repl tools/disk-install.scm -- commit-root /mnt

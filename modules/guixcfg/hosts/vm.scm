@@ -8,6 +8,7 @@
                #:use-module (gnu services networking)      ; dhcpcd-service-type
                #:use-module (gnu packages bash)            ; bash
                #:use-module (guixcfg storage model)
+               #:use-module ((guixcfg storage policies) #:prefix storage:)
                #:use-module (guixcfg boot initrd)          ; ephemeral-root-initrd
                #:use-module (guixcfg boot uki-bootloader)  ; uki-bootloader
                #:use-module (guixcfg services ephemeral-root)
@@ -16,15 +17,9 @@
                #:use-module (guixcfg system packages)
                #:export (%vm-storage-policy %os))
 
-;; VM 存储 policy（docs/storage.md 第 20.2 节）：
-;; QEMU 测试盘，容量小，不绑定具体 by-id（安装时必须显式传入设备）。
-(define %vm-storage-policy
-  (host-storage-policy
-   (name 'vm)
-   (esp-size (gib 2))
-   (min-disk-size (gib 20))
-   (swapfile-size (gib 4))
-   (keep-root-generations 3)))
+;; 保留 host 模块原有导出名；实际 policy 放在纯存储模块中，避免早期
+;; disk-install 为取 policy 而加载完整 OS/UKI/channel 依赖。
+(define %vm-storage-policy storage:%vm-storage-policy)
 
 ;; VM 测试账号。密码哈希对应明文 guix-vm，仅用于测试 VM；
 ;; 真实用户的密码材料走 age secret（docs/secrets.md 第 15 章）。

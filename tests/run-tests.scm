@@ -12,7 +12,10 @@
 ;; SRFI-64 的计数器都记录在“当前 runner”上。
 (test-runner-current (test-runner-simple))
 
+(primitive-load "tests/test-atomic-file.scm")
+(primitive-load "tests/test-boot-state.scm")
 (primitive-load "tests/test-model.scm")
+(primitive-load "tests/test-policies.scm")
 (primitive-load "tests/test-plan.scm")
 (primitive-load "tests/test-validate.scm")
 (primitive-load "tests/test-device.scm")

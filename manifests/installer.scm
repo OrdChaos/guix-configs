@@ -1,7 +1,11 @@
-;;; 安装环境：LiveCD 中执行磁盘安装所需的工具。
-;;; 用法（docs/installation.md 第 30 章）：
-;;;   guix time-machine -C channels.lock.scm -- shell -m manifests/installer.scm \
-;;;     -- configctl install --host vm /dev/vda
+;;; LiveCD 早期磁盘安装环境。
+;;;
+;;; 这里只包含分区、加密、文件系统和设备探测所需工具。
+;;; 必须保持与 UKI / Secure Boot / TPM 工具链解耦：
+;;;   keygen 用 manifests/secure-boot-keygen.scm，
+;;;   enrollment 用 manifests/secure-boot-enroll.scm。
+;;; 用法（从仓库根目录）：
+;;;   guix time-machine -C channels.lock.scm -- shell -m manifests/installer.scm
 
 (specifications->manifest
  (list "git"
@@ -9,8 +13,4 @@
        "cryptsetup"
        "btrfs-progs"
        "dosfstools"
-       "ukify"          ; UKI 组装与 Secure Boot 密钥生成（Rosenthal）
-       "openssl"        ; 证书格式转换（DER→PEM，secure-boot-enroll 用）
-       "sbsigntools"    ; UKI/EFI 签名与固件变量签名（sbsign、sbvarsign）
-       "efitools"       ; cert-to-efi-sig-list、efi-updatevar（固件注册）
-       "util-linux"))   ; lsblk、findmnt、udevadm、uuidgen 等设备工具
+       "util-linux"))   ; lsblk、findmnt、udevadm 等设备工具

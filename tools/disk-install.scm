@@ -12,12 +12,12 @@
 (add-to-load-path (string-append (getcwd) "/modules"))
 
 (use-modules (guixcfg storage model)
+             (guixcfg storage policies)
              (guixcfg storage plan)
              (guixcfg storage validate)
              (guixcfg storage device)
              (guixcfg storage install)
              (guixcfg storage commit)
-             (guixcfg hosts vm)   ; inspect 的参考容量下限
              (ice-9 format)
              (ice-9 match))
 
@@ -33,14 +33,11 @@
 host 可选: vm, laptop~%"))
 
 (define (load-policy host)
-  "按 host 名从对应 host 模块加载存储 policy（如 %vm-storage-policy）。"
-  (let* ((mod (resolve-module `(guixcfg hosts ,(string->symbol host))))
-         (sym (string->symbol (string-append "%" host "-storage-policy")))
-         (var (and mod (module-variable mod sym))))
-    (or (and var (variable-ref var))
-        (begin
-         (format (current-error-port) "未知 host 或其存储 policy: ~a~%" host)
-         (exit 1)))))
+  "从纯存储模块加载 HOST policy；这里不能加载完整 host OS 模块。"
+  (or (storage-policy-by-name host)
+      (begin
+       (format (current-error-port) "未知 host 或其存储 policy: ~a~%" host)
+       (exit 1))))
 
 (define (cmd-inspect device)
   (let ((facts (probe-device device)))

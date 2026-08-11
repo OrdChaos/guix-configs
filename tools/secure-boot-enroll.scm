@@ -8,9 +8,10 @@
 ;;;
 ;;; 输出 sbkeysync 兼容的 keystore：<keydir>/keystore/{PK,KEK,db}/*.auth
 ;;;
-;;; 用法（工具经 installer manifest 提供；从仓库根目录）：
-;;;   guix time-machine -C channels.lock.scm -- shell -m manifests/installer.scm \
-;;;     -- guix repl tools/secure-boot-enroll.scm [keydir]
+;;; 用法（从仓库根目录）：
+;;;   guix time-machine -C channels.lock.scm -- \
+;;;     shell -m manifests/secure-boot-enroll.scm -- \
+;;;     guix repl tools/secure-boot-enroll.scm [keydir]
 ;;;
 ;;; keydir 默认为 /persist/system/keys/secure-boot（LiveCD 安装时指向
 ;;; /mnt/persist/...）。微软证书来自 (guixcfg security certificates)
@@ -34,6 +35,22 @@
 
 (define %default-keydir "/persist/system/keys/secure-boot")
 (define %ms-owner-guid "77fa9abd-0359-4d32-bd60-28f4e78f784b")  ; Microsoft
+
+;; keygen 必须完整产出这六个文件；缺任何一个都不能构建 keystore。
+(define %required-key-files
+  '("PK.key"
+    "PK.crt"
+    "KEK.key"
+    "KEK.crt"
+    "db.key"
+    "db.crt"))
+
+(define (missing-key-files keydir)
+  (filter
+   (lambda (name)
+     (not (file-exists?
+           (string-append keydir "/" name))))
+   %required-key-files))
 
 (define (mkdir-p dir)
   (unless (file-exists? dir)
@@ -133,10 +150,19 @@ VAR 是字符串 \"KEK\" 或 \"db\"，SIGN-KEY 是签名者名（\"PK\"/\"KEK\"�
                            (exit 1))))
          (work (string-append keydir "/keystore/.work"))
          (keystore (string-append keydir "/keystore")))
-    (unless (file-exists? (string-append keydir "/db.key"))
-      (format (current-error-port)
-              "找不到 ~a 下的密钥，先运行 tools/secure-boot-keygen.scm~%" keydir)
-      (exit 1))
+    (let ((missing (missing-key-files keydir)))
+      (unless (null? missing)
+        (format (current-error-port)
+                "Secure Boot 密钥集不完整：~%")
+        (for-each
+         (lambda (name)
+           (format (current-error-port)
+                   "  缺少 ~a/~a~%"
+                   keydir name))
+         missing)
+        (format (current-error-port)
+                "请先成功运行 tools/secure-boot-keygen.scm。~%")
+        (exit 1)))
     (mkdir-p work)
     
     (let ((guid (command-output "uuidgen")))

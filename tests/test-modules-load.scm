@@ -13,16 +13,18 @@
 
 ;; 依赖顺序排列：被依赖的模块先编译注册。
 (define %all-modules
-  '((guixcfg storage model)
+  '((guixcfg utils atomic-file)
+    (guixcfg storage model)
+    (guixcfg storage policies)
     (guixcfg storage plan)
     (guixcfg storage validate)
     (guixcfg storage device)
     (guixcfg storage partition)
     (guixcfg storage filesystem)
     (guixcfg storage subvolume)
+    (guixcfg storage root-generation)
     (guixcfg storage install)
     (guixcfg storage commit)
-    (guixcfg storage root-generation)
     (guixcfg boot initrd)
     (guixcfg boot boot-state)
     (guixcfg security certificates)

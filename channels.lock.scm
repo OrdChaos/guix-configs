@@ -1,8 +1,8 @@
 (list (channel
        (name 'guix)
-       (url "https://mirrors.hust.edu.cn/git/guix.git")
+       (url "https://codeberg.org/guix/guix.git")
        (branch "master")
-       (commit "cfa0e7da7a4488cfad9f4d8ea28e96de8c5f7bf5")
+       (commit "f0332077b948a72f79c16b0838c3c7cdddaed631")
        (introduction
         (make-channel-introduction
          "9edb3f66fd807b096b48283debdcddccfea34bad"

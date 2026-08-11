@@ -356,7 +356,7 @@ API secret
 备份密钥
 Secure Boot 私钥
 LUKS 恢复密钥
-TPM enrollment 材料
+TPM PCR policy signing 私钥（若需要从备份恢复同一 policy 身份）
 ```
 
 ## 5.4 需要备份恢复的数据
@@ -402,6 +402,8 @@ guix-configs
 │
 ├── manifests/
 │   ├── installer.scm
+│   ├── secure-boot-keygen.scm
+│   ├── secure-boot-enroll.scm
 │   └── development.scm
 │
 ├── modules/
@@ -582,6 +584,8 @@ boot/boot-state.scm       Boot State 注册表（Guix 轴 last-good）
 security/certificates.scm 微软兼容证书（origin + 固定哈希）
 tools/secure-boot-keygen.scm   密钥生成
 tools/secure-boot-enroll.scm   注册材料（合并 keystore）
+manifests/secure-boot-keygen.scm   密钥生成工具环境
+manifests/secure-boot-enroll.scm   固件注册工具环境
 ```
 
 全部先在 VM 验证。
