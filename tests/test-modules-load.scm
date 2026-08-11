@@ -25,6 +25,7 @@
     (guixcfg storage root-generation)
     (guixcfg boot initrd)
     (guixcfg boot boot-state)
+    (guixcfg security certificates)
     (guixcfg boot uki)
     (guixcfg boot uki-bootloader)
     (guixcfg services ephemeral-root)
@@ -32,7 +33,6 @@
     (guixcfg system packages)
     (guixcfg system file-systems)
     (guixcfg hosts vm)
-    (guixcfg hosts vm-uki)
     (guixcfg hosts laptop)))
 
 (define (module-file name)

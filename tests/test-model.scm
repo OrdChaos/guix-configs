@@ -9,8 +9,8 @@
 (test-begin "storage-model")
 
 (test-group "持久子卷（docs/storage.md 第 12 章）"
-            (test-equal "固定 9 个持久子卷"
-                        9 (length %persist-subvolumes))
+            (test-equal "固定 8 个持久子卷"
+                        8 (length %persist-subvolumes))
             
             (test-assert "全部使用 @persist- 前缀（第 10.1 节）"
                          (every (lambda (sv) (persist-subvolume-name? (subvolume-name sv)))
@@ -20,7 +20,7 @@
                          (every (lambda (sv)
                                   (let ((mp (subvolume-mount-point sv)))
                                     (or (string-prefix? "/persist/" mp)
-                                        (member mp '("/gnu/store" "/var/guix" "/boot")))))
+                                        (member mp '("/gnu/store" "/var/guix")))))
                                 %persist-subvolumes))
             
             (test-assert "子卷名不重复"

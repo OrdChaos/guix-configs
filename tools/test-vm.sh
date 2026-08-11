@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# 阶段 2/3 测试 VM：Guix 安装 ISO + 空白 qcow2 数据盘 + 仓库目录 9p 共享。
+# 测试 VM：Guix 安装 ISO + 空白 qcow2 数据盘 + 仓库目录 9p 共享。
 # UEFI 启动（OVMF），本项目只支持 UEFI。
 #
 # 用法（从仓库根目录）：
-#   tools/test-vm.sh /path/to/guix-system-install-x86_64-linux.iso          # 从 ISO 启动（安装）
-#   tools/test-vm.sh                                                        # 从硬盘启动（安装完成后）
+#   tools/test-vm.sh [--secboot] /path/to/guix-system-install-x86_64-linux.iso   # 从 ISO 启动（安装）
+#   tools/test-vm.sh [--secboot]                                                 # 从硬盘启动
+#
+#   --secboot   Secure Boot 能力的 OVMF（OVMF_CODE.secboot）+ swtpm 虚拟 TPM2，
+#               使用独立的 VARS（vms/OVMF_VARS.secboot.fd），不影响开发 VM。
 #
 # ISO 下载：https://guix.gnu.org/download/ （选 "GNU Guix System on ... installer"）
 #
@@ -28,9 +31,19 @@
 
 set -euo pipefail
 
+SECBOOT=0
+if [ "${1:-}" = "--secboot" ]; then
+    SECBOOT=1
+    shift
+fi
+
 ISO=${1:-}
 IMG=vms/test-disk.qcow2
-VARS=vms/OVMF_VARS.fd
+if [ "$SECBOOT" = 1 ]; then
+    VARS=vms/OVMF_VARS.secboot.fd
+else
+    VARS=vms/OVMF_VARS.fd
+fi
 
 mkdir -p vms
 if [ ! -f "$IMG" ]; then
@@ -39,15 +52,31 @@ if [ ! -f "$IMG" ]; then
 fi
 
 # ── OVMF 固件 ──────────────────────────────────────────────
-# CODE 只读、VARS 每 VM 一份可写副本（Secure Boot 变量也存这里，阶段 5 会用到）。
-OVMF_CODE=""
-for p in /usr/share/edk2/x64/OVMF_CODE.4m.fd \
-         /usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
-         /usr/share/OVMF/OVMF_CODE.fd \
-         /usr/share/qemu/OVMF_CODE.fd; do
-    if [ -f "$p" ]; then OVMF_CODE="$p"; break; fi
-done
-[ -n "$OVMF_CODE" ] || { echo "找不到 OVMF_CODE（请安装 edk2-ovmf）" >&2; exit 1; }
+# CODE 只读、VARS 每 VM 一份可写副本（Secure Boot 变量也存这里）。
+if [ "$SECBOOT" = 1 ]; then
+    OVMF_CODE=""
+    for p in /usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd \
+             /usr/share/edk2-ovmf/x64/OVMF_CODE.secboot.fd \
+             /usr/share/OVMF/OVMF_CODE.secboot.fd; do
+        if [ -f "$p" ]; then OVMF_CODE="$p"; break; fi
+    done
+    [ -n "$OVMF_CODE" ] || { echo "找不到 OVMF_CODE.secboot（请安装 edk2-ovmf）" >&2; exit 1; }
+    # secboot 变体的认证变量存储在 SMM 里：缺了这两个参数，
+    # 任何 UEFI 变量写入都会被固件拒绝（Invalid argument）。
+    MACHINE=q35,smm=on
+    PFLASH_SECURE=(-global driver=cfi.pflash01,property=secure,value=on)
+else
+    OVMF_CODE=""
+    for p in /usr/share/edk2/x64/OVMF_CODE.4m.fd \
+             /usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
+             /usr/share/OVMF/OVMF_CODE.fd \
+             /usr/share/qemu/OVMF_CODE.fd; do
+        if [ -f "$p" ]; then OVMF_CODE="$p"; break; fi
+    done
+    [ -n "$OVMF_CODE" ] || { echo "找不到 OVMF_CODE（请安装 edk2-ovmf）" >&2; exit 1; }
+    MACHINE=q35
+    PFLASH_SECURE=()
+fi
 
 if [ ! -f "$VARS" ]; then
     OVMF_VARS=""
@@ -63,6 +92,19 @@ fi
 
 FIRMWARE=(-drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE"
           -drive if=pflash,format=raw,file="$VARS")
+
+# ── TPM2（仅 --secboot 模式，swtpm 虚拟 TPM）────────────────
+TPM=()
+if [ "$SECBOOT" = 1 ]; then
+    command -v swtpm >/dev/null || { echo "找不到 swtpm（请安装）" >&2; exit 1; }
+    mkdir -p vms/tpm
+    rm -f vms/swtpm-sock
+    swtpm socket --tpm2 --tpmstate dir=vms/tpm \
+        --ctrl type=unixio,path=vms/swtpm-sock --daemon
+    TPM=(-chardev socket,id=chrtpm,path=vms/swtpm-sock
+         -tpmdev emulator,id=tpm0,chardev=chrtpm
+         -device tpm-tis,tpmdev=tpm0)
+fi
 
 # ── 启动介质 ───────────────────────────────────────────────
 BOOT=()
@@ -102,14 +144,19 @@ VM 启动后，在 guest 里粘贴这一行（挂载仓库共享目录）：
 让它同时是合法入口。GUIX_CONFIG_FACTS 指向目标盘上的机器事实文件）：
   GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
     guix time-machine -C channels.lock.scm -- system init \
-    -L modules modules/guixcfg/hosts/vm.scm /mnt
+    -L modules modules/guixcfg/hosts/vm-uki.scm /mnt
+
+然后提交安装期 root：
+  guix repl tools/disk-install.scm -- commit-root /mnt
 ────────────────────────────────────────────────────────────
 EOF
 
 exec qemu-system-x86_64 \
-    -machine q35 "${ACCEL[@]}" -m 8G -smp 2 \
+    -machine "$MACHINE" "${ACCEL[@]}" -m 8G -smp 2 \
     -vga virtio \
+    "${PFLASH_SECURE[@]}" \
     "${FIRMWARE[@]}" \
+    "${TPM[@]}" \
     -drive file="$IMG",if=none,id=hd0,format=qcow2 \
     -device virtio-blk-pci,drive=hd0,serial=guix-test-disk \
     "${BOOT[@]}" \

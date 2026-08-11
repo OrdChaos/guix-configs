@@ -9,6 +9,7 @@
                #:use-module (gnu packages bash)            ; bash
                #:use-module (guixcfg storage model)
                #:use-module (guixcfg boot initrd)          ; ephemeral-root-initrd
+               #:use-module (guixcfg boot uki-bootloader)  ; uki-bootloader
                #:use-module (guixcfg services ephemeral-root)
                #:use-module (guixcfg system common)
                #:use-module (guixcfg system file-systems)
@@ -54,9 +55,10 @@
    (timezone %common-timezone)
    (locale %common-locale)
    
-   ;; 阶段 3 先用 GRUB-EFI 跑通启动链；UKI/Limine 在阶段 5 替换（docs/boot.md）。
+   ;; Limine + UKI + UEFI 直启（docs/boot.md 第 16 章）。
+   ;; ESP 部署由 (guixcfg boot uki) 的部署脚本完成。
    (bootloader (bootloader-configuration
-                (bootloader grub-efi-bootloader)
+                (bootloader uki-bootloader)
                 (targets '("/efi"))))
    
    (mapped-devices %cryptroot-mapped-devices)

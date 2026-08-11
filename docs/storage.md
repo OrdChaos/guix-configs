@@ -86,6 +86,10 @@ GPT
 恢复分区
 ```
 
+`/boot` 是 root generation 上的普通目录：bootloader 状态
+（UKI、Limine 配置）全部在 ESP 上（docs/boot.md 第 16 章），
+不需要持久子卷，也不需要独立分区。
+
 ESP 大小由 host policy 提供，目标范围：
 
 ```text
@@ -105,7 +109,6 @@ Btrfs 中创建：
 ```text
 @persist-gnu-store
 @persist-var-guix
-@persist-boot
 @persist-system
 @persist-data-app
 @persist-data-home
@@ -123,18 +126,14 @@ Btrfs 中创建：
 @persist-var-guix
     → /var/guix
 
-@persist-boot
-    → /boot
-
 @persist-system
     → /persist/system
 ```
 
-`@persist-boot` 存在的原因：GRUB 核心镜像的 prefix 是
-`grub-install` 探测 `/boot` 当时所在子卷后写死的。
-若 `/boot` 位于可替换的 `@root-N`，每次新建 root generation 后
-GRUB 都找不到 `normal.mod` 而进入 rescue。
-bootloader 状态因此属于“永不替换的持久数据”，独立于 root generation。
+注意 `@persist-var-guix` 在安装期（`system init` 之前）不挂载，
+init 完成后由 `commit-root` 把内容收进子卷——init 会删除目标的
+`/var/guix` 重新开始注册，挂载点删不掉会导致注册不可靠
+（docs/installation.md 第 30.2 节）。
 
 ```text
 @persist-data-app

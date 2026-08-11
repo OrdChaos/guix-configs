@@ -126,6 +126,15 @@
         (format #t "初始状态: ~s~%" (state->alist state)))
       
       (execute-unmount-top)
+      
+      ;; 6. 重跑部署：init 时状态文件尚不存在，ESP 菜单只有 Current
+      ;; 一项；状态就位后重跑让 Previous 项立即出现（Recovery 项仍等
+      ;; 第一次确认启动后的下次部署——Recovery 不指向未验证系统）。
+      ;; 仅 UKI bootloader 存在部署脚本时执行（GRUB host 跳过）。
+      (let ((deploy (string-append target "/boot/deploy-uki")))
+        (if (file-exists? deploy)
+          (invoke deploy target "/efi")   ; ESP 固定挂 /efi（model 固定事实）
+          (format #t "（非 UKI bootloader，跳过部署刷新）~%")))
       (format #t "~%安装期提交完成。可以 umount -R ~a 并重启，
 首次启动将使用 @root-0（状态 first-boot）。~%" target))
     (lambda (key . args)

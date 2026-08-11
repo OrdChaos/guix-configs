@@ -392,6 +392,8 @@ guix-configs
 
 # 32. 主仓库目录结构
 
+当前实际结构（阶段五状态；未来阶段的目录到对应阶段再出现）：
+
 ```text
 ~/guix-configs/
 ├── README.md
@@ -417,48 +419,30 @@ guix-configs
 │       │   ├── filesystem.scm
 │       │   ├── subvolume.scm
 │       │   ├── install.scm
-│       │   └── root-generation.scm
+│       │   ├── root-generation.scm
+│       │   └── commit.scm
 │       │
 │       ├── system/
 │       │   ├── common.scm
 │       │   ├── packages.scm
-│       │   ├── file-systems.scm
-│       │   ├── hardware/
-│       │   │   ├── graphics.scm
-│       │   │   └── printing.scm
-│       │   └── profiles/
-│       │       ├── desktop.scm
-│       │       ├── development.scm
-│       │       └── gaming.scm
+│       │   └── file-systems.scm
 │       │
 │       ├── services/
-│       │   ├── persistence.scm
-│       │   ├── ephemeral-root.scm
-│       │   ├── age-secrets.scm
-│       │   ├── mihomo.scm
-│       │   └── backup.scm
+│       │   └── ephemeral-root.scm
 │       │
 │       ├── boot/
+│       │   ├── initrd.scm
+│       │   ├── boot-state.scm
 │       │   ├── uki.scm
-│       │   ├── limine.scm
-│       │   ├── secure-boot.scm
-│       │   └── tpm.scm
+│       │   └── uki-bootloader.scm
 │       │
-│       └── home/
-│           ├── common.scm
-│           ├── packages.scm
-│           ├── desktop.scm
-│           ├── services/
-│           │   ├── files.scm
-│           │   ├── environment.scm
-│           │   └── flatpak.scm
-│           └── profiles/
-│               ├── base.scm
-│               ├── desktop.scm
-│               └── development.scm
+│       └── security/
+│           └── certificates.scm
 │
 ├── tools/
 │   ├── disk-install.scm
+│   ├── secure-boot-keygen.scm
+│   ├── secure-boot-enroll.scm
 │   └── test-vm.sh
 │
 ├── tests/
@@ -466,6 +450,7 @@ guix-configs
 │   ├── test-plan.scm
 │   ├── test-validate.scm
 │   ├── test-device.scm
+│   ├── test-root-generation.scm
 │   ├── test-modules-load.scm
 │   └── run-tests.scm
 │
@@ -587,13 +572,16 @@ ephemeral-root.scm
 
 ## 阶段五：UKI、Limine、Secure Boot
 
-完成：
+完成（以最终实现为准，docs/boot.md 第 16 章）：
 
 ```text
-uki.scm
-limine.scm
-secure-boot.scm
-tpm.scm
+boot/initrd.scm           自定义 initrd（启动时选/建 @root-N）
+boot/uki.scm              UKI 部署核心（boot-plan、Limine 菜单、签名自探测）
+boot/uki-bootloader.scm   Guix bootloader 框架适配层
+boot/boot-state.scm       Boot State 注册表（Guix 轴 last-good）
+security/certificates.scm 微软兼容证书（origin + 固定哈希）
+tools/secure-boot-keygen.scm   密钥生成
+tools/secure-boot-enroll.scm   注册材料（合并 keystore）
 ```
 
 全部先在 VM 验证。

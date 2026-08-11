@@ -123,19 +123,19 @@ channels.lock.scm
 
 描述频道集合和上游来源。
 
-预计包括：
+当前包括：
 
 ```text
 Guix
 Nonguix
-personal-channel
-Bluebox（过渡期需要时）
-Rosenthal（确实需要其 boot package 时）
+Rosenthal（UKI 工具链：systemd-stub、ukify）
+personal-channel（需要时）
 ```
 
 不需要的频道应删除，不为“以后可能用”永久保留。
 
-注：Guix 官方 Git 仓库已迁移，`https://git.guix.gnu.org/guix.git` 重定向到 `https://codeberg.org/guix/guix.git`，`channels.scm` 使用 Codeberg 直连。
+注：Guix 官方 Git 仓库已迁移到 Codeberg；`channels.scm` 目前使用
+华科大镜像（`mirrors.hust.edu.cn`）加速，Rosenthal 走 Codeberg 直连。
 
 ## 7.2 `channels.lock.scm`
 
@@ -339,6 +339,10 @@ Btrfs send/receive
 ---
 
 # 29. `configctl`
+
+> 状态：规划中，尚未实现。本章是设计规格；当前的实际命令见
+> docs/installation.md 第 30 章（`tools/disk-install.scm` 与
+> `guix system` 直接调用）。
 
 ## 29.1 安装方式
 

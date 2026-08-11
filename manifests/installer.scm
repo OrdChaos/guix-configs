@@ -9,4 +9,8 @@
        "cryptsetup"
        "btrfs-progs"
        "dosfstools"
-       "util-linux"))   ; lsblk、findmnt、udevadm 等设备工具
+       "ukify"          ; UKI 组装与 Secure Boot 密钥生成（Rosenthal）
+       "openssl"        ; 证书格式转换（DER→PEM，secure-boot-enroll 用）
+       "sbsigntools"    ; UKI/EFI 签名与固件变量签名（sbsign、sbvarsign）
+       "efitools"       ; cert-to-efi-sig-list、efi-updatevar（固件注册）
+       "util-linux"))   ; lsblk、findmnt、udevadm、uuidgen 等设备工具
