@@ -48,17 +48,29 @@
   (program-file
    "ephemeral-root-confirm"
    (with-imported-modules
-    (source-module-closure '((guixcfg storage root-generation))
+    (source-module-closure '((guixcfg storage root-generation)
+                             (guixcfg boot boot-state))
                            #:select? guixcfg-module-select?)
     #~(begin
-       (use-modules (guixcfg storage root-generation))
+       (use-modules (guixcfg storage root-generation)
+                    (guixcfg boot boot-state))
        (let ((path (state-file-path #$%persist-system-mount)))
          (when (file-exists? path)
            (let ((state (read-state path)))
              (when (eq? (root-state-boot-status state) 'trying)
                (write-state! path (confirm-boot state))
                (format #t "ephemeral-root: @root-~a 已确认为 last-good~%"
-                       (root-state-current-generation state))))))))))
+                       (root-state-current-generation state))))))
+       ;; 部署成功 ≠ 启动成功：这里才是真正的“启动确认”——
+       ;; 把当前系统登记为 Boot State 的 last-good（Guix 轴），
+       ;; 供下次部署生成 LAST-GOOD.EFI（见 (guixcfg boot uki)）。
+       (let ((n (current-system-generation)))
+         (if n
+           (begin
+            (write-boot-states! %boot-states-path n)
+            (format #t "boot-state: Guix generation ~a 已确认为 last-good~%"
+                    n))
+           (format #t "boot-state: 无法确定当前 Guix generation，跳过~%")))))))
 
 (define (ephemeral-root-cleanup-program keep)
   "KEEP 是保留的旧 root generation 数量（host policy）。"

@@ -69,13 +69,27 @@
        (unless (file-exists? state-path)
          (error "root generation 状态文件不存在" state-path))
        (let* ((state (read-state state-path))
-              ;; 2. 启动模式：rootmode=normal/keep[:N]/recovery
-              (mode  (or (and=> (find-long-option "rootmode"
-                                                  (linux-command-line))
-                                (lambda (s)
-                                  (or (parse-boot-mode s)
-                                      (error "无法识别的 rootmode" s))))
-                         %default-boot-mode))
+              ;; 2. 启动模式：rootmode=normal/keep[:N]/previous:K/recovery
+              (raw-mode (or (and=> (find-long-option "rootmode"
+                                                     (linux-command-line))
+                                   (lambda (s)
+                                     (or (parse-boot-mode s)
+                                         (error "无法识别的 rootmode" s))))
+                            %default-boot-mode))
+              ;; previous:K 是运行期相对选择器（历史启动菜单），
+              ;; 从顶层目录的现存 generation 解析成具体编号，
+              ;; 再按 keep:N 走——部署期的菜单因此永不过期。
+              (mode  (if (eq? (boot-mode-kind raw-mode) 'previous)
+                       (boot-mode
+                        (kind 'keep)
+                        (generation
+                         (or (previous-generation
+                              (filter-map parse-root-generation
+                                          (scandir top))
+                              (boot-mode-generation raw-mode))
+                             (error "没有足够的历史 root generation"
+                                    (boot-mode-generation raw-mode)))))
+                       raw-mode))
               (plan   (plan-boot state mode (current-time)))
               (target (boot-plan-target-subvolume plan)))
          
@@ -178,7 +192,9 @@
                            (guix build syscalls)   ; mount、umount
                            (srfi srfi-1)
                            (srfi srfi-26)
+                           (ice-9 ftw)              ; scandir（previous:K 解析）
                            (guixcfg storage root-generation)
+                           (guixcfg storage model)  ; parse-root-generation
                            #$@(append-map (lambda (md)
                                             (mapped-device-kind-modules
                                              (mapped-device-type md)))

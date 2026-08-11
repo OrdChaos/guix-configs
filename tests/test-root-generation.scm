@@ -13,15 +13,14 @@
               (last-good-generation 1)
               (created-at '((2 . 200) (1 . 100)))
               (boot-status 'trying)
-              (source-template "@root-template")
-              (system-revision "abc123")))
+              (source-template "@root-template")))
 
 (test-group "状态 alist 序列化"
             (test-equal "state->alist → alist->state 往返"
                         (state->alist %sample-state)
                         (state->alist (alist->state (state->alist %sample-state))))
             
-            (test-equal "缺省字段可省略（created-at/source-template/system-revision）"
+            (test-equal "缺省字段可省略（created-at/source-template）"
                         '()
                         (root-state-created-at
                          (alist->state '((next-generation . 1)
@@ -63,7 +62,26 @@
                         (boot-mode-generation (parse-boot-mode "keep:3")))
             (test-assert "拒绝未知值" (not (parse-boot-mode "bogus")))
             (test-assert "拒绝 keep: 空编号" (not (parse-boot-mode "keep:")))
-            (test-assert "拒绝 keep:-1" (not (parse-boot-mode "keep:-1"))))
+            (test-assert "拒绝 keep:-1" (not (parse-boot-mode "keep:-1")))
+            (test-eq "previous:1 识别为 previous"
+                     'previous
+                     (boot-mode-kind (parse-boot-mode "previous:1")))
+            (test-equal "previous:2 的编号"
+                        2 (boot-mode-generation (parse-boot-mode "previous:2")))
+            (test-assert "拒绝 previous:0" (not (parse-boot-mode "previous:0")))
+            (test-assert "拒绝 previous:" (not (parse-boot-mode "previous:"))))
+
+(test-group "previous-generation（历史启动相对选择器，锚定最新）"
+            (test-equal "K=1 即最近一次启动"
+                        4 (previous-generation '(0 1 2 3 4) 1))
+            (test-equal "最新往旧第 2 个"
+                        3 (previous-generation '(0 1 2 3 4) 2))
+            (test-equal "最新往旧第 3 个"
+                        2 (previous-generation '(0 1 2 3 4) 3))
+            (test-assert "不足 K 个时返回 #f"
+                         (not (previous-generation '(0 1) 3)))
+            (test-assert "空列表返回 #f"
+                         (not (previous-generation '() 1))))
 
 ;;; ── 启动决策（第 17.4–17.6 节）
 

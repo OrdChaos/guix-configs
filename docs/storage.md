@@ -400,8 +400,11 @@ last-good-generation
 created-at
 boot-status
 source-template
-system-revision
 ```
+
+（Guix 系统侧的 last-good 不在此处——那是 Boot State 注册表
+`/persist/system/boot-states.scm` 的职责，见第 18 章两轴正交；
+唯一能启动旧系统的入口是 Recovery：last-good 系统 + last-good root。）
 
 ### 17.7.1 状态文件的事务性
 

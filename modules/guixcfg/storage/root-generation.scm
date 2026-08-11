@@ -21,7 +21,6 @@
                          root-state-created-at
                          root-state-boot-status
                          root-state-source-template
-                         root-state-system-revision
                          ;; 状态 <-> alist 序列化
                          initial-state
                          state->alist
@@ -32,6 +31,7 @@
                          boot-mode-kind boot-mode-generation
                          parse-boot-mode
                          %default-boot-mode
+                         previous-generation
                          ;; 启动决策
                          <boot-plan>
                          boot-plan make-boot-plan boot-plan?
@@ -83,10 +83,7 @@
                      (boot-status           root-state-boot-status)
                      ;; 当前 generation 快照自哪个模板（子卷名字符串）
                      (source-template       root-state-source-template
-                                            (default "@root-template"))
-                     ;; 构建系统的 guix-configs Git 修订（字符串或 #f，构建期填入）
-                     (system-revision       root-state-system-revision
-                                            (default #f)))
+                                            (default "@root-template")))
 
 (define (initial-state now)
   "安装期提交完成时的初始状态：@root-0 已就绪但从未启动（第 17.3、17.4 节）。
@@ -152,8 +149,7 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
     (last-good-generation . ,(root-state-last-good-generation state))
     (created-at           . ,(root-state-created-at state))
     (boot-status          . ,(root-state-boot-status state))
-    (source-template      . ,(root-state-source-template state))
-    (system-revision      . ,(root-state-system-revision state))))
+    (source-template      . ,(root-state-source-template state))))
 
 (define (alist->state alist)
   "把状态文件读出的 alist 还原成 <root-state>；缺键或类型不对即报错。"
@@ -179,22 +175,23 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
                 (created-at (or (assq-ref alist 'created-at) '()))
                 (boot-status status)
                 (source-template (or (assq-ref alist 'source-template)
-                                     "@root-template"))
-                (system-revision (assq-ref alist 'system-revision)))))
+                                     "@root-template")))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 启动模式（docs/storage.md 第 17.6 节）。
 ;;; 通过内核命令行参数 rootmode= 选择，缺省为 normal：
-;;;   rootmode=normal     从模板新建 generation（默认）
-;;;   rootmode=keep       复用 current generation
-;;;   rootmode=keep:3     复用指定的 @root-3
-;;;   rootmode=recovery   回到 last-good generation
+;;;   rootmode=normal      从模板新建 generation（默认）
+;;;   rootmode=keep        复用 current generation
+;;;   rootmode=keep:3      复用指定的 @root-3
+;;;   rootmode=previous:1  复用“当前往前第 1 个现存 generation”
+;;;                        （历史启动菜单用：启动时解析，不随启动轮次过期）
+;;;   rootmode=recovery    回到 last-good generation
 
 (define-record-type* <boot-mode>
                      boot-mode make-boot-mode
                      boot-mode?
-                     (kind       boot-mode-kind)       ; normal / keep / recovery
-                     (generation boot-mode-generation  ; keep:N 时为 N，否则 #f
+                     (kind       boot-mode-kind)       ; normal / keep / previous / recovery
+                     (generation boot-mode-generation  ; keep:N / previous:K 时为编号
                                  (default #f)))
 
 (define %default-boot-mode (boot-mode (kind 'normal)))
@@ -212,7 +209,21 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
      (let ((n (string->number (string-drop str 5))))
        (and (integer? n) (>= n 0)
             (boot-mode (kind 'keep) (generation n)))))
+    ((string-prefix? "previous:" str)
+     (let ((k (string->number (string-drop str 9))))
+       (and (integer? k) (>= k 1)
+            (boot-mode (kind 'previous) (generation k)))))
     (else #f)))
+
+(define (previous-generation existing k)
+  "返回 EXISTING（现存 generation 编号列表）中「从最新往旧数第 K 个」
+（K 从 1 计，含最新——Previous boot 1 即最近一次实际启动；
+正常启动项永远是新建 fresh root，与「复用最近一次」不同）。
+锚定最新编号而不是 current：历史启动菜单的语义因此稳定，
+不随上次启动选择的 root 漂移。"
+  (let ((newest-first (sort existing >)))
+    (and (>= (length newest-first) k)
+         (list-ref newest-first (- k 1)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 启动决策：给定当前状态与启动模式，产出一份“启动计划”。
