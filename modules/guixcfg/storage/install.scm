@@ -13,46 +13,112 @@
                #:use-module (ice-9 format)
                #:use-module (ice-9 rdelim)
                #:use-module (srfi srfi-1)
-               #:export (run-install))
+               #:export (run-install
+                         read-secret-line
+                         read-luks-passphrase!
+                         make-luks-passphrase-source))
+
+;;; ────────────────────────────────────────────────────────────
+;;; LUKS passphrase 交互（docs/installation.md 第 30.3 节）。
+;;;
+;;; 目标：安装器只要求用户输入两次密码（设置 + 确认），同一
+;;; passphrase 经 stdin 复用于 luksFormat（--batch-mode）与首次
+;;; cryptsetup open。passphrase 仅存在于本次 apply session 的内存中：
+;;; 不落盘、不进 /gnu/store、不进 argv/environment、不进 plan、
+;;; 不写入 machine facts。Guile 字符串不做 cryptographic secure
+;;; erasure 承诺——只避免明显泄漏路径。
+
+(define (read-secret-line prompt)
+  "关闭终端回显读取一行；读取后输出换行，让下一个提示从新行开始
+（-echo 关闭了回车键的回显，不显式换行会与上一行黏在一起）。
+stdin 非 tty（测试/管道）时直接读，不做终端控制。
+stty 属于 GNU coreutils，由 installer manifest 显式提供
+（manifests/installer.scm）。"
+  (format #t "~a" prompt)
+  (force-output)
+  (let ((line (if (isatty? (current-input-port))
+                (dynamic-wind
+                 (lambda () (system "stty -echo"))
+                 (lambda () (read-line))
+                 (lambda () (system "stty echo")))
+                (read-line))))
+    (format #t "~%")
+    line))
+
+(define (read-luks-passphrase!)
+  "交互设置 LUKS recovery password：两次输入一致且非空，否则重试。
+TPM2 使用独立随机 credential/keyslot，本密码保留为人工 recovery
+password（docs/boot.md 第 16.4 节）。"
+  (let loop ()
+    (let ((a (read-secret-line "设置 LUKS 密码: "))
+          (b (read-secret-line "再次输入 LUKS 密码: ")))
+      (cond
+        ((not (string=? a b))
+         (format #t "两次密码不一致，请重新输入。~%")
+         (loop))
+        ((string-null? a)
+         (format #t "密码不能为空，请重新输入。~%")
+         (loop))
+        (else a)))))
+
+(define (make-luks-passphrase-source reader)
+  "返回一个 thunk：首次调用用 READER 读取 LUKS passphrase 并暂存，
+之后返回同一值。passphrase 只存在于本次 apply session。"
+  (let ((passphrase #f))
+    (lambda ()
+      (or passphrase
+          (let ((p (reader)))
+            (set! passphrase p)
+            p)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 步骤分派：把 plan 步骤 id 映射到执行函数。
-;;; 每个执行函数接收步骤的 detail alist。
+;;; 每个执行函数接收步骤的 detail alist 与 apply session 的
+;;; passphrase thunk（LUKS 相关步骤用）。
 
 (define (detail-ref detail key)
   (or (assq-ref detail key)
       (error "计划步骤缺少参数" key)))
 
 (define %executors
-  `((confirm-target      . ,(lambda (d) #t))    ; 人工确认在 execute-plan 前完成
-                                                (wipe                . ,(lambda (d) (execute-wipe (detail-ref d 'device))))
-                                                (partition           . ,(lambda (d) (execute-partition (detail-ref d 'device)
-                                                                                                       (detail-ref d 'esp-size))))
-                                                (wait-udev           . ,(lambda (d) (execute-wait-udev (detail-ref d 'device))))
-                                                (format-esp          . ,(lambda (d) (execute-format-esp)))
-                                                (luks-format         . ,(lambda (d) (execute-luks-format)))
-                                                (luks-open           . ,(lambda (d) (execute-luks-open)))
-                                                (format-btrfs        . ,(lambda (d) (execute-format-btrfs (detail-ref d 'device))))
-                                                (mount-top           . ,(lambda (d) (execute-mount-top)))
-                                                (make-subvolume      . ,(lambda (d) (execute-make-subvolume (detail-ref d 'name))))
-                                                (make-root-installing . ,(lambda (d) (execute-make-root-installing (detail-ref d 'name))))
-                                                (make-swapfile       . ,(lambda (d) (execute-make-swapfile (detail-ref d 'subvolume)
-                                                                                                           (detail-ref d 'size))))
-                                                (unmount-top         . ,(lambda (d) (execute-unmount-top)))
-                                                (mount-root          . ,(lambda (d) (execute-mount-root (detail-ref d 'name)
-                                                                                                        (detail-ref d 'target))))
-                                                (mount-subvolume     . ,(lambda (d) (execute-mount-subvolume (detail-ref d 'name)
-                                                                                                             (detail-ref d 'target)
-                                                                                                             (detail-ref d 'options))))
-                                                (mount-esp           . ,(lambda (d) (execute-mount-esp (detail-ref d 'target))))
-                                                (write-facts         . ,(lambda (d) (write-machine-facts (detail-ref d 'target))))
-                                                (ready               . ,(lambda (d) #t))))
+  `((confirm-target      . ,(lambda (d passphrase!) #t))    ; 人工确认在 execute-plan 前完成
+                                                            (wipe                . ,(lambda (d passphrase!) (execute-wipe (detail-ref d 'device))))
+                                                            (partition           . ,(lambda (d passphrase!) (execute-partition (detail-ref d 'device)
+                                                                                                                               (detail-ref d 'esp-size))))
+                                                            (wait-udev           . ,(lambda (d passphrase!) (execute-wait-udev (detail-ref d 'device))))
+                                                            (format-esp          . ,(lambda (d passphrase!) (execute-format-esp)))
+                                                            ;; LUKS passphrase 来自 apply session（luks-format 首次读取，
+                                                            ;; luks-open 复用同一值），经 stdin 传给 cryptsetup。
+                                                            (luks-format         . ,(lambda (d passphrase!)
+                                                                                      (execute-luks-format (passphrase!))))
+                                                            (luks-open           . ,(lambda (d passphrase!)
+                                                                                      (catch #t
+                                                                                        (lambda () (execute-luks-open (passphrase!)))
+                                                                                        (lambda args
+                                                                                          (format (current-error-port)
+                                                                                                  "LUKS 卷已创建，但首次打开失败；不会重跑 luksFormat。~%")
+                                                                                          (apply throw args)))))
+                                                            (format-btrfs        . ,(lambda (d passphrase!) (execute-format-btrfs (detail-ref d 'device))))
+                                                            (mount-top           . ,(lambda (d passphrase!) (execute-mount-top)))
+                                                            (make-subvolume      . ,(lambda (d passphrase!) (execute-make-subvolume (detail-ref d 'name))))
+                                                            (make-root-installing . ,(lambda (d passphrase!) (execute-make-root-installing (detail-ref d 'name))))
+                                                            (make-swapfile       . ,(lambda (d passphrase!) (execute-make-swapfile (detail-ref d 'subvolume)
+                                                                                                                                   (detail-ref d 'size))))
+                                                            (unmount-top         . ,(lambda (d passphrase!) (execute-unmount-top)))
+                                                            (mount-root          . ,(lambda (d passphrase!) (execute-mount-root (detail-ref d 'name)
+                                                                                                                                (detail-ref d 'target))))
+                                                            (mount-subvolume     . ,(lambda (d passphrase!) (execute-mount-subvolume (detail-ref d 'name)
+                                                                                                                                     (detail-ref d 'target)
+                                                                                                                                     (detail-ref d 'options))))
+                                                            (mount-esp           . ,(lambda (d passphrase!) (execute-mount-esp (detail-ref d 'target))))
+                                                            (write-facts         . ,(lambda (d passphrase!) (write-machine-facts (detail-ref d 'target))))
+                                                            (ready               . ,(lambda (d passphrase!) #t))))
 
-(define (execute-step step)
+(define (execute-step step passphrase!)
   (let ((executor (assq-ref %executors (plan-step-id step))))
     (unless executor
       (error "未知的计划步骤" (plan-step-id step)))
-    (executor (plan-step-detail step))))
+    (executor (plan-step-detail step) passphrase!)))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 人工确认：必须输入完整设备路径（docs/storage.md 第 31 章）。
@@ -71,20 +137,24 @@
 ;;; 任何一步抛异常，立即报告并退出非零，不做任何自动清理或续跑。
 
 (define (execute-plan plan)
-  (catch #t
-    (lambda ()
-      (for-each
-       (lambda (step n)
-         (format #t "~%[~2d/~2d] ~a~%" n (length plan) (plan-step-summary step))
-         (execute-step step))
-       plan
-       (map (lambda (i) (+ i 1)) (iota (length plan))))
-      (format #t "~%磁盘安装完成。~%"))
-    (lambda (key . args)
-      (format (current-error-port)
-              "~%步骤失败，已立即停止（未完成的操作不会自动继续）。~%错误: ~s ~s~%"
-              key args)
-      (exit 1))))
+  "逐步执行计划（失败即停）。
+LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值；
+它只存在于本次 apply session（不进 plan、不落盘、不进 argv/env）。"
+  (let ((passphrase! (make-luks-passphrase-source read-luks-passphrase!)))
+    (catch #t
+      (lambda ()
+        (for-each
+         (lambda (step n)
+           (format #t "~%[~2d/~2d] ~a~%" n (length plan) (plan-step-summary step))
+           (execute-step step passphrase!))
+         plan
+         (map (lambda (i) (+ i 1)) (iota (length plan))))
+        (format #t "~%磁盘安装完成。~%"))
+      (lambda (key . args)
+        (format (current-error-port)
+                "~%步骤失败，已立即停止（未完成的操作不会自动继续）。~%错误: ~s ~s~%"
+                key args)
+        (exit 1)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 执行前环境检查：在任何破坏性操作之前拦下环境问题

@@ -4,7 +4,8 @@
 (define-module (guixcfg storage filesystem)
                #:use-module (guixcfg storage model)
                #:use-module (guixcfg storage partition)  ; by-partlabel-path
-               #:use-module (guix build utils)
+               #:use-module (guixcfg utils process)      ; invoke-with-stdin
+               #:use-module (guix build utils)          ; invoke（mkfs 等）
                #:export (execute-format-esp
                          execute-luks-format
                          execute-luks-open
@@ -15,23 +16,27 @@
   (invoke "mkfs.vfat" "-F" "32" "-n" %esp-filesystem-label
           (by-partlabel-path %esp-partlabel)))
 
-(define (execute-luks-format)
-  "初始化 LUKS2。交互输入并确认密码；不使用 --batch-mode，
-因为这是安装期的显式人工步骤（恢复密钥在阶段 5/8 另行登记）。"
-  (format #t "  >>> 接下来会要求你【设置】LUKS 密码（输入两次）。~%")
-  (force-output)
-  (invoke "cryptsetup" "luksFormat"
-          "--type" "luks2"
-          "--label" %luks-label
-          (by-partlabel-path %system-partlabel)))
+(define (execute-luks-format passphrase)
+  "初始化 LUKS2。PASSPHRASE 由安装器确认后经 stdin 传入（--key-file=-）；
+--batch-mode 使 cryptsetup 不再交互要求输入 YES。安装器已完成设备
+路径确认与密码确认（docs/installation.md 第 30.3 节）。"
+  (invoke-with-stdin passphrase
+                     "cryptsetup" "luksFormat"
+                     "--type" "luks2"
+                     "--batch-mode"
+                     "--key-file=-"
+                     "--label" %luks-label
+                     (by-partlabel-path %system-partlabel)))
 
-(define (execute-luks-open)
-  "解锁 LUKS 卷到固定 mapper 名。"
-  (format #t "  >>> 请输入【刚才设置】的 LUKS 密码以解锁。~%")
-  (force-output)
-  (invoke "cryptsetup" "open"
-          (by-partlabel-path %system-partlabel)
-          %luks-mapper-name))
+(define (execute-luks-open passphrase)
+  "解锁 LUKS 卷到固定 mapper 名。PASSPHRASE 复用 luksFormat 时的同一
+输入（install.scm 的 apply session 提供），经 stdin 传入，
+不再要求第三次密码输入。"
+  (invoke-with-stdin passphrase
+                     "cryptsetup" "open"
+                     "--key-file=-"
+                     (by-partlabel-path %system-partlabel)
+                     %luks-mapper-name))
 
 (define (execute-format-btrfs mapper-path)
   "在加密卷上格式化 Btrfs，使用固定文件系统标签。"
