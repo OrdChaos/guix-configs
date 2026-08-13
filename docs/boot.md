@@ -94,86 +94,161 @@ db    我们的 db + Microsoft db CAs（含 Option ROM UEFI CA 2023，
   enrollment 工具失败不得阻塞普通 Guix System 安装。
 - 重装默认生成新的信任材料（删除旧密钥目录后重新 keygen）。
 
-## 16.4 TPM2
+## 16.4 TPM2（PCR7-only，已实现）
+
+> 状态：**PCR7-only 自动解锁已实现并通过单元测试与 T2 集成测试**。
+> 实现分层：`tpm2-tools` 负责 PolicyPCR/seal/unseal（CLI 唯一出处
+> 在 `(guixcfg security tpm2 tpm2-tools)`）；Scheme 只编排
+> （enrollment `tools/tpm2-enroll.scm`、initrd 解锁
+> `(guixcfg boot tpm-unlock)`）；**无** PCR11、无 PolicyAuthorize、
+> 无 policy signing key、无 pending/active 授权状态。
 
 ### 兼容性与边界
 
-Guix System 可以使用 TPM2，但当前项目不把它视为 Guix 原生的一等公民功能：
-Guix 提供 `tpm2-tools` 等基础组件，LUKS 仍由项目自定义 initrd 控制。也就是说，
-TPM 自动解锁应实现为 initrd 的一个受控解锁路径，而不是要求 systemd 作为 PID 1。
+Guix System 可以使用 TPM2，但项目不把它视为 Guix 原生的一等公民功能：
+LUKS 仍由项目自定义 initrd 控制。TPM 自动解锁是 initrd 的一个受控解锁
+路径，不要求 systemd 作为 PID 1。
 
-目标：
+行为（已实现）：
 
 ```text
 正常启动
-  TPM policy 满足 → 自动解锁 LUKS
-                  ↓ 失败/TPM 不可用
-                密码回退
+  Secure Boot policy 对应当前 PCR7 → TPM2 unseal 独立随机 LUKS
+  credential → cryptsetup 自动解锁 → 进入系统
+  ↓ 任何 TPM 错误 / PCR7 mismatch / TPM clear / artifact 错误
+直接回退 cryptsetup 人工密码（永远不直接进 emergency shell）
 
-Recovery
-  强制跳过 TPM 自动解锁 → 手工密码
+Recovery（rootmode=recovery）
+  不尝试 TPM → 始终人工密码
 ```
 
-要求：
+要求：TPM enrollment 在完整系统安装完成后、Secure Boot 已启用
+（SecureBoot==1 且非 SetupMode）后执行；永远保留独立的密码 keyslot；
+TPM 使用独立随机 LUKS credential/keyslot，不直接 seal 用户密码；
+TPM 清空、主板更换、Secure Boot policy 改变后都可以用密码进入并
+重新 enrollment（`replace` 子命令）。
 
-- TPM enrollment 在完整系统安装完成后执行；
-- 永远保留独立的密码 keyslot，不让 TPM 成为唯一恢复路径；
-- TPM 使用独立随机 LUKS credential/keyslot，不直接把 LUKS volume key 当作
-  项目管理的普通文件；
-- Recovery 明确禁用 TPM 自动解锁；
-- TPM 清空、主板更换、Secure Boot policy 改变后都可以用密码进入并重新
-  enrollment。
-
-### PCR policy
-
-当前 UKI 使用 `systemd-stub`，即使 Guix System 以 Shepherd 而不是 systemd
-作为 init，stub 仍会在进入内核前把 UKI 的相关 PE section 度量到 **PCR 11**。
-因此不能再假设“Guix 没有 systemd，所以没有 PCR11 UKI measurement”。
-
-目标策略：
+### PCR policy（PCR7-only）
 
 ```text
-PCR7
-  固件 Secure Boot policy / authority 处于预期状态
-+
-PCR11 signed policy
-  当前 UKI 内容属于本项目 policy key 授权的版本
-=
-允许 TPM 自动解锁
+PCR bank: SHA-256
+PCR selection: 7（PolicyPCR）
+sealed object policy: PolicyPCR(sha256:7) —— 绑定机器 Secure Boot
+                      policy 状态，不绑定任何 UKI 内容
 ```
 
-不把 TPM 永久密封到某一个固定 PCR11 值。由独立 PCR policy signing key 对每次
-部署 UKI 的预期 PCR11 policy 签名，更新系统时只生成新的签名 policy，而无需
-重新 enrollment TPM。`ukify` / `systemd-measure` / `systemd-stub` 的 PCR policy
-机制可以独立于 systemd PID 1 使用。
-
-### enrollment 数据放置
-
-**解锁 LUKS 之前必须读取的数据不得只放在 `/persist/system`**，因为
-`@persist-system` 本身就在该 LUKS 容器内部，否则会形成循环依赖。
-
-优先边界：
+关键语义：
 
 ```text
-解锁前需要：
-  TPM sealed/encrypted credential + token metadata
-      → 优先放 LUKS2 JSON token/header
-      → 或必要时放 ESP / TPM NV
-  PCR policy public material/signature
-      → UKI / LUKS2 token / ESP 中的公开材料
-
-解锁后管理：
-  PCR policy signing private key
-  enrollment 版本、审计信息、重新 enrollment 状态
-      → /persist/system/keys/tpm/ 与 /persist/system/tpm/
+PCR7 → 固件 Secure Boot policy 状态（SecureBoot 状态 + PK/KEK/db/dbx）
+     → enrollment 时 seal 当前值
+     → 不随 UKI/kernel/initrd/cmdline 更新变化（那些进 PCR4/11）
+     → PK/KEK/db/firmware 变化导致 PCR7 变化 → unseal 失败 →
+       密码回退 → 人工重新 enrollment（replace）
 ```
 
-TPM sealed blob 本身不依赖保密性，但必须考虑篡改导致的拒绝服务；私有 policy
-signing key 只在解锁后可见，不进入 ESP、Git 或 `/gnu/store`。
+因此 **普通 UKI/kernel/initrd 更新无需重新 enrollment**——TPM 材料是
+机器级状态，不是 UKI slot 级状态（这正是相对旧 PCR11 设计的架构收益）。
 
-实现状态：**阶段 5.5，尚未实现自动解锁代码**。`tools/test-vm.sh --secboot`
-已经提供 swtpm TPM2 测试设备。TPM enrollment/initrd 实现时再引入独立的
-`tpm2-tools` 依赖，不把 TPM 工具链耦合进早期磁盘 installer manifest。
+安全边界（如实说明）：PCR7-only 不绑定"必须是我们的 UKI"——任何在
+该机器 Secure Boot policy 下可启动的代码（含微软签名 shim/GRUB 链）
+都能触发 unseal。它防的是磁盘被拆走单独解密、policy 被篡改、TPM
+被清空；不防"攻击者在这台机器上启动任意签名系统"。对个人笔记本的
+威胁模型（失窃/磁盘拆卸）足够；密码 keyslot 永远是最终兜底。
+
+### 组件与 artifact 布局
+
+```text
+/persist/system/tpm2/state.scm      enrollment 元数据（原子写 + .prev）
+/persist/system/tpm2/objects/       sealed blobs 管理副本（seal.pub/priv）
+ESP /EFI/Guix/tpm2/                 【解锁前读取】seal.pub / seal.priv /
+                                    metadata.scm（enrollment 工具发布；
+                                    不随 UKI slot 变化，initrd 固定路径）
+```
+
+解锁 LUKS **之前**必须读取的数据不能只放在 `/persist/system`（访问它
+要先解锁 LUKS，循环依赖）；sealed blob 非秘密（TPM 密封对象不含明文），
+放 ESP 即可，篡改只造成 DoS → 密码回退。
+
+### enrollment（tools/tpm2-enroll.scm）
+
+```text
+preflight  检查 TPM 可用 / 非 Recovery / LUKS2 / SecureBoot==1 且
+           SetupMode==0 / ESP 挂载 / persist 可写
+enroll     验证 recovery 密码（--test-passphrase）
+           → 生成 32 字节随机 credential（hex，仅内存）
+           → 读当前 PCR7 → trial PolicyPCR(sha256:7) → create sealed
+           → unseal 自验证 → luksAddKey 独立 keyslot（credential 经
+             stdin；recovery 密码经 0600 临时文件——cryptsetup
+             --key-file=- 是读到 EOF 语义，无法与 --new-keyfile=-
+             共享 stdin，实测）
+           → 新 keyslot 验证 → 发布 ESP artifact（失败回滚
+             luksKillSlot）→ /persist 副本 + 原子写 state
+replace    先加新 keyslot 再发布，旧 TPM keyslot 保留为历史材料
+           （绝不先删旧）；recovery keyslot 永不触碰
+status     显示 enrollment 与两侧 artifact 完整性
+```
+
+时点要求：必须在 Secure Boot 已真正启用并完成一次带最终 NVRAM policy
+的正常启动之后执行（安装 ISO 阶段不 seal）。完整流程：
+
+```text
+install → Secure Boot enroll（sbkeysync，PK 最后写）→ reboot
+→ 确认 SecureBoot=1 / SetupMode=0 → tpm2-enroll preflight/enroll
+→ reboot → 验证自动解锁
+```
+
+### initrd 解锁流程（已实现）
+
+```text
+mapped-device open（luks-tpm2-device-mapping，config 侧定义）
+  ↓
+tpm-unlock-in-initrd：
+  cmdline 门控（rootmode=recovery / guixcfg.tpm-unlock=0 → 跳过）
+  → /dev/tpmrm0 存在？
+  → /sys/block PARTNAME 发现 system/esp 分区（initrd 无 udev）
+  → 挂 ESP → 读 EFI/Guix/tpm2/{seal.pub,seal.priv}
+  → createprimary（确定性 SRK，无持久句柄）→ load sealed
+  → policy session（实际 PCR7）→ unseal stdout
+  → 管道直连 cryptsetup open --key-file=-（明文不落盘/不进 argv/env）
+  → 成功 → #t；任意失败 → 打印一行原因 → #f
+  ↓
+#f → 与 luks-device-mapping 相同的分区发现（find-partition-by-luks-uuid
+     10 秒重试）+ cryptsetup 交互密码
+```
+
+### 实测知识（tpm2-tools 5.7 / swtpm，本项目验证）
+
+```text
+- tcti-swtpm 无 resource manager：ContextLoad 每次占新 transient
+  slot，不 flush 会 0x902；测试环境每命令后 tpm2_flushcontext -t
+  （只 flush transient，不碰 sessions——AUTOFLUSH=yes 会杀 session，
+  0x70018）；生产 /dev/tpmrm0 由内核 RM 回收，禁止全局 flush；
+- tpm2_policypcr 指定期望值用 -f <pcrread 原始输出> + -l bank:index；
+  -l "bank:index=值" 前向封印在 swtpm TCTI 下 0x1C4；
+- tpm2_create -L <文件> 在 swtpm 下 0x902，-L hex 正常；
+- cryptsetup --key-file=- 是"读到 EOF"语义（无换行剥离）：
+  安装/解锁的 passphrase 字节必须精确一致；luksAddKey 无法双 stdin；
+- swtpm 测试必须用宿主 tpm2-tools（store 包不带 tcti-swtpm 插件）；
+- initrd 模块闭包不能引入 (guix gexp)/(guix utils)（version-compare
+  dlsym strverscmp，guile-static-initrd 静态链接无法解析）——kind
+  定义在 config 侧，initrd 只带运行时模块。
+```
+
+### 测试
+
+```text
+单元：tests/test-tpm2-state.scm（enrollment 状态）、
+      tests/test-tpm-unlock.scm（门控/决策）
+T2：  tools/test-tpm2-poc.sh（swtpm PolicyPCR 机制：seal/unseal、
+      extend 后失败）
+      tools/test-tpm2-luks.sh（真实 cryptsetup：T2-1 自动解锁 /
+      T2-2 PCR 变化回退 / T2-3 blob 损坏回退 / T2-4 TPM clear 回退 /
+      T2-5 Recovery 门控）
+T3：  tools/t7-e2e.sh + tools/t7-scenario.sh（OVMF Secure Boot +
+      swtpm + 签名 UKI 场景：auto-unlock / secboot-off / tpm-clear /
+      corrupt / recovery）
+```
 
 ## 16.5 内核模块签名
 

@@ -192,6 +192,23 @@ umount -R /mnt
 reboot
 ```
 
+### 30.3.5 TPM2 PCR7 enrollment（可选，Secure Boot 启用后）
+
+Secure Boot 已启用并完成一次带最终 NVRAM policy 的正常启动后
+（SecureBoot==1 且 SetupMode==0），在目标系统上以 root 执行：
+
+```bash
+guix shell tpm2-tools cryptsetup --   guix repl tools/tpm2-enroll.scm -- preflight
+guix repl tools/tpm2-enroll.scm -- enroll      # 首次 enrollment
+guix repl tools/tpm2-enroll.scm -- status      # 查看状态
+guix repl tools/tpm2-enroll.scm -- replace     # Secure Boot policy 变化后
+```
+
+enrollment 把独立随机 credential 密封到当前 PCR7 并加入独立 LUKS
+keyslot；recovery 密码 keyslot 始终保留。此后普通 UKI/kernel/initrd
+更新无需重新 enrollment；PK/KEK/db 变化导致 PCR7 变化后，启动会回退
+密码，再用 `replace` 重新 enrollment。流程见 docs/boot.md 第 16.4 节。
+
 ## 30.4 仓库复制
 
 安装完成前，把同一 Git commit 部署到：

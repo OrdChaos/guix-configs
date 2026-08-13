@@ -2,13 +2,13 @@
 
 个人设备的 Guix System 配置、安装与维护工程。面向 VM 和 Laptop 两台机器：
 
-无状态根目录（Btrfs root generation）+ GPT/LUKS2/Btrfs + UKI/Limine + Secure Boot/TPM2 + age 秘密管理 + Guix Home + Flatpak。
+无状态根目录（Btrfs root generation）+ GPT/LUKS2/Btrfs + UKI/Limine + Secure Boot + TPM2 PCR7 自动解锁（密码回退）+ age 秘密管理 + Guix Home + Flatpak。
 
 完整设计定义见 `docs/`：
 
 - `docs/project-definition.md` — 入口与索引（含目录结构、开发顺序、设计原则）
 - `docs/storage.md` — 存储模型、持久子卷、root generation、备份
-- `docs/boot.md` — Secure Boot、UKI、TPM、内核模块签名
+- `docs/boot.md` — Secure Boot、UKI、TPM2 PCR7 解锁、内核模块签名
 - `docs/system.md` — Host、软件分类、硬件与驱动、Flatpak、Mihomo
 - `docs/secrets.md` — 配置/秘密/可变状态分类、age 秘密管理
 - `docs/deployment.md` — 频道管理、部署规则、`configctl`、日常工作流

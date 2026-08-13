@@ -167,9 +167,10 @@ init 完成后由 `commit-root` 把内容收进子卷——init 会删除目标�
 ├── keys/
 │   ├── age/
 │   │   └── host.key
-│   ├── secure-boot/
-│   └── tpm/                 # PCR policy signing private material（解锁后使用）
-├── tpm/                     # enrollment 管理/审计状态（解锁后使用）
+│   └── secure-boot/
+├── tpm2/                    # enrollment 状态（state.scm，原子写）
+│   └── objects/             # sealed blobs 管理副本（解锁后使用；
+│                            # 解锁前读取用 ESP /EFI/Guix/tpm2/）
 ├── ssh/
 ├── machine-id
 ├── facts/
@@ -186,12 +187,12 @@ init 完成后由 `commit-root` 把内容收进子卷——init 会删除目标�
 - 安装时发现的机器事实；
 - root generation 状态；
 - 安装 revision；
-- TPM 的**解锁后**管理/审计状态与 PCR policy signing 私有材料。
+- TPM2 的**解锁后**管理状态（enrollment 元数据、sealed blobs 副本）。
 
-注意：TPM 自动解锁在打开 LUKS 之前发生，因此 sealed/encrypted credential、
-LUKS token metadata、PCR policy 的公开验证材料等“解锁前必需数据”不能只存在
-`/persist/system`。它们优先进入 LUKS2 JSON token/header，必要时才放 ESP 或
-TPM NV；详细信任模型见 `docs/boot.md` 第 16.4 节。
+注意：TPM 自动解锁在打开 LUKS 之前发生，因此 sealed blobs 等“解锁前
+必需数据”不能只存在 `/persist/system`。它们发布到 ESP 的
+`/EFI/Guix/tpm2/`（机器级固定路径，不随 UKI slot 变化）；详细信任
+模型见 `docs/boot.md` 第 16.4 节。
 
 ## 13.2 `/persist/data-app`
 
