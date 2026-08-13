@@ -25,6 +25,8 @@
     (guixcfg storage root-generation)
     (guixcfg storage install)
     (guixcfg storage commit)
+    (guixcfg utils process)
+    (guixcfg security tpm2 tpm2-tools)
     (guixcfg boot initrd)
     (guixcfg boot boot-state)
     (guixcfg security certificates)
