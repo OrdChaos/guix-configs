@@ -19,6 +19,7 @@
 (define-module (guixcfg boot initrd)
                #:use-module (guixcfg storage model)
                #:use-module (guixcfg storage root-generation)
+               #:use-module (guixcfg boot tpm-unlock)      ; tpm-unlock-in-initrd（经 kind）
                #:use-module (gnu system linux-initrd)      ; expression->initrd、flat-linux-module-directory
                #:use-module (gnu system mapped-devices)    ; mapped-device-kind-open
                #:use-module (gnu system file-systems)      ; file-system->spec
@@ -178,7 +179,9 @@
                                     (gnu system file-systems)
                                     (gnu build file-systems)
                                     (guix build syscalls)
-                                    (guixcfg storage root-generation))
+                                    (guixcfg storage root-generation)
+                                    (guixcfg boot tpm-unlock)
+                                    (guixcfg security tpm2 tpm2-tools))
                                   #:select? (lambda (name)
                                               (or (guix-module-name? name)
                                                   (eq? (car name) 'guixcfg))))
@@ -195,6 +198,8 @@
                            (ice-9 ftw)              ; scandir（previous:K 解析）
                            (guixcfg storage root-generation)
                            (guixcfg storage model)  ; parse-root-generation
+                           (guixcfg boot tpm-unlock)
+                           (guixcfg security tpm2 tpm2-tools)
                            #$@(append-map (lambda (md)
                                             (mapped-device-kind-modules
                                              (mapped-device-type md)))

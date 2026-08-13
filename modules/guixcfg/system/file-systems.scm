@@ -4,10 +4,14 @@
 
 (define-module (guixcfg system file-systems)
                #:use-module (guixcfg storage model)
+               #:use-module (guixcfg boot tpm-unlock)      ; tpm-unlock-in-initrd
                #:use-module (gnu system file-systems)    ; file-system、%base-file-systems
-               #:use-module (gnu system mapped-devices)  ; mapped-device、luks-device-mapping
-               #:use-module (gnu system uuid)            ; uuid
-               #:use-module (srfi srfi-1)                ; every
+               #:use-module (gnu system mapped-devices)  ; mapped-device、mapped-device-kind
+               #:use-module (gnu system uuid)            ; uuid、uuid-bytevector
+               #:use-module (guix gexp)                  ; file-append
+               #:use-module (gnu packages cryptsetup)    ; cryptsetup-static
+               #:use-module (gnu packages hardware)      ; tpm2-tools
+               #:use-module (srfi srfi-1)                ; every、first
                #:export (cryptroot-mapped-devices
                          %ephemeral-root-file-system
                          system-file-systems
@@ -87,15 +91,76 @@ reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
 (define (require-machine-fact key)
   (require-fact (machine-facts) key))
 
+;;; PCR7-aware mapped-device-kind：open 先试 TPM（tpm-unlock-in-initrd，
+;;; 见 (guixcfg boot tpm-unlock)——initrd 运行时模块），失败走与
+;;; luks-device-mapping 相同的分区发现（find-partition-by-luks-uuid
+;;; 10 秒重试）+ cryptsetup 交互解锁。close 用标准 cryptsetup close。
+;;;
+;;; 本 kind 定义在 config 侧（本模块不进 initrd 闭包），因此可以
+;;; import (guix gexp)/(gnu packages …)；进入 initrd 的只有
+;;; modules 字段列出的运行时模块（initrd 闭包若含 (guix gexp)/
+;;; (guix utils) 会导致 guile-static-initrd 构建失败——strverscmp
+;;; dlsym 无法解析，实测）。
+(define luks-tpm2-device-mapping
+  (mapped-device-kind
+   (open (lambda (source targets)
+           (let ((target (first targets)))
+             #~(begin
+                (use-modules (gnu build file-systems)   ; system*/tty
+                             (guix build utils)         ; mkdir-p
+                             (guix build syscalls)      ; mount、umount
+                             (ice-9 rdelim)
+                             (ice-9 ftw)
+                             (ice-9 regex)
+                             (ice-9 binary-ports)
+                             (ice-9 popen)
+                             (rnrs bytevectors)
+                             (rnrs io ports)
+                             (srfi srfi-13))
+                ;; cryptsetup 需要 /run/cryptsetup/（LUKS2 强制 locking）
+                (mkdir-p "/run/cryptsetup/")
+                ;; 先尝试 TPM 自动解锁；失败走标准交互密码路径。
+                (if (tpm-unlock-in-initrd
+                     #$(file-append tpm2-tools "/bin")
+                     #$(file-append cryptsetup-static "/sbin/cryptsetup"))
+                  #t
+                  (let* ((source-bv #$(if (uuid? source)
+                                        (uuid-bytevector source)
+                                        source))
+                         (partition
+                          (or (let loop ((tries-left 10))
+                                (and (positive? tries-left)
+                                     (or (find-partition-by-luks-uuid source-bv)
+                                         (begin (sleep 1)
+                                                (loop (- tries-left 1))))))
+                              (error "LUKS partition not found" source-bv)))
+                         (cryptsetup
+                          #$(file-append cryptsetup-static "/sbin/cryptsetup")))
+                    (format #t "TPM 解锁未成功，进入密码解锁~%")
+                    (zero? (system*/tty cryptsetup "open" "--type" "luks"
+                                        partition #$target))))))))
+   (close (lambda (source targets)
+            #~(system* #$(file-append cryptsetup-static "/sbin/cryptsetup")
+                       "close" #$(first targets))))
+   (modules '((guixcfg boot tpm-unlock)
+              (rnrs bytevectors)
+              (rnrs io ports)
+              (ice-9 match)
+              (ice-9 rdelim)
+              ((gnu build file-systems)
+               #:select (find-partition-by-luks-uuid system*/tty))))))
+
 ;; LUKS 映射 source：必须用 facts 里的 LUKS UUID——initrd 扫描块设备
 ;; 匹配 LUKS 头（find-partition-by-luks-uuid），无需 udev 符号链接。
 ;; 缺少 luks-uuid 时 fail-closed，绝不回退 /dev/disk/by-partlabel/。
 ;; 函数而非变量：构造时（首次调用）才触发 facts 校验，模块加载不失败。
+;; 解锁类型：luks-tpm2-device-mapping——先尝试 TPM2 PCR7 自动解锁，
+;; 失败回退标准交互密码（docs/boot.md 第 16.4 节）。
 (define (cryptroot-mapped-devices)
   (list (mapped-device
          (source (uuid (require-machine-fact 'luks-uuid)))
          (target %luks-mapper-name)
-         (type luks-device-mapping))))
+         (type luks-tpm2-device-mapping))))
 
 (define %mapper-path
   (string-append "/dev/mapper/" %luks-mapper-name))

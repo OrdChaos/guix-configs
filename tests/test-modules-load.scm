@@ -28,6 +28,7 @@
     (guixcfg utils process)
     (guixcfg security tpm2 tpm2-tools)
     (guixcfg security tpm2 state)
+    (guixcfg boot tpm-unlock)
     (guixcfg boot initrd)
     (guixcfg boot boot-state)
     (guixcfg security certificates)

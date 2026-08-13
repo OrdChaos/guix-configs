@@ -28,6 +28,7 @@
                #:use-module (ice-9 popen)             ; open-pipe*
                #:use-module (srfi srfi-1)             ; append-map
                #:export (;; 环境（production / test 显式区分）
+                         %tpm2-tools-tcti
                          <tpm2-environment>
                          tpm2-environment make-tpm2-environment
                          tpm2-environment?
@@ -72,8 +73,12 @@
                      (cleanup tpm2-environment-cleanup
                               (default 'none)))
 
+;; 生产 TCTI：内核 resource manager（initrd 与部署期同用）。
+;; swtpm 测试时显式传 "swtpm:path=..." 覆盖。
+(define %tpm2-tools-tcti "device:/dev/tpmrm0")
+
 (define %production-tpm2-environment
-  (tpm2-environment (tcti "device:/dev/tpmrm0")))
+  (tpm2-environment (tcti %tpm2-tools-tcti)))
 
 (define current-tpm2-environment
   (make-parameter %production-tpm2-environment))
