@@ -7,38 +7,93 @@
                #:use-module (gnu system file-systems)    ; file-system、%base-file-systems
                #:use-module (gnu system mapped-devices)  ; mapped-device、luks-device-mapping
                #:use-module (gnu system uuid)            ; uuid
-               #:export (%cryptroot-mapped-devices
+               #:use-module (srfi srfi-1)                ; every
+               #:export (cryptroot-mapped-devices
                          %ephemeral-root-file-system
                          system-file-systems
                          %swap-spaces))
 
 ;; 机器事实（docs/storage.md 第 19 章）：安装器写入，可重新探测，不进 Git。
-;; 构建期读取：优先 GUIX_CONFIG_FACTS 环境变量（LiveCD 安装时指向
-;; /mnt/persist/...，即 configctl 以后也会用它显式传入），
-;; 其次运行系统的固定路径。文件不存在时回退到 by-partlabel
-;; （可做 system build 评估，但那样的配置在 initrd 里无法解锁——
-;; initrd 没有 udev，by-partlabel 不存在）。
-(define %facts-path
-  (or (getenv "GUIX_CONFIG_FACTS")
-      "/persist/system/facts/host.scm"))
+;; 构建期读取，路径解析规则：
+;;   1. GUIX_CONFIG_FACTS（非空）→ 显式 override，必须存在且格式合法，
+;;      否则立即报错——显式指定不允许静默忽略；
+;;   2. 否则 /persist/system/facts/host.scm 存在 → 自动使用（已安装系统
+;;      reconfigure 无需环境变量）；
+;;   3. 否则 → 无 machine facts（boot-critical fact 缺失时在构造
+;;      mapped-device 处 fail-closed，不回退 by-partlabel）。
+(define %default-machine-facts-path
+  "/persist/system/facts/host.scm")
 
+(define (regular-file? path)
+  "PATH 存在且是普通文件（目录等显式拒绝）。"
+  (and (file-exists? path)
+       (eq? (stat:type (stat path)) 'regular)))
+
+(define (resolve-facts-path override default)
+  "解析 facts 路径（纯函数，便于测试）。OVERRIDE 是 GUIX_CONFIG_FACTS
+的值（#f 或空串 = 未设置）。返回实际路径或 #f（无 facts）。"
+  (cond
+    ((and override (not (string-null? override)))
+     (cond
+       ((regular-file? override) override)
+       ((file-exists? override)
+        (error "GUIX_CONFIG_FACTS 指向的不是普通文件:" override))
+       (else
+        (error "GUIX_CONFIG_FACTS 指向的文件不存在:" override))))
+    ((regular-file? default) default)
+    ((file-exists? default)
+     (error "默认 machine facts 路径不是普通文件:" default))
+    (else #f)))
+
+(define (machine-facts-path)
+  (resolve-facts-path (getenv "GUIX_CONFIG_FACTS") %default-machine-facts-path))
+
+(define (facts-alist? x)
+  (and (list? x) (every pair? x)))
+
+(define (load-machine-facts path)
+  "读取并校验 facts 文件：必须是可 read 的 alist，否则显式报错。"
+  (let ((facts (catch #t
+                 (lambda ()
+                   (call-with-input-file path read))
+                 (lambda (key . args)
+                   (error "machine facts 文件无法解析:" path key args)))))
+    (unless (facts-alist? facts)
+      (error "machine facts 文件格式非法（应为 alist）:" path))
+    facts))
+
+;; 惰性求值：模块加载阶段不执行任何 I/O 或校验——guile 的
+;; resolve-module 会吞掉模块加载失败时的原始错误并留下半成品模块，
+;; 依赖方（hosts/vm.scm）只会看到 unbound variable。所有 facts 读取
+;; 与校验推迟到首次构造 mapped-device 时（force），届时错误在调用方
+;; 求值路径上抛出，信息清晰可诊断。
 (define %machine-facts
-  (if (file-exists? %facts-path)
-    (call-with-input-file %facts-path read)
-    '()))
+  (delay (let ((path (machine-facts-path)))
+           (if path (load-machine-facts path) '()))))
+
+(define (machine-facts)
+  (force %machine-facts))
 
 (define (machine-fact key)
-  (assq-ref %machine-facts key))
+  (assq-ref (machine-facts) key))
 
-;; LUKS 映射：优先用 facts 里的 LUKS UUID——initrd 会扫描块设备匹配
-;; LUKS 头，无需 udev 符号链接；没有 facts 时退回固定 PARTLABEL。
-(define %cryptroot-source
-  (cond ((machine-fact 'luks-uuid) => (lambda (u) (uuid u)))
-    (else (string-append "/dev/disk/by-partlabel/" %system-partlabel))))
+(define (require-fact facts key)
+  "FACTS 中必须存在 KEY；缺失立即报错（fail-closed）——宁可
+reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
+  (or (assq-ref facts key)
+      (error "缺少必需的 machine fact:" key
+             "拒绝生成可启动系统")))
 
-(define %cryptroot-mapped-devices
+(define (require-machine-fact key)
+  (require-fact (machine-facts) key))
+
+;; LUKS 映射 source：必须用 facts 里的 LUKS UUID——initrd 扫描块设备
+;; 匹配 LUKS 头（find-partition-by-luks-uuid），无需 udev 符号链接。
+;; 缺少 luks-uuid 时 fail-closed，绝不回退 /dev/disk/by-partlabel/。
+;; 函数而非变量：构造时（首次调用）才触发 facts 校验，模块加载不失败。
+(define (cryptroot-mapped-devices)
   (list (mapped-device
-         (source %cryptroot-source)
+         (source (uuid (require-machine-fact 'luks-uuid)))
          (target %luks-mapper-name)
          (type luks-device-mapping))))
 
@@ -62,7 +117,7 @@ create-mount-point?：阶段 4 起每个新 root generation 都是空子卷，
    (mount-point (subvolume-mount-point sv))
    (type "btrfs")
    (options (subvolume-options-string sv))
-   (dependencies %cryptroot-mapped-devices)
+   (dependencies (cryptroot-mapped-devices))
    (needed-for-boot? #t)
    (create-mount-point? #t)
    (check? #f)))
@@ -76,7 +131,7 @@ create-mount-point?：阶段 4 起每个新 root generation 都是空子卷，
    (mount-point "/")
    (type "btrfs")
    (options (string-append "subvol=" root-subvolume))
-   (dependencies %cryptroot-mapped-devices)
+   (dependencies (cryptroot-mapped-devices))
    (needed-for-boot? #t)
    (check? #f)))
 

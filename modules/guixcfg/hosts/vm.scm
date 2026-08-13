@@ -56,7 +56,7 @@
                 (bootloader uki-bootloader)
                 (targets '("/efi"))))
    
-   (mapped-devices %cryptroot-mapped-devices)
+   (mapped-devices (cryptroot-mapped-devices))
    
    ;; 无状态根（docs/storage.md 第 17 章）：initrd 启动时按
    ;; @persist-system/root-generations/state.scm 选择/创建 @root-N，

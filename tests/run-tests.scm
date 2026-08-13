@@ -12,15 +12,36 @@
 ;; SRFI-64 的计数器都记录在“当前 runner”上。
 (test-runner-current (test-runner-simple))
 
-(primitive-load "tests/test-atomic-file.scm")
-(primitive-load "tests/test-boot-state.scm")
-(primitive-load "tests/test-model.scm")
-(primitive-load "tests/test-policies.scm")
-(primitive-load "tests/test-plan.scm")
-(primitive-load "tests/test-validate.scm")
-(primitive-load "tests/test-device.scm")
-(primitive-load "tests/test-root-generation.scm")
-(primitive-load "tests/test-modules-load.scm")
+;; (guixcfg hosts vm) 会加载 (guixcfg system file-systems)，其顶层对
+;; luks-uuid 做 fail-closed 检查（无 facts 时模块加载即报错）。因此全套
+;; 测试在临时 facts 环境下运行（不碰真实宿主 /persist）：显式提供测试
+;; UUID，让 modules-compile、%os 实例化等测试可以正常加载 host 模块。
+(define %test-facts-file
+  (string-append "/tmp/guixcfg-test-facts-"
+                 (number->string (getpid)) ".scm"))
+
+(call-with-output-file %test-facts-file
+                       (lambda (port)
+                         (write '((luks-uuid . "00000000-0000-0000-0000-000000000000")) port)
+                         (newline port)))
+
+(dynamic-wind
+ (lambda () (setenv "GUIX_CONFIG_FACTS" %test-facts-file))
+ (lambda ()
+   (primitive-load "tests/test-atomic-file.scm")
+   (primitive-load "tests/test-boot-state.scm")
+   (primitive-load "tests/test-model.scm")
+   (primitive-load "tests/test-policies.scm")
+   (primitive-load "tests/test-plan.scm")
+   (primitive-load "tests/test-validate.scm")
+   (primitive-load "tests/test-device.scm")
+   (primitive-load "tests/test-root-generation.scm")
+   (primitive-load "tests/test-modules-load.scm")
+   (primitive-load "tests/test-machine-facts.scm"))
+ (lambda ()
+   (unsetenv "GUIX_CONFIG_FACTS")
+   (when (file-exists? %test-facts-file)
+     (delete-file %test-facts-file))))
 
 (let ((runner (test-runner-current)))
   (exit (zero? (+ (test-runner-fail-count runner)
