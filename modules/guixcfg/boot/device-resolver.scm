@@ -10,6 +10,8 @@
 ;;; 失败而构建失败（实测）。
 
 (define-module (guixcfg boot device-resolver)
+               #:use-module ((gnu build file-systems)
+                             #:select (find-partition-by-luks-uuid))
                #:use-module (rnrs bytevectors)        ; make-bytevector
                #:use-module (ice-9 ftw)               ; scandir
                #:use-module (ice-9 rdelim)            ; read-line

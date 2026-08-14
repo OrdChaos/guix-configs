@@ -72,7 +72,10 @@ install() {
     local idir="$T7_DIR/install-files"
     rm -rf "$idir"; mkdir -p "$idir/modules"
     cp "$T7_INSTALL_DIR/install-init" "$idir/init"
-    local kdir="$(dirname "$(dirname "$(readlink -f "$sys/kernel/bzImage")")")"
+    # readlink -f 解析到 linux 包目录下的 bzImage；内核模块在该目录的
+    # lib/modules（一个 dirname 即可——两个 dirname 会退到 /gnu/store，
+    # find 落空导致 install 提前退出）。
+    local kdir="$(dirname "$(readlink -f "$sys/kernel/bzImage")")"
     find "$kdir/lib/modules" -name "*.ko.zst" 2>/dev/null \
         | grep -E "virtio|9p|btrfs|dm-crypt|blake2b|netfs|raid6|xor|nls" \
         | while read -r m; do cp "$m" "$idir/modules/"; done
