@@ -49,11 +49,13 @@
    "ephemeral-root-confirm"
    (with-imported-modules
     (source-module-closure '((guixcfg storage root-generation)
-                             (guixcfg boot boot-state))
+                             (guixcfg boot boot-state)
+                             (guixcfg boot recovery))
                            #:select? guixcfg-module-select?)
     #~(begin
        (use-modules (guixcfg storage root-generation)
-                    (guixcfg boot boot-state))
+                    (guixcfg boot boot-state)
+                    (guixcfg boot recovery))
        (let ((path (state-file-path #$%persist-system-mount)))
          (when (file-exists? path)
            (let ((state (read-state path)))
@@ -62,14 +64,12 @@
                (format #t "ephemeral-root: @root-~a 已确认为 last-good~%"
                        (root-state-current-generation state))))))
        ;; 部署成功 ≠ 启动成功：这里才是真正的“启动确认”——
-       ;; 把当前系统登记为 Boot State 的 last-good（Guix 轴），
-       ;; 供下次部署生成 RECOVERY.EFI 的 Guix 轴（见 (guixcfg boot uki)）。
+       ;; promote Recovery candidate（验证 identity → GC root → artifact
+       ;; → 菜单）并记录 Boot State 的 last-good（Guix 轴，最终 commit）。
        (let ((n (current-system-generation)))
          (if n
            (begin
-            (write-boot-states! %boot-states-path
-                                n
-                                (current-kernel-command-line))
+            (promote-recovery! "/efi" n (current-kernel-command-line))
             (format #t "boot-state: Guix generation ~a 已确认为 last-good~%"
                     n))
            (format #t "boot-state: 无法确定当前 Guix generation，跳过~%")))))))
@@ -99,31 +99,31 @@
            (let ((state (read-state state-path)))
              (let ((mounted? #f))
                (dynamic-wind
-                 (lambda ()
-                   (mkdir-p top)
-                   (mount mapper top "btrfs" 0 "subvolid=5")
-                   (set! mounted? #t))
-                 (lambda ()
-                   (let* ((names (or (scandir top) '()))
-                          (existing (filter-map parse-root-generation names))
-                          (victims (generations-to-delete existing state
-                                                          #$keep)))
-                     ;; invoke 在任意删除失败时立即抛错；只有全部成功后才
-                     ;; prune metadata，状态不会谎称仍存在的子卷已被删除。
-                     (for-each
-                      (lambda (n)
-                        (format #t "ephemeral-root: 删除旧 generation ~a~%"
-                                (root-generation-name n))
-                        (invoke btrfs "subvolume" "delete"
-                                (string-append top "/"
-                                               (root-generation-name n))))
-                      victims)
-                     (let ((remaining (lset-difference = existing victims)))
-                       (write-state! state-path
-                                     (prune-created-at state remaining)))))
-                 (lambda ()
-                   (when mounted?
-                     (umount top))))))))))))
+                (lambda ()
+                  (mkdir-p top)
+                  (mount mapper top "btrfs" 0 "subvolid=5")
+                  (set! mounted? #t))
+                (lambda ()
+                  (let* ((names (or (scandir top) '()))
+                         (existing (filter-map parse-root-generation names))
+                         (victims (generations-to-delete existing state
+                                                         #$keep)))
+                    ;; invoke 在任意删除失败时立即抛错；只有全部成功后才
+                    ;; prune metadata，状态不会谎称仍存在的子卷已被删除。
+                    (for-each
+                     (lambda (n)
+                       (format #t "ephemeral-root: 删除旧 generation ~a~%"
+                               (root-generation-name n))
+                       (invoke btrfs "subvolume" "delete"
+                               (string-append top "/"
+                                              (root-generation-name n))))
+                     victims)
+                    (let ((remaining (lset-difference = existing victims)))
+                      (write-state! state-path
+                                    (prune-created-at state remaining)))))
+                (lambda ()
+                  (when mounted?
+                    (umount top))))))))))))
 
 (define* (one-shot-program-service name program documentation
                                    #:key (requirement '(user-processes)))
