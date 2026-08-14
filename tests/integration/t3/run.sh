@@ -40,7 +40,21 @@ usage() {
     sed -n 's/^#   /  /p' "$0" | grep -E "run.sh" | head -12
 }
 
-vm-ssh() { ssh "${SSH_OPTS[@]}" root@localhost "$@"; }
+vm-ssh() {
+    # sshd 依赖网络就绪（dhcpcd）与首次 host key 生成，root@guix-vm
+    # 出现后可能仍需 1-2 分钟；连接失败（255）重试最多 2 分钟，
+    # 命令失败（其他退出码）直接返回。
+    local tries=0 rc=255
+    while [ $rc -ne 0 ]; do
+        ssh "${SSH_OPTS[@]}" -o ConnectTimeout=10 root@localhost "$@"
+        rc=$?
+        if [ $rc -eq 0 ]; then return 0; fi
+        [ $rc -eq 255 ] || return $rc
+        tries=$((tries+1))
+        if [ $tries -ge 30 ]; then return 255; fi
+        sleep 4
+    done
+}
 
 gen-ssh-key() {
     mkdir -p "$T7_DIR/ssh"
@@ -92,13 +106,17 @@ sb-keygen() {
 }
 
 # Secure Boot enrollment：boot 无 SB 状态 → VM 内合并 keystore + sbkeysync。
+# 此时尚无 TPM enrollment，磁盘需 recovery 密码解锁；T7_KEEP_VM=1
+# 保持 VM 运行（interact 默认结束即关，后续 vm-ssh 无法连接）。
 sb-enroll() {
-    tests/integration/t3/boot.sh interact sb-enroll "wait:root@guix-vm" >/dev/null
+    T7_KEEP_VM=1 tests/integration/t3/boot.sh interact sb-enroll \
+        "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
     vm-ssh 'mkdir -p /mnt/cfg && mount -t 9p -o trans=virtio guix-configs /mnt/cfg && \
             cd /mnt/cfg && \
             guix time-machine -C channels.lock.scm -- shell -m manifests/secure-boot-enroll.scm -- \
-              guix repl tools/secure-boot-enroll.scm /mnt/cfg/vms/t3/keys && \
-            sbkeysync' 
+              sh -c "guix repl tools/secure-boot-enroll.scm /mnt/cfg/vms/t3/keys && \
+                     sbkeysync --keystore /mnt/cfg/vms/t3/keys/keystore --verbose && \
+                     sbkeysync --keystore /mnt/cfg/vms/t3/keys/keystore --verbose --pk"'
     vm-ssh 'herd power-off root' >/dev/null 2>&1 || true
     sleep 8
     echo "Secure Boot enrollment 完成；重启验证 SecureBoot=1"
