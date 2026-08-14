@@ -159,6 +159,13 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
 ;;; ────────────────────────────────────────────────────────────
 ;;; preflight
 
+(define (dir-writable? path)
+  "写权限检查（不依赖 (ice-9 posix)——guix 的 guile 环境加载不了该
+模块，实测；stat mode 的 owner/group/other 写位任一即可）。"
+  (and (file-exists? path)
+       (let ((st (stat path)))
+         (not (zero? (logand (stat:mode st) #o222))))))
+
 (define (preflight)
   (define (check name ok?)
     (format #t "  [~a] ~a~%" (if ok? "ok" "FAIL") name)
@@ -177,7 +184,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
            (check "ESP 已挂载（/efi/EFI/Guix 存在）"
                   (file-exists? "/efi/EFI/Guix"))
            (check "/persist 可写"
-                  (file-writable? "/persist/system"))))
+                  (dir-writable? "/persist/system"))))
          (fail-count (count (lambda (x) (not x)) results)))
     (format #t "preflight: ~a 项失败~%" fail-count)
     (exit (if (zero? fail-count) 0 1))))
@@ -210,16 +217,19 @@ unique 目录）；dynamic-wind 保证正常与异常路径都清理。"
          (dynamic-wind
           (lambda () #t)
           (lambda ()
+            (format #t "DBG0 pre-workdir~%")
             (mkdir-p workdir)
             
             ;; 1. 用户 recovery 密码：验证实际有效（luksAddKey 的授权凭据）
             (let ((passphrase (or passphrase
                                   (read-passphrase! "输入 recovery LUKS 密码: "))))
+              (format #t "DBG1 passphrase~%")
               (unless (luks-passphrase-valid? passphrase)
                 (error "recovery 密码无法解锁 LUKS；中止"))
               (format #t "recovery 密码验证通过。~%")
               
               ;; 2. 显示当前 PCR7 并确认（Secure Boot 已启用状态下的机器 policy）
+              (format #t "DBG2 pcrread~%")
               (let* ((pcr7-hex (tpm2-pcrread! %tcti %tpm2-bin "sha256:7"))
                      (pcr7-file (string-append workdir "/pcr7.bin")))
                 (format #t "当前 PCR7 = ~a~%" pcr7-hex)
@@ -237,6 +247,7 @@ unique 目录）；dynamic-wind 保证正常与异常路径都清理。"
                        (seal-ctx (string-append workdir "/seal.ctx")))
                   ;; trial PolicyPCR（期望值 = 当前 PCR7）
                   (tpm2-pcrread! %tcti %tpm2-bin "sha256:7" #:out pcr7-file)
+                  (format #t "DBG3 sealed~%")
                   (tpm2-policy-pcr-digest! %tcti %tpm2-bin pcr7-file
                                            #:pcr "sha256:7" #:out policy-file)
                   (tpm2-createprimary! %tcti %tpm2-bin #:out primary)
@@ -248,6 +259,7 @@ unique 目录）；dynamic-wind 保证正常与异常路径都清理。"
                   ;; 4. 立即用当前 PCR7 验证 unseal（不通过不继续）。
                   ;;    明文只经管道（tpm2_unseal stdout），不落盘。
                   (let ((sess (string-append workdir "/verify.session.ctx")))
+                    (format #t "DBG4 unseal-verify~%")
                     (tpm2-load-sealed! %tcti %tpm2-bin primary seal-pub seal-priv
                                        #:out seal-ctx)
                     (tpm2-start-policy-session! %tcti %tpm2-bin #:out sess)
@@ -268,6 +280,7 @@ unique 目录）；dynamic-wind 保证正常与异常路径都清理。"
                     (call-with-output-file pw-file
                                            (lambda (p) (display passphrase p)))
                     (chmod pw-file #o600)
+                    (format #t "DBG5 luksAddKey~%")
                     (let ((old-slots (or (luks-max-keyslot) -1)))
                       (invoke-with-stdin credential %cryptsetup
                                          "luksAddKey" "--key-file" pw-file

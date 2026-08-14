@@ -85,4 +85,12 @@
    (lambda ()
      (delete-file-recursively dir))))
 
+;; ── resolve-system-device：错误 UUID fail-closed（D2）─────────
+(test-assert "错误 UUID 拒绝解析（D2）"
+             (catch #t
+               (lambda ()
+                 (resolve-system-device "ffffffffffffffffffffffffffffffff" #:tries 0)
+                 #f)
+               (lambda (k . a) #t)))
+
 (test-end)

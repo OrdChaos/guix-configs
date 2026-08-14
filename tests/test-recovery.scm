@@ -47,3 +47,28 @@
      (delete-file-recursively dir))))
 
 (test-end)
+
+;; ── promote-recovery!：identity mismatch 拒绝 artifact（R3）────
+(let ((dir (mkdtemp "/tmp/guixcfg-recovery-r3-XXXXXX")))
+  (dynamic-wind
+   (lambda () #t)
+   (lambda ()
+     (mkdir-p (string-append dir "/EFI/Guix/A"))
+     (call-with-output-file (string-append dir "/EFI/Guix/A/RECOVERY.EFI")
+                            (lambda (p) (display "slot-uki" p)))
+     ;; slot 用 symbol（(slot . A)）——string-append 兼容（修复回归）
+     (call-with-output-file (string-append dir "/EFI/Guix/candidate.scm")
+                            (lambda (p)
+                              (write '((system . "/gnu/store/FAKE-SYSTEM") (slot . A)) p)
+                              (newline p)))
+     ;; candidate.system（FAKE）与 current 不一致 → 拒绝 promote
+     ;; artifact；write-boot-states! 的宿主路径限制用 catch 兜住，
+     ;; 断言的是 mismatch 日志路径（artifact 不被复制）。
+     (let ((ok (catch #t
+                (lambda ()
+                  (promote-recovery! dir 1 "")
+                  (not (file-exists? (string-append dir "/RECOVERY.EFI"))))
+                (lambda (key . args)
+                  (not (file-exists? (string-append dir "/RECOVERY.EFI")))))))
+       (test-assert "identity mismatch 拒绝 promote artifact（R3）" ok)))
+   (lambda () (delete-file-recursively dir))))

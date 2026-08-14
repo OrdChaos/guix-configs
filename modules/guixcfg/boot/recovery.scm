@@ -78,8 +78,11 @@ COMMAND-LINE 是当前启动的 Guix generation 与确认 cmdline（boot-state
     (when match?
       ;; 3. promote artifact（槽内 candidate → 稳定路径，原子替换）
       (let* ((slot (assq-ref meta 'slot))
+             ;; candidate.scm 里 slot 是符号（(slot . A)）；string-append
+             ;; 需要字符串，兼容两种写法。
+             (slot-str (if (symbol? slot) (symbol->string slot) slot))
              (slot-uki (string-append esp "/" %uki-esp-subdir
-                                      "/" slot "/RECOVERY.EFI"))
+                                      "/" slot-str "/RECOVERY.EFI"))
              (stable-uki (string-append esp "/" %recovery-stable)))
         (if (file-exists? slot-uki)
           (begin
