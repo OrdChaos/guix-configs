@@ -119,6 +119,14 @@ print(f"[t7] qemu pid: {p.pid}", flush=True)
 buf = b""
 log = open(os.environ.get("T7_LOG", "/tmp/t7-interact.log"), "wb")
 
+def tty_write(data):
+    """向串口写入：stdio 模式 fd 是文件对象，其余模式是整数 fd。"""
+    if serial_mode == "stdio":
+        fd.write(data)
+        fd.flush()
+    else:
+        os.write(fd, data)
+
 def pump(timeout=0.2):
     """同时泵取 PTY/socket、QEMU stdout/stderr（防管道阻塞）。"""
     global buf
@@ -158,15 +166,17 @@ for kind, arg in steps:
         print(f"[t7] send: {arg}", flush=True)
         # cryptsetup 交互读密码的 termios 下 \r 不触发行提交；
         # \n 是行结束符（fifo/stdio 验证过的成功方式）
-        os.write(fd, arg.encode() + b"\n")
+        tty_write(arg.encode() + b"\n")
         time.sleep(0.5)
     elif kind == "raw":
-        os.write(fd, arg.encode())
+        tty_write(arg.encode())
         time.sleep(0.2)
     elif kind == "cmd":
         print(f"[t7] cmd: {arg}", flush=True)
-        os.write(fd, arg.encode() + b"\r")
-        time.sleep(2)
+        # \n 提交（与 send 一致）：\r 在 bash readline 与登录横幅
+        # 输出竞争时会丢字符（实测 mount 变 mout）。
+        tty_write(b"\n" + arg.encode() + b"\n")
+        time.sleep(3)
         pump(0.5)
     elif kind == "expect":
         ok = wait_for(arg, timeout=180)
@@ -177,8 +187,14 @@ for kind, arg in steps:
         # 向 Guile debug REPL 发送一个表达式，等待提示符再出现。
         # 用于 initrd 崩溃后的挂载/目录诊断（不等待输出内容，
         # 全部进日志，之后用 mark 快照检查）。
+        # 实测：一次性写入长表达式会丢字符（~50%），分块慢发。
         print(f"[t7] repl: {arg}", flush=True)
-        os.write(fd, arg.encode() + b"\n")
+        time.sleep(0.3)
+        data = arg.encode()
+        for i in range(0, len(data), 16):
+            tty_write(data[i:i+16])
+            time.sleep(0.05)
+        tty_write(b"\n")
         if not wait_for("scheme@(guile-user)", timeout=60):
             print(f"[t7] repl TIMEOUT: {arg}", flush=True)
             break
@@ -195,10 +211,13 @@ time.sleep(1)
 pump(1)
 log.write(buf)
 log.close()
-if fd is not None:
+if fd is not None and serial_mode != "stdio":
     os.close(fd)
-try:
-    p.wait(timeout=5)
-except Exception:
-    p.kill()
+if os.environ.get("T7_KEEP_VM"):
+    print(f"[t7] keeping VM alive (pid {p.pid})", flush=True)
+else:
+    try:
+        p.wait(timeout=5)
+    except Exception:
+        p.kill()
 print("[t7] done", flush=True)

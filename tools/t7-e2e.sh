@@ -18,9 +18,16 @@
 #   tools/t7-e2e.sh cleanup
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
 
-T7="$(pwd)/vms/t7"
+# 直接执行时 cd 到仓库根；被 source（如 vms/t3/t3-boot.sh）时保持调用方 cwd。
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    cd "$(dirname "$0")/.."
+fi
+
+# T7_DIR 覆盖：T3 使用全新测试目录（vms/t3），避免污染旧 vms/t7 状态。
+# 安装 initramfs 来源固定为 vms/t7-install（脚本产物，非 git 源文件）。
+T7="$(cd "${T7_DIR:-$(pwd)/vms/t7}" && pwd)"
+T7_INSTALL_DIR="$(cd "${T7_INSTALL_DIR:-$(pwd)/vms/t7-install}" && pwd)"
 STORE=/gnu/store
 mkdir -p "$T7/keys" "$T7/tpm"
 
@@ -97,13 +104,13 @@ case "${1:-}" in
         [ -n "${SYSTEM_PATH:-}" ] || { echo "需要 SYSTEM_PATH" >&2; exit 1; }
         [ -f "$DISK" ] || qemu-img create -f qcow2 "$DISK" 25G
         rm -rf "$T7/initramfs"; mkdir -p "$T7/initramfs/bin" "$T7/initramfs/modules"
-        cp "$T7-install/init" "$T7/initramfs/init"
+        cp "$T7_INSTALL_DIR/init" "$T7/initramfs/init"
         cp "$BB/busybox" "$T7/initramfs/bin/"
-        for a in sh mount umount insmod cp mkdir cat echo sleep sync poweroff ls awk grep head mknod dmesg zcat; do
+        for a in sh mount umount insmod cp mkdir cat echo sleep sync poweroff ls awk grep head mknod dmesg zcat basename dirname; do
             ln -sf busybox "$T7/initramfs/bin/$a"
         done
         # 模块预先解压（busybox zcat 不支持 zstd；insmod 不解压 .ko.zst）
-        for m in "$T7-install"/modules/*.ko.zst; do
+        for m in "$T7_INSTALL_DIR"/modules/*.ko.zst; do
             [ -f "$m" ] || continue
             zstd -d -f "$m" -o "$T7/initramfs/modules/$(basename "$m" .zst)" 2>/dev/null
         done
