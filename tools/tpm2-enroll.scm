@@ -242,8 +242,10 @@ SetupMode==0 才认为 Secure Boot 已启用；无法读取返回 #f
                  (tpm2-unseal! %tcti %tpm2-bin seal-ctx sess #:output out)
                  (tpm2-flush-session! %tcti %tpm2-bin sess)
                  (unless (string=? credential
-                                   (call-with-input-file out
-                                                         (lambda (p) (get-string-all p))))
+                                   (utf8->string
+                                    (call-with-input-file out
+                                                          (lambda (p)
+                                                            (get-bytevector-all p)))))
                    (error "unseal 自验证失败；中止"))
                  (delete-file out)
                  (format #t "unseal 自验证通过。~%"))
