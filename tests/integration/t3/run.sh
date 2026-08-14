@@ -129,10 +129,16 @@ enroll-tpm() {
     cp "$T7_DIR/vars-sb-enroll.fd" "$T7_DIR/vars-enroll-tpm.fd"
     T7_KEEP_VM=1 tests/integration/t3/boot.sh interact enroll-tpm \
         "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
-    vm-ssh 'mkdir -p /mnt/cfg && mount -t 9p -o trans=virtio guix-configs /mnt/cfg' 
+    vm-ssh 'modprobe 9p 9pnet_virtio 2>/dev/null; mkdir -p /mnt/cfg && mount -t 9p -o trans=virtio guix-configs /mnt/cfg'
+    # 不用 guix repl：VM 的 guix 包在 3.0.11 下有 dynamic-wind arity
+    # 问题（guix/ui.scm 加载时崩）。tpm2-enroll.scm 只依赖
+    # guixcfg + (guix build utils)，用 guix 自带的 guile 直接跑，
+    # -L 指向 guix site（shebang 的 guile 同 store 包的 share）。
     printf '%s\nyes\n' "$RECOVERY_PW" | vm-ssh \
         'cd /mnt/cfg && GUIXCFG_TPM_TCTI=device:/dev/tpmrm0 \
-         guix repl tools/tpm2-enroll.scm -- enroll'
+         G=$(head -1 "$(command -v guix)" | sed "s|^#!||" | awk "{print \$1}") \
+         && S=$(dirname "$(dirname "$G")")/share/guile/site/3.0 \
+         && "$G" --no-auto-compile -L "$S" -L modules -s tools/tpm2-enroll.scm enroll'
     vm-ssh 'herd power-off root' >/dev/null 2>&1 || true
     sleep 8
     echo "TPM enrollment 完成；重启后 Scenario A 验证自动解锁"
@@ -153,6 +159,11 @@ scenario() {
     if [ ! -d "$T7_DIR/tpm-stage-b/tpm2-00.permall" ]; then
         cp -r "$T7_DIR/tpm-enroll-tpm" "$T7_DIR/tpm-stage-b"
     fi
+    # 每个场景从干净状态开始：前一场景（T7_KEEP_VM=1）残留的 qemu
+    # 占着 2222/磁盘锁，会静默破坏下一次 boot。
+    pkill -f 'qemu-system-x8[6]' 2>/dev/null || true
+    pkill -x swtpm 2>/dev/null || true
+    sleep 2
     case "$name" in
         A|a)
             T7_KEEP_VM=1 tests/integration/t3/boot.sh boot stage-b >/dev/null
@@ -166,7 +177,27 @@ scenario() {
             grep -a "回退密码" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && echo "* B tpm-clear fallback: PASS" || { echo "* B FAIL"; exit 1; }
             ;;
+        C|c)
+            # PCR7 change：换 fresh VARS（新 SB 状态 → PCR7 与 enroll 时
+            # 不同）→ unseal 失败 → 密码回退。
+            tests/integration/t3/boot.sh fresh-vars stage-b
+            T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
+                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
+            grep -a "尝试自动解锁" "$T7_DIR/interact-stage-b.log" >/dev/null \
+                && grep -a "回退密码" "$T7_DIR/interact-stage-b.log" >/dev/null \
+                && echo "* C PCR7 change fallback: PASS" || { echo "* C FAIL"; exit 1; }
+            ;;
         D|d)
+            # 提取 ESP 里 install-init 独立构建、inspect 断言过的真实
+            # RECOVERY.EFI（绝不 cp CURRENT.EFI——rootmode=recovery 门控
+            # 必须真实），经 9p 拷回宿主作为 -kernel 引导文件。
+            T7_KEEP_VM=1 tests/integration/t3/boot.sh boot stage-b >/dev/null
+            vm-ssh 'modprobe 9p 9pnet_virtio 2>/dev/null; mkdir -p /mnt/cfg && \
+                    mount -t 9p -o trans=virtio guix-configs /mnt/cfg && \
+                    (cp /efi/EFI/Guix/A/RECOVERY.EFI /mnt/cfg/vms/t3/recovery-t3.efi 2>/dev/null || \
+                     cp /efi/EFI/Guix/RECOVERY.EFI /mnt/cfg/vms/t3/recovery-t3.efi)' >/dev/null
+            vm-ssh 'herd power-off root' >/dev/null 2>&1 || true
+            sleep 8
             T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
                 "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" \
                 -kernel "$T7_DIR/recovery-t3.efi" >/dev/null
@@ -175,6 +206,9 @@ scenario() {
                 && echo "* D recovery skip: PASS" || { echo "* D FAIL"; exit 1; }
             ;;
         E|e)
+            # 前置：确保有运行中的系统（enrolled TPM 正常 auto-unlock）
+            # 才能 SSH 进去 corrupt artifact。
+            T7_KEEP_VM=1 tests/integration/t3/boot.sh boot stage-b >/dev/null
             vm-ssh 'cd /efi/EFI/Guix/tpm2 && printf "\x00" | dd of=seal.priv bs=1 seek=10 count=1 conv=notrunc 2>/dev/null; herd power-off root' >/dev/null 2>&1 || true
             sleep 8
             T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
@@ -183,19 +217,22 @@ scenario() {
                 && grep -a "回退密码" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && echo "* E corrupt artifact fallback: PASS" || { echo "* E FAIL"; exit 1; }
             ;;
-        *) echo "未知场景: $name（A B D E）"; exit 1;;
+        *) echo "未知场景: $name（A B C D E）"; exit 1;;
     esac
 }
 
 all() {
     fresh
     build-system
-    install
+    # sb-keygen 必须在 install 之前：install-init 的 ukify build 需要
+    # /mnt/cfg/vms/t3/keys/db.{key,crt}（9p 挂载宿主路径）给 UKI 签名。
     sb-keygen
+    install
     sb-enroll
     enroll-tpm
     scenario A
     scenario B
+    scenario C
     scenario D
     scenario E
 }

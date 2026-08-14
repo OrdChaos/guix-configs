@@ -140,8 +140,22 @@ reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
                            (cryptsetup
                             #$(file-append cryptsetup-static "/sbin/cryptsetup")))
                       (format #t "TPM 解锁未成功，进入密码解锁~%")
-                      (zero? (system*/tty cryptsetup "open" "--type" "luks"
-                                          partition #$target)))))))))
+                      ;; console 竞态防御（同 linux-boot 的
+                      ;; switch-to-system 重开做法）：pid-1 环境下
+                      ;; fd 0/1/2 与 /dev/console 偶发脱钩，实测
+                      ;; system*/tty 的 isatty 误判 → login_tty
+                      ;; ENOSYS → panic。重开后直接用 system* 继承
+                      ;; console（cryptsetup 交互读密码），不再依赖
+                      ;; isatty 启发式。
+                      (when (file-exists? "/dev/console")
+                        (let ((console (open-file "/dev/console" "r+b0")))
+                          (for-each close-fdes '(0 1 2))
+                          (dup2 (fileno console) 0)
+                          (dup2 (fileno console) 1)
+                          (dup2 (fileno console) 2)
+                          (close-port console)))
+                      (zero? (system* cryptsetup "open" "--type" "luks"
+                                      partition #$target)))))))))
    (close (lambda (source targets)
             #~(system* #$(file-append cryptsetup-static "/sbin/cryptsetup")
                        "close" #$(first targets))))
@@ -152,7 +166,7 @@ reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
               (ice-9 match)
               (ice-9 rdelim)
               ((gnu build file-systems)
-               #:select (find-partition-by-luks-uuid system*/tty))))))
+               #:select (find-partition-by-luks-uuid))))))
 
 ;; LUKS 映射 source：必须用 facts 里的 LUKS UUID——initrd 扫描块设备
 ;; 匹配 LUKS 头（find-partition-by-luks-uuid），无需 udev 符号链接。
