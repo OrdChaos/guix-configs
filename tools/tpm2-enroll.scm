@@ -260,7 +260,7 @@ SetupMode==0 才认为 Secure Boot 已启用；无法读取返回 #f
                  (chmod pw-file #o600)
                  (let ((old-slots (or (luks-max-keyslot) -1)))
                    (invoke-with-stdin credential %cryptsetup
-                                      "luksAddKey" "--key-file=" pw-file
+                                      "luksAddKey" "--key-file" pw-file
                                       "--new-keyfile=-" (luks-device))
                    (let* ((keyslot (luks-max-keyslot))
                           ;; 回滚闭包：发布失败时删除刚加入的 keyslot
@@ -269,7 +269,7 @@ SetupMode==0 才认为 Secure Boot 已启用；无法读取返回 #f
                                                "回滚：删除 keyslot ~a~%" keyslot)
                                        (invoke-with-stdin passphrase %cryptsetup
                                                           "luksKillSlot"
-                                                          "--key-file=" pw-file
+                                                          "--key-file" pw-file
                                                           (luks-device)
                                                           (number->string keyslot)))))
                      (delete-file pw-file)
