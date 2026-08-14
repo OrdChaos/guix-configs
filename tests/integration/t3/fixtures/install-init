@@ -170,8 +170,9 @@ $UKIFY build --linux "$KERNEL" --initrd "$INITRD" \
     --stub "$STUB" \
     --secureboot-private-key "$SBKEY" --secureboot-certificate "$SBCRT" \
     --output /mnt/esp/EFI/Guix/A/CURRENT.EFI \
-cp /mnt/esp/EFI/Guix/A/CURRENT.EFI /mnt/esp/EFI/Guix/A/RECOVERY.EFI \
     || { echo "T7-INSTALL-FAIL: ukify build"; poweroff -f; }
+cp /mnt/esp/EFI/Guix/A/CURRENT.EFI /mnt/esp/EFI/Guix/A/RECOVERY.EFI \
+    || { echo "T7-INSTALL-FAIL: cp RECOVERY"; poweroff -f; }
 $SBSIGN --key "$SBKEY" --cert "$SBCRT" \
     --output /mnt/esp/EFI/BOOT/BOOTX64.EFI "$LIMINE" \
     || { echo "T7-INSTALL-FAIL: sbsign limine"; poweroff -f; }
