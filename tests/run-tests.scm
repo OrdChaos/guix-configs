@@ -31,6 +31,7 @@
    (primitive-load "tests/test-atomic-file.scm")
    (primitive-load "tests/test-boot-state.scm")
    (primitive-load "tests/test-process.scm")
+   (primitive-load "tests/test-spawn.scm")
    (primitive-load "tests/test-model.scm")
    (primitive-load "tests/test-policies.scm")
    (primitive-load "tests/test-plan.scm")
