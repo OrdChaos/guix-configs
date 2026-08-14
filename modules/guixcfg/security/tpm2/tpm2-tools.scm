@@ -174,14 +174,26 @@ transient 回收语义由 (current-tpm2-environment) 决定：
 （--key-file 语义），不落盘、不进 argv/environment。
 PARENT 是持久句柄或 context。"
          (let ((bin (string-append tpm2-tools-bin "/tpm2_create"))
-               ;; 实测：tpm2_create -L <文件> 在 swtpm TCTI 下 0x902；hex 正常
+               ;; 实测：tpm2_create -L <文件> 在 swtpm TCTI 下 0x902；hex 正常。
+               ;; sealed attrs 必须显式指定为 0x492 = fixedtpm(0x2)|
+               ;; fixedparent(0x10)|adminwithpolicy(0x80)|noda(0x400)
+               ;; （TPM 2.0 spec TPMA_OBJECT 布局，tss/libtpms 一致；
+               ;; systemd-cryptenroll 的 sealed attrs 相同）。adminWithPolicy
+               ;; 必须置位——unseal 端用 policy session 授权。
+               ;; 注意：TPMA_OBJECT 的 bit0/bit3 是 reserved（shall be
+               ;; zero）；早期文档流传的 fixedTPM=bit0 位定义是错的，
+               ;; 按旧定义拼的 0x3b/0x1e1 之类 attrs 报 0x2E1 reserved
+               ;; bits（T3 实测）；5.7 不带 -a 的默认 sealed attrs
+               ;; （0x10452，含 restricted）对 keyedhash 非法，报 0x2C2。
                (policy-hex (bytes->hex (call-with-input-file policy-digest-file
                                                              get-bytevector-all))))
            (with-tcti tcti
                       (lambda ()
-                        (invoke-with-bytevector-stdin secret bin "-C" parent
-                                                      "-u" public-out "-r" private-out
-                                                      "-L" policy-hex "-i" "-" "-g" "sha256"))))
+                        (invoke-with-bytevector-stdin
+                         secret bin "-C" parent
+                         "-u" public-out "-r" private-out
+                         "-L" policy-hex "-i" "-" "-g" "sha256"
+                         "-a" "0x492"))))
          (values public-out private-out))
 
 (define* (tpm2-load-sealed! tcti tpm2-tools-bin parent public-file private-file
