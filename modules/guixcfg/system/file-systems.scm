@@ -5,6 +5,7 @@
 (define-module (guixcfg system file-systems)
                #:use-module (guixcfg storage model)
                #:use-module (guixcfg boot tpm-unlock)      ; tpm-unlock-in-initrd
+               #:use-module (guixcfg security tpm2 packages) ; tpm2-tools-compat
                #:use-module (gnu system file-systems)    ; file-system、%base-file-systems
                #:use-module (gnu system mapped-devices)  ; mapped-device、mapped-device-kind
                #:use-module (gnu system uuid)            ; uuid、uuid-bytevector
@@ -121,14 +122,19 @@ reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
                 (mkdir-p "/run/cryptsetup/")
                 ;; 先尝试 TPM 自动解锁；失败走标准交互密码路径。
                 (if (tpm-unlock-in-initrd
-                     #$(file-append tpm2-tools "/bin")
+                     #$(file-append tpm2-tools-compat "/bin")
                      #$(file-append cryptsetup-static "/sbin/cryptsetup"))
                   #t
                   (let* ((source-bv #$(if (uuid? source)
                                         (uuid-bytevector source)
                                         source))
+                         ;; 分区发现优先 PARTNAME（/sys/block 扫描，实测
+                         ;; 可靠）；UUID 匹配作后备——实测 boot 时嵌入的
+                         ;; source-bv 与 initrd 文件内容可能不一致（gexp
+                         ;; 序列化边界），不能用它作为唯一发现手段。
                          (partition
-                          (or (let loop ((tries-left 10))
+                          (or (partname-device "system")
+                              (let loop ((tries-left 10))
                                 (and (positive? tries-left)
                                      (or (find-partition-by-luks-uuid source-bv)
                                          (begin (sleep 1)
