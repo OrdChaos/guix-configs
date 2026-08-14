@@ -6,6 +6,8 @@
                #:use-module (guixcfg storage model)
                #:use-module (guixcfg boot tpm-unlock)      ; tpm-unlock-in-initrd
                #:use-module (virelith packages tpm2)        ; tpm2-tools-compat
+               #:use-module (guixcfg boot device-resolver) ; resolve-system-device
+               #:use-module (guixcfg security tpm2 tpm2-tools) ; bytes->hex
                #:use-module (gnu system file-systems)    ; file-system、%base-file-systems
                #:use-module (gnu system mapped-devices)  ; mapped-device、mapped-device-kind
                #:use-module (gnu system uuid)            ; uuid、uuid-bytevector
@@ -109,6 +111,7 @@ reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
                 (use-modules (gnu build file-systems)   ; system*/tty
                              (guix build utils)         ; mkdir-p
                              (guix build syscalls)      ; mount、umount
+                             (guixcfg boot device-resolver) ; resolve-system-device
                              (ice-9 rdelim)
                              (ice-9 ftw)
                              (ice-9 regex)
@@ -117,28 +120,20 @@ reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
                              (rnrs bytevectors)
                              (rnrs io ports)
                              (srfi srfi-13))
+                ;; cryptroot 的权威身份：config 侧嵌入的 LUKS UUID hex
+                ;; 字符串（gexp 序列化边界可靠——T3 实测 bytevector 嵌入
+                ;; initrd 后可能全零；hex string 稳定）。
+                (define source-hex #$(bytes->hex (uuid-bytevector source)))
                 ;; cryptsetup 需要 /run/cryptsetup/（LUKS2 强制 locking）
                 (mkdir-p "/run/cryptsetup/")
                 ;; 先尝试 TPM 自动解锁；失败走标准交互密码路径。
+                ;; TPM 与密码回退共享同一 resolver（UUID 权威，4.4）。
                 (if (tpm-unlock-in-initrd
                      #$(file-append tpm2-tools-compat "/bin")
-                     #$(file-append cryptsetup-static "/sbin/cryptsetup"))
+                     #$(file-append cryptsetup-static "/sbin/cryptsetup")
+                     source-hex)
                   #t
-                  (let* ((source-bv #$(if (uuid? source)
-                                        (uuid-bytevector source)
-                                        source))
-                         ;; 分区发现优先 PARTNAME（/sys/block 扫描，实测
-                         ;; 可靠）；UUID 匹配作后备——实测 boot 时嵌入的
-                         ;; source-bv 与 initrd 文件内容可能不一致（gexp
-                         ;; 序列化边界），不能用它作为唯一发现手段。
-                         (partition
-                          (or (partname-device "system")
-                              (let loop ((tries-left 10))
-                                (and (positive? tries-left)
-                                     (or (find-partition-by-luks-uuid source-bv)
-                                         (begin (sleep 1)
-                                                (loop (- tries-left 1))))))
-                              (error "LUKS partition not found" source-bv)))
+                  (let* ((partition (resolve-system-device source-hex))
                          (cryptsetup
                           #$(file-append cryptsetup-static "/sbin/cryptsetup")))
                     (format #t "TPM 解锁未成功，进入密码解锁~%")
@@ -147,7 +142,10 @@ reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
    (close (lambda (source targets)
             #~(system* #$(file-append cryptsetup-static "/sbin/cryptsetup")
                        "close" #$(first targets))))
-   (modules '((guixcfg boot tpm-unlock)
+   (modules '((guixcfg boot device-resolver)
+              (guixcfg boot tpm-unlock)
+              (zlib)                        ; module-import 源码 fallback 需要
+              (zstd)
               (rnrs bytevectors)
               (rnrs io ports)
               (ice-9 match)

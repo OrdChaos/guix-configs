@@ -17,6 +17,7 @@
 ;;;     shell）
 
 (define-module (guixcfg boot tpm-unlock)
+               #:use-module (guixcfg boot device-resolver) ; resolve-system/esp-device
                #:use-module (guixcfg storage model)        ; %luks-mapper-name
                #:use-module (guixcfg security tpm2 tpm2-tools)
                #:use-module (guix build utils)             ; mkdir-p
@@ -31,8 +32,6 @@
                #:use-module (srfi srfi-1)                  ; first
                #:use-module (srfi srfi-13)                 ; string-tokenize
                #:export (tpm-unlock-in-initrd
-                         ensure-partlabel-links!
-                         partname-device
                          cmdline-option
                          proc-cmdline-option
                          tpm-unlock-candidate?))
@@ -63,60 +62,9 @@
                   name))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 设备发现（initrd 无 udev；实测 workaround，来自旧 TPM era）
-
-(define (partname-device label)
-  "遍历 /sys/block/*/*/uevent 找 PARTNAME=LABEL 的分区，返回
-/dev/<分区名>；找不到返回 #f。不依赖 udev/blkid。"
-  (let loop ((devices (or (scandir "/sys/block") '())))
-    (if (null? devices)
-      #f
-      (let* ((dev (car devices))
-             (dev-dir (string-append "/sys/block/" dev)))
-        (if (or (string-prefix? "." dev)
-                (not (eq? 'directory (stat:type (stat dev-dir)))))
-          (loop (cdr devices))
-          (let loop2 ((parts (or (scandir dev-dir) '())))
-            (if (null? parts)
-              (loop (cdr devices))
-              (let* ((part (car parts))
-                     (part-dir (string-append dev-dir "/" part))
-                     (uevent (string-append part-dir "/uevent")))
-                (if (and (not (string-prefix? "." part))
-                         (file-exists? uevent)
-                         (let ((content (call-with-input-file uevent
-                                                              (lambda (p)
-                                                                (get-string-all p)))))
-                           (let ((m (string-match "PARTNAME=([^\n]+)" content)))
-                             (and m (string=? (match:substring m 1) label)))))
-                  (string-append "/dev/" part)
-                  (loop2 (cdr parts)))))))))))
-
-(define (ensure-partlabel-links!)
-  "initrd 无 udev：创建分区设备节点与 /dev/disk/by-partlabel/ 链接
-（块设备主次号来自 /sys/block/<dev>/dev，mknod 用
-(guix build syscalls) 的符号类型 'block）。"
-  (let ((dir "/dev/disk/by-partlabel"))
-    (mkdir-p dir)
-    (for-each
-     (lambda (label)
-       (let ((dev (partname-device label)))
-         (when dev
-           (let ((name (basename dev)))
-             ;; mknod 块设备（主:次 从 sysfs）
-             (let* ((sys (string-append "/sys/block/" name "/dev")))
-               (when (file-exists? sys)
-                 (let* ((nums (call-with-input-file sys
-                                                    (lambda (p) (read-line p))))
-                        (maj (string-take nums (string-index nums #\:)))
-                        (min (string-drop nums (+ 1 (string-index nums #\:)))))
-                   (false-if-exception
-                    (mknod dev 'block
-                           (+ (* (string->number maj) 256)
-                              (string->number min)))))))
-             (false-if-exception
-              (symlink dev (string-append dir "/" label)))))))
-     '("esp" "system"))))
+;;; 设备发现：LUKS UUID authoritative（(guixcfg boot device-resolver)——
+;;; system 用 UUID 解析，ESP 是 system 的 sibling；不依赖 udev/partlabel
+;;; 猜测）。
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 决策纯函数（测试用）
@@ -130,10 +78,12 @@
 ;;; ────────────────────────────────────────────────────────────
 ;;; initrd 解锁尝试
 
-(define (tpm-unlock-in-initrd tpm2-bin cryptsetup-bin)
+(define (tpm-unlock-in-initrd tpm2-bin cryptsetup-bin luks-uuid-hex)
   "initrd 内的 TPM 自动解锁尝试。返回 #t 表示 LUKS（cryptroot）已由
 TPM credential 打开；#f 表示未尝试或失败（调用方回退密码）。
-TPM2-BIN/CRYPTSETUP-BIN 为 store 中的可执行文件路径。"
+TPM2-BIN/CRYPTSETUP-BIN 为 store 中的可执行文件路径。LUKS-UUID-HEX
+为 config 侧嵌入的 system LUKS UUID（hex 字符串，16 字节，无连字符），
+UUID 是权威身份。"
   (catch #t
     (lambda ()
       ;; ── cmdline 门控：Recovery 与显式禁用都跳过（双保险）
@@ -148,8 +98,8 @@ TPM2-BIN/CRYPTSETUP-BIN 为 store 中的可执行文件路径。"
         (throw 'tpm-skip "无 /dev/tpmrm0"))
       
       ;; ── 设备发现：PARTLABEL 固定事实（model.scm）
-      (let ((system-part (partname-device "system"))
-            (esp-part (partname-device "esp")))
+      (let* ((system-part (resolve-system-device luks-uuid-hex))
+             (esp-part (resolve-esp-device system-part)))
         (unless (and system-part esp-part)
           (throw 'tpm-skip "未找到 system/esp 分区"))
         (format #t "TPM: system=~a esp=~a~%" system-part esp-part)
