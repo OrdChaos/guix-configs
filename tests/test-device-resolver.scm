@@ -67,18 +67,20 @@
                                 (display "PARTNAME=esp\n" port)))
        (test-equal "其他 disk 的 esp 不影响本盘解析"
                    "/dev/vda1"
-                   (resolve-esp-device "/dev/vda2" #:sysfs sysfs))))
-   ;; 多个 esp（vda1 + vda3）→ error
-   (mkdir-p (string-append vda "/vda3"))
-   (call-with-output-file (string-append vda "/vda3/uevent")
-                          (lambda (port)
-                            (display "PARTNAME=esp\n" port)))
-   (test-assert "多个 sibling esp → error"
-                (catch #t
-                  (lambda ()
-                    (resolve-esp-device "/dev/vda2" #:sysfs sysfs)
-                    #f)
-                  (lambda (k . a) #t)))
+                   (resolve-esp-device "/dev/vda2" #:sysfs sysfs))
+       
+       ;; 多个 esp（vda1 + vda3）→ error（放在最后：会改变 vda 盘的
+       ;; esp 数量，必须先于其他 disk 测试完成断言）
+       (mkdir-p (string-append vda "/vda3"))
+       (call-with-output-file (string-append vda "/vda3/uevent")
+                              (lambda (port)
+                                (display "PARTNAME=esp\n" port)))
+       (test-assert "多个 sibling esp → error"
+                    (catch #t
+                      (lambda ()
+                        (resolve-esp-device "/dev/vda2" #:sysfs sysfs)
+                        #f)
+                      (lambda (k . a) #t)))))
    
    (lambda ()
      (delete-file-recursively dir))))

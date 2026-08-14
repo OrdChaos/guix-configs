@@ -123,29 +123,30 @@ reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
                 ;; cryptroot 的权威身份：config 侧嵌入的 LUKS UUID hex
                 ;; 字符串（gexp 序列化边界可靠——T3 实测 bytevector 嵌入
                 ;; initrd 后可能全零；hex string 稳定）。
-                (define source-hex #$(bytes->hex (uuid-bytevector source)))
-                ;; cryptsetup 需要 /run/cryptsetup/（LUKS2 强制 locking）
-                (mkdir-p "/run/cryptsetup/")
-                ;; 先尝试 TPM 自动解锁；失败走标准交互密码路径。
-                ;; TPM 与密码回退共享同一 resolver（UUID 权威，4.4）。
-                (if (tpm-unlock-in-initrd
-                     #$(file-append tpm2-tools-compat "/bin")
-                     #$(file-append cryptsetup-static "/sbin/cryptsetup")
-                     source-hex)
-                  #t
-                  (let* ((partition (resolve-system-device source-hex))
-                         (cryptsetup
-                          #$(file-append cryptsetup-static "/sbin/cryptsetup")))
-                    (format #t "TPM 解锁未成功，进入密码解锁~%")
-                    (zero? (system*/tty cryptsetup "open" "--type" "luks"
-                                        partition #$target))))))))
+                ;; 用 let* 而非 define：guile 3.0.9（raw-initrd builder 的
+                ;; guile-final）的 psyntax 不允许 begin 内 use-modules 之后
+                ;; 出现 define（definition in expression context），实测。
+                (let* ((source-hex #$(bytes->hex (uuid-bytevector source))))
+                  ;; cryptsetup 需要 /run/cryptsetup/（LUKS2 强制 locking）
+                  (mkdir-p "/run/cryptsetup/")
+                  ;; 先尝试 TPM 自动解锁；失败走标准交互密码路径。
+                  ;; TPM 与密码回退共享同一 resolver（UUID 权威，4.4）。
+                  (if (tpm-unlock-in-initrd
+                       #$(file-append tpm2-tools-compat "/bin")
+                       #$(file-append cryptsetup-static "/sbin/cryptsetup")
+                       source-hex)
+                    #t
+                    (let* ((partition (resolve-system-device source-hex))
+                           (cryptsetup
+                            #$(file-append cryptsetup-static "/sbin/cryptsetup")))
+                      (format #t "TPM 解锁未成功，进入密码解锁~%")
+                      (zero? (system*/tty cryptsetup "open" "--type" "luks"
+                                          partition #$target)))))))))
    (close (lambda (source targets)
             #~(system* #$(file-append cryptsetup-static "/sbin/cryptsetup")
                        "close" #$(first targets))))
    (modules '((guixcfg boot device-resolver)
               (guixcfg boot tpm-unlock)
-              (zlib)                        ; module-import 源码 fallback 需要
-              (zstd)
               (rnrs bytevectors)
               (rnrs io ports)
               (ice-9 match)
