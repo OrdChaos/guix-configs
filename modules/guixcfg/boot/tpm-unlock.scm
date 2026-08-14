@@ -168,44 +168,69 @@ TPM2-BIN/CRYPTSETUP-BIN 为 store 中的可执行文件路径。"
              (format #t "TPM: tpm2 材料就绪，尝试自动解锁~%")
              
              ;; ── unseal：重建 SRK → load sealed → policy session
-             ;;    （实际 PCR7）→ unseal stdout 管道直连 cryptsetup
-             (let* ((workdir "/tmp/guixcfg-tpm2-initrd")
+             ;;    （实际 PCR7）→ unseal stdout 管道直连 cryptsetup。
+             ;;    每步 catch 并归类（failure 阶段区分），boot console
+             ;;    只输出一行分类日志。
+             (let* ((workdir "/run/guixcfg/tpm2-initrd")
                     (primary (string-append workdir "/primary.ctx"))
                     (seal-ctx (string-append workdir "/seal.ctx"))
                     (sess (string-append workdir "/policy.session.ctx")))
                (mkdir-p workdir)
-               (tpm2-createprimary! %tpm2-tools-tcti tpm2-bin #:out primary)
-               (tpm2-load-sealed! %tpm2-tools-tcti tpm2-bin
-                                  primary seal-pub seal-priv
-                                  #:out seal-ctx)
+               (catch #t
+                 (lambda ()
+                   (tpm2-createprimary! %tpm2-tools-tcti tpm2-bin #:out primary))
+                 (lambda (k . a) (throw 'tpm-fail "SRK 创建失败")))
+               (catch #t
+                 (lambda ()
+                   (tpm2-load-sealed! %tpm2-tools-tcti tpm2-bin
+                                      primary seal-pub seal-priv
+                                      #:out seal-ctx))
+                 (lambda (k . a)
+                   (throw 'tpm-fail "sealed object 加载失败（artifact 无效或 TPM 状态不符）")))
                (tpm2-start-policy-session! %tpm2-tools-tcti tpm2-bin
                                            #:out sess)
                (tpm2-policy-pcr-session! %tpm2-tools-tcti tpm2-bin sess
                                          #:pcr "sha256:7")
-               (let ((secret-port
-                      (tpm2-unseal! %tpm2-tools-tcti tpm2-bin
-                                    seal-ctx sess)))
-                 ;; unseal stdout → cryptsetup stdin
-                 (let ((crypt-port
-                        (open-pipe* OPEN_WRITE cryptsetup-bin
-                                    "open" "--type" "luks"
-                                    "--key-file=-"
-                                    system-part
-                                    %luks-mapper-name)))
-                   (let loop ()
-                     (let ((bv (get-bytevector-n secret-port 4096)))
-                       (unless (eof-object? bv)
-                         (put-bytevector crypt-port bv)
-                         (loop))))
-                   (let ((status (close-pipe crypt-port)))
-                     (close-port secret-port)
-                     (unless (zero? (status:exit-val status))
-                       (throw 'tpm-fail "cryptsetup 拒绝 credential"))))
-                 (tpm2-flush-session! %tpm2-tools-tcti tpm2-bin sess)
-                 (format #t "TPM: LUKS 自动解锁成功~%")
-                 #t))))
+               (catch #t
+                 (lambda ()
+                   (let ((secret-port
+                          (tpm2-unseal! %tpm2-tools-tcti tpm2-bin
+                                        seal-ctx sess)))
+                     ;; unseal stdout → cryptsetup stdin
+                     (let ((crypt-port
+                            (open-pipe* OPEN_WRITE cryptsetup-bin
+                                        "open" "--type" "luks"
+                                        "--key-file=-"
+                                        system-part
+                                        %luks-mapper-name)))
+                       (let loop ()
+                         (let ((bv (get-bytevector-n secret-port 4096)))
+                           (unless (eof-object? bv)
+                             (put-bytevector crypt-port bv)
+                             (loop))))
+                       (let ((status (close-pipe crypt-port)))
+                         (close-port secret-port)
+                         (unless (zero? (status:exit-val status))
+                           (throw 'tpm-fail "cryptsetup 拒绝 credential"))))
+                     (tpm2-flush-session! %tpm2-tools-tcti tpm2-bin sess)
+                     (format #t "TPM: LUKS 自动解锁成功~%")
+                     #t)))
+               (lambda (k . a)
+                 (if (eq? k 'tpm-fail)
+                   (apply throw k a)
+                   (throw 'tpm-fail "PCR policy 不匹配或 TPM 命令失败"))))))
          (lambda ()
            (false-if-exception (umount %esp-tpm-mount))))))
     (lambda (key . args)
-      (format #t "TPM: 自动解锁跳过/失败（~a），回退密码~%" key)
+      ;; boot console 保持短：只输出一行分类日志（skip vs failure +
+      ;; 原因/阶段），不打印 stack trace。
+      (cond
+        ((eq? key 'tpm-skip)
+         (format #t "TPM: 跳过（~a），回退密码~%"
+                 (and (pair? args) (car args))))
+        ((eq? key 'tpm-fail)
+         (format #t "TPM: 失败（~a），回退密码~%"
+                 (and (pair? args) (car args))))
+        (else
+         (format #t "TPM: 失败（TPM 命令/未知），回退密码~%")))
       #f)))
