@@ -4,6 +4,7 @@
 ;;; （.prev 回退）。
 
 (use-modules (guixcfg security tpm2 state)
+             (guix build utils)        ; delete-file-recursively
              (srfi srfi-64))
 
 (test-begin "tpm2-state")

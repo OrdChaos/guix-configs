@@ -11,25 +11,29 @@
 ;;;   - cmdline 门控（rootmode=recovery / guixcfg.tpm-unlock=0 → 跳过）
 ;;;   - PARTLABEL 设备发现（initrd 无 udev：/sys/block 扫描）
 ;;;   - 挂 ESP → 读机器级 artifact（/EFI/Guix/tpm2/，不随 UKI slot 变化）
-;;;   - PolicyPCR(实际 PCR7) → unseal stdout 管道 → cryptsetup open
-;;;     --key-file=-
+;;;   - PolicyPCR(实际 PCR7) → tpm2_unseal stdout FD 直连 cryptsetup
+;;;     stdin FD（spawn-pipeline，明文不经 Scheme heap）→ cryptsetup
+;;;     open --key-file=-
 ;;;   - 任意失败 → 返回 #f → kind 回退标准交互密码（永不 emergency
 ;;;     shell）
+;;;
+;;; 子进程路径：全部走 (guixcfg utils spawn) 的 spawn 原语
+;;; （posix_spawn，父进程不 fork）——initrd 的 guile-static 在 fork 后
+;;; 触发 GC segfault（见 (guixcfg utils spawn) 头部注释），open-pipe*/
+;;; invoke 在 initrd 内不可用。
 
 (define-module (guixcfg boot tpm-unlock)
                #:use-module (guixcfg boot device-resolver) ; resolve-system/esp-device
                #:use-module (guixcfg storage model)        ; %luks-mapper-name
                #:use-module (guixcfg security tpm2 tpm2-tools)
+               #:use-module (guixcfg utils spawn)          ; spawn-pipeline
                #:use-module (guix build utils)             ; mkdir-p
                #:use-module (guix build syscalls)          ; mount、umount、mknod
                #:use-module (ice-9 ftw)                    ; scandir
                #:use-module (ice-9 regex)                  ; string-match
                #:use-module (ice-9 rdelim)                 ; read-line
-               #:use-module (ice-9 binary-ports)           ; get-bytevector-all/n
-               #:use-module (ice-9 popen)                  ; open-pipe*
-               #:use-module (rnrs bytevectors)             ; utf8->string
-               #:use-module (rnrs io ports)                ; put-bytevector
                #:use-module (srfi srfi-1)                  ; first
+               #:use-module (srfi srfi-11)                 ; let-values
                #:use-module (srfi srfi-13)                 ; string-tokenize
                #:export (tpm-unlock-in-initrd
                          cmdline-option
@@ -143,32 +147,33 @@ UUID 是权威身份。"
                                          #:pcr "sha256:7")
                (catch #t
                  (lambda ()
-                   (let ((secret-port
-                          (tpm2-unseal! %tpm2-tools-tcti tpm2-bin
-                                        seal-ctx sess)))
-                     ;; unseal stdout → cryptsetup stdin
-                     (let ((crypt-port
-                            (open-pipe* OPEN_WRITE cryptsetup-bin
-                                        "open" "--type" "luks"
-                                        "--key-file=-"
-                                        system-part
-                                        %luks-mapper-name)))
-                       (let loop ()
-                         (let ((bv (get-bytevector-n secret-port 4096)))
-                           (unless (eof-object? bv)
-                             (put-bytevector crypt-port bv)
-                             (loop))))
-                       (let ((status (close-pipe crypt-port)))
-                         (close-port secret-port)
-                         (unless (zero? (status:exit-val status))
-                           (throw 'tpm-fail "cryptsetup 拒绝 credential"))))
-                     (tpm2-flush-session! %tpm2-tools-tcti tpm2-bin sess)
-                     (format #t "TPM: LUKS 自动解锁成功~%")
-                     #t)))
+                   ;; unseal stdout FD → pipe → cryptsetup stdin FD 直连
+                   ;; （spawn-pipeline，父进程只做 pipe/spawn/close/waitpid；
+                   ;; 明文不经 Scheme heap。with-tcti 让 tpm2_unseal 继承
+                   ;; TPM2TOOLS_TCTI；cryptsetup 不受该变量影响）。
+                   (with-tcti %tpm2-tools-tcti
+                     (lambda ()
+                       (let-values (((unseal-status crypt-status)
+                                     (spawn-pipeline
+                                      (string-append tpm2-bin "/tpm2_unseal")
+                                      "-c" seal-ctx
+                                      "-p" (string-append "session:" sess)
+                                      "--"
+                                      cryptsetup-bin "open" "--type" "luks"
+                                      "--key-file=-"
+                                      system-part
+                                      %luks-mapper-name)))
+                         (unless (zero? crypt-status)
+                           (throw 'tpm-fail "cryptsetup 拒绝 credential"))
+                         (unless (zero? unseal-status)
+                           (throw 'tpm-fail "tpm2_unseal 失败")))))
+                   (tpm2-flush-session! %tpm2-tools-tcti tpm2-bin sess)
+                   (format #t "TPM: LUKS 自动解锁成功~%")
+                   #t)
                (lambda (k . a)
                  (if (eq? k 'tpm-fail)
                    (apply throw k a)
-                   (throw 'tpm-fail "PCR policy 不匹配或 TPM 命令失败"))))))
+                   (throw 'tpm-fail "PCR policy 不匹配或 TPM 命令失败")))))))
          (lambda ()
            (false-if-exception (umount %esp-tpm-mount))))))
     (lambda (key . args)

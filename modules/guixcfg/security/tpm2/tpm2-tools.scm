@@ -20,13 +20,12 @@
 ;;; 全部由 tpm2-tools 完成；Scheme 只编排。
 
 (define-module (guixcfg security tpm2 tpm2-tools)
-               #:use-module (guix build utils)        ; invoke
-               #:use-module (guixcfg utils process)   ; invoke-with-stdin、invoke-capture
+               #:use-module (guixcfg utils spawn)        ; spawn-wait、spawn-with-stdin、spawn-capture
                #:use-module (guix records)            ; define-record-type*
                #:use-module (rnrs bytevectors)        ; bytevector->u8-list
                #:use-module (ice-9 binary-ports)      ; get-bytevector-all
-               #:use-module (ice-9 popen)             ; open-pipe*
                #:use-module (srfi srfi-1)             ; append-map
+               #:use-module (srfi srfi-11)            ; let-values
                #:export (;; 环境（production / test 显式区分）
                          %tpm2-tools-tcti
                          <tpm2-environment>
@@ -36,6 +35,7 @@
                          tpm2-environment-cleanup
                          current-tpm2-environment
                          make-test-tpm2-environment
+                         with-tcti
                          ;; 低层原语（按 tpm2-tools 命令一对一）
                          tpm2-createprimary!
                          tpm2-policy-pcr-digest!
@@ -98,10 +98,14 @@
          (unsetenv "TPM2TOOLS_TCTI"))))))
 
 (define (tpm2-run-raw tcti . args)
-  "以指定 TCTI 运行 tpm2-tools 命令；非零退出码抛错。不自动 flush。"
+  "以指定 TCTI 运行 tpm2-tools 命令；非零退出码抛错。不自动 flush。
+走 spawn 路径（posix_spawn，父进程不 fork——initrd 的 guile-static
+在 fork 后触发 GC segfault，见 (guixcfg utils spawn) 头部注释）。"
   (with-tcti tcti
              (lambda ()
-               (apply invoke (car args) (cdr args)))))
+               (let ((status (apply spawn-wait args)))
+                 (unless (zero? status)
+                   (error "tpm2-tools 命令失败" (car args) status))))))
 
 (define (tpm2-run tcti . args)
   "以指定 TCTI 运行 tpm2-tools 命令；非零退出码抛错。
@@ -126,10 +130,13 @@ transient 回收语义由 (current-tpm2-environment) 决定：
     (apply tpm2-run-raw tcti args)))
 
 (define (tpm2-run-capture tcti . args)
-  "同上，但捕获 stdout（用于读 PCR、摘要等）。"
+  "同上，但捕获 stdout（用于读 PCR、摘要等），返回文本。"
   (with-tcti tcti
              (lambda ()
-               (apply invoke-capture (car args) (cdr args)))))
+               (let-values (((output status) (apply spawn-capture args)))
+                 (unless (zero? status)
+                   (error "tpm2-tools 命令失败" (car args) status))
+                 (utf8->string output)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 对象管理
@@ -195,11 +202,14 @@ argv/environment。PARENT 是持久句柄或 context。
                                                               get-bytevector-all))))
            (with-tcti tcti
                       (lambda ()
-                        (invoke-with-bytevector-stdin
-                         secret-bv bin "-C" parent
-                         "-u" public-out "-r" private-out
-                         "-L" policy-hex "-i" "-" "-g" "sha256"
-                         "-a" "0x492"))))
+                        (let ((status
+                               (spawn-with-stdin
+                                secret-bv bin "-C" parent
+                                "-u" public-out "-r" private-out
+                                "-L" policy-hex "-i" "-" "-g" "sha256"
+                                "-a" "0x492")))
+                          (unless (zero? status)
+                            (error "tpm2_create 失败" status))))))
          (values public-out private-out))
 
 (define* (tpm2-load-sealed! tcti tpm2-tools-bin parent public-file private-file
@@ -222,19 +232,28 @@ argv/environment。PARENT 是持久句柄或 context。
 (define* (tpm2-unseal! tcti tpm2-tools-bin seal-context session-context
                        #:key (output #f))
          "unseal。OUTPUT 非 #f 时明文写入该文件（仅测试/调试用）；
-为 #f 时返回子进程 stdout 的输入 port——明文只流经管道，不落盘、
-不进 argv/env、不进入 Scheme 字符串，调用方负责把 port 内容写给
-下游（如 cryptsetup stdin）并 close-port。"
+为 #f 时返回 (values port pid)——明文只流经管道，不落盘、不进
+argv/env、不进入 Scheme 字符串；调用方负责读完后 close-port 并
+wait-exit pid（spawn 路径，父进程不 fork，避免 initrd 的 fork 后
+GC segfault；pid 必须 wait，否则 zombie）。"
          (let ((bin (string-append tpm2-tools-bin "/tpm2_unseal")))
            (if output
-             (tpm2-run tcti bin "-c" seal-context
-                       "-p" (string-append "session:" session-context)
-                       "-o" output)
+             (begin
+              (tpm2-run tcti bin "-c" seal-context
+                        "-p" (string-append "session:" session-context)
+                        "-o" output)
+              (values #f #f))
              (with-tcti tcti
                         (lambda ()
-                          (open-pipe* OPEN_READ bin
-                                      "-c" seal-context
-                                      "-p" (string-append "session:" session-context)))))))
+                          (let* ((pair (pipe))
+                                 (pid (spawn bin
+                                             (list bin "-c" seal-context
+                                                   "-p" (string-append
+                                                         "session:" session-context))
+                                             #:search-path? #f
+                                             #:output (cdr pair))))
+                            (close-port (cdr pair))   ; 父进程不写子进程 stdout
+                            (values (car pair) pid)))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; PCR 读写与清理

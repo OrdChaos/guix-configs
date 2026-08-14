@@ -33,6 +33,7 @@
              (guixcfg security tpm2 state)
              (guixcfg storage model)     ; %system-partlabel
              (guixcfg utils process)
+             (guixcfg utils spawn)       ; wait-exit（unseal 管道回收）
              (guix build utils)         ; mkdir-p、invoke、file-writable?
              (ice-9 format)
              (ice-9 match)
@@ -264,9 +265,13 @@ unique 目录）；dynamic-wind 保证正常与异常路径都清理。"
                                        #:out seal-ctx)
                     (tpm2-start-policy-session! %tcti %tpm2-bin #:out sess)
                     (tpm2-policy-pcr-session! %tcti %tpm2-bin sess #:pcr "sha256:7")
-                    (let ((out-port (tpm2-unseal! %tcti %tpm2-bin seal-ctx sess)))
+                    (let-values (((out-port unseal-pid)
+                                  (tpm2-unseal! %tcti %tpm2-bin seal-ctx sess)))
                       (let ((got (utf8->string (get-bytevector-all out-port))))
                         (close-port out-port)
+                        (let ((st (wait-exit unseal-pid)))
+                          (unless (zero? st)
+                            (error "unseal 退出码非零" st)))
                         (unless (string=? credential got)
                           (error "unseal 自验证失败；中止"))))
                     (tpm2-flush-session! %tcti %tpm2-bin sess)
