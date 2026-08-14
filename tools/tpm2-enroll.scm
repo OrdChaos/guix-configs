@@ -131,10 +131,14 @@ SetupMode==0 才认为 Secure Boot 已启用；无法读取返回 #f
     (lambda (key . args) #f)))
 
 (define (luks-max-keyslot)
-  "luksDump 中最大的 keyslot 编号（新加的 slot = 最大编号）。"
+  "luksDump 中最大的 keyslot 编号（新加的 slot = 最大编号）。
+cryptsetup 2.8 的 luksDump 输出是 '  N: luks2'（无 'Keyslot' 前缀，
+T3 实测）；旧格式 'Keyslot N:' 也兼容。"
   (let* ((dump (invoke-capture %cryptsetup "luksDump" (luks-device)))
          (slots (filter-map (lambda (line)
-                              (let ((m (string-match "^Keyslot ([0-9]+):" line)))
+                              (let ((m (or (string-match "^Keyslot ([0-9]+):" line)
+                                           (string-match
+                                            "^[[:space:]]*([0-9]+): luks" line))))
                                 (and m (string->number (match:substring m 1)))))
                             (string-split dump #\newline))))
     (and (pair? slots) (apply max slots))))
