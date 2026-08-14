@@ -25,7 +25,8 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
 fi
 
 # T7_DIR 覆盖：T3 使用全新测试目录（vms/t3），避免污染旧 vms/t7 状态。
-# 安装 initramfs 来源固定为 vms/t7-install（脚本产物，非 git 源文件）。
+# 安装 initramfs 来源：T3 用 tests/integration/t3/fixtures（tracked 源码）；
+# 旧 T7 流程沿用 vms/t7-install（历史遗留，非 git 源文件）。
 T7="$(cd "${T7_DIR:-$(pwd)/vms/t7}" && pwd)"
 T7_INSTALL_DIR="$(cd "${T7_INSTALL_DIR:-$(pwd)/vms/t7-install}" && pwd)"
 STORE=/gnu/store

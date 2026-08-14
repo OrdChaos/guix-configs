@@ -1,0 +1,191 @@
+#!/bin/sh
+# T7 安装 initramfs init：构造 GPT + LUKS2 + Btrfs 磁盘，从 9p 共享的
+# /gnu/store 复制系统 closure，部署 UKI + Limine 到 ESP，然后关机。
+# 由 tools/t7-e2e.sh install 驱动（QEMU + OVMF + swtpm）。
+set -x
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+# ── 1. 基础目录与设备节点（无 udev：sysfs + mdev）────────────
+mkdir -p /tmp /dev /proc /sys /mnt /run/cryptsetup
+mount -t proc proc /proc 2>/dev/null
+mount -t sysfs sysfs /sys 2>/dev/null
+mkdir -p /dev/pts /dev/mapper /mnt
+mount -t devpts devpts /dev/pts 2>/dev/null
+mdev -s 2>/dev/null
+mknod /dev/mapper/control c 10 236 2>/dev/null || true
+mknod /dev/urandom c 1 9 2>/dev/null || true
+mknod /dev/random c 1 8 2>/dev/null || true
+mknod /dev/null c 1 3 2>/dev/null || true
+mknod /dev/zero c 1 5 2>/dev/null || true
+mknod /dev/tty c 5 0 2>/dev/null || true
+mknod /dev/btrfs-control c 10 234 2>/dev/null || true
+
+# ── 2. 内核模块（virtio + 9p；insmod 不解压 .ko.zst，先 zcat）──
+for m in virtio_ring virtio virtio_pci_legacy_dev virtio_pci_modern_dev virtio_pci virtio_blk netfs 9pnet 9pnet_virtio 9p dm-crypt raid6_pq xor libblake2b blake2b btrfs nls_iso8859-1; do
+    if [ -f "/modules/$m.ko" ]; then
+        insmod "/modules/$m.ko" 2>/dev/null
+    else
+        zcat "/modules/$m.ko.zst" > "/tmp/$m.ko" 2>/dev/null \
+            && insmod "/tmp/$m.ko" 2>/dev/null
+    fi
+done
+sleep 2
+# 模块加载后设备节点才会出现：重新扫描
+mdev -s 2>/dev/null
+
+# ── 3. 9p 挂载（/gnu/store 必须挂在此处：动态链接器绝对路径）──
+mkdir -p /gnu/store /mnt/cfg
+mount -t 9p -o trans=virtio,version=9p2000.L gnu-store /gnu/store || { echo "T7-INSTALL-FAIL: 9p gnu-store 挂载失败"; poweroff -f; }
+mount -t 9p -o trans=virtio,version=9p2000.L guix-configs /mnt/cfg || { echo "T7-INSTALL-FAIL: 9p cfg 挂载失败"; poweroff -f; }
+
+# ── 4. 工具定位（store）────────────────────────────────────
+CRYPTSETUP=$(ls /gnu/store/*-cryptsetup-static-*/sbin/cryptsetup | head -1)
+BTRFS=$(ls /gnu/store/*-btrfs-progs-static-*/bin/btrfs | head -1)
+MKFSBTRFS=$(ls /gnu/store/*-btrfs-progs-*/bin/mkfs.btrfs | head -1)
+SGDISK=$(ls /gnu/store/*-gptfdisk-*/bin/sgdisk | head -1)
+MKFS=$(ls /gnu/store/*-dosfstools-*/sbin/mkfs.vfat | head -1)
+UKIFY=$(ls /gnu/store/*-ukify-*/bin/ukify | head -1)
+SBSIGN=$(ls /gnu/store/*-sbsigntools-*/bin/sbsign | head -1)
+STUB=$(ls /gnu/store/*-systemd-stub-*/libexec/linuxx64.efi.stub | head -1)
+LIMINE=$(ls /gnu/store/*-limine-*/share/limine/BOOTX64.EFI | head -1)
+# T3 测试用 Secure Boot 密钥（宿主生成，经 9p 传入；正式流程用
+# /persist/system/keys/secure-boot）
+SBKEY=/mnt/cfg/vms/t3/keys/db.key
+SBCRT=/mnt/cfg/vms/t3/keys/db.crt
+
+# ── 5. 目标盘（第二个 virtio-blk，serial=guix-t7-disk）──────
+# 无 udev：从 sysfs 读主次设备号手动 mknod（busybox 无 seq）
+i=0
+while [ ! -e /dev/vdb ] && [ $i -lt 30 ]; do
+    if [ -e /sys/block/vdb/dev ]; then
+        dev=$(cat /sys/block/vdb/dev)
+        mknod /dev/vdb b "${dev%%:*}" "${dev##*:}" 2>/dev/null
+        for p in /sys/block/vdb/vdb*; do
+            [ -e "$p/dev" ] || continue
+            pdev=$(cat "$p/dev")
+            mknod "/dev/${p##*/}" b "${pdev%%:*}" "${pdev##*:}" 2>/dev/null
+        done
+    fi
+    i=$((i+1))
+    sleep 1
+done
+[ -e /dev/vdb ] || { echo "T7-INSTALL-FAIL: 目标盘 vdb 未出现"; poweroff -f; }
+
+# ── 6. 分区：ESP(512M) + LUKS ───────────────────────────────
+# 分区节点手动创建（无 udev/partprobe）
+make_part_nodes() {
+    for p in /sys/block/vdb/vdb*; do
+        [ -e "$p/dev" ] || continue
+        pdev=$(cat "$p/dev")
+        mknod "/dev/${p##*/}" b "${pdev%%:*}" "${pdev##*:}" 2>/dev/null
+    done
+}
+$SGDISK -Z /dev/vdb >/dev/null
+$SGDISK -n 1:2048:+512M -t 1:ef00 -c 1:esp /dev/vdb >/dev/null
+$SGDISK -n 2:0:0 -t 2:8309 -c 2:system /dev/vdb >/dev/null
+sleep 2
+make_part_nodes
+
+# ── 7. LUKS2（recovery password）→ Btrfs 子卷 ───────────────
+printf 't7-recovery-password' > /tmp/pw
+# 固定 UUID：系统构建时 facts 用同一 UUID（LUKS 按 UUID 查找）
+$CRYPTSETUP luksFormat --type luks2 --batch-mode --key-file=/tmp/pw \
+    --uuid 12345678-1234-1234-1234-123456789abc /dev/vdb2 \
+    || { echo "T7-INSTALL-FAIL: luksFormat"; poweroff -f; }
+$CRYPTSETUP open --key-file=/tmp/pw /dev/vdb2 cryptroot || { echo "T7-INSTALL-FAIL: luksOpen"; poweroff -f; }
+$MKFSBTRFS -L rootfs /dev/mapper/cryptroot || { echo "T7-INSTALL-FAIL: mkfs.btrfs"; poweroff -f; }
+mkdir -p /mnt/root /mnt/sys /mnt/esp
+mount -t btrfs /dev/mapper/cryptroot /mnt/root
+for sv in @persist-gnu-store @persist-var-guix @persist-system \
+          @persist-data-app @persist-data-home @persist-data-nobackup \
+          @persist-swap @persist-snapshots @root-template @root-0; do
+    $BTRFS subvolume create "/mnt/root/$sv" >/dev/null
+done
+
+# ── 8. 挂载目标（layout 见 storage/model.scm）───────────────
+ls /mnt/root/ 2>&1
+$BTRFS subvolume list /mnt/root 2>&1
+# 目录必须等 @root-0 挂载后再建（否则被空子卷覆盖）
+mount -t btrfs -o subvol=@root-0 /dev/mapper/cryptroot /mnt/sys 2>&1
+ls -ld /mnt/sys/ 2>&1
+# busybox mount 不自动创建挂载点：必须创建完整路径
+for d in /mnt/sys/gnu/store /mnt/sys/var/guix /mnt/sys/persist/system /mnt/sys/boot; do
+    mkdir -p "$d"
+done
+# 用 subvolid 挂载（实测 subvol=名字 在部分子卷上 ENOENT；ID 从 256 起
+# 按创建顺序固定：gnu-store=256 var-guix=257 system=258）
+ls -ld /mnt/sys/gnu /mnt/sys/gnu/store /mnt/sys/var /mnt/sys/persist /mnt/sys/persist/system 2>&1
+mount -t btrfs -o subvolid=256 /dev/mapper/cryptroot /mnt/sys/gnu/store
+mount -t btrfs -o subvolid=257 /dev/mapper/cryptroot /mnt/sys/var/guix
+mount -t btrfs -o subvolid=258 /dev/mapper/cryptroot /mnt/sys/persist/system
+
+# ── 9. 复制系统 closure（requisites 列表由 host 生成）───────
+ls -la /mnt/cfg/ 2>&1 | head -5
+ls -la /mnt/cfg/vms/ 2>&1 | head -5
+if [ ! -f /mnt/cfg/vms/requisites.txt ]; then
+    echo "T7-INSTALL-FAIL: requisites.txt 缺失"
+    poweroff -f
+fi
+SYSTEM=$(cat /mnt/cfg/vms/system-path)
+echo "T7-INSTALL: 复制 closure（system=$SYSTEM）"
+while read -r p; do
+    n=$(basename "$p")
+    if [ ! -e "/mnt/sys/gnu/store/$n" ]; then
+        cp -a "/gnu/store/$n" "/mnt/sys/gnu/store/"
+    fi
+done < /mnt/cfg/vms/requisites.txt
+sync
+
+# ── 10. /var/guix profile 链接 + facts ──────────────────────
+mkdir -p /mnt/sys/var/guix/profiles
+ln -sfn "$SYSTEM" /mnt/sys/var/guix/profiles/system-1-link
+mkdir -p /mnt/sys/persist/system/facts
+LUKS_UUID=12345678-1234-1234-1234-123456789abc
+cat > /mnt/sys/persist/system/facts/host.scm <<EOF
+((luks-uuid . "$LUKS_UUID"))
+EOF
+mkdir -p /mnt/sys/persist/system/root-generations
+cat > /mnt/sys/persist/system/root-generations/state.scm <<EOF
+((next-generation . 1)
+ (current-generation . 0)
+ (last-good-generation . #f)
+ (created-at . ((0 . 1700000000)))
+ (boot-status . first-boot)
+ (source-template . "@root-template"))
+EOF
+echo "T7-INSTALL: facts 写入 luks-uuid=$LUKS_UUID"
+
+# ── 11. ESP + UKI 部署（真实系统 kernel/initrd）─────────────
+$MKFS -F 32 -n ESP /dev/vdb1 || { echo "T7-INSTALL-FAIL: mkfs.vfat"; poweroff -f; }
+mount /dev/vdb1 /mnt/esp
+mkdir -p /mnt/esp/EFI/BOOT /mnt/esp/EFI/Guix/A
+printf 'NAME="Guix System"\nID=guix\n' > /tmp/os-release
+KERNEL="$SYSTEM/kernel/bzImage"
+INITRD="$SYSTEM/initrd"
+# root=/selected-root：initrd 先选/建 @root-N 挂到 /selected-root，
+# boot-system 按 root= 参数原样挂载（docs/storage.md 第 17 章）
+CMDLINE="root=/selected-root gnu.system=$SYSTEM gnu.load=$SYSTEM/boot console=ttyS0"
+$UKIFY build --linux "$KERNEL" --initrd "$INITRD" \
+    --os-release /tmp/os-release --cmdline "$CMDLINE" \
+    --stub "$STUB" \
+    --secureboot-private-key "$SBKEY" --secureboot-certificate "$SBCRT" \
+    --output /mnt/esp/EFI/Guix/A/CURRENT.EFI \
+    || { echo "T7-INSTALL-FAIL: ukify build"; poweroff -f; }
+$SBSIGN --key "$SBKEY" --cert "$SBCRT" \
+    --output /mnt/esp/EFI/BOOT/BOOTX64.EFI "$LIMINE" \
+    || { echo "T7-INSTALL-FAIL: sbsign limine"; poweroff -f; }
+cat > /mnt/esp/limine.conf <<EOF
+timeout: 2
+
+/GNU Guix
+    protocol: efi_chainload
+    image_path: boot():/EFI/Guix/A/CURRENT.EFI
+EOF
+sync
+umount /mnt/esp
+umount /mnt/sys/gnu/store /mnt/sys/var/guix /mnt/sys/persist/system
+umount /mnt/sys
+$CRYPTSETUP close cryptroot
+echo "T7-INSTALL-DONE"
+sync
+poweroff -f

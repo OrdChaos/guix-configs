@@ -6,12 +6,7 @@
 (define-module (guixcfg hosts vm)
                #:use-module (gnu)                          ; operating-system、user-account、service 等
                #:use-module (gnu services networking)      ; dhcpcd-service-type
-               #:use-module (gnu services ssh)             ; openssh-service-type
-               #:use-module (gnu services base)            ; mingetty-service-type、mingetty-configuration
                #:use-module (gnu packages bash)            ; bash
-               #:use-module (virelith packages tpm2)        ; tpm2-tools-compat
-               #:use-module (gnu packages package-management) ; guix（VM 内运行仓库工具链）
-               #:use-module (guix gexp)                  ; local-file
                #:use-module (guixcfg storage model)
                #:use-module ((guixcfg storage policies) #:prefix storage:)
                #:use-module (guixcfg boot initrd)          ; ephemeral-root-initrd
@@ -20,7 +15,7 @@
                #:use-module (guixcfg system common)
                #:use-module (guixcfg system file-systems)
                #:use-module (guixcfg system packages)
-               #:export (%vm-storage-policy %os))
+               #:export (%vm-storage-policy %vm-services %os))
 
 ;; 保留 host 模块原有导出名；实际 policy 放在纯存储模块中，避免早期
 ;; disk-install 为取 policy 而加载完整 OS/UKI/channel 依赖。
@@ -29,48 +24,20 @@
 ;; VM 测试账号。密码哈希对应明文 guix-vm，仅用于测试 VM；
 ;; 真实用户的密码材料走 age secret（docs/secrets.md 第 15 章）。
 (define %vm-users
-  (cons (user-account
-         (name "root")
-         (comment "T3 test root")
-         (group "root")
+  (list (user-account
+         (name "user")
+         (comment "VM test user")
+         (group "users")
+         (supplementary-groups '("wheel" "netdev"))
          (shell (file-append bash "/bin/bash"))
-         (home-directory "/root")
-         (password "$6$PLZmfXnlX.NPoslT$8l/LjqcwElCDRi7oRnyp13NKV1LY83jJNl.sLwIfzhHh/xyst9XH05QiGYA1Uyc15vQ9dzyneq2YKKignmMMd1"))
-        (list (user-account
-               (name "user")
-               (comment "VM test user")
-               (group "users")
-               (supplementary-groups '("wheel" "netdev"))
-               (shell (file-append bash "/bin/bash"))
-               (home-directory "/home/user")
-               (password "$6$guixconfigs$ZfB2boEo/DBJKS.0A9BQkUfD4JU8P9Y8yuC/dU71yWNDC3NRu2DByReuIcdygDGv2JzIWLozjr7axXnvGmHs7.")))))
+         (home-directory "/home/user")
+         (password "$6$guixconfigs$ZfB2boEo/DBJKS.0A9BQkUfD4JU8P9Y8yuC/dU71yWNDC3NRu2DByReuIcdygDGv2JzIWLozjr7axXnvGmHs7."))))
 
 (define %vm-services
   (append
    (list ;; QEMU user-mode 网络需要 DHCP（当前 master 中 dhcp-client-service-type
     ;; 已由 dhcpcd-service-type 取代）。
-         (service dhcpcd-service-type)
-         ;; ttyS0 串口登录（T3 场景 harness 经串口交互；root 自动登录
-         ;; 仅测试 VM——正式 laptop host 不配置）。
-         ;; 注意：必须用 agetty 而非 mingetty——%base-services 内置的
-         ;; agetty（tty #f 自动探测）会同时尝试 ttyS0，与 mingetty
-         ;; 竞争导致会话周期性被杀；agetty 显式占用后自动模式会跳过。
-         (service agetty-service-type
-                  (agetty-configuration
-                   (tty "ttyS0")
-                   (term "vt100")
-                   (auto-login "root")))
-         ;; SSH（T3 harness 经 hostfwd 2222→22 执行系统内命令——
-         ;; 串口 getty 会话在注入输入时不稳定，实测）；
-         ;; root 密码仅测试 VM。
-         (service openssh-service-type
-                  (openssh-configuration
-                   (permit-root-login #t)
-                   ;; T3 harness 的 SSH 公钥（vms/t3/ssh/id_ed25519.pub）
-                   (authorized-keys
-                    `(("root"
-                       ,(local-file
-                         "/home/ordchaos/Projects/guix-configs/vms/t3/ssh/id_ed25519.pub")))))))
+         (service dhcpcd-service-type))
    ;; 无状态根的用户态服务：启动确认（last-good）与旧 generation 清理
    ;; （docs/storage.md 第 17.4、17.8 节）。
    (ephemeral-root-shepherd-services
@@ -101,11 +68,7 @@
    (swap-devices %swap-spaces)
    
    (users %vm-users)
-   ;; guix/tpm2-tools-compat：T3 在 VM 内执行 enroll、PCR7 读取
-   ;; （tpm2-tools 已在 initrd 闭包；这里放进 profile 供用户态使用）。
-   ;; tpm2-tools-compat 由 Virelith 频道供应（tpm2-tss 4.1.3 + openssl-3.0，
-   ;; 见 (virelith packages tpm2)）。
-   (packages (append (list guix tpm2-tools-compat) %system-packages))
+   (packages %system-packages)
    (services %vm-services)))
 
 ;; 末尾裸表达式：让本文件同时是 guix system 的入口文件——
