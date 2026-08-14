@@ -64,14 +64,21 @@ PARTNAME 猜测（配置与磁盘事实不一致时必须失败）。"
 
 (define (partition-parent-disk sysfs partition)
   "返回分区（如 /dev/vda2）所在 disk 名（vda）或 #f。
-/sys/block/<part> 的 realpath 是 /sys/devices/.../vda/vda2。"
-  (let ((link (string-append sysfs "/" partition)))
+分区条目位置随内核版本变化（实测）：
+  - 旧内核：/sys/block/<part> 是独立 symlink（realpath 到 .../vda/vda2）
+  - 新内核（linux-libre 7.x）：/sys/block 只列 disk（vda），分区在
+    /sys/block/<disk>/<part> 与 /sys/class/block/<part>（symlink 到
+    ../../devices/.../vda/vda2，dirname 即 disk）
+两个位置都尝试；disk 名取 realpath 的 dirname basename。"
+  (define (disk-of-link link)
     (and (false-if-exception (lstat link))  ; symlink 本身存在（不跟随）
          (let ((real (readlink link)))
            (and (string? real)
                 (let* ((dir (dirname real))
                        (disk (basename dir)))
-                  (and (not (string=? disk partition)) disk)))))))
+                  (and (not (string=? disk partition)) disk))))))
+  (or (disk-of-link (string-append sysfs "/" partition))
+      (disk-of-link (string-append "/sys/class/block/" partition))))
 
 (define* (resolve-esp-device system-device
                              #:key (sysfs "/sys/block"))
