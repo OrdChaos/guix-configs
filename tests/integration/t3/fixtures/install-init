@@ -171,8 +171,20 @@ $UKIFY build --linux "$KERNEL" --initrd "$INITRD" \
     --secureboot-private-key "$SBKEY" --secureboot-certificate "$SBCRT" \
     --output /mnt/esp/EFI/Guix/A/CURRENT.EFI \
     || { echo "T7-INSTALL-FAIL: ukify build"; poweroff -f; }
-cp /mnt/esp/EFI/Guix/A/CURRENT.EFI /mnt/esp/EFI/Guix/A/RECOVERY.EFI \
-    || { echo "T7-INSTALL-FAIL: cp RECOVERY"; poweroff -f; }
+# Recovery：独立构建——同 CURRENT 的 kernel/initrd + cmdline 追加
+# rootmode=recovery（与生产 uki.scm 的 candidate 逻辑一致）。绝不
+# cp CURRENT.EFI：Recovery 必须真实携带 rootmode=recovery 门控，
+# 否则 initrd 的 cmdline 门控失效（Recovery 会错误尝试 TPM 解锁）。
+$UKIFY build --linux "$KERNEL" --initrd "$INITRD" \
+    --os-release /tmp/os-release --cmdline "$CMDLINE rootmode=recovery" \
+    --stub "$STUB" \
+    --secureboot-private-key "$SBKEY" --secureboot-certificate "$SBCRT" \
+    --output /mnt/esp/EFI/Guix/A/RECOVERY.EFI \
+    || { echo "T7-INSTALL-FAIL: ukify build recovery"; poweroff -f; }
+# 断言：inspect RECOVERY.EFI 的 .cmdline 必须含 rootmode=recovery
+# （fixture 正确性门禁——工具链回归时最先暴露）
+$UKIFY inspect /mnt/esp/EFI/Guix/A/RECOVERY.EFI | grep -q "rootmode=recovery" \
+    || { echo "T7-INSTALL-FAIL: RECOVERY.EFI 缺少 rootmode=recovery"; poweroff -f; }
 $SBSIGN --key "$SBKEY" --cert "$SBCRT" \
     --output /mnt/esp/EFI/BOOT/BOOTX64.EFI "$LIMINE" \
     || { echo "T7-INSTALL-FAIL: sbsign limine"; poweroff -f; }
