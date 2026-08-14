@@ -48,14 +48,18 @@
 ;;; ────────────────────────────────────────────────────────────
 ;;; 工具定位与环境
 
-(define (store-glob pattern)
+(define (store-glob prefix subpath)
+  "在 /gnu/store 顶层找 PREFIX 开头的条目，拼 SUBPATH 返回。
+scandir 只列顶层条目名，不能把 /bin 等子路径写进匹配模式。"
   (let ((m (scandir "/gnu/store"
-                    (lambda (name) (string-match pattern name)))))
-    (and (pair? m) (string-append "/gnu/store/" (car m)))))
+                    (lambda (name) (string-prefix? prefix name)))))
+    (and (pair? m) (string-append "/gnu/store/" (car m) subpath))))
 
-(define %tpm2-bin (or (store-glob ".*-tpm2-tools-.*/bin$") "/usr/sbin"))
-(define %cryptsetup (or (store-glob ".*-cryptsetup-.*/sbin/cryptsetup$")
-                        "/usr/sbin/cryptsetup"))
+(define %tpm2-bin (or (getenv "GUIXCFG_TPM2_BIN")
+                      (store-glob "tpm2-tools-" "/bin")
+                      "/run/current-system/profile/bin"))
+(define %cryptsetup (or (store-glob "cryptsetup-" "/sbin/cryptsetup")
+                        "/run/current-system/profile/sbin/cryptsetup"))
 
 ;; 生产 /dev/tpmrm0；测试可用 GUIXCFG_TPM_TCTI 显式覆盖（如
 ;; "swtpm:path=..."）——绝不默默回退 swtpm。
@@ -106,12 +110,15 @@ SetupMode==0 才认为 Secure Boot 已启用；无法读取返回 #f
   (zero? (system* %cryptsetup "isLuks" (luks-device))))
 
 (define (read-passphrase! prompt)
-  "关闭终端回显读取密码。"
+  "关闭终端回显读取密码；stdin 非 tty（SSH 管道/测试）时直读。"
   (display prompt)
   (force-output)
-  (invoke "stty" "-echo")
-  (let ((pw (read-line)))
-    (invoke "stty" "echo")
+  (let ((pw (if (isatty? (current-input-port))
+              (dynamic-wind
+               (lambda () (invoke "stty" "-echo"))
+               (lambda () (read-line))
+               (lambda () (invoke "stty" "echo")))
+              (read-line))))
     (newline)
     pw))
 
