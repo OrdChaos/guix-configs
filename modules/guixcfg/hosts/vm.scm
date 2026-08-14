@@ -9,8 +9,7 @@
                #:use-module (gnu services ssh)             ; openssh-service-type
                #:use-module (gnu services base)            ; mingetty-service-type、mingetty-configuration
                #:use-module (gnu packages bash)            ; bash
-               #:use-module (guixcfg security tpm2 packages) ; tpm2-tools-compat
-               #:use-module (gnu packages hardware)        ; tpm2-tools（T3 场景在 VM 内读取 PCR7）
+               #:use-module (virelith packages tpm2)        ; tpm2-tools-compat
                #:use-module (gnu packages package-management) ; guix（VM 内运行仓库工具链）
                #:use-module (guix gexp)                  ; local-file
                #:use-module (guixcfg storage model)
@@ -102,10 +101,10 @@
    (swap-devices %swap-spaces)
    
    (users %vm-users)
-   ;; guix/tpm2-tools：T3 在 VM 内执行 enroll、sbkeysync、PCR7 读取
+   ;; guix/tpm2-tools-compat：T3 在 VM 内执行 enroll、PCR7 读取
    ;; （tpm2-tools 已在 initrd 闭包；这里放进 profile 供用户态使用）。
-   ;; tpm2-tools-compat：tpm2-tss 3.0.3 + openssl 3.5 的 HMAC 兼容修复
-   ;; （(guixcfg security tpm2 packages)）。
+   ;; tpm2-tools-compat 由 Virelith 频道供应（tpm2-tss 4.1.3 + openssl-3.0，
+   ;; 见 (virelith packages tpm2)）。
    (packages (append (list guix tpm2-tools-compat) %system-packages))
    (services %vm-services)))
 

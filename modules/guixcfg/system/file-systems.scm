@@ -5,13 +5,12 @@
 (define-module (guixcfg system file-systems)
                #:use-module (guixcfg storage model)
                #:use-module (guixcfg boot tpm-unlock)      ; tpm-unlock-in-initrd
-               #:use-module (guixcfg security tpm2 packages) ; tpm2-tools-compat
+               #:use-module (virelith packages tpm2)        ; tpm2-tools-compat
                #:use-module (gnu system file-systems)    ; file-system、%base-file-systems
                #:use-module (gnu system mapped-devices)  ; mapped-device、mapped-device-kind
                #:use-module (gnu system uuid)            ; uuid、uuid-bytevector
                #:use-module (guix gexp)                  ; file-append
                #:use-module (gnu packages cryptsetup)    ; cryptsetup-static
-               #:use-module (gnu packages hardware)      ; tpm2-tools
                #:use-module (srfi srfi-1)                ; every、first
                #:export (cryptroot-mapped-devices
                          %ephemeral-root-file-system

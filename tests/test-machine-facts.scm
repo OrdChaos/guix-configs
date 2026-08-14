@@ -127,8 +127,10 @@
 ;;     清晰错误，而不是 Scheme unbound variable。复现
 ;;     GUIX_CONFIG_FACTS=/mnt/persist/...（已安装系统上不存在）场景。
 (define (repro-failure env-value)
-  "在子进程（guix repl）中加载 file-systems 并构造 root mapped-device，
-返回 (rc . stderr)；预期 rc≠0。"
+  "在子进程（guix time-machine repl）中加载 file-systems 并构造 root
+mapped-device，返回 (rc . stderr)；预期 rc≠0。
+用 time-machine 保证子进程与主测试共享同一频道集（file-systems 依赖
+Virelith 频道提供的 tpm2-tools-compat，宿主 guix 的频道不可见）。"
   (let* ((script (string-append %tmp-dir "/repro.scm"))
          (err-file (string-append %tmp-dir "/repro.err")))
     (call-with-output-file script
@@ -138,7 +140,8 @@
                              (display "(car ((@ (guixcfg system file-systems) cryptroot-mapped-devices)))\n" p)))
     (let ((rc (system* "sh" "-c"
                        (string-append "GUIX_CONFIG_FACTS=" env-value
-                                      " guix repl -L modules -- " script
+                                      " guix time-machine -C channels.lock.scm"
+                                      " -- repl -L modules -- " script
                                       " >/dev/null 2>" err-file))))
       (cons (status:exit-val rc)
             (call-with-input-file err-file get-string-all)))))
