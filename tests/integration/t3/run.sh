@@ -124,7 +124,11 @@ sb-enroll() {
 
 # TPM enrollment：boot（SB on）→ VM 内 tpm2-enroll。
 enroll-tpm() {
-    tests/integration/t3/boot.sh interact enroll-tpm "wait:root@guix-vm" >/dev/null
+    # SB 已启用但尚无 TPM enrollment：密码解锁；interact 后保持 VM。
+    # VARS 延续 sb-enroll 的（已注册 PK/db/KEK——Secure Boot on）。
+    cp "$T7_DIR/vars-sb-enroll.fd" "$T7_DIR/vars-enroll-tpm.fd"
+    T7_KEEP_VM=1 tests/integration/t3/boot.sh interact enroll-tpm \
+        "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
     vm-ssh 'mkdir -p /mnt/cfg && mount -t 9p -o trans=virtio guix-configs /mnt/cfg' 
     printf '%s\nyes\n' "$RECOVERY_PW" | vm-ssh \
         'cd /mnt/cfg && GUIXCFG_TPM_TCTI=device:/dev/tpmrm0 \
@@ -142,6 +146,13 @@ enroll-tpm() {
 #   scenario E  corrupt artifact → 密码回退
 scenario() {
     local name="$1"
+    # SB 与 TPM 状态延续：后续 boot 用 sb-enroll 的 VARS（Secure Boot on）
+    # 与 enroll 后的 TPM 状态（sealed 对象）；B 的 fresh-tpm 在其 case
+    # 内重置 TPM（VARS 保持）。
+    cp "$T7_DIR/vars-sb-enroll.fd" "$T7_DIR/vars-stage-b.fd"
+    if [ ! -d "$T7_DIR/tpm-stage-b/tpm2-00.permall" ]; then
+        cp -r "$T7_DIR/tpm-enroll-tpm" "$T7_DIR/tpm-stage-b"
+    fi
     case "$name" in
         A|a)
             T7_KEEP_VM=1 tests/integration/t3/boot.sh boot stage-b >/dev/null
