@@ -6,7 +6,6 @@
 (define-module (guixcfg hosts vm)
                #:use-module (gnu)                          ; operating-system、user-account、service 等
                #:use-module (gnu services networking)      ; dhcpcd-service-type
-               #:use-module (gnu packages bash)            ; bash
                #:use-module (guixcfg storage model)
                #:use-module ((guixcfg storage policies) #:prefix storage:)
                #:use-module (guixcfg boot initrd)          ; ephemeral-root-initrd
@@ -17,7 +16,9 @@
                #:use-module (guixcfg system packages)
                #:use-module (guixcfg system ssh)       ; secure-ssh-service、ssh-host-key-service
                #:use-module (guixcfg system user-persistence)  ; selected user persistence
+               #:use-module (guixcfg users user)       ; %primary-user（结构事实权威源）
                #:use-module (guixcfg home user)        ; %guix-home（挂入 system）
+               #:use-module (guixcfg security secrets)  ; runtime secrets 部署
                #:use-module (gnu services guix)        ; guix-home-service-type
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:export (%vm-storage-policy %vm-services %os))
@@ -26,17 +27,13 @@
 ;; disk-install 为取 policy 而加载完整 OS/UKI/channel 依赖。
 (define %vm-storage-policy storage:%vm-storage-policy)
 
-;; VM 测试账号。密码哈希对应明文 guix-vm，仅用于测试 VM；
-;; 真实用户的密码材料走 age secret（docs/secrets.md 第 15 章）。
+;; Primary user 来自 (guixcfg users user) 的 %primary-user（结构事实的
+;; 唯一来源：username/uid/groups/shell/home）。密码 hash 不在此处——
+;; user-account password 为 #f，hash 由 install secret 在 LUKS 建立后
+;; 注入目标 shadow（ephemeral root 下 account activation 复用既有
+;; shadow 条目，跨 boot/reconfigure 保留；docs/secrets.md）。
 (define %vm-users
-  (list (user-account
-         (name "user")
-         (comment "VM test user")
-         (group "users")
-         (supplementary-groups '("wheel" "netdev"))
-         (shell (file-append bash "/bin/bash"))
-         (home-directory "/home/user")
-         (password "$6$guixconfigs$ZfB2boEo/DBJKS.0A9BQkUfD4JU8P9Y8yuC/dU71yWNDC3NRu2DByReuIcdygDGv2JzIWLozjr7axXnvGmHs7."))))
+  (list (primary-user-account)))
 
 (define %vm-services
   (append
@@ -72,7 +69,8 @@
    (initrd ephemeral-root-initrd)
    (file-systems (append (system-file-systems %ephemeral-root-file-system)
                          ;; selected user persistence（bind mounts，login 前就位）
-                         (user-persistence-file-systems "user")
+                         (user-persistence-file-systems
+                          (user-profile-name %primary-user))
                          %base-file-systems))
    
    (swap-devices %swap-spaces)
@@ -85,7 +83,17 @@
    (packages (append (list tpm2-tools-compat) %system-packages))
    (services (append (list (secure-ssh-service)
                            (ssh-host-key-service)
-                           (user-persistence-service "user")
+                           (user-persistence-service
+                            (user-profile-name %primary-user))
+                           ;; 声明式 runtime secrets（boot 时 root 解密到
+                           ;; /run/guixcfg-secrets；docs/secrets.md）
+                           (secrets-deploy-service
+                            %vm-secrets (user-profile-name %primary-user))
+                           ;; 用户密码 hash 注入（install secret →
+                           ;; ephemeral /etc/shadow，login 前）
+                           (password-inject-service
+                            (user-profile-name %primary-user)
+                            "secrets/install/user-password.hash.age")
                            ;; Guix Home 挂入 system：home-environment 随
                            ;; system generation 构建，boot 时由官方
                            ;; guix-home-service-type 以 user 身份运行其
@@ -93,7 +101,8 @@
                            ;; ~/.guix-home 与 dotfile 链接，指向本
                            ;; generation closure 内的 home）。
                            (service guix-home-service-type
-                                    `(("user" ,%guix-home))))
+                                    `((,(user-profile-name %primary-user)
+                                       ,%guix-home))))
                      %vm-services))))
 
 ;; 末尾裸表达式：让本文件同时是 guix system 的入口文件——
