@@ -2,7 +2,8 @@
 ;;; 选定目录经 bind mount 来自 /persist/data-home/<user>/；
 ;;; activation 确保目录存在与 ownership。
 
-(use-modules (gnu system file-systems)
+(use-modules (gnu services shepherd)    ; shepherd-service 访问器
+             (gnu system file-systems)
              (guix gexp)
              (guixcfg system user-persistence)
              (srfi srfi-1)
@@ -56,5 +57,30 @@
                (and (string-contains s "/home/")
                     (string-contains s "chown")
                     (string-contains s "chmod"))))
+
+;; ── Guix Home 环境跨重启重放 ──────────────────────────────────
+;; guix home 内容全在 persist（/gnu/store + /var/guix），$HOME 只有
+;; 符号链接；home-env-reapply 在 file-systems 就位后重建它们。
+(define reapply-svc-val
+  (service-value (home-env-reapply-service "user")))
+(define reapply-shepherd
+  (car reapply-svc-val))
+
+(test-assert "home-env-reapply service registered"
+  (member 'home-env-reapply (shepherd-service-provision reapply-shepherd)))
+
+(test-assert "home-env-reapply requires file-systems (before login)"
+  (member 'file-systems (shepherd-service-requirement reapply-shepherd)))
+
+(test-assert "home-env-reapply is one-shot"
+  (shepherd-service-one-shot? reapply-shepherd))
+
+(test-assert "home-env-reapply program compiles"
+  (let ((s (object->string
+            (program-file-gexp (home-env-reapply-program "user")))))
+    (and (string-contains s "/var/guix/profiles/per-user/")
+         (string-contains s "/guix-home")
+         (string-contains s ".guix-home")
+         (string-contains s "symlink"))))
 
 (test-end "user-persistence")

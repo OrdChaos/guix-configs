@@ -25,37 +25,49 @@
                          (write '((luks-uuid . "00000000-0000-0000-0000-000000000000")) port)
                          (newline port)))
 
+;; 每个测试文件都调用 (test-runner-current (test-runner-simple))，把
+;; 当前 runner 换成自己的新 runner——最后的 runner 只反映最后一个
+;; 文件，直接看 (test-runner-current) 会让前面套件的失败被掩盖。
+;; 这里在每个文件加载后立刻摘取其 runner 的计数，累计判定退出码。
+(define %fail-total 0)
+(define %xfail-total 0)
+
+(define (run-file file)
+  (primitive-load file)
+  (let ((r (test-runner-current)))
+    (set! %fail-total (+ %fail-total (test-runner-fail-count r)))
+    (set! %xfail-total (+ %xfail-total (test-runner-xfail-count r)))))
+
 (dynamic-wind
  (lambda () (setenv "GUIX_CONFIG_FACTS" %test-facts-file))
  (lambda ()
-   (primitive-load "tests/test-atomic-file.scm")
-   (primitive-load "tests/test-boot-state.scm")
-   (primitive-load "tests/test-process.scm")
-   (primitive-load "tests/test-spawn.scm")
-   (primitive-load "tests/test-model.scm")
-   (primitive-load "tests/test-policies.scm")
-   (primitive-load "tests/test-plan.scm")
-   (primitive-load "tests/test-validate.scm")
-   (primitive-load "tests/test-device.scm")
-   (primitive-load "tests/test-root-generation.scm")
-   (primitive-load "tests/test-modules-load.scm")
-   (primitive-load "tests/test-machine-facts.scm")
-   (primitive-load "tests/test-luks-passphrase.scm")
-   (primitive-load "tests/test-tpm2-state.scm")
-   (primitive-load "tests/test-tpm-unlock.scm")
-   (primitive-load "tests/test-recovery.scm")
-   (primitive-load "tests/test-device-resolver.scm")
-   (primitive-load "tests/test-commit-root.scm")
-   (primitive-load "tests/test-tpm2-enroll.scm")
-   (primitive-load "tests/test-ui-language.scm")
-   (primitive-load "tests/test-ssh.scm")
-   (primitive-load "tests/test-user-persistence.scm")
-   (primitive-load "tests/test-home.scm"))
+   (for-each run-file
+             '("tests/test-atomic-file.scm"
+               "tests/test-boot-state.scm"
+               "tests/test-process.scm"
+               "tests/test-spawn.scm"
+               "tests/test-model.scm"
+               "tests/test-policies.scm"
+               "tests/test-plan.scm"
+               "tests/test-validate.scm"
+               "tests/test-device.scm"
+               "tests/test-root-generation.scm"
+               "tests/test-modules-load.scm"
+               "tests/test-machine-facts.scm"
+               "tests/test-luks-passphrase.scm"
+               "tests/test-tpm2-state.scm"
+               "tests/test-tpm-unlock.scm"
+               "tests/test-recovery.scm"
+               "tests/test-device-resolver.scm"
+               "tests/test-commit-root.scm"
+               "tests/test-tpm2-enroll.scm"
+               "tests/test-ui-language.scm"
+               "tests/test-ssh.scm"
+               "tests/test-user-persistence.scm"
+               "tests/test-home.scm")))
  (lambda ()
    (unsetenv "GUIX_CONFIG_FACTS")
    (when (file-exists? %test-facts-file)
      (delete-file %test-facts-file))))
 
-(let ((runner (test-runner-current)))
-  (exit (zero? (+ (test-runner-fail-count runner)
-                  (test-runner-xfail-count runner)))))
+(exit (zero? (+ %fail-total %xfail-total)))

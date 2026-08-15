@@ -70,3 +70,26 @@ persistent directories (bind-mounted by the system from
 Explicitly ephemeral (not persisted in this round): `~/.cache`,
 `~/.config`, `~/.local`, `~/.mozilla`, `~/.steam`, whole HOME.
 This round does not claim full user state persistence.
+
+## J5 — Guix Home Environment across Reboots
+
+`guix home reconfigure` writes nothing into `/persist` itself: the home
+generation lives in `/var/guix/profiles/per-user/<user>` and
+`/gnu/store` (both persistent subvolumes). What lives in the ephemeral
+`$HOME` is only a set of symlinks:
+
+- `~/.guix-home` -> the current home generation
+- `~/.gitconfig`, `~/.bash_profile`, `~/.bashrc`, `~/.profile`, ...
+  -> generation `files/` entries
+
+Since the ephemeral root is recreated at every boot, those symlinks
+vanish on reboot (the environment appears "uninstalled" until
+`guix home reconfigure` is re-run by hand).
+
+System-side guarantee (owned by `user-persistence` module): the
+one-shot shepherd service `home-env-reapply` runs once `file-systems`
+is up (before login/sshd) and re-creates the symlinks from the latest
+home generation chain — no manual re-run needed after reboots. It
+never overwrites a real (non-symlink) file in `$HOME`, and it is a
+no-op while no home generation exists. `~/.cache`, `~/.config`,
+`~/.local` contents stay ephemeral as per J4.

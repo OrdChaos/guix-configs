@@ -80,7 +80,8 @@
    (packages (append (list tpm2-tools-compat) %system-packages))
    (services (append (list (secure-ssh-service)
                            (ssh-host-key-service)
-                           (user-persistence-service "user"))
+                           (user-persistence-service "user")
+                           (home-env-reapply-service "user"))
                      %vm-services))))
 
 ;; 末尾裸表达式：让本文件同时是 guix system 的入口文件——

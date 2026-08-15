@@ -12,13 +12,16 @@
 
 (define-module (guixcfg system user-persistence)
                #:use-module (gnu services)            ; simple-service
+               #:use-module (gnu services shepherd)   ; shepherd-service
                #:use-module (gnu system file-systems) ; file-system
                #:use-module (guix gexp)
                #:use-module (guix modules)            ; source-module-closure
                #:export (%persistent-user-dirs
                          user-persistence-file-systems
                          user-persistence-activation
-                         user-persistence-service))
+                         user-persistence-service
+                         home-env-reapply-program
+                         home-env-reapply-service))
 
 ;; 持久化目录（后续按应用状态需求单独扩展）。
 (define %persistent-user-dirs
@@ -80,3 +83,71 @@ home 的语义一致：0700 + 用户所有）。"
   "把 selected user 持久化目录创建挂到系统 activation。"
   (simple-service 'user-persistence activation-service-type
                   (user-persistence-activation user)))
+
+;;; ────────────────────────────────────────────────────────────
+;;; Guix Home 环境跨重启可用（System 侧保证，docs/system-home-boundaries.md
+;;; 第 2 节）：guix home 的全部内容（generation、files/、dotfile 内容）
+;;; 都在 persist 侧（/gnu/store 与 /var/guix/profiles/per-user/），
+;;; $HOME 里只有指向它们的符号链接——随 ephemeral root 每次启动消失。
+;;; 本服务在 file-systems 就位后重建这些链接（~/.guix-home 与 dotfile
+;;; 链接），使声明式 home 环境在重启后无需手工 guix home reconfigure。
+;;; 不覆盖已存在的真实文件；无 home generation 时静默跳过。
+
+(define (home-env-reapply-program user)
+  "重建 $HOME 中指向 home generation 的符号链接的程序（file-systems
+就位后运行；/gnu/store 与 /var/guix 此时已挂载）。"
+  (program-file
+   (string-append "home-env-reapply-" user)
+   (with-imported-modules (source-module-closure
+                           '((guix build utils) (ice-9 ftw)))
+     #~(begin
+         (use-modules (guix build utils) (ice-9 ftw))
+         (define home (string-append "/home/" #$user))
+         (define guix-home-chain
+           (string-append "/var/guix/profiles/per-user/" #$user "/guix-home"))
+         (define (symlink? p)
+           (eq? 'symlink (stat:type (lstat p))))
+         (define (relink target-link source)
+           ;; 目标已存在且是真实文件 → 不动（不覆盖用户文件）；
+           ;; 缺失 / 悬空 / 旧链接 → 重建。
+           (unless (and (file-exists? target-link)
+                        (not (symlink? target-link)))
+             (mkdir-p (dirname target-link))
+             (when (file-exists? target-link) (delete-file target-link))
+             (symlink source target-link)))
+         (define (relink-tree src-dir target-dir)
+           ;; files/ 树 → $HOME 对应位置（目录名原样保留，如
+           ;; files/.config/ → ~/.config/，与 guix symlink-manager 的
+           ;; 映射一致）。
+           (for-each
+            (lambda (entry)
+              (unless (member entry '("." ".."))
+                (let ((src (string-append src-dir "/" entry))
+                      (tgt (string-append target-dir "/" entry)))
+                  (if (eq? (stat:type (lstat src)) 'directory)
+                    (relink-tree src tgt)
+                    (relink tgt src)))))
+            (scandir src-dir)))
+         (when (file-exists? guix-home-chain)
+           (relink (string-append home "/.guix-home") guix-home-chain)
+           (let ((files-dir (string-append home "/.guix-home/files")))
+             (when (file-exists? files-dir)
+               (relink-tree files-dir home))))
+         #t))))
+
+(define (home-env-reapply-service user)
+  "boot 时重建 Guix Home 符号链接的 one-shot shepherd 服务。依赖
+file-systems（而非 user-processes）：在 sshd/login 接受连接前完成，
+登录 shell 即可读到完整的 home 环境。"
+  (simple-service 'home-env-reapply shepherd-root-service-type
+                  (list (shepherd-service
+                         (provision '(home-env-reapply))
+                         (requirement '(file-systems))
+                         (one-shot? #t)
+                         (documentation
+                          "Re-create the Guix Home symlinks in $HOME once \
+file-systems is up, so the declarative home environment survives ephemeral \
+root recreation.")
+                         (start #~(lambda ()
+                                    (zero? (system* #$(home-env-reapply-program user)))))
+                         (stop #~(const #f))))))
