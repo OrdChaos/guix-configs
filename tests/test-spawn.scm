@@ -39,8 +39,12 @@
             (test-equal "consumer 在 producer 失败后正常退出" 0 cs))
 
 ;; 4. consumer exit != 0
+;; 注意：consumer 不能用 /bin/false（不读 stdin 立即退出）——producer
+;; 的 write 与 consumer 的 exit 存在竞态（EPIPE），退出码不稳定。用
+;; “读光 stdin 再非零退出”的 consumer，确定性验证 producer 不受影响。
 (let-values (((ps cs) (spawn-pipeline "/bin/echo" "x"
-                                      "--" "/bin/false")))
+                                      "--" "/bin/sh" "-c"
+                                      "cat > /dev/null; exit 1")))
             (test-equal "producer 正常" 0 ps)
             (test-assert "consumer 非零退出码" (not (zero? cs))))
 

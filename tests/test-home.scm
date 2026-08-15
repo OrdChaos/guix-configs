@@ -4,6 +4,8 @@
 (use-modules (guixcfg home user)
              (guixcfg home packages)
              (gnu home)
+             (gnu home services)        ; home-files-service-type
+             (gnu home services shells) ; home-bash-service-type
              (guix packages)          ; package-name
              (srfi srfi-1)
              (srfi srfi-64))
