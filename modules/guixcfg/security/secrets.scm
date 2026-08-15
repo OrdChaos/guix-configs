@@ -26,6 +26,7 @@
 (define-module (guixcfg security secrets)
                #:use-module (gnu services)              ; simple-service
                #:use-module (gnu services shepherd)     ; shepherd-service
+               #:use-module (gnu packages golang-crypto)  ; age
                #:use-module (guix gexp)
                #:use-module (guix modules)              ; source-module-closure
                #:use-module (guix records)
@@ -90,6 +91,9 @@ store。"
      #~(begin
          (use-modules (guix build utils))
          (define runtime-root #$%secrets-runtime-root)
+         ;; age 用 closure 内的绝对路径——不依赖服务进程的 PATH
+         ;; （shepherd 服务继承 boot 时的环境，PATH 里可能无 age）。
+         (define age-bin #$(file-append age "/bin/age"))
          (define identity "/persist/system/keys/age/identity")
          (define (run-age-decrypt cipher out-path uid gid mode)
            ;; 输出先到同目录 .new（0600）再原子 rename——失败不留
@@ -100,7 +104,7 @@ store。"
              (chmod tmp #o600)
              (catch #t
                (lambda ()
-                 (invoke "age" "--decrypt" "-i" identity
+                 (invoke age-bin "--decrypt" "-i" identity
                          "-o" tmp cipher)
                  (chmod tmp mode)
                  (chown tmp uid gid)
@@ -110,9 +114,18 @@ store。"
                  (apply throw k a)))))
          (unless (file-exists? identity)
            (error "stable identity missing; refusing to prompt" identity))
+         ;; 目录层级权限（user 要能穿越 root 目录读到自己的 secret）：
+         ;;   runtime-root   root 0755（可穿越）
+         ;;   system/        root 0700（仅 root）
+         ;;   users/         root 0755（可穿越）
+         ;;   users/<user>/  owner=<user> 0700（仅该用户）
          (mkdir-p runtime-root)
-         (chmod runtime-root #o700)
+         (chmod runtime-root #o755)
          (chown runtime-root 0 0)
+         (let ((sys-dir (string-append runtime-root "/system"))
+               (users-dir (string-append runtime-root "/users")))
+           (mkdir-p sys-dir) (chmod sys-dir #o700) (chown sys-dir 0 0)
+           (mkdir-p users-dir) (chmod users-dir #o755) (chown users-dir 0 0))
          #$@(map
              (lambda (decl)
                (let* ((source (secret-decl-source decl))  ; local-file
@@ -122,7 +135,15 @@ store。"
                  #~(begin
                      (let* ((pw (getpw #$owner))
                             (uid (passwd:uid pw))
-                            (gid (passwd:gid pw)))
+                            (gid (passwd:gid pw))
+                            (parent (dirname #$target)))
+                       ;; user scope：users/<user>/ 目录归该用户 0700
+                       (mkdir-p parent)
+                       (when (string-prefix?
+                              (string-append runtime-root "/users/")
+                              parent)
+                         (chown parent uid gid)
+                         (chmod parent #o700))
                        (run-age-decrypt
                         #$(local-file (assume-valid-file-name source))
                         #$target uid gid #$mode)))))
@@ -162,6 +183,7 @@ installed stable age identity into /run/guixcfg-secrets (tmpfs).")
    (with-imported-modules (source-module-closure '((guix build utils)))
      #~(begin
          (use-modules (guix build utils) (ice-9 rdelim) (srfi srfi-13))
+         (define age-bin #$(file-append age "/bin/age"))
          (define identity "/persist/system/keys/age/identity")
          (define cipher #$(local-file (assume-valid-file-name source)))
          (define user #$user)
@@ -169,14 +191,16 @@ installed stable age identity into /run/guixcfg-secrets (tmpfs).")
            (error "stable identity missing; refusing to prompt" identity))
          (let ((tmp (string-append "/run/guixcfg-secrets/.pw-"
                                    (number->string (getpid)))))
+           ;; 只确保目录存在；权限层级由 guixcfg-secrets-deploy 负责
+           ;; （runtime root 0755 可穿越）——这里不动目录权限，避免
+           ;; 两个服务的启动顺序影响最终权限。
            (mkdir-p "/run/guixcfg-secrets")
-           (chmod "/run/guixcfg-secrets" #o700)
            (dynamic-wind
              (lambda ()
                (call-with-output-file tmp (lambda (p) #t))
                (chmod tmp #o600))
              (lambda ()
-               (invoke "age" "--decrypt" "-i" identity "-o" tmp cipher)
+               (invoke age-bin "--decrypt" "-i" identity "-o" tmp cipher)
                (let* ((hash (string-trim-both
                              (call-with-input-file tmp
                                (lambda (p) (read-string p)))))
