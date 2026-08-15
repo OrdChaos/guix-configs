@@ -99,8 +99,9 @@
 
 (define (tpm2-run-raw tcti . args)
   "以指定 TCTI 运行 tpm2-tools 命令；非零退出码抛错。不自动 flush。
-走 spawn 路径（posix_spawn，父进程不 fork——initrd 的 guile-static
-在 fork 后触发 GC segfault，见 (guixcfg utils spawn) 头部注释）。"
+走 spawn 路径（posix_spawn，父进程不 fork——见 (guixcfg utils spawn)
+头部注释：popen/fork + static Guile PID1 组合曾可复现 GC 故障，
+spawn 为最终修复）。"
   (with-tcti tcti
              (lambda ()
                (let ((status (apply spawn-wait args)))
@@ -234,8 +235,8 @@ argv/environment。PARENT 是持久句柄或 context。
          "unseal。OUTPUT 非 #f 时明文写入该文件（仅测试/调试用）；
 为 #f 时返回 (values port pid)——明文只流经管道，不落盘、不进
 argv/env、不进入 Scheme 字符串；调用方负责读完后 close-port 并
-wait-exit pid（spawn 路径，父进程不 fork，避免 initrd 的 fork 后
-GC segfault；pid 必须 wait，否则 zombie）。"
+wait-exit pid（spawn 路径，父进程不 fork——见 (guixcfg utils spawn)
+头部注释；pid 必须 wait，否则 zombie）。"
          (let ((bin (string-append tpm2-tools-bin "/tpm2_unseal")))
            (if output
              (begin

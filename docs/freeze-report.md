@@ -9,11 +9,20 @@
 **6. T2（cryptsetup 集成）**：9/9 PASS
 **7. 宿主全回归**：256 PASS，EXIT=0（Phase 11 + 修复后复跑）
 
-**8. initrd segfault 决定性定位（Phase 2）**：
-   guile-static 3.0.9/3.0.11 在 pid 1 下 BDW GC 崩溃（movzbl (%rax)），
-   与 tpm2-tools 版本无关；用最小复现 + 解包 initrd 逐层确认，不靠猜
-**9. segfault 解决方案**：busybox-static 为 pid 1 + guile 子进程（非 pid 1，
-   GC 正常）+ 预挂 proc（3.0.11 GC 需 /proc 的 pthread_getattr_np）
+**8. initrd subprocess 故障定位（Phase 2，historical debugging）**：
+   TPM 自动解锁早期实现通过 Guile 的传统 popen/fork 型 subprocess 路径
+   调用 tpm2-tools/cryptsetup。在 static Guile 的 initrd/PID1 环境中，
+   该路径能够触发 BDW GC/进程运行时异常和 segfault。决定性实验证明的
+   是「fork/popen 执行路径 + static Guile PID1 环境」的组合可复现故障
+   （与 tpm2-tools 版本无关）；并未证明 BDW GC 本身不能在 PID1 下运行。
+   调试过程中曾验证 BusyBox PID1 → Guile child 可以改变/规避部分 PID1
+   相关故障表现——该方案仅用于根因隔离实验，从未成为最终产品架构。
+**9. 最终修复（Final Architecture）**：
+   保留 Guix 原生的 Guile PID1 initrd 模型，将 initrd TPM subprocess 层
+   迁移为 Guile spawn / posix_spawn primitives（spawn-wait /
+   spawn-with-stdin / spawn-capture / spawn-pipeline）。父 Guile 进程
+   不执行传统 fork/popen 中转。故障在保持 Guile PID1 不变的情况下
+   消失，并通过多次真实 TPM 自动解锁验证。BusyBox PID1 不属于产品架构。
 **10. spawn primitives（Phase 3-5，a35e044）**：spawn-wait / spawn-with-stdin /
     spawn-capture / spawn-pipeline / wait-exit（posix_spawn，父进程不 fork）
 **11. spawn 测试**：15 项 spawn + 9 项 process helper，全 PASS
@@ -48,8 +57,46 @@
     全回归 256 PASS；enroll/replace 首次完整跑通
     **判定：READY TO FREEZE = YES（产品代码）**
 
-   附带记录（不阻塞 freeze，测试基础设施打磨项）：
+   附带记录（test infrastructure limitations，非 production architecture
+   limitations；不阻塞 freeze，后续测试基础设施打磨项）：
    1) 重装后 udev 服务偶发卡死（shepherd "Starting service udev..." 挂起，
       btrfs-control 已存在警告）——基础设施问题，产品代码已另行完整验证
    2) 密码回退路径 Argon2 验证在 QEMU 下极慢（luksAddKey ~5 分钟边缘）
    3) swtpm 状态写回依赖正常退出（pkill 写回偶发不完整——已加退出等待）
+
+
+---
+
+## 最终产品架构（Final Architecture）
+
+```
+Virelith
+  ├─ tpm2-tss 4.2.0
+  └─ tpm2-tools 5.8
+            ↓
+Guix initrd
+  Guile PID1（Guix 原生 initrd 模型）
+     ↓
+  boot/device resolver
+     ├─ LUKS UUID → exact system partition
+     └─ sibling ESP
+     ↓
+  TPM PCR7 unlock
+     ↓
+  spawn / posix_spawn
+     ↓
+  tpm2_unseal
+     │
+     │ pipe（stdout fd → stdin fd）
+     ▼
+  cryptsetup
+     ↓
+  ephemeral root
+     ↓
+  userspace confirm
+     ├─ GC root
+     ├─ Recovery promote
+     └─ boot-state v2
+```
+
+架构中不存在：BusyBox PID1、systemd、PCR11、PolicyAuthorize。

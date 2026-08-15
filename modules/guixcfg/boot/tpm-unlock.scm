@@ -18,9 +18,9 @@
 ;;;     shell）
 ;;;
 ;;; 子进程路径：全部走 (guixcfg utils spawn) 的 spawn 原语
-;;; （posix_spawn，父进程不 fork）——initrd 的 guile-static 在 fork 后
-;;; 触发 GC segfault（见 (guixcfg utils spawn) 头部注释），open-pipe*/
-;;; invoke 在 initrd 内不可用。
+;;; （posix_spawn，父进程不 fork——见 (guixcfg utils spawn) 头部注释：
+;;; popen/fork + static Guile PID1 组合曾可复现 GC 故障，spawn 为最终
+;;; 修复；open-pipe*/invoke 在 initrd 内不可用）。
 
 (define-module (guixcfg boot tpm-unlock)
                #:use-module (guixcfg boot device-resolver) ; resolve-system/esp-device

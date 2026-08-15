@@ -2,10 +2,14 @@
 ;;; primitives——initrd 的 guile-static 下可用（spawn 是内置过程，
 ;;; 不依赖 (ice-9 spawn) 模块；实测 guile-static 3.0.11 无该模块）。
 ;;;
-;;; 背景（Phase 2 定位）：initrd 的 guile-static 在 popen/fork 路径上
-;;; 触发 GC 相关 segfault（pid 1，指令 movzbl (%rax)@0x4d5593，伴随
-;;; pthread_getattr_np GC Warning，与 tpm2-tools 版本无关）。spawn 走
-;;; posix_spawn（vfork 语义），父进程不 fork，规避 fork 后的 GC 触发。
+;;; 背景（historical debugging）：TPM 自动解锁早期实现经 Guile 传统
+;;; popen/fork 型 subprocess 路径调用 tpm2-tools/cryptsetup，在 static
+;;; Guile 的 initrd/PID1 环境中可复现 GC 相关故障（movzbl (%rax)@0x4d5593、
+;;; pthread_getattr_np GC Warning，与 tpm2-tools 版本无关）。决定性实验
+;;; 证明的是「fork/popen 路径 + static Guile PID1 环境」的组合可复现
+;;; 故障，并非 BDW GC 本身不能在 PID1 下运行。最终修复：保留 Guile
+;;; PID1 不变，改用 spawn（posix_spawn，父进程不 fork）后故障消失，
+;;; 通过多次真实 TPM 自动解锁验证。
 ;;;
 ;;; 约定：
 ;;;   - 全部使用显式绝对路径（#:search-path? #f，initrd 无 PATH 依赖）；
