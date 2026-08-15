@@ -6,6 +6,7 @@
              (gnu home)
              (gnu home services)        ; home-files-service-type
              (gnu home services shells) ; home-bash-service-type
+             (gnu services guix)        ; guix-home-service-type
              (guix packages)          ; package-name
              (srfi srfi-1)
              (srfi srfi-64))
@@ -41,5 +42,15 @@
 (test-assert "home-files service present (gitconfig)"
              (and files-svc
                   (assoc ".gitconfig" (service-value files-svc))))
+
+;; Guix Home 挂入 system（官方 guix-home-service-type）：home-environment
+;; 随 system generation 构建，boot 时以用户身份运行其 activate，重建
+;; ephemeral $HOME 中的 ~/.guix-home 与 dotfile 链接（指向本 generation
+;; closure 内的 home，而非 mutable 记录）。
+(define gh-svc
+  (service guix-home-service-type `(("user" ,%guix-home))))
+(test-assert "guix-home-service-type binds %guix-home"
+             (and (eq? (service-kind gh-svc) guix-home-service-type)
+                  (eq? (cadr (car (service-value gh-svc))) %guix-home)))
 
 (test-end "home")

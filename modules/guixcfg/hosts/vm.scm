@@ -17,6 +17,8 @@
                #:use-module (guixcfg system packages)
                #:use-module (guixcfg system ssh)       ; secure-ssh-service、ssh-host-key-service
                #:use-module (guixcfg system user-persistence)  ; selected user persistence
+               #:use-module (guixcfg home user)        ; %guix-home（挂入 system）
+               #:use-module (gnu services guix)        ; guix-home-service-type
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:export (%vm-storage-policy %vm-services %os))
 
@@ -81,7 +83,14 @@
    (services (append (list (secure-ssh-service)
                            (ssh-host-key-service)
                            (user-persistence-service "user")
-                           (home-env-reapply-service "user"))
+                           ;; Guix Home 挂入 system：home-environment 随
+                           ;; system generation 构建，boot 时由官方
+                           ;; guix-home-service-type 以 user 身份运行其
+                           ;; activate（重建 ephemeral $HOME 中的
+                           ;; ~/.guix-home 与 dotfile 链接，指向本
+                           ;; generation closure 内的 home）。
+                           (service guix-home-service-type
+                                    `(("user" ,%guix-home))))
                      %vm-services))))
 
 ;; 末尾裸表达式：让本文件同时是 guix system 的入口文件——

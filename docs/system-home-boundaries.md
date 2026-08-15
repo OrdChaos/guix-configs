@@ -73,23 +73,41 @@ This round does not claim full user state persistence.
 
 ## J5 — Guix Home Environment across Reboots
 
-`guix home reconfigure` writes nothing into `/persist` itself: the home
-generation lives in `/var/guix/profiles/per-user/<user>` and
-`/gnu/store` (both persistent subvolumes). What lives in the ephemeral
-`$HOME` is only a set of symlinks:
+`/home/user` is ephemeral (stateless root). Everything Guix Home
+manages is **derived state**, regenerated from the repository plus the
+current system generation — nothing Home-related is persisted:
 
-- `~/.guix-home` -> the current home generation
-- `~/.gitconfig`, `~/.bash_profile`, `~/.bashrc`, `~/.profile`, ...
-  -> generation `files/` entries
+- `~/.guix-home` and the dotfile symlinks (`~/.gitconfig`,
+  `~/.bash_profile`, `~/.bashrc`, `~/.profile`, ...) are *not* part of
+  the persistence inventory; they are re-created at every boot by the
+  official `guix-home-service-type`.
 
-Since the ephemeral root is recreated at every boot, those symlinks
-vanish on reboot (the environment appears "uninstalled" until
-`guix home reconfigure` is re-run by hand).
+Mechanism (official Guix mechanism, no custom reimplementation):
 
-System-side guarantee (owned by `user-persistence` module): the
-one-shot shepherd service `home-env-reapply` runs once `file-systems`
-is up (before login/sshd) and re-creates the symlinks from the latest
-home generation chain — no manual re-run needed after reboots. It
-never overwrites a real (non-symlink) file in `$HOME`, and it is a
-no-op while no home generation exists. `~/.cache`, `~/.config`,
-`~/.local` contents stay ephemeral as per J4.
+- the `home-environment` (`%guix-home` in `(guixcfg home user)`) is
+  wired into the operating system via
+  `(service guix-home-service-type `(("user" ,%guix-home)))`; it is
+  built at `guix system reconfigure` time and becomes part of the
+  **system generation closure**
+- at boot, the generated one-shot shepherd service `guix-home-user`
+  (requirement `(user-processes)`, i.e. after `file-systems` and
+  `user-homes`) runs the closure's `activate` script **as the user**;
+  the symlink manager atomically re-creates `~/.guix-home` (symlink +
+  rename) and all dotfile symlinks pointing into the closure's
+  `files/`
+- no `guix home reconfigure` is run at boot: no new home generation,
+  no re-evaluation, no derivation work
+- the activate script derives its target home from its own store path
+  (`dirname (car (command-line))`), so booting system generation N
+  activates exactly the home environment bound to N — rollback /
+  Last Good / Recovery follow the system generation by construction,
+  not by a mutable record
+
+Timing: activation runs after persistent filesystems are mounted and
+after `user-homes` created `/home/user` with correct ownership; it
+completes before interactive sessions start (same `user-processes`
+batch, ordered before sshd in this repository's service list).
+
+Persistence boundary: only mutable user data (the five
+bind-mounted directories) enters persistence; dotfiles declared by
+Guix Home stay ephemeral and are regenerated.
