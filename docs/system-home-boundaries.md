@@ -111,3 +111,44 @@ batch, ordered before sshd in this repository's service list).
 Persistence boundary: only mutable user data (the five
 bind-mounted directories) enters persistence; dotfiles declared by
 Guix Home stay ephemeral and are regenerated.
+
+Live reconfigure (hot activation): `guix system reconfigure`'s
+shepherd upgrade restarts the changed one-shot service
+`guix-home-user`, which runs the *new* closure's activate — Home is
+hot-switched without reboot (measured: Home-only edits switch
+`~/.guix-home` within the same reconfigure run, no new home
+generation is created). Caveat: the service upgrade is
+fire-and-forget — activate failure is not reflected in the
+reconfigure exit code. `tools/reconfigure.sh` is the orchestration
+entry (minimal `configctl system switch`, deployment.md §6): on
+success it explicitly restarts `guix-home-user` and verifies the link
+state (including pivot-residue detection); error semantics: system
+failure → Home untouched; system success + Home failure → explicit
+report, no rollback, next boot recovers via the official service.
+
+## J6 — Session Infrastructure (elogind)
+
+`XDG_RUNTIME_DIR` / `/run/user/<uid>` are **system/session
+infrastructure**, provided by `elogind-service-type` in
+`(guixcfg system common)` (`%common-services`, shared by all hosts):
+PAM session extension (`pam_elogind.so`) gives SSH and tty logins a
+proper runtime directory; `/run/user` is declared as a tmpfs
+file-system by the service — never persisted, never created by Home
+or persistence modules. Guix Home's `on-first-login` relies on this.
+
+Future desktop: `greetd` (login entry / graphical session) will sit
+on top of this elogind layer — not introduced this round.
+
+## J7 — Future Work (recorded, not implemented)
+
+- **Home preview/test tooling**: `home-check` / `home-preview` —
+  evaluate/build/temporarily activate a Home environment without
+  creating a formal system generation and without an independent
+  home generation (frequent iteration on bash/git/niri/fcitx
+  configs). Formal deployment stays `system reconfigure`.
+- **greetd**: desktop-phase login entry on top of the existing
+  elogind session infrastructure.
+- **configctl**: the planned full deployment tool (deployment.md §6:
+  clean-worktree checks, git archive snapshot, `/etc/guix-configs`
+  deployment records); `tools/reconfigure.sh` is its minimal
+  VM-stage core.
