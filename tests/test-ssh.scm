@@ -13,11 +13,10 @@
 
 (test-begin "system-ssh")
 
-;; 从 secure-ssh-service 提取生效的 openssh-configuration（fold-services）
-(define ssh-config
-  (service-value
-   (fold-services (list (secure-ssh-service))
-                  #:target-type openssh-service-type)))
+;; secure-ssh-service 的 service-value 即 openssh-configuration
+;; （openssh-service-type 的配置；fold-services 需要 shepherd-root
+;; 上下文，这里直接取 service 值）。
+(define ssh-config (service-value (secure-ssh-service)))
 
 (test-eq "permit-root-login = no（root 一切认证方式禁止）"
          'no (openssh-configuration-permit-root-login ssh-config))
