@@ -44,11 +44,18 @@
 存在且 owner 为 USER（首次系统激活自动完成；不重建已有用户数据）。
 已有的 /home/USER/guix-configs 等存量目录的迁移是显式人工步骤
 （docs/installation.md 第 30 节——先迁移到 /persist 再 reconfigure
-启用 bind，避免静默覆盖）。"
+启用 bind，避免静默覆盖）。
+
+注意：/home/USER 本身是 ephemeral，但 file-systems 阶段为 bind mount
+创建挂载点时会把 /home/USER 以 root:root 0755 建出；guix 的
+activate-user-home 对已存在的 home 整体跳过（不 chown），导致用户
+无法在 ~ 顶层写入。这里显式恢复 home 的 owner/权限（与 guix 新建
+home 的语义一致：0700 + 用户所有）。"
   (with-imported-modules (source-module-closure '((guix build utils)))
     #~(begin
         (use-modules (guix build utils))
         (let* ((persist (string-append "/persist/data-home/" #$user))
+               (home (string-append "/home/" #$user))
                (uid (passwd:uid (getpw #$user)))
                (gid (passwd:gid (getpw #$user))))
           (mkdir-p persist)
@@ -58,7 +65,12 @@
              (let ((src (string-append persist "/" d)))
                (mkdir-p src)
                (chown src uid gid)))
-           '#$%persistent-user-dirs)))))
+           '#$%persistent-user-dirs)
+          ;; /home/USER 恢复标准语义（见上）。mkdir-p 只补缺失目录，
+          ;; 不覆盖已存在的挂载点。
+          (mkdir-p home)
+          (chown home uid gid)
+          (chmod home #o700)))))
 
 (define (user-persistence-service user)
   "把 selected user 持久化目录创建挂到系统 activation。"

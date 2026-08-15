@@ -48,4 +48,13 @@
                      (user-persistence-activation "user"))
        #t))
 
+;; /home/user 自身 ownership 恢复（file-systems 挂载点创建会以 root
+;; 建出 home，guix activate-user-home 对已存在 home 跳过——由本
+;; activation 恢复 0700 + 用户所有）。<gexp> 的 printer 会打印 body。
+(test-assert "activation restores /home/user ownership"
+  (let ((s (object->string (user-persistence-activation "user"))))
+    (and (string-contains s "/home/")
+         (string-contains s "chown")
+         (string-contains s "chmod"))))
+
 (test-end "user-persistence")
