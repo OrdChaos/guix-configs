@@ -69,7 +69,8 @@
                "tests/test-home-pivot.scm"
                "tests/test-users.scm"
                "tests/test-age.scm"
-               "tests/test-secrets.scm")))
+               "tests/test-secrets.scm"
+               "tests/test-store-leakage.scm")))
  (lambda ()
    (unsetenv "GUIX_CONFIG_FACTS")
    (when (file-exists? %test-facts-file)
