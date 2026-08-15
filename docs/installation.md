@@ -116,11 +116,21 @@ GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
 guix repl tools/disk-install.scm -- commit-root /mnt
 ```
 
-依次执行：收养 `/var/guix` 进 `@persist-var-guix` → 快照固化
-`@root-template` / `@root-0` → 删除 `@root-installing` → 写初始
-root generation 状态（`first-boot`，原子写）→ **重跑 UKI 部署**，
-让 ESP 菜单立即带上 Previous 项。之后不要立即卸载重启：后面
-可能还要在 LiveCD 里执行 Secure Boot enrollment（30.3.4）。
+依次执行（rename 语义，见 storage/commit.scm 头部注释与
+tests/test-commit-root.scm）：收养 `/var/guix` 进 `@persist-var-guix`
+（幂等）→ 发布只读 `@root-template`（ro=true 校验）→
+**rename** `@root-installing` → `@root-0`（不再删除挂载源——删除
+会让 TARGET 视图失效，实测 bug）→ 验证 TARGET 不变式
+（etc/gnu/persist/boot）→ **重跑 UKI 部署**（rename 后 TARGET
+视图保持，deploy 实际执行）→ **最后**写初始 root generation 状态
+（`first-boot`，原子写——state 是 commit record，deploy 成功后才
+宣布提交）。之后不要立即卸载重启：后面可能还要在 LiveCD 里执行
+Secure Boot enrollment（30.3.4）。
+
+重复执行是安全 no-op（committed predicate：@root-0 + state 均存在）；
+rename 后中断的提交会在下次运行时自动恢复完成。Previous 菜单项在
+首次启动后的下次部署出现（state 最后写，commit 时 deploy 尚在
+first-boot 之前）。
 
 首次启动由 initrd 里的无状态根逻辑接管。菜单语义见 docs/boot.md
 第 16.1 节；`rootmode=` 参数见 docs/storage.md 第 17.6 节。
