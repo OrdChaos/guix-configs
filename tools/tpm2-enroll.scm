@@ -44,9 +44,9 @@
              (ice-9 popen)              ; open-pipe*
              (rnrs bytevectors)         ; make-bytevector
              ((rnrs base) #:select (let-values))  ; 只取 let-values——
-                                ; 全量导入会覆盖 Guile 原生 error
-                                ;（R6RS error 签名 who/message/irritants，
-                                ; 实测 replace 报 wrong-number-of-arguments）
+             ; 全量导入会覆盖 Guile 原生 error
+             ;（R6RS error 签名 who/message/irritants，
+             ; 实测 replace 报 wrong-number-of-arguments）
              (srfi srfi-1)              ; filter-map、count
              (srfi srfi-13))            ; string-tokenize
 
@@ -174,8 +174,8 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
 ;; 才发现缺二进制”（实测 bug：%tpm2-bin 曾解析到不含 tpm2 的路径）。
 (define %enroll-tpm2-commands
   '("tpm2_pcrread" "tpm2_policypcr" "tpm2_createprimary"
-    "tpm2_startauthsession" "tpm2_create" "tpm2_load"
-    "tpm2_unseal" "tpm2_flushcontext"))
+                   "tpm2_startauthsession" "tpm2_create" "tpm2_load"
+                   "tpm2_unseal" "tpm2_flushcontext"))
 
 (define (executable-checks)
   "enrollment 需要的 executables 检查（#t/#f 列表，含打印）。

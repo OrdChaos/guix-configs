@@ -40,21 +40,21 @@
 (define (scan-file path)
   "返回 PATH 中的违规列表：((行号 . 字符串) ...)。"
   (let loop ((lines (call-with-input-file path
-                      (lambda (p)
-                        (let l ((acc '()) (i 1))
-                          (let ((line (read-line p)))
-                            (if (eof-object? line)
-                              (reverse acc)
-                              (l (cons (cons i line) acc) (+ i 1))))))))
+                                          (lambda (p)
+                                            (let l ((acc '()) (i 1))
+                                              (let ((line (read-line p)))
+                                                (if (eof-object? line)
+                                                  (reverse acc)
+                                                  (l (cons (cons i line) acc) (+ i 1))))))))
              (acc '()))
     (if (null? lines)
       (reverse acc)
       (let* ((line (cdar lines))
              (viol (if (and (runtime-string-call? line)
                             (not (string-prefix? ";;" line)))
-                      (filter string-has-han?
-                              (extract-string-literals line))
-                      '())))
+                     (filter string-has-han?
+                             (extract-string-literals line))
+                     '())))
         (loop (cdr lines)
               (append (map (lambda (s) (cons (caar lines) s)) viol) acc))))))
 
@@ -81,11 +81,11 @@
 (test-begin "ui-language")
 
 (test-assert "production runtime strings contain no Han characters"
-  (let ((viol (runtime-han-violations)))
-    (for-each (lambda (v)
-                (format #t "  Han runtime string: ~a:~a ~s~%"
-                        (car v) (caadr v) (cdadr v)))
-              viol)
-    (null? viol)))
+             (let ((viol (runtime-han-violations)))
+               (for-each (lambda (v)
+                           (format #t "  Han runtime string: ~a:~a ~s~%"
+                                   (car v) (caadr v) (cdadr v)))
+                         viol)
+               (null? viol)))
 
 (test-end "ui-language")

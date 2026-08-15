@@ -15,8 +15,8 @@
 (define fss (user-persistence-file-systems "user"))
 
 (test-equal "selected dirs declared"
-    %persistent-user-dirs
-  (map (lambda (fs) (basename (file-system-mount-point fs))) fss))
+            %persistent-user-dirs
+            (map (lambda (fs) (basename (file-system-mount-point fs))) fss))
 
 (for-each
  (lambda (d)
@@ -25,36 +25,36 @@
                                (string-append "/home/user/" d)))
                    fss)))
      (test-assert (string-append "/home/user/" d " bind mount declared")
-       (and fs
-            (string=? (file-system-device fs)
-                      (string-append "/persist/data-home/user/" d))
-            (string=? (file-system-type fs) "none")
-            (member 'bind-mount (file-system-flags fs))
-            (file-system-create-mount-point? fs)))))
+                  (and fs
+                       (string=? (file-system-device fs)
+                                 (string-append "/persist/data-home/user/" d))
+                       (string=? (file-system-type fs) "none")
+                       (member 'bind-mount (file-system-flags fs))
+                       (file-system-create-mount-point? fs)))))
  %persistent-user-dirs)
 
 (test-assert "all mount points under /home/user (HOME not fully persisted)"
-  (every (lambda (fs)
-           (string-prefix? "/home/user/" (file-system-mount-point fs)))
-         fss))
+             (every (lambda (fs)
+                      (string-prefix? "/home/user/" (file-system-mount-point fs)))
+                    fss))
 (test-assert "no mount point is /home/user itself"
-  (not (any (lambda (fs)
-              (string=? (file-system-mount-point fs) "/home/user"))
-            fss)))
+             (not (any (lambda (fs)
+                         (string=? (file-system-mount-point fs) "/home/user"))
+                       fss)))
 
 ;; activation gexp 可编译
 (test-assert "persistence activation gexp compiles"
-  (and (gexp->script "user-persistence-check"
-                     (user-persistence-activation "user"))
-       #t))
+             (and (gexp->script "user-persistence-check"
+                                (user-persistence-activation "user"))
+                  #t))
 
 ;; /home/user 自身 ownership 恢复（file-systems 挂载点创建会以 root
 ;; 建出 home，guix activate-user-home 对已存在 home 跳过——由本
 ;; activation 恢复 0700 + 用户所有）。<gexp> 的 printer 会打印 body。
 (test-assert "activation restores /home/user ownership"
-  (let ((s (object->string (user-persistence-activation "user"))))
-    (and (string-contains s "/home/")
-         (string-contains s "chown")
-         (string-contains s "chmod"))))
+             (let ((s (object->string (user-persistence-activation "user"))))
+               (and (string-contains s "/home/")
+                    (string-contains s "chown")
+                    (string-contains s "chmod"))))
 
 (test-end "user-persistence")

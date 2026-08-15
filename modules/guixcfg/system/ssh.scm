@@ -34,18 +34,18 @@
   "activation gexp：确保 %SSH-HOST-KEY-DIR 存在且 ed25519 host key
 已生成（缺失才生成）。"
   (with-imported-modules (source-module-closure '((guix build utils)))
-    #~(begin
-        (use-modules (guix build utils))
-        (mkdir-p #$%ssh-host-key-dir)
-        (let ((key (string-append #$%ssh-host-key-dir
-                                  "/ssh_host_ed25519_key")))
-          (unless (file-exists? key)
-            (invoke (string-append #$(file-append openssh "/bin/ssh-keygen"))
-                    "-t" "ed25519" "-N" "" "-f" key)
-            (chmod key #o600)
-            (chmod (string-append key ".pub") #o644))
-          ;; 目录本身 root 可读写即可（权限 0755）。
-          (chmod #$%ssh-host-key-dir #o755)))))
+                         #~(begin
+                            (use-modules (guix build utils))
+                            (mkdir-p #$%ssh-host-key-dir)
+                            (let ((key (string-append #$%ssh-host-key-dir
+                                                      "/ssh_host_ed25519_key")))
+                              (unless (file-exists? key)
+                                (invoke (string-append #$(file-append openssh "/bin/ssh-keygen"))
+                                        "-t" "ed25519" "-N" "" "-f" key)
+                                (chmod key #o600)
+                                (chmod (string-append key ".pub") #o644))
+                              ;; 目录本身 root 可读写即可（权限 0755）。
+                              (chmod #$%ssh-host-key-dir #o755)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; System-owned OpenSSH server policy（production VM）。

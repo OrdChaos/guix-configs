@@ -19,31 +19,31 @@
 (define ssh-config (service-value (secure-ssh-service)))
 
 (test-assert "permit-root-login = no（root 一切认证方式禁止）"
-  (eq? #f (openssh-configuration-permit-root-login ssh-config)))
+             (eq? #f (openssh-configuration-permit-root-login ssh-config)))
 (test-assert "PasswordAuthentication yes"
-  (openssh-configuration-password-authentication? ssh-config))
+             (openssh-configuration-password-authentication? ssh-config))
 (test-assert "PubkeyAuthentication yes"
-  (openssh-configuration-public-key-authentication? ssh-config))
+             (openssh-configuration-public-key-authentication? ssh-config))
 (test-assert "empty passwords disabled"
-  (not (openssh-configuration-allow-empty-passwords? ssh-config)))
+             (not (openssh-configuration-allow-empty-passwords? ssh-config)))
 (test-assert "generate-host-keys? off（默认 /etc/ssh 生成禁用）"
-  (not (openssh-configuration-generate-host-keys? ssh-config)))
+             (not (openssh-configuration-generate-host-keys? ssh-config)))
 (test-assert "port 22"
-  (= 22 (openssh-configuration-port-number ssh-config)))
+             (= 22 (openssh-configuration-port-number ssh-config)))
 
 ;; host-key 持久化路径与 DenyUsers 出现在 sshd 配置
 (define extra (openssh-configuration-extra-content ssh-config))
 (test-assert "HostKey points at /persist/system/ssh/"
-  (string-contains extra (string-append "HostKey " %ssh-host-key-dir
-                                        "/ssh_host_ed25519_key")))
+             (string-contains extra (string-append "HostKey " %ssh-host-key-dir
+                                                   "/ssh_host_ed25519_key")))
 (test-assert "DenyUsers root as defense-in-depth"
-  (string-contains extra "DenyUsers root"))
+             (string-contains extra "DenyUsers root"))
 
 ;; 首启 host-key activation 可编译（gexp->script）
 (test-assert "host-key activation gexp compiles"
-  (let ((out (false-if-exception
-              (gexp->script "ssh-host-key-check"
-                            (ssh-host-key-activation)))))
-    (and out #t)))
+             (let ((out (false-if-exception
+                         (gexp->script "ssh-host-key-check"
+                                       (ssh-host-key-activation)))))
+               (and out #t)))
 
 (test-end "system-ssh")

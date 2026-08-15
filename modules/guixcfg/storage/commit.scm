@@ -86,17 +86,17 @@
         (dst (top-path "@persist-var-guix")))
     (if (file-exists? (string-append dst "/db"))
       (begin
-        ;; 上次中断已收养：确保 src 仍是空挂载点目录（不重复 cp）
-        (unless (file-exists? src) (mkdir-p src))
-        (format #t "(/var/guix already adopted; skipping)~%"))
+       ;; 上次中断已收养：确保 src 仍是空挂载点目录（不重复 cp）
+       (unless (file-exists? src) (mkdir-p src))
+       (format #t "(/var/guix already adopted; skipping)~%"))
       (begin
-        (unless (file-exists? (string-append src "/db"))
-          (error "init did not create /var/guix/db; adoption aborted" src))
-        ;; 跨子卷不能 rename，复制后删除（内容只有 db 和少量链接，很小）。
-        (invoke "cp" "-a" (string-append src "/.") (string-append dst "/"))
-        (delete-file-recursively src)
-        (mkdir-p src)          ; 留空目录作运行时挂载点
-        (format #t "/var/guix adopted into @persist-var-guix~%")))))
+       (unless (file-exists? (string-append src "/db"))
+         (error "init did not create /var/guix/db; adoption aborted" src))
+       ;; 跨子卷不能 rename，复制后删除（内容只有 db 和少量链接，很小）。
+       (invoke "cp" "-a" (string-append src "/.") (string-append dst "/"))
+       (delete-file-recursively src)
+       (mkdir-p src)          ; 留空目录作运行时挂载点
+       (format #t "/var/guix adopted into @persist-var-guix~%")))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; template publish：只读候选快照 → 原子改名发布。
@@ -215,23 +215,23 @@
         (else
          (if (eq? (commit-state) 'interrupted-after-rename)
            (begin
-             ;; 上次在 rename 后、state 前中断：恢复完成剩余步骤。
-             ;; 此时 TARGET 挂着 @root-0（挂载跟随 rename）。
-             (format #t "previous commit was interrupted after rename; resuming remaining steps~%")
-             (unless (file-exists? (top-path %root-template-name))
-               (publish-template! (root-generation-name 0))))
+            ;; 上次在 rename 后、state 前中断：恢复完成剩余步骤。
+            ;; 此时 TARGET 挂着 @root-0（挂载跟随 rename）。
+            (format #t "previous commit was interrupted after rename; resuming remaining steps~%")
+            (unless (file-exists? (top-path %root-template-name))
+              (publish-template! (root-generation-name 0))))
            (begin
-             ;; 正常路径：确认 TARGET 挂的是 @root-installing
-             (let ((source (first-command-line "findmnt" "-no" "SOURCE" target)))
-               (unless (and source (string-contains source %root-installing-name))
-                 (error "target is not mounted from the installing root (@root-installing)" target source)))
-             ;; 1. 收养 /var/guix（必须在快照之前：模板应含空的 /var/guix
-             ;;    挂载点，而子卷应含 init 写入的注册内容）
-             (adopt-var-guix!)
-             ;; 2. 发布只读模板（失败时 source 不动）
-             (publish-template! %root-installing-name)
-             ;; 3. rename 安装期 root 为 generation 0（不再 snapshot+delete）
-             (commit-generation-zero!)))
+            ;; 正常路径：确认 TARGET 挂的是 @root-installing
+            (let ((source (first-command-line "findmnt" "-no" "SOURCE" target)))
+              (unless (and source (string-contains source %root-installing-name))
+                (error "target is not mounted from the installing root (@root-installing)" target source)))
+            ;; 1. 收养 /var/guix（必须在快照之前：模板应含空的 /var/guix
+            ;;    挂载点，而子卷应含 init 写入的注册内容）
+            (adopt-var-guix!)
+            ;; 2. 发布只读模板（失败时 source 不动）
+            (publish-template! %root-installing-name)
+            ;; 3. rename 安装期 root 为 generation 0（不再 snapshot+delete）
+            (commit-generation-zero!)))
          ;; 4. 验证 TARGET 仍完整（rename 后不变式）
          (verify-target! target)
          ;; 5. deploy UKI（rename 后 TARGET 视图保持，deploy 可执行）

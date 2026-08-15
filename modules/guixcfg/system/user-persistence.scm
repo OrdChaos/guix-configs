@@ -20,9 +20,13 @@
                          user-persistence-activation
                          user-persistence-service))
 
-;; 第一轮持久化目录（后续按应用状态需求单独扩展）。
+;; 持久化目录（后续按应用状态需求单独扩展）。
 (define %persistent-user-dirs
-  '("guix-configs" "Projects" "Documents" "Downloads" "Pictures"))
+  '("guix-configs"
+    "Projects"
+    "Documents"
+    "Downloads"
+    "Pictures"))
 
 (define (user-persistence-file-systems user)
   "SELECTED 用户目录的 bind mount 声明（/persist/data-home/USER/<d>
@@ -52,25 +56,25 @@ activate-user-home 对已存在的 home 整体跳过（不 chown），导致用�
 无法在 ~ 顶层写入。这里显式恢复 home 的 owner/权限（与 guix 新建
 home 的语义一致：0700 + 用户所有）。"
   (with-imported-modules (source-module-closure '((guix build utils)))
-    #~(begin
-        (use-modules (guix build utils))
-        (let* ((persist (string-append "/persist/data-home/" #$user))
-               (home (string-append "/home/" #$user))
-               (uid (passwd:uid (getpw #$user)))
-               (gid (passwd:gid (getpw #$user))))
-          (mkdir-p persist)
-          (chown persist uid gid)
-          (for-each
-           (lambda (d)
-             (let ((src (string-append persist "/" d)))
-               (mkdir-p src)
-               (chown src uid gid)))
-           '#$%persistent-user-dirs)
-          ;; /home/USER 恢复标准语义（见上）。mkdir-p 只补缺失目录，
-          ;; 不覆盖已存在的挂载点。
-          (mkdir-p home)
-          (chown home uid gid)
-          (chmod home #o700)))))
+                         #~(begin
+                            (use-modules (guix build utils))
+                            (let* ((persist (string-append "/persist/data-home/" #$user))
+                                   (home (string-append "/home/" #$user))
+                                   (uid (passwd:uid (getpw #$user)))
+                                   (gid (passwd:gid (getpw #$user))))
+                              (mkdir-p persist)
+                              (chown persist uid gid)
+                              (for-each
+                               (lambda (d)
+                                 (let ((src (string-append persist "/" d)))
+                                   (mkdir-p src)
+                                   (chown src uid gid)))
+                               '#$%persistent-user-dirs)
+                              ;; /home/USER 恢复标准语义（见上）。mkdir-p 只补缺失目录，
+                              ;; 不覆盖已存在的挂载点。
+                              (mkdir-p home)
+                              (chown home uid gid)
+                              (chmod home #o700)))))
 
 (define (user-persistence-service user)
   "把 selected user 持久化目录创建挂到系统 activation。"

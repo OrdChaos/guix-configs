@@ -322,7 +322,7 @@ timeout: 3
                              (newline port)))
        
        (format #t
-               "UKI deployment ~a 已提交（~a签名，Recovery candidate 已部署；原活动槽：~a）~%"
+               "UKI deployment ~a has been committed （~a signed，Recovery candidate has been set up；Original active slot：~a）~%"
                target-slot
-               (if signed? "已" "未")
+               (if signed? "already" "not")
                (or active "legacy/none"))))))
