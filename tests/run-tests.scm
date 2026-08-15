@@ -65,7 +65,8 @@
                "tests/test-ssh.scm"
                "tests/test-user-persistence.scm"
                "tests/test-session.scm"
-               "tests/test-home.scm")))
+               "tests/test-home.scm"
+               "tests/test-home-pivot.scm")))
  (lambda ()
    (unsetenv "GUIX_CONFIG_FACTS")
    (when (file-exists? %test-facts-file)

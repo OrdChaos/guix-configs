@@ -42,6 +42,23 @@ if ! guix time-machine -C channels.lock.scm -- system reconfigure \
 fi
 
 # 2. 热激活 Home（幂等：home closure 未变时 activate 重建同一组链接）
+#
+#    preflight：上次失败激活的 stale pivot（~/.guix-home.new）会让
+#    activate 的 (symlink new-home pivot) 永久 EEXIST（上游不处理残留）。
+#    保守清理：home-pivot.scm 只 unlink 指向 store home generation 的
+#    symlink；普通文件/目录/未知 symlink fail closed（明确报错退出）。
+pivot="/home/$HOME_USER/.guix-home.new"
+if ! guile -L "$ROOT/modules" -s "$ROOT/tools/home-pivot.scm" \
+       --clean "$pivot" >/dev/null 2>&1; then
+  echo "reconfigure: stale pivot $pivot exists but is NOT a recognizable" >&2
+  echo "  Guix Home pivot symlink (plain file/directory/unknown link);" >&2
+  echo "  refusing to touch it. Investigate manually, then retry." >&2
+  exit 2
+fi
+
+had_pivot_before=0
+[ -e "$pivot" ] && had_pivot_before=1
+
 if ! herd restart guix-home-"$HOME_USER" >/dev/null 2>&1; then
   echo "reconfigure: system generation switched, but Home hot-activation" >&2
   echo "  could not be started (herd restart rejected). The official service" >&2
@@ -68,7 +85,18 @@ if [ -L "/home/$HOME_USER/.guix-home" ]; then
   new_link="$(readlink "/home/$HOME_USER/.guix-home")"
 fi
 
-if [ "$ok" -eq 0 ] || [ -e "/home/$HOME_USER/.guix-home.new" ]; then
+if [ "$ok" -eq 0 ] || [ -e "$pivot" ]; then
+  # 本次激活失败产生的 stale pivot：preflight 后无 pivot 而现在有 →
+  # 确知是本次产生的，安全清理（仅 symlink 指向 store home 时清理），
+  # 不覆盖原始 activation 错误。
+  if [ "$had_pivot_before" -eq 0 ] && [ -e "$pivot" ]; then
+    if ! guile -L "$ROOT/modules" -s "$ROOT/tools/home-pivot.scm" \
+           --clean "$pivot" >/dev/null 2>&1; then
+      echo "reconfigure: additionally, cleanup of the stale pivot from" >&2
+      echo "  THIS failed activation failed; manual attention required:" >&2
+      echo "  $pivot" >&2
+    fi
+  fi
   echo "reconfigure: system generation switched OK, but Home hot-activation" >&2
   echo "  FAILED (old Home: ${old_link:-none}; system is NOT rolled back)." >&2
   echo "  Investigate: pivot residue /home/$HOME_USER/.guix-home.new, or" >&2
