@@ -64,6 +64,7 @@
                "tests/test-ui-language.scm"
                "tests/test-ssh.scm"
                "tests/test-user-persistence.scm"
+               "tests/test-session.scm"
                "tests/test-home.scm")))
  (lambda ()
    (unsetenv "GUIX_CONFIG_FACTS")

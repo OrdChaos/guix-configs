@@ -47,6 +47,9 @@
    ;; （docs/storage.md 第 17.4、17.8 节）。
    (ephemeral-root-shepherd-services
     (host-storage-policy-keep-root-generations %vm-storage-policy))
+   ;; 基础 session infrastructure（elogind：/run/user、XDG_RUNTIME_DIR、
+   ;; PAM session——system/common 拥有）。
+   %common-services
    %base-services))
 
 (define %os
