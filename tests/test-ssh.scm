@@ -18,8 +18,8 @@
 ;; 上下文，这里直接取 service 值）。
 (define ssh-config (service-value (secure-ssh-service)))
 
-(test-eq "permit-root-login = no（root 一切认证方式禁止）"
-         'no (openssh-configuration-permit-root-login ssh-config))
+(test-assert "permit-root-login = no（root 一切认证方式禁止）"
+  (eq? #f (openssh-configuration-permit-root-login ssh-config)))
 (test-assert "PasswordAuthentication yes"
   (openssh-configuration-password-authentication? ssh-config))
 (test-assert "PubkeyAuthentication yes"

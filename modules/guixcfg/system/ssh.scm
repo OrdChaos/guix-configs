@@ -61,7 +61,10 @@ sshd 配置与 host-key 持久化由 System 拥有；Guix Home 不管理 sshd，
   (service openssh-service-type
            (openssh-configuration
             (port-number 22)
-            (permit-root-login 'no)
+            ;; #f 生成 PermitRootLogin no（guix 的 permit-root-login 字段
+            ;; 不支持 'no 符号——match 只认 #t/#f/without-password/
+            ;; prohibit-password，实测 match-error）。
+            (permit-root-login #f)
             (allow-empty-passwords? #f)
             (password-authentication? #t)
             (public-key-authentication? #t)
