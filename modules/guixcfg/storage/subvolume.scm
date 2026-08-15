@@ -21,7 +21,11 @@
 (define %btrfs-top-mount "/run/guix-configs-btrfs-top")
 
 (define (mapper-path)
-  (string-append "/dev/mapper/" %luks-mapper-name))
+  "LUKS mapper 设备路径。GUIXCFG_TEST_LUKS_MAPPER 仅供 scratch-loopback
+集成测试覆盖（见 tests/test-commit-root.scm）；产品默认 /dev/mapper/cryptroot。"
+  (or (let ((v (getenv "GUIXCFG_TEST_LUKS_MAPPER")))
+        (and v (not (string-null? v)) v))
+      (string-append "/dev/mapper/" %luks-mapper-name)))
 
 (define (execute-mount-top)
   (mkdir-p %btrfs-top-mount)
