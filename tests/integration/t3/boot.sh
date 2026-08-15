@@ -25,8 +25,15 @@ start_swtpm_for() { # $1=name —— 复用已有 TPM 状态（permall）或全�
     local tpmdir="$T7/tpm-$1" sock="$T7/swtpm-$1.sock"
     # 同一时刻只有一个 VM：先清掉旧 swtpm 与 stale socket，
     # 再按状态目录决定复用（permall 存在）或全新。
+    # 必须等旧 swtpm 完全退出（释放 permall 的 .lock 并写回状态）：
+    # 否则新 swtpm 无法加载 permall，会以随机 seed 启动 → 与 sealed
+    # 对象不匹配（Esys_Load 0x1DF integrity check failed），实测。
     pkill -x swtpm 2>/dev/null || true
-    sleep 0.3
+    for _ in $(seq 1 100); do
+        pgrep -x swtpm >/dev/null || break
+        sleep 0.1
+    done
+    sleep 0.5
     rm -f "$sock"
     if [ ! -d "$tpmdir" ] || [ ! -f "$tpmdir/tpm2-00.permall" ]; then
         rm -rf "$tpmdir"

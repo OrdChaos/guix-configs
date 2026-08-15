@@ -42,7 +42,7 @@ usage() {
 
 vm-ssh() {
     # sshd 依赖网络就绪（dhcpcd）与首次 host key 生成，root@guix-vm
-    # 出现后可能仍需 1-2 分钟；连接失败（255）重试最多 2 分钟，
+    # 出现后可能仍需 2-3 分钟；连接失败（255）重试最多 5 分钟，
     # 命令失败（其他退出码）直接返回。
     local tries=0 rc=255
     while [ $rc -ne 0 ]; do
@@ -51,9 +51,17 @@ vm-ssh() {
         if [ $rc -eq 0 ]; then return 0; fi
         [ $rc -eq 255 ] || return $rc
         tries=$((tries+1))
-        if [ $tries -ge 30 ]; then return 255; fi
-        sleep 4
+        if [ $tries -ge 60 ]; then return 255; fi
+        sleep 5
     done
+}
+
+# ESP 分区镜像操作（mtools 直读 qcow2 的 ESP，不经 VM boot——
+# 密码/TPM 竞态会让提取 boot 偶发卡死，实测）。
+MT_BIN="$(ls -d /gnu/store/*mtools*/bin 2>/dev/null | head -1)"
+
+esp-image() {
+    qemu-img dd -f qcow2 if="$T7_DIR/disk.qcow2" of="$T7_DIR/esp.raw" bs=1M skip=1 count=512 2>/dev/null
 }
 
 gen-ssh-key() {
@@ -153,12 +161,13 @@ enroll-tpm() {
 scenario() {
     local name="$1"
     # SB 与 TPM 状态延续：后续 boot 用 sb-enroll 的 VARS（Secure Boot on）
-    # 与 enroll 后的 TPM 状态（sealed 对象）；B 的 fresh-tpm 在其 case
-    # 内重置 TPM（VARS 保持）。
+    # 与 enroll 后的 TPM 状态（sealed 对象）。每次无条件从 enrolled
+    # 状态恢复：B 的 fresh-tpm 在其 case 内重置 TPM（VARS 保持），
+    # C/D/E 必须回到 enrolled 状态（目录存在性检查会误判——B 的
+    # fresh-tpm 只删对象不删目录，实测）。
     cp "$T7_DIR/vars-sb-enroll.fd" "$T7_DIR/vars-stage-b.fd"
-    if [ ! -d "$T7_DIR/tpm-stage-b/tpm2-00.permall" ]; then
-        cp -r "$T7_DIR/tpm-enroll-tpm" "$T7_DIR/tpm-stage-b"
-    fi
+    rm -rf "$T7_DIR/tpm-stage-b"
+    cp -r "$T7_DIR/tpm-enroll-tpm" "$T7_DIR/tpm-stage-b"
     # 每个场景从干净状态开始：前一场景（T7_KEEP_VM=1）残留的 qemu
     # 占着 2222/磁盘锁，会静默破坏下一次 boot。
     pkill -f 'qemu-system-x8[6]' 2>/dev/null || true
@@ -191,7 +200,8 @@ scenario() {
             # 提取 ESP 里 install-init 独立构建、inspect 断言过的真实
             # RECOVERY.EFI（绝不 cp CURRENT.EFI——rootmode=recovery 门控
             # 必须真实），经 9p 拷回宿主作为 -kernel 引导文件。
-            T7_KEEP_VM=1 tests/integration/t3/boot.sh boot stage-b >/dev/null
+            T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
+                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
             vm-ssh 'modprobe 9p 9pnet_virtio 2>/dev/null; mkdir -p /mnt/cfg && \
                     mount -t 9p -o trans=virtio guix-configs /mnt/cfg && \
                     (cp /efi/EFI/Guix/A/RECOVERY.EFI /mnt/cfg/vms/t3/recovery-t3.efi 2>/dev/null || \
@@ -201,14 +211,17 @@ scenario() {
             T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
                 "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" \
                 -kernel "$T7_DIR/recovery-t3.efi" >/dev/null
-            grep -a "tpm-skip" "$T7_DIR/interact-stage-b.log" >/dev/null \
+            grep -a "跳过（cmdline 禁用" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && ! grep -a "尝试自动解锁" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && echo "* D recovery skip: PASS" || { echo "* D FAIL"; exit 1; }
             ;;
         E|e)
-            # 前置：确保有运行中的系统（enrolled TPM 正常 auto-unlock）
-            # 才能 SSH 进去 corrupt artifact。
-            T7_KEEP_VM=1 tests/integration/t3/boot.sh boot stage-b >/dev/null
+            # corrupt ESP 里的 seal.priv：经 VM（vm-ssh）修改后关机。
+            # 不用 mtools 写回 qcow2——qemu-img dd 的 of 默认 raw，
+            # 会覆盖 qcow2 头毁掉磁盘（实测事故），且 qemu-nbd 依赖
+            # 宿主 root。VM 写回最安全。
+            T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
+                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
             vm-ssh 'cd /efi/EFI/Guix/tpm2 && printf "\x00" | dd of=seal.priv bs=1 seek=10 count=1 conv=notrunc 2>/dev/null; herd power-off root' >/dev/null 2>&1 || true
             sleep 8
             T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
