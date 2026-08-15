@@ -16,6 +16,7 @@
                #:use-module (guixcfg system file-systems)
                #:use-module (guixcfg system packages)
                #:use-module (guixcfg system ssh)       ; secure-ssh-service、ssh-host-key-service
+               #:use-module (guixcfg system user-persistence)  ; selected user persistence
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:export (%vm-storage-policy %vm-services %os))
 
@@ -65,6 +66,8 @@
    ;; 挂到 /selected-root 后由 boot-system bind 成系统根。
    (initrd ephemeral-root-initrd)
    (file-systems (append (system-file-systems %ephemeral-root-file-system)
+                         ;; selected user persistence（bind mounts，login 前就位）
+                         (user-persistence-file-systems "user")
                          %base-file-systems))
    
    (swap-devices %swap-spaces)
@@ -76,7 +79,8 @@
    ;; 必须来自锁定 Virelith 的 compat 包（docs/boot.md 第 16.4 节）。
    (packages (append (list tpm2-tools-compat) %system-packages))
    (services (append (list (secure-ssh-service)
-                           (ssh-host-key-service))
+                           (ssh-host-key-service)
+                           (user-persistence-service "user"))
                      %vm-services))))
 
 ;; 末尾裸表达式：让本文件同时是 guix system 的入口文件——
