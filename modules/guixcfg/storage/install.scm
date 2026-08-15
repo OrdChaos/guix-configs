@@ -136,11 +136,14 @@ password（docs/boot.md 第 16.4 节）。"
 ;;; 失败即停（docs/storage.md 第 31 章）：
 ;;; 任何一步抛异常，立即报告并退出非零，不做任何自动清理或续跑。
 
-(define (execute-plan plan)
+(define* (execute-plan plan #:key (passphrase-reader read-luks-passphrase!))
   "逐步执行计划（失败即停）。
 LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值；
-它只存在于本次 apply session（不进 plan、不落盘、不进 argv/env）。"
-  (let ((passphrase! (make-luks-passphrase-source read-luks-passphrase!)))
+它只存在于本次 apply session（不进 plan、不落盘、不进 argv/env）。
+PASSPHRASE-READER 默认交互读取；也可是 age secret reader（installer
+用 --luks-secret 时经 stable S 解密 secrets/install/luks-recovery.age，
+见 tools/secrets.scm 与 docs/secrets.md）——两种来源共用 stdin 语义。"
+  (let ((passphrase! (make-luks-passphrase-source passphrase-reader)))
     (catch #t
       (lambda ()
         (for-each
@@ -224,8 +227,9 @@ LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值�
 ;;; ────────────────────────────────────────────────────────────
 ;;; 完整安装流程。
 
-(define (run-install policy device)
-  "把 DEVICE 安装成 POLICY 描述的布局。调用前需 root 权限。"
+(define* (run-install policy device #:key (passphrase-reader read-luks-passphrase!))
+  "把 DEVICE 安装成 POLICY 描述的布局。调用前需 root 权限。
+PASSPHRASE-READER 透传给 execute-plan（交互或 age secret 来源）。"
   ;; 0. 环境检查
   (preflight-environment! device)
   
@@ -254,7 +258,7 @@ LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值�
     (confirm-device! device)
     
     ;; 4. 逐步执行
-    (execute-plan plan)
+    (execute-plan plan #:passphrase-reader passphrase-reader)
     
     ;; 5. 若 store 还在内存盘，提醒先 cow-store 再 init
     (warn-if-store-in-ram)))

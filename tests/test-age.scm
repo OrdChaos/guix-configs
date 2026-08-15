@@ -193,6 +193,31 @@
        (lambda () (age-verify! root) #f)
        (lambda (k . a) #t)))))
 
+;; ── LUKS reader（install secret 消费路径）：decrypt-to-string
+;; roundtrip + reader 语义 ──────────────────────────────────────
+(with-test-paths
+ (lambda (root)
+   (age-init! root %test-pass)
+   (age-unlock! root %test-pass)
+   (age-install! root)
+   (let* ((luks-plain "test-luks-recovery-pass-9z2x")
+          (cipher (string-append root "/luks.age"))
+          (recipient (string-trim-both
+                      (call-with-input-file
+                          (string-append root "/" %stable-recipient-rel)
+                        (lambda (p) (read-string p))))))
+     (invoke-with-stdin
+      (string-append luks-plain "\n") "age" "--armor"
+      "-r" recipient "-o" cipher)
+     (test-equal "age reader returns LUKS plaintext"
+       luks-plain
+       ((make-age-secret-reader cipher)))
+     ;; runtime S 优先（安装期语义）：lock 后 installed S 也可读
+     (age-lock!)
+     (test-equal "reader works with installed S after lock"
+       luks-plain
+       ((make-age-secret-reader cipher))))))
+
 ;; ── unlock 缺密文 → 明确失败 ─────────────────────────────────
 (with-test-paths
  (lambda (root)

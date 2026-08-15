@@ -25,12 +25,15 @@
                          %stable-identity-rel
                          recipient-format?
                          runtime-identity-present?
+                         current-identity-path
                          age-init!
                          age-unlock!
                          age-install!
                          age-verify!
                          age-lock!
-                         age-decrypt-file))
+                         age-decrypt-file
+                         age-decrypt-to-string
+                         make-age-secret-reader))
 
 ;; 运行时临时 S（tmpfs；目录 0700、文件 0600）与安装后的
 ;; authoritative S（LUKS-backed persist）的默认路径；函数经 parameter
@@ -59,6 +62,13 @@
 (define (runtime-identity-present?)
   "运行时临时 S 是否已就位。"
   (file-exists? (%runtime-identity-path)))
+
+(define (current-identity-path)
+  "当前可用的 identity 路径：安装/bootstrap 期 runtime 临时 S 优先
+（此时 /persist 尚未就绪）；日常运行用 LUKS 内 installed S。"
+  (if (runtime-identity-present?)
+      (%runtime-identity-path)
+      (%installed-identity-path)))
 
 (define (read-file-string path)
   (call-with-input-file path
@@ -253,7 +263,7 @@ already-unlocked（复用）或 unlocked（新解密）。"
       (lambda ()
         ;; identity 经 -i 文件参数（路径无 secret 内容）；明文经 -o 文件。
         (invoke-with-stdin "" "age" "--decrypt"
-                           "-i" (%installed-identity-path)
+                           "-i" (current-identity-path)
                            "-o" tmp ciphertext-path)
         (chmod tmp mode)
         (chown tmp owner-uid owner-gid)
@@ -261,3 +271,30 @@ already-unlocked（复用）或 unlocked（新解密）。"
       (lambda ()
         (false-if-exception (delete-file tmp))))
     #t))
+
+(define (age-decrypt-to-string ciphertext-path)
+  "用 installed S 解密 CIPHERTEXT-PATH，明文作为字符串返回（只在
+本进程内存；经 /run 0600 临时文件中转，读回即删）。"
+  (let ((tmp (string-append (%runtime-identity-dir) "/.dec-str-"
+                            (number->string (getpid)))))
+    (mkdir-p (%runtime-identity-dir))
+    (chmod (%runtime-identity-dir) #o700)
+    (dynamic-wind
+      (lambda ()
+        (call-with-output-file tmp (lambda (port) #t))
+        (chmod tmp #o600))
+      (lambda ()
+        (invoke-with-stdin "" "age" "--decrypt"
+                           "-i" (current-identity-path)
+                           "-o" tmp ciphertext-path)
+        (read-file-string tmp))
+      (lambda ()
+        (false-if-exception (delete-file tmp))))))
+
+(define (make-age-secret-reader ciphertext-path)
+  "返回一个 reader thunk：首次调用解密 CIPHERTEXT-PATH（installed S）
+并返回明文（去掉尾部换行），供 install.scm 的 passphrase-reader
+使用——与交互读取同一 stdin 语义，明文不落盘、不进 argv/env。"
+  (lambda ()
+    (string-trim-right (age-decrypt-to-string ciphertext-path)
+                       #\newline)))
