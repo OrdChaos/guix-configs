@@ -15,6 +15,7 @@
                #:use-module (guixcfg system common)
                #:use-module (guixcfg system file-systems)
                #:use-module (guixcfg system packages)
+               #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:export (%vm-storage-policy %vm-services %os))
 
 ;; 保留 host 模块原有导出名；实际 policy 放在纯存储模块中，避免早期
@@ -68,7 +69,11 @@
    (swap-devices %swap-spaces)
    
    (users %vm-users)
-   (packages %system-packages)
+   ;; tpm2-tools-compat 显式加入 system profile：tpm2-enroll 工具
+   ;; （guix repl tools/tpm2-enroll.scm）依赖
+   ;; /run/current-system/profile/bin/tpm2_{pcrread,createprimary,...}，
+   ;; 必须来自锁定 Virelith 的 compat 包（docs/boot.md 第 16.4 节）。
+   (packages (append (list tpm2-tools-compat) %system-packages))
    (services %vm-services)))
 
 ;; 末尾裸表达式：让本文件同时是 guix system 的入口文件——

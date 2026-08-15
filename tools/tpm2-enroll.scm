@@ -43,24 +43,25 @@
              (ice-9 binary-ports)       ; get-bytevector-all/n!
              (ice-9 popen)              ; open-pipe*
              (rnrs bytevectors)         ; make-bytevector
-             (rnrs base)                ; let-values（unseal 管道回收）
+             ((rnrs base) #:select (let-values))  ; 只取 let-values——
+                                ; 全量导入会覆盖 Guile 原生 error
+                                ;（R6RS error 签名 who/message/irritants，
+                                ; 实测 replace 报 wrong-number-of-arguments）
              (srfi srfi-1)              ; filter-map、count
              (srfi srfi-13))            ; string-tokenize
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 工具定位与环境
 
-(define (store-glob prefix subpath)
-  "在 /gnu/store 顶层找 PREFIX 开头的条目，拼 SUBPATH 返回。
-scandir 只列顶层条目名，不能把 /bin 等子路径写进匹配模式。"
-  (let ((m (scandir "/gnu/store"
-                    (lambda (name) (string-prefix? prefix name)))))
-    (and (pair? m) (string-append "/gnu/store/" (car m) subpath))))
-
+;; TPM2 binaries 与 cryptsetup 的确定性来源：system profile
+;; （/run/current-system/profile）。tpm2-tools-compat 由 host 的
+;; packages 显式加入 profile（vm.scm），cryptsetup 在 %system-packages。
+;; 不模糊扫描 /gnu/store：store 条目名是 <hash>-tpm2-tools-compat-5.8，
+;; 前缀匹配不可靠，且多 generation/多版本时会选错（实测）。
+;; GUIXCFG_TPM2_BIN / GUIXCFG_CRYPTSETUP 仅供测试/调试覆盖。
 (define %tpm2-bin (or (getenv "GUIXCFG_TPM2_BIN")
-                      (store-glob "tpm2-tools-" "/bin")
                       "/run/current-system/profile/bin"))
-(define %cryptsetup (or (store-glob "cryptsetup-" "/sbin/cryptsetup")
+(define %cryptsetup (or (getenv "GUIXCFG_CRYPTSETUP")
                         "/run/current-system/profile/sbin/cryptsetup"))
 
 ;; 生产 /dev/tpmrm0；测试可用 GUIXCFG_TPM_TCTI 显式覆盖（如
@@ -168,25 +169,58 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
        (let ((st (stat path)))
          (not (zero? (logand (stat:mode st) #o222))))))
 
-(define (preflight)
+;; enrollment 真正需要执行的 TPM2 命令集合（tpm2-tools.scm 的实际调用）。
+;; preflight 必须验证 executable 可达，禁止“preflight PASS 而 enroll
+;; 才发现缺二进制”（实测 bug：%tpm2-bin 曾解析到不含 tpm2 的路径）。
+(define %enroll-tpm2-commands
+  '("tpm2_pcrread" "tpm2_policypcr" "tpm2_createprimary"
+    "tpm2_startauthsession" "tpm2_create" "tpm2_load"
+    "tpm2_unseal" "tpm2_flushcontext"))
+
+(define (executable-checks)
+  "enrollment 需要的 executables 检查（#t/#f 列表，含打印）。
+可单独测试（tests/test-tpm2-enroll.scm）。"
   (define (check name ok?)
     (format #t "  [~a] ~a~%" (if ok? "ok" "FAIL") name)
     ok?)
+  (define (check-executable path name)
+    ;; (guix build utils) 的 file-executable? 在 guix repl 环境未导出、
+    ;; (ice-9 posix) 在 time-machine repl 环境不可用（均实测），
+    ;; 用 guile 核心的 stat mode 位检查（零额外模块依赖）。
+    (check (string-append name " 可执行: " path)
+           (and (file-exists? path)
+                (let ((st (stat path)))
+                  (not (zero? (logand (stat:mode st) #o111)))))))
+  (append
+   (list (check-executable %cryptsetup "cryptsetup"))
+   (map (lambda (name)
+          (check-executable (string-append %tpm2-bin "/" name) name))
+        %enroll-tpm2-commands)))
+
+(define (preflight-checks)
+  "preflight 全量检查结果（#t/#f 列表，含打印）。可单独测试。"
+  (define (check name ok?)
+    (format #t "  [~a] ~a~%" (if ok? "ok" "FAIL") name)
+    ok?)
+  (append
+   (list
+    (check "TPM2 设备可用"
+           (tpmrm0-present?))
+    (check "当前系统不是 Recovery"
+           (not (recovery-boot?)))
+    (check "目标设备是 LUKS2"
+           (and (file-exists? (luks-device)) (luks-is-luks2?)))
+    (check "Secure Boot 已启用（SecureBoot==1 且非 SetupMode）"
+           (secure-boot-enabled?))
+    (check "ESP 已挂载（/efi/EFI/Guix 存在）"
+           (file-exists? "/efi/EFI/Guix"))
+    (check "/persist 可写"
+           (dir-writable? "/persist/system")))
+   (executable-checks)))
+
+(define (preflight)
   (format #t "== TPM2 enrollment preflight ==~%")
-  (let* ((results
-          (list
-           (check "TPM2 设备可用"
-                  (tpmrm0-present?))
-           (check "当前系统不是 Recovery"
-                  (not (recovery-boot?)))
-           (check "目标设备是 LUKS2"
-                  (and (file-exists? (luks-device)) (luks-is-luks2?)))
-           (check "Secure Boot 已启用（SecureBoot==1 且非 SetupMode）"
-                  (secure-boot-enabled?))
-           (check "ESP 已挂载（/efi/EFI/Guix 存在）"
-                  (file-exists? "/efi/EFI/Guix"))
-           (check "/persist 可写"
-                  (dir-writable? "/persist/system"))))
+  (let* ((results (preflight-checks))
          (fail-count (count (lambda (x) (not x)) results)))
     (format #t "preflight: ~a 项失败~%" fail-count)
     (exit (if (zero? fail-count) 0 1))))
