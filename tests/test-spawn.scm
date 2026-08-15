@@ -23,32 +23,32 @@
 ;; 1. producer → pipe → consumer（FD 直连，退出码 0/0）
 (let-values (((ps cs) (spawn-pipeline "/bin/echo" "hello-pipe"
                                       "--" "/bin/cat" "-")))
-  (test-equal "pipeline: producer 退出码 0" 0 ps)
-  (test-equal "pipeline: consumer 退出码 0" 0 cs))
+            (test-equal "pipeline: producer 退出码 0" 0 ps)
+            (test-equal "pipeline: consumer 退出码 0" 0 cs))
 
 ;; 2. binary data 含 NUL（spawn-capture 原始字节）
 (let-values (((out st) (spawn-capture "/usr/bin/printf" "a\\0b\\0c")))
-  (test-equal "binary capture: 退出码 0" 0 st)
-  (test-equal "binary capture: 含 NUL 的字节"
-              #vu8(97 0 98 0 99) out))
+            (test-equal "binary capture: 退出码 0" 0 st)
+            (test-equal "binary capture: 含 NUL 的字节"
+                        #vu8(97 0 98 0 99) out))
 
 ;; 3. producer exit != 0（consumer 收到 EOF）
 (let-values (((ps cs) (spawn-pipeline "/bin/false"
                                       "--" "/bin/cat" "-")))
-  (test-assert "producer 非零退出码" (not (zero? ps)))
-  (test-equal "consumer 在 producer 失败后正常退出" 0 cs))
+            (test-assert "producer 非零退出码" (not (zero? ps)))
+            (test-equal "consumer 在 producer 失败后正常退出" 0 cs))
 
 ;; 4. consumer exit != 0
 (let-values (((ps cs) (spawn-pipeline "/bin/echo" "x"
                                       "--" "/bin/false")))
-  (test-equal "producer 正常" 0 ps)
-  (test-assert "consumer 非零退出码" (not (zero? cs))))
+            (test-equal "producer 正常" 0 ps)
+            (test-assert "consumer 非零退出码" (not (zero? cs))))
 
 ;; 5. consumer early close（producer 写 EPIPE，非零/信号退出）
 (let-values (((ps cs) (spawn-pipeline "/bin/sh" "-c" "head -c 100000 /dev/zero"
                                       "--" "/bin/head" "-c" "1")))
-  (test-equal "early close: consumer 退出码 0" 0 cs)
-  (test-assert "early close: producer 因 EPIPE 非零" (not (zero? ps))))
+            (test-equal "early close: consumer 退出码 0" 0 cs)
+            (test-assert "early close: producer 因 EPIPE 非零" (not (zero? ps))))
 
 ;; 6. exec target 不存在（spawn 抛错）
 (test-assert "exec target 不存在 → 抛错"
@@ -82,7 +82,7 @@
   (spawn-capture "/bin/echo" "x")
   (let-values (((ps cs) (spawn-pipeline "/bin/echo" "x"
                                         "--" "/bin/cat" "-")))
-    (values ps cs))
+              (values ps cs))
   (test-equal "spawn 前后 fd 数不变" before (fd-count)))
 
 (test-end)

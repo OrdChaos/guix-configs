@@ -152,28 +152,28 @@ UUID 是权威身份。"
                    ;; 明文不经 Scheme heap。with-tcti 让 tpm2_unseal 继承
                    ;; TPM2TOOLS_TCTI；cryptsetup 不受该变量影响）。
                    (with-tcti %tpm2-tools-tcti
-                     (lambda ()
-                       (let-values (((unseal-status crypt-status)
-                                     (spawn-pipeline
-                                      (string-append tpm2-bin "/tpm2_unseal")
-                                      "-c" seal-ctx
-                                      "-p" (string-append "session:" sess)
-                                      "--"
-                                      cryptsetup-bin "open" "--type" "luks"
-                                      "--key-file=-"
-                                      system-part
-                                      %luks-mapper-name)))
-                         (unless (zero? crypt-status)
-                           (throw 'tpm-fail "cryptsetup 拒绝 credential"))
-                         (unless (zero? unseal-status)
-                           (throw 'tpm-fail "tpm2_unseal 失败")))))
+                              (lambda ()
+                                (let-values (((unseal-status crypt-status)
+                                              (spawn-pipeline
+                                               (string-append tpm2-bin "/tpm2_unseal")
+                                               "-c" seal-ctx
+                                               "-p" (string-append "session:" sess)
+                                               "--"
+                                               cryptsetup-bin "open" "--type" "luks"
+                                               "--key-file=-"
+                                               system-part
+                                               %luks-mapper-name)))
+                                            (unless (zero? crypt-status)
+                                              (throw 'tpm-fail "cryptsetup 拒绝 credential"))
+                                            (unless (zero? unseal-status)
+                                              (throw 'tpm-fail "tpm2_unseal 失败")))))
                    (tpm2-flush-session! %tpm2-tools-tcti tpm2-bin sess)
                    (format #t "TPM: LUKS 自动解锁成功~%")
                    #t)
-               (lambda (k . a)
-                 (if (eq? k 'tpm-fail)
-                   (apply throw k a)
-                   (throw 'tpm-fail "PCR policy 不匹配或 TPM 命令失败")))))))
+                 (lambda (k . a)
+                   (if (eq? k 'tpm-fail)
+                     (apply throw k a)
+                     (throw 'tpm-fail "PCR policy 不匹配或 TPM 命令失败")))))))
          (lambda ()
            (false-if-exception (umount %esp-tpm-mount))))))
     (lambda (key . args)

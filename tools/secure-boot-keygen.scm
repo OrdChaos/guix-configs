@@ -37,12 +37,12 @@
 
 (define (main args)
   (let ((dir (match (cdr args)
-               (() %default-dir)
-               ((dir) dir)
-               (_
-                (format (current-error-port)
-                        "用法: secure-boot-keygen [目标目录]~%")
-                (exit 1)))))
+                    (() %default-dir)
+                    ((dir) dir)
+                    (_
+                     (format (current-error-port)
+                             "用法: secure-boot-keygen [目标目录]~%")
+                     (exit 1)))))
     ;; 不允许覆盖部分存在的 keyset。
     ;; 如果上一次生成中途失败，也要求人工确认并删除后重建。
     (let ((existing
@@ -59,10 +59,10 @@
                 "如需重建，请先手动删除整个目录：~a~%"
                 dir)
         (exit 1)))
-
+    
     (mkdir-p dir)
     (chmod dir #o700)
-
+    
     (for-each
      (lambda (name)
        (let ((key (string-append dir "/" name ".key"))
@@ -73,7 +73,7 @@
               "--secureboot-certificate" crt)
          (chmod key #o400)))
      %key-names)
-
+    
     (format #t
             "~%完成。仅生成 key/crt：~%
   ~a~%

@@ -195,190 +195,190 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
 ;;; enrollment 主体（enroll / replace 共用）
 
 (define* (do-enroll #:key (replace? #f) (passphrase #f))
-  "执行 enrollment（enroll / replace 共用主体）。PASSPHRASE 为 #f 时\n交互读取（do-replace 传入以复用一次密码输入）。\n所有明文临时材料只存在于 /run/guixcfg/tpm2-enroll/（tmpfs、root-only、\nunique 目录）；dynamic-wind 保证正常与异常路径都清理。"
-  (define id (string-append "enroll-" (number->string (current-time))))
-  (define workdir (string-append "/run/guixcfg/tpm2-enroll/" id))
+         "执行 enrollment（enroll / replace 共用主体）。PASSPHRASE 为 #f 时\n交互读取（do-replace 传入以复用一次密码输入）。\n所有明文临时材料只存在于 /run/guixcfg/tpm2-enroll/（tmpfs、root-only、\nunique 目录）；dynamic-wind 保证正常与异常路径都清理。"
+         (define id (string-append "enroll-" (number->string (current-time))))
+         (define workdir (string-append "/run/guixcfg/tpm2-enroll/" id))
          ;; ── 硬性前置检查（任一不满足即中止，不做任何修改）────────
-  (unless (tpmrm0-present?) (error "TPM2 设备不可用"))
-  (when (recovery-boot?) (error "Recovery 模式禁止 enrollment"))
-  (unless
-   (and (file-exists? (luks-device)) (luks-is-luks2?))
-   (error "目标不是 LUKS2"))
-  (unless
-   (secure-boot-enabled?)
-   (error "Secure Boot 未启用/无法证明启用；拒绝 TPM enrollment"))
-  (unless (file-exists? "/efi/EFI/Guix") (error "ESP 未挂载或布局缺失（/efi/EFI/Guix）"))
-  (let ((existing (read-tpm2-state)))
-    (when (and (tpm2-enrolled? existing) (not replace?))
-          (error "已 enrollment（~a）。如需重新 enrollment 请用 replace 命令"
-                 (tpm2-enrollment-id existing))))
-  (dynamic-wind
-   (lambda () #t)
-   (lambda ()
-     (format #t "DBG0 pre-workdir~%")
-     (mkdir-p workdir)
-     (let ((passphrase
-            (or passphrase (read-passphrase! "输入 recovery LUKS 密码: "))))
-       (format #t "DBG1 passphrase~%")
-       (unless
-        (luks-passphrase-valid? passphrase)
-        (error "recovery 密码无法解锁 LUKS；中止"))
-       (format #t "recovery 密码验证通过。~%")
-       (format #t "DBG2 pcrread~%")
+         (unless (tpmrm0-present?) (error "TPM2 设备不可用"))
+         (when (recovery-boot?) (error "Recovery 模式禁止 enrollment"))
+         (unless
+           (and (file-exists? (luks-device)) (luks-is-luks2?))
+           (error "目标不是 LUKS2"))
+         (unless
+           (secure-boot-enabled?)
+           (error "Secure Boot 未启用/无法证明启用；拒绝 TPM enrollment"))
+         (unless (file-exists? "/efi/EFI/Guix") (error "ESP 未挂载或布局缺失（/efi/EFI/Guix）"))
+         (let ((existing (read-tpm2-state)))
+           (when (and (tpm2-enrolled? existing) (not replace?))
+             (error "已 enrollment（~a）。如需重新 enrollment 请用 replace 命令"
+                    (tpm2-enrollment-id existing))))
+         (dynamic-wind
+          (lambda () #t)
+          (lambda ()
+            (format #t "DBG0 pre-workdir~%")
+            (mkdir-p workdir)
+            (let ((passphrase
+                   (or passphrase (read-passphrase! "输入 recovery LUKS 密码: "))))
+              (format #t "DBG1 passphrase~%")
+              (unless
+                (luks-passphrase-valid? passphrase)
+                (error "recovery 密码无法解锁 LUKS；中止"))
+              (format #t "recovery 密码验证通过。~%")
+              (format #t "DBG2 pcrread~%")
               ;; 2. 显示当前 PCR7 并确认（Secure Boot 已启用状态下的机器 policy）
-       (let* ((pcr7-hex (tpm2-pcrread! %tcti %tpm2-bin "sha256:7"))
-              (pcr7-file (string-append workdir "/pcr7.bin")))
-         (format #t "当前 PCR7 = ~a~%" pcr7-hex)
-         (format #t "确认在 Secure Boot 已启用的状态下执行 enrollment？输入 yes: ")
-         (force-output)
-         (unless (string-ci=? (read-line) "yes") (error "未确认；中止 enrollment"))
+              (let* ((pcr7-hex (tpm2-pcrread! %tcti %tpm2-bin "sha256:7"))
+                     (pcr7-file (string-append workdir "/pcr7.bin")))
+                (format #t "当前 PCR7 = ~a~%" pcr7-hex)
+                (format #t "确认在 Secure Boot 已启用的状态下执行 enrollment？输入 yes: ")
+                (force-output)
+                (unless (string-ci=? (read-line) "yes") (error "未确认；中止 enrollment"))
                 ;; 3. 随机 credential + sealed object
-         (let* ((credential (random-credential))
-                (policy-file (string-append workdir "/policy.pcr.digest"))
-                (primary (string-append workdir "/primary.ctx"))
-                (seal-pub (string-append workdir "/seal.pub"))
-                (seal-priv (string-append workdir "/seal.priv"))
-                (seal-ctx (string-append workdir "/seal.ctx")))
+                (let* ((credential (random-credential))
+                       (policy-file (string-append workdir "/policy.pcr.digest"))
+                       (primary (string-append workdir "/primary.ctx"))
+                       (seal-pub (string-append workdir "/seal.pub"))
+                       (seal-priv (string-append workdir "/seal.priv"))
+                       (seal-ctx (string-append workdir "/seal.ctx")))
                   ;; trial PolicyPCR（期望值 = 当前 PCR7）
-           (tpm2-pcrread! %tcti %tpm2-bin "sha256:7" #:out pcr7-file)
-           (format #t "DBG3 sealed~%")
-           (tpm2-policy-pcr-digest!
-            %tcti
-            %tpm2-bin
-            pcr7-file
-            #:pcr
-            "sha256:7"
-            #:out
-            policy-file)
-           (tpm2-createprimary! %tcti %tpm2-bin #:out primary)
-           (tpm2-create-sealed!
-            %tcti
-            %tpm2-bin
-            primary
-            policy-file
-            credential
-            #:public-out
-            seal-pub
-            #:private-out
-            seal-priv)
-           (format #t "sealed object 已创建（credential 仅内存）~%")
+                  (tpm2-pcrread! %tcti %tpm2-bin "sha256:7" #:out pcr7-file)
+                  (format #t "DBG3 sealed~%")
+                  (tpm2-policy-pcr-digest!
+                   %tcti
+                   %tpm2-bin
+                   pcr7-file
+                   #:pcr
+                   "sha256:7"
+                   #:out
+                   policy-file)
+                  (tpm2-createprimary! %tcti %tpm2-bin #:out primary)
+                  (tpm2-create-sealed!
+                   %tcti
+                   %tpm2-bin
+                   primary
+                   policy-file
+                   credential
+                   #:public-out
+                   seal-pub
+                   #:private-out
+                   seal-priv)
+                  (format #t "sealed object 已创建（credential 仅内存）~%")
                   ;; 4. 立即用当前 PCR7 验证 unseal（不通过不继续）。
-           (let ((sess (string-append workdir "/verify.session.ctx")))
-             (format #t "DBG4 unseal-verify~%")
-             (tpm2-load-sealed!
-              %tcti
-              %tpm2-bin
-              primary
-              seal-pub
-              seal-priv
-              #:out
-              seal-ctx)
-             (tpm2-start-policy-session! %tcti %tpm2-bin #:out sess)
-             (tpm2-policy-pcr-session! %tcti %tpm2-bin sess #:pcr "sha256:7")
-             (let-values
-              (((out-port unseal-pid)
-                (tpm2-unseal! %tcti %tpm2-bin seal-ctx sess)))
-              (let ((got (utf8->string (get-bytevector-all out-port))))
-                (close-port out-port)
-                (let ((st (wait-exit unseal-pid)))
-                  (unless (zero? st) (error "unseal 退出码非零" st)))
-                (unless (string=? credential got) (error "unseal 自验证失败；中止"))))
-             (tpm2-flush-session! %tcti %tpm2-bin sess)
-             (format #t "unseal 自验证通过。~%"))
+                  (let ((sess (string-append workdir "/verify.session.ctx")))
+                    (format #t "DBG4 unseal-verify~%")
+                    (tpm2-load-sealed!
+                     %tcti
+                     %tpm2-bin
+                     primary
+                     seal-pub
+                     seal-priv
+                     #:out
+                     seal-ctx)
+                    (tpm2-start-policy-session! %tcti %tpm2-bin #:out sess)
+                    (tpm2-policy-pcr-session! %tcti %tpm2-bin sess #:pcr "sha256:7")
+                    (let-values
+                     (((out-port unseal-pid)
+                       (tpm2-unseal! %tcti %tpm2-bin seal-ctx sess)))
+                     (let ((got (utf8->string (get-bytevector-all out-port))))
+                       (close-port out-port)
+                       (let ((st (wait-exit unseal-pid)))
+                         (unless (zero? st) (error "unseal 退出码非零" st)))
+                       (unless (string=? credential got) (error "unseal 自验证失败；中止"))))
+                    (tpm2-flush-session! %tcti %tpm2-bin sess)
+                    (format #t "unseal 自验证通过。~%"))
                   ;; 5. luksAddKey：credential 经 stdin（--new-keyfile=-）；
-           (let ((pw-file (string-append workdir "/.pw")))
-             (call-with-output-file
-              pw-file
-              (lambda (p) (display passphrase p)))
-             (chmod pw-file 384)
-             (format #t "DBG5 luksAddKey~%")
-             (let ((old-slots (or (luks-max-keyslot) -1)))
-               (invoke-with-stdin
-                credential
-                %cryptsetup
-                "luksAddKey"
-                "--key-file"
-                pw-file
-                "--new-keyfile=-"
-                (luks-device))
-               (let* ((keyslot (luks-max-keyslot))
-                      (rollback!
-                       (lambda ()
-                         (format
-                          (current-error-port)
-                          "回滚：删除 keyslot ~a~%"
-                          keyslot)
-                         (invoke-with-stdin
-                          passphrase
-                          %cryptsetup
-                          "luksKillSlot"
-                          "--key-file"
-                          pw-file
-                          (luks-device)
-                          (number->string keyslot)))))
-                 (delete-file pw-file)
-                 (unless
-                  (and keyslot (> keyslot old-slots))
-                  (error "无法确认新 keyslot；中止"))
-                 (format #t "TPM keyslot ~a 已加入。~%" keyslot)
-                 (unless
-                        ;; 6. 验证新 keyslot 可解锁
-                  (catch #t
-                         (lambda ()
-                           (invoke-with-stdin
-                            credential
-                            %cryptsetup
-                            "open"
-                            "--test-passphrase"
-                            "--key-file=-"
-                            (luks-device))
-                           #t)
-                         (lambda (key . args) #f))
-                  (rollback!)
-                  (error "新 keyslot 解锁验证失败；已回滚"))
+                  (let ((pw-file (string-append workdir "/.pw")))
+                    (call-with-output-file
+                     pw-file
+                     (lambda (p) (display passphrase p)))
+                    (chmod pw-file 384)
+                    (format #t "DBG5 luksAddKey~%")
+                    (let ((old-slots (or (luks-max-keyslot) -1)))
+                      (invoke-with-stdin
+                       credential
+                       %cryptsetup
+                       "luksAddKey"
+                       "--key-file"
+                       pw-file
+                       "--new-keyfile=-"
+                       (luks-device))
+                      (let* ((keyslot (luks-max-keyslot))
+                             (rollback!
+                              (lambda ()
+                                (format
+                                 (current-error-port)
+                                 "回滚：删除 keyslot ~a~%"
+                                 keyslot)
+                                (invoke-with-stdin
+                                 passphrase
+                                 %cryptsetup
+                                 "luksKillSlot"
+                                 "--key-file"
+                                 pw-file
+                                 (luks-device)
+                                 (number->string keyslot)))))
+                        (delete-file pw-file)
+                        (unless
+                          (and keyslot (> keyslot old-slots))
+                          (error "无法确认新 keyslot；中止"))
+                        (format #t "TPM keyslot ~a 已加入。~%" keyslot)
+                        (unless
+                          ;; 6. 验证新 keyslot 可解锁
+                          (catch #t
+                            (lambda ()
+                              (invoke-with-stdin
+                               credential
+                               %cryptsetup
+                               "open"
+                               "--test-passphrase"
+                               "--key-file=-"
+                               (luks-device))
+                              #t)
+                            (lambda (key . args) #f))
+                          (rollback!)
+                          (error "新 keyslot 解锁验证失败；已回滚"))
                         ;; 7. 发布 ESP artifact（解锁前可读；失败回滚 keyslot）
-                 (let ((esp-dir %esp-tpm2-dir))
-                   (mkdir-p esp-dir)
-                   (catch #t
-                          (lambda ()
-                            (copy-file
-                             seal-pub
-                             (string-append esp-dir "/seal.pub"))
-                            (copy-file
-                             seal-priv
-                             (string-append esp-dir "/seal.priv"))
-                            (call-with-output-file
-                             (string-append esp-dir "/metadata.scm")
-                             (lambda (p)
-                               (write `((enrollment-id unquote id)
-                                        (keyslot unquote keyslot)
-                                        (pcr7 unquote pcr7-hex)
-                                        (created unquote (current-time)))
-                                      p)
-                               (newline p))))
-                          (lambda (key . args)
-                            (rollback!)
-                            (apply throw key args)))
-                   (format #t "ESP artifact 已发布（~a）~%" esp-dir))
+                        (let ((esp-dir %esp-tpm2-dir))
+                          (mkdir-p esp-dir)
+                          (catch #t
+                            (lambda ()
+                              (copy-file
+                               seal-pub
+                               (string-append esp-dir "/seal.pub"))
+                              (copy-file
+                               seal-priv
+                               (string-append esp-dir "/seal.priv"))
+                              (call-with-output-file
+                               (string-append esp-dir "/metadata.scm")
+                               (lambda (p)
+                                 (write `((enrollment-id unquote id)
+                                          (keyslot unquote keyslot)
+                                          (pcr7 unquote pcr7-hex)
+                                          (created unquote (current-time)))
+                                        p)
+                                 (newline p))))
+                            (lambda (key . args)
+                              (rollback!)
+                              (apply throw key args)))
+                          (format #t "ESP artifact 已发布（~a）~%" esp-dir))
                         ;; 8. /persist 管理副本 + 原子写 state
-                 (let ((obj-dir (enrollment-artifact-dir)))
-                   (mkdir-p obj-dir)
-                   (copy-file seal-pub (string-append obj-dir "/seal.pub"))
-                   (copy-file seal-priv (string-append obj-dir "/seal.priv"))
-                   (write-tpm2-state!
-                    (tpm2-enrollment
-                     (id id)
-                     (keyslot keyslot)
-                     (pcr7 pcr7-hex)
-                     (created (current-time))
-                     (notes (if replace? '("replace") '("initial")))))
-                   (format
-                    #t
-                    "state 已写入（enrollment ~a，keyslot ~a）~%"
-                    id
-                    keyslot))
-                 (format #t "~%enrollment 完成。下次启动将尝试 TPM 自动解锁；\n密码回退不受影响。~%"))))))))
-   (lambda () (false-if-exception (delete-file-recursively workdir)))))
+                        (let ((obj-dir (enrollment-artifact-dir)))
+                          (mkdir-p obj-dir)
+                          (copy-file seal-pub (string-append obj-dir "/seal.pub"))
+                          (copy-file seal-priv (string-append obj-dir "/seal.priv"))
+                          (write-tpm2-state!
+                           (tpm2-enrollment
+                            (id id)
+                            (keyslot keyslot)
+                            (pcr7 pcr7-hex)
+                            (created (current-time))
+                            (notes (if replace? '("replace") '("initial")))))
+                          (format
+                           #t
+                           "state 已写入（enrollment ~a，keyslot ~a）~%"
+                           id
+                           keyslot))
+                        (format #t "~%enrollment 完成。下次启动将尝试 TPM 自动解锁；\n密码回退不受影响。~%"))))))))
+          (lambda () (false-if-exception (delete-file-recursively workdir)))))
 
 (define (do-replace)
   "rotate：先按 enroll 流程加新 keyslot + 发布 + 提交 state，成功后用

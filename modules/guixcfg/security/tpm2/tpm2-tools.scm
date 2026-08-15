@@ -135,9 +135,9 @@ transient 回收语义由 (current-tpm2-environment) 决定：
   (with-tcti tcti
              (lambda ()
                (let-values (((output status) (apply spawn-capture args)))
-                 (unless (zero? status)
-                   (error "tpm2-tools 命令失败" (car args) status))
-                 (utf8->string output)))))
+                           (unless (zero? status)
+                             (error "tpm2-tools 命令失败" (car args) status))
+                           (utf8->string output)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 对象管理
