@@ -25,11 +25,13 @@
                #:use-module (guix gexp)
                #:use-module (guix modules)       ; source-module-closure
                #:use-module (guix records)       ; define-record-type*
+               #:use-module (ice-9 regex)        ; string-match（cmdline-system）
                #:export (;; Boot Plan
                          <boot-plan>
                          boot-plan make-boot-plan boot-plan?
                          boot-plan-label
                          boot-plan-kernel boot-plan-initrd boot-plan-cmdline
+                         boot-plan-system
                          ;; 固定位置
                          %secure-boot-keydir
                          %uki-esp-subdir
@@ -51,7 +53,14 @@
                      (label   boot-plan-label)
                      (kernel  boot-plan-kernel)
                      (initrd  boot-plan-initrd)
-                     (cmdline boot-plan-cmdline))
+                     (cmdline boot-plan-cmdline)
+                     ;; 本次部署的 system 目录（/gnu/store/<hash>-system）。
+                     ;; 由 menu-entry->boot-plan 从部署 cmdline 的
+                     ;; gnu.system= 解析；Recovery candidate 的 identity
+                     ;; 以此为准（不能从 kernel 路径 dirname 推导——布局
+                     ;; 依赖，实测 bug）。#f 时部署脚本回退 cmdline 解析。
+                     (system  boot-plan-system
+                              (default #f)))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 部署脚本：以 root 在部署期运行。
@@ -217,7 +226,8 @@ Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
          (define (cmdline-system cmdline)
            (let ((m (string-match "gnu\\.system=([^ ]+)" cmdline)))
              (and m (match:substring m 1))))
-         (let ((candidate-system (or (cmdline-system current-cmdline)
+         (let ((candidate-system (or #$(boot-plan-system current)
+                                     (cmdline-system current-cmdline)
                                      (dirname (dirname current-kernel)))))
            (atomic-write-file! candidate-meta
                                (lambda (port)
