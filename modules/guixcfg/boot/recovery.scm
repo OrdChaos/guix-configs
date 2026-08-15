@@ -79,10 +79,10 @@ CURRENT-SYSTEM/BOOT-STATES-PATH/GC-ROOT 为测试注入点（生产调用不传�
                 (match? (and current candidate-system
                              (string=? candidate-system current))))
            (unless (and current (string-prefix? "/gnu/store/" current))
-             (error "recovery: 无法解析 /run/current-system 为有效 identity，\
-中止 confirm（fail-closed）"))
+             (error "recovery: cannot resolve /run/current-system to a valid identity; \
+aborting confirm (fail-closed)"))
            (when (and meta (not match?))
-             (format #t "recovery: candidate（~a）与当前系统（~a）不一致，跳过 promote~%"
+             (format #t "recovery: candidate (~a) does not match current system (~a); skipping promote~%"
                      candidate-system current))
            ;; 2. GC root：保护当前确认的 last-good system（guix gc /
            ;;    delete-generations 不回收 Recovery closure）。
@@ -100,8 +100,8 @@ CURRENT-SYSTEM/BOOT-STATES-PATH/GC-ROOT 为测试注入点（生产调用不传�
                  (begin
                   (mkdir-p (dirname stable-uki))
                   (atomic-replace-file! slot-uki stable-uki)
-                  (format #t "recovery: 已提升 ~a（槽 ~a）~%" candidate-system slot))
-                 (format #t "recovery: candidate UKI 缺失（~a），跳过 promote~%" slot-uki)))
+                  (format #t "recovery: promoted ~a (slot ~a)~%" candidate-system slot))
+                 (format #t "recovery: candidate UKI missing (~a); skipping promote~%" slot-uki)))
              ;; 4. limine.conf 加 Recovery 入口（如果缺）
              (add-recovery-menu-entry! esp))
            ;; 5. boot-state（最终 commit record；总是记录当前确认的 last-good）

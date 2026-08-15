@@ -62,18 +62,18 @@
 (define (preflight-commit! target)
   "TARGET 是安装目标挂载点（通常 /mnt）。"
   (unless (zero? (getuid))
-    (error "commit-root 需要 root 权限"))
+    (error "commit-root requires root privileges"))
   
   ;; TARGET 必须挂着 btrfs subvolume（@root-installing 或中断恢复时的
   ;; @root-0——具体由 commit-state 分支校验）。
   (let ((source (first-command-line "findmnt" "-no" "SOURCE" target)))
     (unless (and source (string-contains source "[/@"))
-      (error "目标挂载的不是 btrfs subvolume，无法提交"
+      (error "target is not mounted from a btrfs subvolume; cannot commit"
              target source)))
   
   ;; system init 应已完成：/etc 已由 init 生成。
   (unless (file-exists? (string-append target "/etc"))
-    (error "目标上没有 /etc，疑似尚未执行 guix system init" target)))
+    (error "target has no /etc; guix system init has not been run" target)))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; /var/guix 收养：把 init 写好的注册信息从 @root-installing 搬进
@@ -88,15 +88,15 @@
       (begin
         ;; 上次中断已收养：确保 src 仍是空挂载点目录（不重复 cp）
         (unless (file-exists? src) (mkdir-p src))
-        (format #t "（/var/guix 已收养，跳过）~%"))
+        (format #t "(/var/guix already adopted; skipping)~%"))
       (begin
         (unless (file-exists? (string-append src "/db"))
-          (error "init 未生成 /var/guix/db，疑似 init 未执行，收养中止" src))
+          (error "init did not create /var/guix/db; adoption aborted" src))
         ;; 跨子卷不能 rename，复制后删除（内容只有 db 和少量链接，很小）。
         (invoke "cp" "-a" (string-append src "/.") (string-append dst "/"))
         (delete-file-recursively src)
         (mkdir-p src)          ; 留空目录作运行时挂载点
-        (format #t "已将 /var/guix 收养进 @persist-var-guix~%")))))
+        (format #t "/var/guix adopted into @persist-var-guix~%")))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; template publish：只读候选快照 → 原子改名发布。
@@ -113,14 +113,14 @@
     (invoke "btrfs" "subvolume" "snapshot" "-r"
             source (top-path (template-new-name)))
     (unless (file-exists? (top-path (template-new-name)))
-      (error "模板快照验证失败，中止提交"))
+      (error "template snapshot verification failed; aborting commit"))
     (rename-file (top-path (template-new-name)) (top-path %root-template-name))
     ;; template 永远 readonly（决定性不变式）
     (let ((ro (first-command-line "btrfs" "property" "get"
                                   (top-path %root-template-name) "ro")))
       (unless (and ro (string-contains ro "ro=true"))
-        (error "模板不是只读，中止" ro)))
-    (format #t "已发布只读模板 ~a~%" %root-template-name)))
+        (error "template is not read-only; aborting" ro)))
+    (format #t "published read-only template ~a~%" %root-template-name)))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; generation 0：rename（而非 snapshot + delete——删除已挂载 source
@@ -130,7 +130,7 @@
 (define (commit-generation-zero!)
   (rename-file (top-path %root-installing-name)
                (top-path (root-generation-name 0)))
-  (format #t "已提交 ~a（rename 自 ~a，挂载视图保持）~%"
+  (format #t "committed ~a (renamed from ~a; mount view preserved)~%"
           (root-generation-name 0) %root-installing-name))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -140,9 +140,9 @@
   (for-each
    (lambda (d)
      (unless (file-exists? (string-append target "/" d))
-       (error "commit 后 TARGET 缺少目录，中止（未写 state 未部署）" d target)))
+       (error "TARGET missing directory after commit; aborting (state not written, no deploy)" d target)))
    '("etc" "gnu" "persist" "boot"))
-  (format #t "TARGET 完整性检查通过（etc/gnu/persist/boot）~%"))
+  (format #t "TARGET integrity checks passed (etc/gnu/persist/boot)~%"))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; UKI 部署：rename 后 TARGET/boot/deploy-uki 必须可见（挂载视图
@@ -154,9 +154,9 @@
     (cond
       ((file-exists? deploy)
        (invoke deploy target "/efi")   ; ESP 固定挂 /efi（model 固定事实）
-       (format #t "deploy-uki 已执行（~a）~%" deploy))
+       (format #t "deploy-uki executed (~a)~%" deploy))
       ((file-exists? (string-append target "/efi/limine.conf"))
-       (error "UKI bootloader 已部署（ESP 有 limine.conf）但缺少 deploy-uki 脚本"
+       (error "UKI bootloader deployed (ESP has limine.conf) but deploy-uki script is missing"
               deploy))
       (else
        (format #t "（无 deploy-uki：非 UKI bootloader 属预期，跳过部署刷新；\
@@ -171,7 +171,7 @@
          (state (initial-state (current-time))))
     (mkdir-p dir)
     (write-state! (state-file-path persist-system) state)
-    (format #t "初始状态: ~s~%" (state->alist state))))
+    (format #t "initial state: ~s~%" (state->alist state))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 失败恢复：rename 已发生时回滚（Btrfs rename 可逆——决定性实验），
@@ -185,7 +185,7 @@
     (when (and (file-exists? root0) (not (file-exists? installing)))
       (false-if-exception
        (rename-file root0 installing))
-      (format #t "已回滚：~a → ~a~%" (root-generation-name 0)
+      (format #t "rolled back: ~a -> ~a~%" (root-generation-name 0)
               %root-installing-name)))
   (false-if-exception
    (invoke "btrfs" "subvolume" "delete" (top-path %root-template-name)))
@@ -207,24 +207,24 @@
     (lambda ()
       (case (commit-state)
         ((committed)
-         (format #t "安装已提交过（@root-0 与 state 均存在），no-op~%")
+         (format #t "installation already committed (@root-0 and state present); no-op~%")
          (execute-unmount-top)
          'committed)
         ((unknown)
-         (error "异常状态：既无 @root-installing 也无 @root-0，请人工检查顶层"))
+         (error "unexpected state: neither @root-installing nor @root-0 exists; inspect top level manually"))
         (else
          (if (eq? (commit-state) 'interrupted-after-rename)
            (begin
              ;; 上次在 rename 后、state 前中断：恢复完成剩余步骤。
              ;; 此时 TARGET 挂着 @root-0（挂载跟随 rename）。
-             (format #t "检测到上次提交在 rename 后中断，恢复剩余步骤~%")
+             (format #t "previous commit was interrupted after rename; resuming remaining steps~%")
              (unless (file-exists? (top-path %root-template-name))
                (publish-template! (root-generation-name 0))))
            (begin
              ;; 正常路径：确认 TARGET 挂的是 @root-installing
              (let ((source (first-command-line "findmnt" "-no" "SOURCE" target)))
                (unless (and source (string-contains source %root-installing-name))
-                 (error "目标挂载的不是安装期 root（@root-installing）" target source)))
+                 (error "target is not mounted from the installing root (@root-installing)" target source)))
              ;; 1. 收养 /var/guix（必须在快照之前：模板应含空的 /var/guix
              ;;    挂载点，而子卷应含 init 写入的注册内容）
              (adopt-var-guix!)
@@ -251,6 +251,6 @@
         (lambda () (execute-unmount-top))
         (lambda _ #t))
       (format (current-error-port)
-              "~%提交失败，已回滚到可重跑状态（@root-installing 仍在）。~%错误: ~s ~s~%"
+              "~%commit failed; rolled back to a rerunnable state (@root-installing remains).~%error: ~s ~s~%"
               key args)
       (exit 1))))

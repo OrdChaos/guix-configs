@@ -99,7 +99,7 @@
                  (and (list? pcr-list) (every string? pcr-list))
                  (or (not pcr7) (string? pcr7))
                  (integer? created))
-      (error "tpm2 state 格式错误" alist))
+      (error "malformed tpm2 state" alist))
     (tpm2-enrollment (id id) (keyslot keyslot)
                      (pcr-bank pcr-bank) (pcr-list pcr-list)
                      (pcr7 pcr7) (created created)

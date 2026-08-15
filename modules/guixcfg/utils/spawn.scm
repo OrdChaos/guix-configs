@@ -105,7 +105,7 @@ OUTPUT 是原始字节（可能含 NUL）。"
   "按 -- 分隔符把 ARGS 分成 (producer-args . consumer-args)。"
   (let loop ((l args) (acc '()))
     (cond ((null? l)
-           (error "spawn-pipeline: 缺少 -- 分隔符"))
+           (error "spawn-pipeline: missing -- separator"))
       ((equal? (car l) "--")
        (cons (reverse acc) (cdr l)))
       (else

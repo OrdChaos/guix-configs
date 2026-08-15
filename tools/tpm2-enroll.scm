@@ -222,7 +222,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
   (format #t "== TPM2 enrollment preflight ==~%")
   (let* ((results (preflight-checks))
          (fail-count (count (lambda (x) (not x)) results)))
-    (format #t "preflight: ~a 项失败~%" fail-count)
+    (format #t "preflight: ~a failure(s)~%" fail-count)
     (exit (if (zero? fail-count) 0 1))))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -233,18 +233,18 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
          (define id (string-append "enroll-" (number->string (current-time))))
          (define workdir (string-append "/run/guixcfg/tpm2-enroll/" id))
          ;; ── 硬性前置检查（任一不满足即中止，不做任何修改）────────
-         (unless (tpmrm0-present?) (error "TPM2 设备不可用"))
-         (when (recovery-boot?) (error "Recovery 模式禁止 enrollment"))
+         (unless (tpmrm0-present?) (error "TPM2 device unavailable"))
+         (when (recovery-boot?) (error "enrollment forbidden in Recovery mode"))
          (unless
            (and (file-exists? (luks-device)) (luks-is-luks2?))
-           (error "目标不是 LUKS2"))
+           (error "target is not LUKS2"))
          (unless
            (secure-boot-enabled?)
-           (error "Secure Boot 未启用/无法证明启用；拒绝 TPM enrollment"))
-         (unless (file-exists? "/efi/EFI/Guix") (error "ESP 未挂载或布局缺失（/efi/EFI/Guix）"))
+           (error "Secure Boot not enabled/provable; refusing TPM enrollment"))
+         (unless (file-exists? "/efi/EFI/Guix") (error "ESP not mounted or layout missing (/efi/EFI/Guix)"))
          (let ((existing (read-tpm2-state)))
            (when (and (tpm2-enrolled? existing) (not replace?))
-             (error "已 enrollment（~a）。如需重新 enrollment 请用 replace 命令"
+             (error "TPM enrollment already exists (~a). Use replace to re-enroll"
                     (tpm2-enrollment-id existing))))
          (dynamic-wind
           (lambda () #t)
@@ -256,16 +256,16 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
               (format #t "DBG1 passphrase~%")
               (unless
                 (luks-passphrase-valid? passphrase)
-                (error "recovery 密码无法解锁 LUKS；中止"))
-              (format #t "recovery 密码验证通过。~%")
+                (error "recovery passphrase cannot unlock LUKS; aborting"))
+              (format #t "recovery passphrase verified.~%")
               (format #t "DBG2 pcrread~%")
               ;; 2. 显示当前 PCR7 并确认（Secure Boot 已启用状态下的机器 policy）
               (let* ((pcr7-hex (tpm2-pcrread! %tcti %tpm2-bin "sha256:7"))
                      (pcr7-file (string-append workdir "/pcr7.bin")))
-                (format #t "当前 PCR7 = ~a~%" pcr7-hex)
-                (format #t "确认在 Secure Boot 已启用的状态下执行 enrollment？输入 yes: ")
+                (format #t "current PCR7 = ~a~%" pcr7-hex)
+                (format #t "Confirm enrollment while Secure Boot is enabled? Type yes: ")
                 (force-output)
-                (unless (string-ci=? (read-line) "yes") (error "未确认；中止 enrollment"))
+                (unless (string-ci=? (read-line) "yes") (error "not confirmed; aborting enrollment"))
                 ;; 3. 随机 credential + sealed object
                 (let* ((credential (random-credential))
                        (policy-file (string-append workdir "/policy.pcr.digest"))
@@ -295,7 +295,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                    seal-pub
                    #:private-out
                    seal-priv)
-                  (format #t "sealed object 已创建（credential 仅内存）~%")
+                  (format #t "sealed object created (credential held in memory only)~%")
                   ;; 4. 立即用当前 PCR7 验证 unseal（不通过不继续）。
                   (let ((sess (string-append workdir "/verify.session.ctx")))
                     (format #t "DBG4 unseal-verify~%")
@@ -315,10 +315,10 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                      (let ((got (utf8->string (get-bytevector-all out-port))))
                        (close-port out-port)
                        (let ((st (wait-exit unseal-pid)))
-                         (unless (zero? st) (error "unseal 退出码非零" st)))
-                       (unless (string=? credential got) (error "unseal 自验证失败；中止"))))
+                         (unless (zero? st) (error "unseal exited with non-zero status" st)))
+                       (unless (string=? credential got) (error "unseal self-check failed; aborting"))))
                     (tpm2-flush-session! %tcti %tpm2-bin sess)
-                    (format #t "unseal 自验证通过。~%"))
+                    (format #t "unseal self-check passed.~%"))
                   ;; 5. luksAddKey：credential 经 stdin（--new-keyfile=-）；
                   (let ((pw-file (string-append workdir "/.pw")))
                     (call-with-output-file
@@ -353,8 +353,8 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                         (delete-file pw-file)
                         (unless
                           (and keyslot (> keyslot old-slots))
-                          (error "无法确认新 keyslot；中止"))
-                        (format #t "TPM keyslot ~a 已加入。~%" keyslot)
+                          (error "cannot confirm new keyslot; aborting"))
+                        (format #t "TPM keyslot ~a added.~%" keyslot)
                         (unless
                           ;; 6. 验证新 keyslot 可解锁
                           (catch #t
@@ -369,7 +369,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                               #t)
                             (lambda (key . args) #f))
                           (rollback!)
-                          (error "新 keyslot 解锁验证失败；已回滚"))
+                          (error "new keyslot unlock verification failed; rolled back"))
                         ;; 7. 发布 ESP artifact（解锁前可读；失败回滚 keyslot）
                         (let ((esp-dir %esp-tpm2-dir))
                           (mkdir-p esp-dir)
@@ -393,7 +393,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                             (lambda (key . args)
                               (rollback!)
                               (apply throw key args)))
-                          (format #t "ESP artifact 已发布（~a）~%" esp-dir))
+                          (format #t "ESP artifact published (~a)~%" esp-dir))
                         ;; 8. /persist 管理副本 + 原子写 state
                         (let ((obj-dir (enrollment-artifact-dir)))
                           (mkdir-p obj-dir)
@@ -411,7 +411,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                            "state 已写入（enrollment ~a，keyslot ~a）~%"
                            id
                            keyslot))
-                        (format #t "~%enrollment 完成。下次启动将尝试 TPM 自动解锁；\n密码回退不受影响。~%"))))))))
+                        (format #t "~%enrollment complete. Next boot will attempt TPM auto-unlock;\npassphrase fallback is unaffected.~%"))))))))
           (lambda () (false-if-exception (delete-file-recursively workdir)))))
 
 (define (do-replace)
@@ -420,12 +420,12 @@ recovery 密码删除旧 TPM keyslot（recovery keyslot 永不碰）。删除失
 新 enrollment 保持有效，只打印 WARNING 并提供 orphan 清理命令。"
   (let ((old (read-tpm2-state)))
     (unless (tpm2-enrolled? old)
-      (error "尚未 enrollment；请用 enroll 命令"))
+      (error "No existing TPM enrollment; use the enroll command"))
     (let* ((old-keyslot (tpm2-enrollment-keyslot old))
            (passphrase (read-passphrase! "输入 recovery LUKS 密码: ")))
-      (format #t "== TPM2 enrollment replace（旧 keyslot ~a）==~%" old-keyslot)
+      (format #t "== TPM2 enrollment replace (old keyslot ~a) ==~%" old-keyslot)
       (unless (luks-passphrase-valid? passphrase)
-        (error "recovery 密码无法解锁 LUKS；中止"))
+        (error "recovery passphrase cannot unlock LUKS; aborting"))
       ;; do-enroll 复用同一密码；成功后删除旧 TPM keyslot（绝不先删后建）。
       (do-enroll #:replace? #t #:passphrase passphrase)
       (catch #t
@@ -433,7 +433,7 @@ recovery 密码删除旧 TPM keyslot（recovery keyslot 永不碰）。删除失
           (invoke-with-stdin passphrase %cryptsetup
                              "luksKillSlot" "--key-file=-"
                              (luks-device) (number->string old-keyslot))
-          (format #t "旧 TPM keyslot ~a 已删除。~%" old-keyslot))
+          (format #t "old TPM keyslot ~a removed.~%" old-keyslot))
         (lambda (key . args)
           (format (current-error-port)
                   "WARNING: 删除旧 TPM keyslot ~a 失败；新 enrollment 保持有效。~%"
@@ -456,18 +456,18 @@ recovery 密码删除旧 TPM keyslot（recovery keyslot 永不碰）。删除失
                (tpm2-enrollment-created state))
        (format #t "  pcr-bank : ~a~%" (tpm2-enrollment-pcr-bank state))
        (format #t "  pcr-list : ~a~%" (tpm2-enrollment-pcr-list state))
-       (format #t "  pcr7     : ~a~%" (or (tpm2-enrollment-pcr7 state) "（未记录）"))
-       (format #t "  ESP 侧   : ~a~%"
+       (format #t "  pcr7     : ~a~%" (or (tpm2-enrollment-pcr7 state) (not recorded)))
+       (format #t "  ESP side  : ~a~%"
                (if (and (file-exists? (string-append %esp-tpm2-dir "/seal.pub"))
                         (file-exists? (string-append %esp-tpm2-dir "/seal.priv")))
                  "完整"
                  "缺失/不完整"))
-       (format #t "  /persist 侧: ~a~%"
+       (format #t "  /persist side: ~a~%"
                (if (enrollment-artifacts-present?
                     state %tpm2-state-dir)
                  "完整"
                  "缺失/不完整")))
-      (format #t "  （未 enrollment）~%"))))
+      (format #t "  (no enrollment)~%"))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 入口
@@ -476,13 +476,13 @@ recovery 密码删除旧 TPM keyslot（recovery keyslot 永不碰）。删除失
   (let ((args (command-line)))
     (if (< (length args) 2)
       (begin
-       (display "用法: guix repl tools/tpm2-enroll.scm -- preflight|enroll|replace|status\n")
+       (display "Usage: guix repl tools/tpm2-enroll.scm -- preflight|enroll|replace|status\n")
        (exit 1))
       (case (string->symbol (list-ref args 1))
         ((preflight) (preflight))
         ((enroll) (do-enroll #:replace? #f))
         ((replace) (do-replace))
         ((status) (status))
-        (else (display "未知动词\n") (exit 1))))))
+        (else (display "unknown command\n") (exit 1))))))
 
 (main)

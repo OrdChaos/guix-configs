@@ -59,7 +59,7 @@
 
 (define (run . args)
   (unless (zero? (status:exit-val (apply system* args)))
-    (error "命令失败" args)))
+    (error "command failed" args)))
 
 (define (command-output . args)
   (string-trim-right
@@ -138,7 +138,7 @@ VAR 是字符串 \"KEK\" 或 \"db\"，SIGN-KEY 是签名者名（\"PK\"/\"KEK\"�
            "-c" (string-append keydir "/" sign-key ".crt")
            var combined
            (string-append keystore "/" var "/" var ".auth"))
-      (format #t "~a.auth 已生成（含 ~a 个证书条目）~%"
+      (format #t "~a.auth generated (with ~a certificate entries)~%"
               var (length pieces)))))
 
 (define (main args)
@@ -182,8 +182,8 @@ VAR 是字符串 \"KEK\" 或 \"db\"，SIGN-KEY 是签名者名（\"PK\"/\"KEK\"�
       (build-variable! keydir work keystore guid "db" "KEK"
                        (vendor-certificates-for 'db)))
     
-    (format #t "~%keystore 就绪：~a~%~
-               注册（PK 最后写，写入即启用 Secure Boot）：~%~
+    (format #t "~%keystore ready: ~a~%~
+               Enrollment (PK written last; writing it enables Secure Boot):~%~
                ~%  sbkeysync --keystore ~a --verbose~%~
                ~%  sbkeysync --keystore ~a --verbose --pk~%"
             keystore keystore keystore)))

@@ -26,7 +26,7 @@
 
 (define (run . args)
   (unless (zero? (status:exit-val (apply system* args)))
-    (error "命令失败" args)))
+    (error "command failed" args)))
 
 (define (key-material-paths dir)
   (append-map
@@ -67,7 +67,7 @@
      (lambda (name)
        (let ((key (string-append dir "/" name ".key"))
              (crt (string-append dir "/" name ".crt")))
-         (format #t "生成 ~a~%" name)
+         (format #t "generated ~a~%" name)
          (run "ukify" "genkey"
               "--secureboot-private-key" key
               "--secureboot-certificate" crt)

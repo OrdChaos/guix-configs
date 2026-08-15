@@ -104,7 +104,7 @@
                             (lambda (key . args)
                               (cadr args)))))
                  (and (string? msg)
-                      (string-contains msg "GUIX_CONFIG_FACTS 指向的文件不存在"))))
+                      (string-contains msg "GUIX_CONFIG_FACTS points to a missing file"))))
   (test-assert "缺失 luks-uuid 时错误消息含 fact 名"
                (let ((msg (catch #t
                             (lambda ()
@@ -113,7 +113,7 @@
                             (lambda (key . args)
                               (cadr args)))))
                  (and (string? msg)
-                      (string-contains msg "缺少必需的 machine fact")))))
+                      (string-contains msg "missing required machine fact")))))
 
 ;; 12. 集成：正式 root LUKS mapped-device source 是 facts 中的 UUID，
 ;;     绝不是 /dev/disk/by-partlabel/ 字符串。
@@ -157,12 +157,12 @@ Virelith 频道提供的 tpm2-tools-compat，宿主 guix 的频道不可见）�
       (test-assert "override 指向不存在文件：清晰报错，非 unbound variable"
                    (and (not (zero? (car r1)))
                         (string-contains (cdr r1)
-                                         "GUIX_CONFIG_FACTS 指向的文件不存在")
+                                         "GUIX_CONFIG_FACTS points to a missing file")
                         (not (string-contains (cdr r1) "unbound variable")))))
     (let ((r2 (repro-failure no-luks)))
       (test-assert "facts 缺 luks-uuid：清晰报错，非 unbound variable"
                    (and (not (zero? (car r2)))
-                        (string-contains (cdr r2) "缺少必需的 machine fact")
+                        (string-contains (cdr r2) "missing required machine fact")
                         (not (string-contains (cdr r2) "unbound variable"))))))
   (format (current-error-port)
           "跳过子进程集成测试：PATH 中无 guix~%"))

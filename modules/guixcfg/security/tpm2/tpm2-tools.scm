@@ -106,7 +106,7 @@ spawn 为最终修复）。"
              (lambda ()
                (let ((status (apply spawn-wait args)))
                  (unless (zero? status)
-                   (error "tpm2-tools 命令失败" (car args) status))))))
+                   (error "tpm2-tools command failed" (car args) status))))))
 
 (define (tpm2-run tcti . args)
   "以指定 TCTI 运行 tpm2-tools 命令；非零退出码抛错。
@@ -136,7 +136,7 @@ transient 回收语义由 (current-tpm2-environment) 决定：
              (lambda ()
                (let-values (((output status) (apply spawn-capture args)))
                            (unless (zero? status)
-                             (error "tpm2-tools 命令失败" (car args) status))
+                             (error "tpm2-tools command failed" (car args) status))
                            (utf8->string output)))))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -210,7 +210,7 @@ argv/environment。PARENT 是持久句柄或 context。
                                 "-L" policy-hex "-i" "-" "-g" "sha256"
                                 "-a" "0x492")))
                           (unless (zero? status)
-                            (error "tpm2_create 失败" status))))))
+                            (error "tpm2_create failed" status))))))
          (values public-out private-out))
 
 (define* (tpm2-load-sealed! tcti tpm2-tools-bin parent public-file private-file

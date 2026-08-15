@@ -43,12 +43,12 @@
      (cond
        ((regular-file? override) override)
        ((file-exists? override)
-        (error "GUIX_CONFIG_FACTS 指向的不是普通文件:" override))
+        (error "GUIX_CONFIG_FACTS does not point to a regular file:" override))
        (else
-        (error "GUIX_CONFIG_FACTS 指向的文件不存在:" override))))
+        (error "GUIX_CONFIG_FACTS points to a missing file:" override))))
     ((regular-file? default) default)
     ((file-exists? default)
-     (error "默认 machine facts 路径不是普通文件:" default))
+     (error "default machine facts path is not a regular file:" default))
     (else #f)))
 
 (define (machine-facts-path)
@@ -63,9 +63,9 @@
                  (lambda ()
                    (call-with-input-file path read))
                  (lambda (key . args)
-                   (error "machine facts 文件无法解析:" path key args)))))
+                   (error "cannot parse machine facts file:" path key args)))))
     (unless (facts-alist? facts)
-      (error "machine facts 文件格式非法（应为 alist）:" path))
+      (error "malformed machine facts file (expected an alist):" path))
     facts))
 
 ;; 惰性求值：模块加载阶段不执行任何 I/O 或校验——guile 的
@@ -87,8 +87,8 @@
   "FACTS 中必须存在 KEY；缺失立即报错（fail-closed）——宁可
 reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
   (or (assq-ref facts key)
-      (error "缺少必需的 machine fact:" key
-             "拒绝生成可启动系统")))
+      (error "missing required machine fact:" key
+             "refusing to build a bootable system")))
 
 (define (require-machine-fact key)
   (require-fact (machine-facts) key))
@@ -139,7 +139,7 @@ reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
                     (let* ((partition (resolve-system-device source-hex))
                            (cryptsetup
                             #$(file-append cryptsetup-static "/sbin/cryptsetup")))
-                      (format #t "TPM 解锁未成功，进入密码解锁~%")
+                      (format #t "TPM unlock unsuccessful; falling back to passphrase~%")
                       ;; console 竞态防御（同 linux-boot 的
                       ;; switch-to-system 重开做法）：pid-1 环境下
                       ;; fd 0/1/2 与 /dev/console 偶发脱钩，实测

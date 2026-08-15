@@ -122,7 +122,7 @@
                   (lambda (k . a)
                     (let ((msg (call-with-output-string
                                 (lambda (p) (write a p)))))
-                      (string-contains msg "无法解析"))))))
+                      (string-contains msg "cannot resolve"))))))
        (test-assert "identity 无法解析 → fail-closed 中止（抛错）" err)
        (test-assert "fail-closed：boot-state 未被写入"
                     (not (file-exists? boot-state)))

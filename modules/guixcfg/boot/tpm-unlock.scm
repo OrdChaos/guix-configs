@@ -119,7 +119,7 @@ UUID 是权威身份。"
                   (seal-priv (string-append tpm2-dir "/seal.priv")))
              (unless (and (file-exists? seal-pub) (file-exists? seal-priv))
                (throw 'tpm-skip "ESP 缺少 tpm2 材料"))
-             (format #t "TPM: tpm2 材料就绪，尝试自动解锁~%")
+             (format #t "TPM: tpm2 materials ready, attempting automatic unlock~%")
              
              ;; ── unseal：重建 SRK → load sealed → policy session
              ;;    （实际 PCR7）→ unseal stdout 管道直连 cryptsetup。
@@ -168,7 +168,7 @@ UUID 是权威身份。"
                                             (unless (zero? unseal-status)
                                               (throw 'tpm-fail "tpm2_unseal 失败")))))
                    (tpm2-flush-session! %tpm2-tools-tcti tpm2-bin sess)
-                   (format #t "TPM: LUKS 自动解锁成功~%")
+                   (format #t "TPM: LUKS auto-unlock succeeded~%")
                    #t)
                  (lambda (k . a)
                    (if (eq? k 'tpm-fail)
@@ -181,11 +181,11 @@ UUID 是权威身份。"
       ;; 原因/阶段），不打印 stack trace。
       (cond
         ((eq? key 'tpm-skip)
-         (format #t "TPM: 跳过（~a），回退密码~%"
+         (format #t "TPM: skipped (~a); falling back to passphrase~%"
                  (and (pair? args) (car args))))
         ((eq? key 'tpm-fail)
-         (format #t "TPM: 失败（~a），回退密码~%"
+         (format #t "TPM: failed (~a); falling back to passphrase~%"
                  (and (pair? args) (car args))))
         (else
-         (format #t "TPM: 失败（TPM 命令/未知），回退密码~%")))
+         (format #t "TPM: failed (TPM command/unknown); falling back to passphrase~%")))
       #f)))

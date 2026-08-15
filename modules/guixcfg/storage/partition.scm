@@ -45,6 +45,6 @@ ESP：1 号分区，大小来自 host policy（2–4 GiB），类型 EF00；
     (let loop ()
       (unless (every file-exists? targets)
         (when (> (current-time) deadline)
-          (error "等待分区节点超时" targets))
+          (error "timed out waiting for partition node" targets))
         (usleep 200000)
         (loop)))))

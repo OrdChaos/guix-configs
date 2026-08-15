@@ -70,7 +70,7 @@
                  (lambda (k . a)
                    (if (eq? k 'misc-error)
                      ;; error 单参数时：a = (#f "~A" (MESSAGE) #f)
-                     (string-contains (car (caddr a)) "尚未 enrollment")
+                     (string-contains (car (caddr a)) "No existing TPM enrollment")
                      #f)))))
           caught)))
     (lambda ()

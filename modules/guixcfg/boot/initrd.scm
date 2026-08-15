@@ -62,20 +62,20 @@
        
        (define (btrfs-run . args)
          (unless (zero? (apply system* btrfs args))
-           (error "btrfs 命令失败" args)))
+           (error "btrfs command failed" args)))
        
        ;; 1. 挂顶层，读状态（主文件损坏时 read-state 自动回退 .prev）
        (mkdir-p top)
        (mount mapper top "btrfs" 0 "subvolid=5")
        (unless (file-exists? state-path)
-         (error "root generation 状态文件不存在" state-path))
+         (error "root generation state file missing" state-path))
        (let* ((state (read-state state-path))
               ;; 2. 启动模式：rootmode=normal/keep[:N]/previous:K/recovery
               (raw-mode (or (and=> (find-long-option "rootmode"
                                                      (linux-command-line))
                                    (lambda (s)
                                      (or (parse-boot-mode s)
-                                         (error "无法识别的 rootmode" s))))
+                                         (error "unrecognized rootmode" s))))
                             %default-boot-mode))
               ;; previous:K 是运行期相对选择器（历史启动菜单），
               ;; 从顶层目录的现存 generation 解析成具体编号，
@@ -88,13 +88,13 @@
                               (filter-map parse-root-generation
                                           (scandir top))
                               (boot-mode-generation raw-mode))
-                             (error "没有足够的历史 root generation"
+                             (error "not enough historical root generations"
                                     (boot-mode-generation raw-mode)))))
                        raw-mode))
               (plan   (plan-boot state mode (current-time)))
               (target (boot-plan-target-subvolume plan)))
          
-         (format #t "root generation: ~a（模式 ~a）~%"
+         (format #t "root generation: ~a (mode ~a)~%"
                  target (boot-mode-kind mode))
          
          ;; 3. Normal：从事务创建 @root-N（先清残留，再快照，再改名）
@@ -102,12 +102,12 @@
            (let ((new-path   (string-append top "/" target ".new"))
                  (final-path (string-append top "/" target)))
              (when (file-exists? new-path)
-               (format #t "清理上次事务残留的 ~a~%" new-path)
+               (format #t "cleaning up leftover ~a from interrupted transaction~%" new-path)
                (btrfs-run "subvolume" "delete" new-path))
              (when (file-exists? final-path)
                ;; 上次在改名后、写状态前崩溃：该 generation 从未被
                ;; 记录为已启动，删掉重建是安全的。
-               (format #t "清理未记录的 ~a~%" final-path)
+               (format #t "removing unrecorded ~a~%" final-path)
                (btrfs-run "subvolume" "delete" final-path))
              (btrfs-run "subvolume" "snapshot"
                         (string-append top "/"

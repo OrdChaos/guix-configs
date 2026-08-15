@@ -61,7 +61,7 @@
            (let ((state (read-state path)))
              (when (eq? (root-state-boot-status state) 'trying)
                (write-state! path (confirm-boot state))
-               (format #t "ephemeral-root: @root-~a 已确认为 last-good~%"
+               (format #t "ephemeral-root: @root-~a confirmed as last-good~%"
                        (root-state-current-generation state))))))
        ;; 部署成功 ≠ 启动成功：这里才是真正的“启动确认”——
        ;; promote Recovery candidate（验证 identity → GC root → artifact
@@ -70,9 +70,9 @@
          (if n
            (begin
             (promote-recovery! "/efi" n (current-kernel-command-line))
-            (format #t "boot-state: Guix generation ~a 已确认为 last-good~%"
+            (format #t "boot-state: Guix generation ~a confirmed as last-good~%"
                     n))
-           (format #t "boot-state: 无法确定当前 Guix generation，跳过~%")))))))
+           (format #t "boot-state: cannot determine current Guix generation; skipping~%")))))))
 
 (define (ephemeral-root-cleanup-program keep)
   "KEEP 是保留的旧 root generation 数量（host policy）。"
@@ -95,7 +95,7 @@
              (mapper #$(string-append "/dev/mapper/" %luks-mapper-name))
              (btrfs (string-append #$btrfs-progs "/bin/btrfs")))
          (if (not (file-exists? state-path))
-           (format #t "ephemeral-root: 状态文件不存在，跳过清理~%")
+           (format #t "ephemeral-root: state file missing; skipping cleanup~%")
            (let ((state (read-state state-path)))
              (let ((mounted? #f))
                (dynamic-wind
@@ -112,7 +112,7 @@
                     ;; prune metadata，状态不会谎称仍存在的子卷已被删除。
                     (for-each
                      (lambda (n)
-                       (format #t "ephemeral-root: 删除旧 generation ~a~%"
+                       (format #t "ephemeral-root: deleting old generation ~a~%"
                                (root-generation-name n))
                        (invoke btrfs "subvolume" "delete"
                                (string-append top "/"

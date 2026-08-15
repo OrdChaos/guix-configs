@@ -138,7 +138,7 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
     (let ((prev (state-prev-path path)))
       (if (file-exists? prev)
         (try prev)
-        (error "root generation 状态文件不存在" path)))))
+        (error "root generation state file missing" path)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 序列化：与 facts 文件相同的 alist 形式（write/read 往返）。
@@ -157,19 +157,19 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
   (define (required key)
     (let ((pair (assq key alist)))
       (unless pair
-        (error "状态文件缺少字段" key))
+        (error "state file missing field" key))
       (cdr pair)))
   (define (integer-or-false key)
     (let ((value (required key)))
       (unless (or (not value) (integer? value))
-        (error "状态文件字段应为整数或 #f" key value))
+        (error "state file field must be an integer or #f" key value))
       value))
   (let ((next (required 'next-generation))
         (status (required 'boot-status)))
     (unless (and (integer? next) (>= next 0))
-      (error "next-generation 应为非负整数" next))
+      (error "next-generation must be a non-negative integer" next))
     (unless (memq status '(first-boot trying ok))
-      (error "boot-status 非法" status))
+      (error "invalid boot-status" status))
     (root-state (next-generation next)
                 (current-generation (integer-or-false 'current-generation))
                 (last-good-generation (integer-or-false 'last-good-generation))
@@ -246,7 +246,7 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
   (define (reuse-plan n)
     ;; 复用已存在的 @root-N：不建快照，只更新 current/boot-status。
     (unless n
-      (error "没有可复用的 root generation"))
+      (error "no reusable root generation"))
     (boot-plan (target-subvolume (root-generation-name n))
                (create-from-template? #f)
                (state-after
@@ -258,7 +258,7 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
     ((recovery)
      (let ((last-good (root-state-last-good-generation state)))
        (unless last-good
-         (error "没有可恢复的 last-good generation"))
+         (error "no recoverable last-good generation"))
        (reuse-plan last-good)))
     ((keep)
      (reuse-plan (or (boot-mode-generation mode)
@@ -281,7 +281,7 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
                               (root-state-created-at state)))
             (boot-status 'trying)))))))
     (else
-     (error "未知启动模式" (boot-mode-kind mode)))))
+     (error "unknown boot mode" (boot-mode-kind mode)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 用户态确认：启动成功进入系统后，把 current 标记为 last-good。

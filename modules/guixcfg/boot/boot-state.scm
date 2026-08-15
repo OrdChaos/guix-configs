@@ -98,7 +98,7 @@ v2（((format-version . 2) (last-good . ((generation . N) (system . S)
                        (integer? last-good)
                        (and (list? last-good) (assq 'generation last-good)))
                    (or (not command-line) (string? command-line)))
-        (error "boot-state 格式错误" p state))
+        (error "malformed boot-state" p state))
       state))
   (if (file-exists? path)
     (catch #t

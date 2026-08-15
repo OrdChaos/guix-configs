@@ -41,7 +41,7 @@
                          (display input port)
                          (close-pipe port))))
       (unless (zero? (status:exit-val status))
-        (error "命令失败" program (status:exit-val status))))))
+        (error "command failed" program (status:exit-val status))))))
 
 (define (invoke-with-bytevector-stdin input program . args)
   "把字节串 INPUT（bytevector）通过管道写入 PROGRAM 的 stdin 并等待
@@ -55,7 +55,7 @@ guard 而不是 catch 捕获。"
                          (put-bytevector port input)
                          (close-pipe port))))
       (unless (zero? (status:exit-val status))
-        (error "命令失败" program (status:exit-val status))))))
+        (error "command failed" program (status:exit-val status))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; stdout 捕获
@@ -68,7 +68,7 @@ guard 而不是 catch 捕获。"
     (let ((output (read-string port)))
       (let ((status (close-pipe port)))
         (unless (zero? (status:exit-val status))
-          (error "命令失败" program (status:exit-val status)))
+          (error "command failed" program (status:exit-val status)))
         output))))
 
 (define (invoke-capture-bytevector program . args)
@@ -78,5 +78,5 @@ guard 而不是 catch 捕获。"
     (let ((output (get-bytevector-all port)))
       (let ((status (close-pipe port)))
         (unless (zero? (status:exit-val status))
-          (error "命令失败" program (status:exit-val status)))
+          (error "command failed" program (status:exit-val status)))
         output))))

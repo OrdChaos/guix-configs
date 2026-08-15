@@ -50,14 +50,14 @@ stty 属于 GNU coreutils，由 installer manifest 显式提供
 TPM2 使用独立随机 credential/keyslot，本密码保留为人工 recovery
 password（docs/boot.md 第 16.4 节）。"
   (let loop ()
-    (let ((a (read-secret-line "设置 LUKS 密码: "))
-          (b (read-secret-line "再次输入 LUKS 密码: ")))
+    (let ((a (read-secret-line "Set LUKS passphrase: "))
+          (b (read-secret-line "Repeat LUKS passphrase: ")))
       (cond
         ((not (string=? a b))
-         (format #t "两次密码不一致，请重新输入。~%")
+         (format #t "Passphrases do not match; please re-enter.~%")
          (loop))
         ((string-null? a)
-         (format #t "密码不能为空，请重新输入。~%")
+         (format #t "Passphrase must not be empty; please re-enter.~%")
          (loop))
         (else a)))))
 
@@ -78,7 +78,7 @@ password（docs/boot.md 第 16.4 节）。"
 
 (define (detail-ref detail key)
   (or (assq-ref detail key)
-      (error "计划步骤缺少参数" key)))
+      (error "plan step missing argument" key)))
 
 (define %executors
   `((confirm-target      . ,(lambda (d passphrase!) #t))    ; 人工确认在 execute-plan 前完成
@@ -96,7 +96,7 @@ password（docs/boot.md 第 16.4 节）。"
                                                                                         (lambda () (execute-luks-open (passphrase!)))
                                                                                         (lambda args
                                                                                           (format (current-error-port)
-                                                                                                  "LUKS 卷已创建，但首次打开失败；不会重跑 luksFormat。~%")
+                                                                                                  "LUKS volume created but initial open failed; luksFormat will not be rerun.~%")
                                                                                           (apply throw args)))))
                                                             (format-btrfs        . ,(lambda (d passphrase!) (execute-format-btrfs (detail-ref d 'device))))
                                                             (mount-top           . ,(lambda (d passphrase!) (execute-mount-top)))
@@ -117,19 +117,19 @@ password（docs/boot.md 第 16.4 节）。"
 (define (execute-step step passphrase!)
   (let ((executor (assq-ref %executors (plan-step-id step))))
     (unless executor
-      (error "未知的计划步骤" (plan-step-id step)))
+      (error "unknown plan step" (plan-step-id step)))
     (executor (plan-step-detail step) passphrase!)))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 人工确认：必须输入完整设备路径（docs/storage.md 第 31 章）。
 
 (define (confirm-device! device)
-  (format #t "~%将对 ~a 执行【不可撤销的破坏性操作】。~%" device)
-  (format #t "请输入完整设备路径 ~a 以确认: " device)
+  (format #t "~%This will perform an IRREVERSIBLE DESTRUCTIVE operation on ~a.~%" device)
+  (format #t "Enter the full device path ~a to confirm: " device)
   (force-output)
   (let ((input (read-line)))
     (unless (equal? input device)
-      (format #t "输入不匹配，已中止，未做任何修改。~%")
+      (format #t "Input does not match; aborted, nothing was modified.~%")
       (exit 1))))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -149,10 +149,10 @@ LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值�
            (execute-step step passphrase!))
          plan
          (map (lambda (i) (+ i 1)) (iota (length plan))))
-        (format #t "~%磁盘安装完成。~%"))
+        (format #t "~%Disk installation complete.~%"))
       (lambda (key . args)
         (format (current-error-port)
-                "~%步骤失败，已立即停止（未完成的操作不会自动继续）。~%错误: ~s ~s~%"
+                "~%Step failed; stopped immediately (incomplete operations will not continue automatically).~%error: ~s ~s~%"
                 key args)
         (exit 1)))))
 
@@ -167,23 +167,23 @@ LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值�
 (define (preflight-environment! device)
   "检查安装环境本身；任何问题直接报错退出。"
   (unless (zero? (getuid))
-    (error "apply 需要 root 权限"))
+    (error "apply requires root privileges"))
   
   (for-each
    (lambda (cmd)
      (unless (search-path (string-split (or (getenv "PATH") "") #\:) cmd)
-       (error "所需命令不可用（检查 manifest 是否进入 installer 环境）" cmd)))
+       (error "required command unavailable (check the manifest provides the installer environment)" cmd)))
    %required-commands)
   
   (when (file-exists? (string-append "/dev/mapper/" %luks-mapper-name))
-    (error "LUKS mapper 名已被占用（可能有上次未完成或正在使用的安装）"
+    (error "LUKS mapper name already in use (an unfinished or active installation may exist)"
            %luks-mapper-name))
   
   (let ((ro (first-command-line "lsblk" "-dno" "RO" device)))
     (when (equal? ro "1")
-      (error "目标设备是只读的" device)))
+      (error "target device is read-only" device)))
   
-  (format #t "环境检查通过（root、命令齐全、mapper 空闲、设备可写）。~%"))
+  (format #t "environment checks passed (root, commands, mapper free, device writable).~%"))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 机器事实（docs/storage.md 第 19 章）：安装时生成、可重新探测、不进 Git。
@@ -195,7 +195,7 @@ LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值�
   (let ((luks-uuid (first-command-line "cryptsetup" "luksUUID"
                                        (by-partlabel-path %system-partlabel))))
     (unless luks-uuid
-      (error "无法读取 LUKS UUID" %system-partlabel))
+      (error "failed to read LUKS UUID" %system-partlabel))
     (let ((facts `((luks-uuid . ,luks-uuid)))
           (dir (string-append target "/persist/system/facts")))
       (mkdir-p dir)
@@ -203,7 +203,7 @@ LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值�
                              (lambda (port)
                                (write facts port)
                                (newline port)))
-      (format #t "  机器事实: ~s~%" facts))))
+      (format #t "  machine facts: ~s~%" facts))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 安装后提醒：LiveCD 的 /gnu/store 在内存盘（tmpfs）上。
@@ -215,10 +215,10 @@ LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值�
   (let ((fstype (first-command-line "findmnt" "-no" "FSTYPE" "/gnu/store")))
     (when (equal? fstype "tmpfs")
       (format #t "~%==================================================~%")
-      (format #t "  注意: /gnu/store 目前在内存盘 (tmpfs) 上。~%")
-      (format #t "  执行 guix system init 之前，请先运行:~%")
+      (format #t "  NOTE: /gnu/store is currently on the RAM disk (tmpfs).~%")
+      (format #t "  Before running guix system init, run:~%")
       (format #t "~%    herd start cow-store /mnt~%")
-      (format #t "~%  否则下载和构建会写满内存盘。~%")
+      (format #t "~%  Otherwise downloads and builds will fill the RAM disk.~%")
       (format #t "==================================================~%"))))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -232,17 +232,17 @@ LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值�
   ;; 1. policy 自校验
   (let ((policy-failures (validate-policy policy)))
     (unless (null? policy-failures)
-      (format (current-error-port) "host policy 不合法:~%")
+      (format (current-error-port) "host policy is invalid:~%")
       (for-each (lambda (f)
                   (format (current-error-port) "  - ~a~%" (check-failure-message f)))
                 policy-failures)
       (exit 1)))
   
   ;; 2. 探测并校验目标设备
-  (format #t "正在探测 ~a ...~%" device)
+  (format #t "probing ~a ...~%" device)
   (let ((failures (validate-target (probe-device device) policy)))
     (unless (null? failures)
-      (format (current-error-port) "目标设备未通过安全检查:~%")
+      (format (current-error-port) "target device failed safety checks:~%")
       (for-each (lambda (f)
                   (format (current-error-port) "  - ~a~%" (check-failure-message f)))
                 failures)
