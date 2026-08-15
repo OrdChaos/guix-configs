@@ -33,18 +33,17 @@
   ;; system：部署 cmdline 的 gnu.system=（guix 注入的部署权威路径）。
   ;; boot-plan 显式携带，供 Recovery candidate 的 identity 匹配
   ;; （不能从 kernel 路径 dirname 推导——布局依赖，实测 bug）。
-  (let* ((args (menu-entry-linux-arguments entry))
-         (system (let ((m (string-match "gnu\\.system=([^ ]+)"
-                                        (string-join args " "))))
-                   (and m (match:substring m 1)))))
-    (boot-plan
-     (label (menu-entry-label entry))
-     (kernel (menu-entry-linux entry))
-     (initrd (menu-entry-initrd entry))
-     (cmdline #~(string-join (list #$@args) " "))
-     ;; 普通字符串（非 gexp）：#$(boot-plan-system current) 在部署
-     ;; gexp 里引用字符串同样合法，且避开模块内单数 ungexp 未绑定。
-     (system system))))
+  ;; 注意：guix 注入的 kernel-arguments 是 gexp（配置期非字符串），
+  ;; 所以 system 是延迟 gexp（部署脚本内对求值后的 cmdline 解析）。
+  (boot-plan
+   (label (menu-entry-label entry))
+   (kernel (menu-entry-linux entry))
+   (initrd (menu-entry-initrd entry))
+   (cmdline #~(string-join (list #$@(menu-entry-linux-arguments entry)) " "))
+   (system #~(let ((m (string-match "gnu\\.system=([^ ]+)"
+                                    (string-join (list #$@(menu-entry-linux-arguments entry))
+                                                 " "))))
+               (and m (match:substring m 1))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 2–3. 框架调用约定：generator 与 installer

@@ -86,6 +86,7 @@ Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
                     (guixcfg utils atomic-file)
                     (ice-9 ftw)
                     (ice-9 rdelim)
+                    (ice-9 regex)          ; cmdline-system（gnu.system= 解析）
                     (srfi srfi-1)
                     (srfi srfi-13))
        
