@@ -15,6 +15,7 @@
                #:use-module (guixcfg system common)
                #:use-module (guixcfg system file-systems)
                #:use-module (guixcfg system packages)
+               #:use-module (guixcfg system ssh)       ; secure-ssh-service、ssh-host-key-service
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:export (%vm-storage-policy %vm-services %os))
 
@@ -74,7 +75,9 @@
    ;; /run/current-system/profile/bin/tpm2_{pcrread,createprimary,...}，
    ;; 必须来自锁定 Virelith 的 compat 包（docs/boot.md 第 16.4 节）。
    (packages (append (list tpm2-tools-compat) %system-packages))
-   (services %vm-services)))
+   (services (append (list (secure-ssh-service)
+                           (ssh-host-key-service))
+                     %vm-services))))
 
 ;; 末尾裸表达式：让本文件同时是 guix system 的入口文件——
 ;; guix system init/reconfigure 加载文件时取最后一个顶层表达式的值
