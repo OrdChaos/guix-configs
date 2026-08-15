@@ -82,4 +82,4 @@ sshd 配置与 host-key 持久化由 System 拥有；Guix Home 不管理 sshd，
 (define (ssh-host-key-service)
   "把首启 host-key 生成挂到系统 activation（sshd 启动前执行）。"
   (simple-service 'ssh-host-keys activation-service-type
-                  (list (ssh-host-key-activation))))
+                  (ssh-host-key-activation)))

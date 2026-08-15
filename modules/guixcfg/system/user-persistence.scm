@@ -79,4 +79,4 @@ home 的语义一致：0700 + 用户所有）。"
 (define (user-persistence-service user)
   "把 selected user 持久化目录创建挂到系统 activation。"
   (simple-service 'user-persistence activation-service-type
-                  (list (user-persistence-activation user))))
+                  (user-persistence-activation user)))
