@@ -152,3 +152,108 @@ on top of this elogind layer — not introduced this round.
   clean-worktree checks, git archive snapshot, `/etc/guix-configs`
   deployment records); `tools/reconfigure.sh` is its minimal
   VM-stage core.
+
+---
+
+## J8 — Boot Readiness Contract
+
+六个语义 capability（阶段语义，不表示某脚本碰巧执行过）：
+
+### Storage phase
+
+```text
+persistent-state-ready
+    persistent filesystems mounted; /persist/system, /persist/data-home,
+    /var/guix, /gnu/store available
+```
+
+### System-state phase
+
+```text
+account-state-ready
+    Guix account topology + persistent login credential projected into
+    ephemeral /etc/{passwd,group,shadow} (password projector succeeded)
+interactive-secrets-ready
+    interactive-critical runtime secrets fully published (currently a
+    light barrier: no login-critical ordinary app secrets exist)
+```
+
+### User-infrastructure phase
+
+```text
+home-ready
+    current system generation's Home projected to ephemeral $HOME
+    (static substrate; user Shepherd session services NOT included)
+session-infra-ready
+    elogind/PAM substrate ready (XDG_RUNTIME_DIR creation capability)
+```
+
+### Interactive phase
+
+```text
+interactive-session-ready
+    pure join barrier; opens the login gate atomically
+```
+
+DAG（Shepherd 原生 requirement/provision，无 sleep/轮询/启动顺序碰运气）：
+
+```text
+file-systems
+    ↓
+persistent-state-ready
+    ↓                    ↓
+account projection    critical secrets publication
+    ↓                    ↓
+account-state-ready   interactive-secrets-ready
+    └────────┬───────────┘
+             ▼
+       user-processes（extension 注入 prerequisite）
+             │
+       ┌─────┴──────┐
+       ▼            ▼
+    elogind    guix-home-user
+       │            │
+session-infra    home-ready
+       └─────┬──────┘
+             ▼
+interactive-session-ready → open login gate
+             │
+       ┌─────┼──────────┐
+       ▼     ▼          ▼
+    agetty  SSH     future greetd
+```
+
+Login prompt 的强语义：`login:` 出现 = interactive-session-ready 已过
+（mingetty shepherd-requirement 延迟）；PAM gate（pam_nologin +
+/run/guixcfg/session-not-ready）是 correctness fallback——未来新增
+login frontend 漏加 requirement 也绕不过 readiness policy。
+
+## J9 — Failure Contract
+
+```text
+Home activation fails        → home-ready ✗ → interactive-session-ready ✗
+                               → 新 interactive session 拒绝（gate 关）
+account projection fails     → account-state-ready ✗ → 同上
+critical runtime secret fails→ interactive-secrets-ready ✗ → 同上
+non-critical app secret fails→ login 仍允许；对应 consumer 自己失败
+existing repair session      → gate 关闭不杀已有 session
+```
+
+失败恢复无需 reboot：修复原因 → 重跑 tools/reconfigure.sh（或 herd
+restart 相应服务 + 重新开放 gate）即可。
+
+## J10 — 为什么不照搬别人的 Guix impermanent 配置
+
+多数现有 Guix impermanent 配置用：persistent /home + password hash
+in system config——Home activation 与 login 并发也无害（旧 Home 仍在、
+hash 每 boot 从 closure 重建）。本项目不同：ephemeral /home + password
+hash 不允许进 store——**strict interactive readiness 是 correctness
+requirement，不是 cosmetic optimization**。
+
+## J11 — 借鉴的成熟模型（实现全用 Guix/Shepherd/PAM/elogind）
+
+借鉴 immutable/impermanent systems 的生命周期分层：
+early persistent state → account credentials → transactional secrets →
+readiness targets → login gate → post-login user session graph。
+实现全部使用 Guix/Shepherd/PAM/elogind/Guix Home 原生抽象——不复制
+systemd。
