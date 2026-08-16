@@ -55,13 +55,15 @@
   (member 'guixcfg-secrets-deploy
           (shepherd-service-provision deploy-shepherd)))
 
-(define inject-shepherd
-  (car (service-value (password-inject-service
-                       "user" "secrets/install/user-password.hash.age"))))
-(test-assert "inject service one-shot"
-  (shepherd-service-one-shot? inject-shepherd))
-(test-assert "inject service after user-homes (account activation done)"
-  (member 'user-homes (shepherd-service-requirement inject-shepherd)))
+(define project-shepherd
+  (car (service-value (password-project-service "user"))))
+(test-assert "projector service one-shot"
+  (shepherd-service-one-shot? project-shepherd))
+(test-assert "projector service after user-homes (account activation done)"
+  (member 'user-homes (shepherd-service-requirement project-shepherd)))
+(test-assert "projector provides account-state-ready"
+  (member 'account-state-ready
+          (shepherd-service-provision project-shepherd)))
 
 ;; ciphertext 进 closure（local-file 引用）；identity 路径在运行期
 ;; 程序中出现但**不含任何明文**——构建最终脚本验证文本不含
@@ -87,15 +89,26 @@
        (string-contains deploy-script "--decrypt")))
 (test-assert "deploy script contains no plaintext sentinel"
   (not (string-contains deploy-script "GUIXCFG_SECRET_SENTINEL")))
-(test-assert "inject script contains no password hash"
+(test-assert "projector script contains no password hash"
   (not (string-contains
         (call-with-input-file
             (build-script
-             (gexp->file "guixcfg-password-inject-test"
+             (gexp->file "guixcfg-password-project-test"
                          (program-file-gexp
-                          (password-inject-program
-                           "user" "secrets/install/user-password.hash.age"))))
+                          (password-project-program "user"))))
           (lambda (p) (read-string p)))
         "$6$")))
+;; projector 是纯文件操作——绝不调 age/读 .age/访问 stable S
+(test-assert "projector script does not touch age or runtime secrets"
+  (let ((t (call-with-input-file
+               (build-script
+                (gexp->file "guixcfg-password-project-pure-test"
+                            (program-file-gexp
+                             (password-project-program "user"))))
+             (lambda (p) (read-string p)))))
+    (and (not (string-contains t "age --decrypt"))
+         (not (string-contains t "/persist/system/keys/age"))
+         (not (string-contains t "/run/guixcfg-secrets"))
+         (string-contains t "/persist/system/accounts/"))))
 
 (test-end "secrets")

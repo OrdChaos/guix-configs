@@ -33,7 +33,10 @@
                          age-lock!
                          age-decrypt-file
                          age-decrypt-to-string
-                         make-age-secret-reader))
+                         make-age-secret-reader
+                         %account-credentials-dir
+                         provision-password-hash!
+                         password-hash-format?))
 
 ;; 运行时临时 S（tmpfs；目录 0700、文件 0600）与安装后的
 ;; authoritative S（LUKS-backed persist）的默认路径；函数经 parameter
@@ -298,3 +301,44 @@ already-unlocked（复用）或 unlocked（新解密）。"
   (lambda ()
     (string-trim-right (age-decrypt-to-string ciphertext-path)
                        #\newline)))
+
+;;; ────────────────────────────────────────────────────────────
+;;; 账户凭据的持久物化（三层模型：repo ciphertext → persistent
+;;; authoritative credential → ephemeral /etc/shadow 投影；
+;;; docs/secrets.md 第 15.5 节）。
+
+;; /persist/system/accounts/<user>/password.hash（root 0700/0600）；
+;; parameter 化供测试覆盖。
+(define %account-credentials-dir
+  (make-parameter "/persist/system/accounts"))
+
+(define (password-hash-format? s)
+  "S 是否是 shadow 兼容的 crypt hash（$id$salt$hash，非空、无换行/
+  冒号注入）。"
+  (and (string? s)
+       (string-match "^\\$[0-9a-z]+\\$[^:$]+\\$[^: \n]+$" s)
+       #t))
+
+(define (provision-password-hash! user ciphertext-path)
+  "explicit provisioning（fresh install / 密码更新）：解密
+  CIPHERTEXT-PATH（user-password.hash.age）→ 校验 hash 形态 → 原子
+  物化到 /persist/system/accounts/USER/password.hash（root 0700/0600）。
+  只保存 hash；失败不留半个文件。返回目标路径。"
+  (let* ((hash (string-trim-right
+                (age-decrypt-to-string ciphertext-path) #\newline)))
+    (unless (password-hash-format? hash)
+      (error "provisioned password material is not a valid shadow hash"
+             user))
+    (let ((dir (string-append (%account-credentials-dir) "/" user)))
+      (mkdir-p (%account-credentials-dir))
+      (chmod (%account-credentials-dir) #o700)
+      ;; root-only chown：安装流程以 root 运行；普通用户单测环境
+      ;; （无 CAP_CHOWN）跳过。
+      (false-if-exception (chown (%account-credentials-dir) 0 0))
+      (mkdir-p dir)
+      (chmod dir #o700)
+      (false-if-exception (chown dir 0 0))
+      (secret-file! (string-append dir "/password.hash")
+                    (string-append hash "\n") #o600)
+      (false-if-exception (chown (string-append dir "/password.hash") 0 0))
+      (string-append dir "/password.hash"))))

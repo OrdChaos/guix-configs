@@ -58,6 +58,11 @@ ciphertext alone cannot recover secrets without it.~%")))
     (("verify")
      (age-verify! (repo-root))
      (format #t "installed identity matches repository recipient~%"))
+    (("provision-password" user ciphertext)
+     ;; explicit provisioning：解密 hash ciphertext → 校验 → 原子物化到
+     ;; /persist/system/accounts/USER/password.hash（root 0700/0600）。
+     (let ((path (provision-password-hash! user ciphertext)))
+       (format #t "password hash materialized: ~a~%" path)))
     (("lock")
      (age-lock!)
      (format #t "runtime identity removed~%"))
@@ -66,7 +71,7 @@ ciphertext alone cannot recover secrets without it.~%")))
      (format #t "decrypted ~a -> ~a~%" cipher out))
     (_
      (format (current-error-port)
-             "usage: secrets.scm init|unlock|install|verify|lock|decrypt CIPHER OUT~%")
+             "usage: secrets.scm init|unlock|install|verify|lock|decrypt CIPHER OUT|provision-password USER CIPHER~%")
      (exit 64))))
 
 (main (command-line))

@@ -62,8 +62,7 @@
   (build-text
    (gexp->file "leak-check-inject"
                (program-file-gexp
-                (password-inject-program
-                 "user" "secrets/install/user-password.hash.age")))))
+                (password-project-program "user")))))
 (test-assert "password inject script clean" (no-leak? inject-text))
 
 ;; 3. system derivation 文本（内嵌引用面）

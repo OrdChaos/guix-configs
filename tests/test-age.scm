@@ -57,7 +57,9 @@
                     (%installed-identity-dir
                      (string-append root "/persist/keys/age"))
                     (%installed-identity-path
-                     (string-append root "/persist/keys/age/identity")))
+                     (string-append root "/persist/keys/age/identity"))
+                    (%account-credentials-dir
+                     (string-append root "/persist/accounts")))
        (mkdir-p (string-append root "/persist/system"))
        (thunk root)))))
 
@@ -217,6 +219,43 @@
      (test-equal "reader works with installed S after lock"
        luks-plain
        ((make-age-secret-reader cipher))))))
+
+;; ── password provisioning（三层模型：ciphertext → persist hash）───
+(with-test-paths
+ (lambda (root)
+   (age-init! root %test-pass)
+   (age-unlock! root %test-pass)
+   (let* ((hash "$6$testsalt$abcdefghijklmnopqrstuvwxyz0123456789abcdef")
+          (cipher (string-append root "/pw.age"))
+          (recipient (string-trim-both
+                      (call-with-input-file
+                          (string-append root "/" %stable-recipient-rel)
+                        (lambda (p) (read-string p))))))
+     (invoke-with-stdin
+      (string-append hash "\n") "age" "--armor" "-r" recipient
+      "-o" cipher)
+     ;; installed-path 参数化到测试 root（provision 写 %account-
+     ;; credentials-dir 固定路径——测试前临时覆盖）
+     (let ((provisioned
+            (provision-password-hash! "user" cipher)))
+       (test-assert "provision returns accounts path"
+         (string-contains provisioned "accounts/user/password.hash"))
+       (test-assert "provisioned hash 0600"
+         (= #o600 (mode-of provisioned)))
+       (test-assert "provisioned content is the hash"
+         (string=? hash
+                   (string-trim-right
+                    (call-with-input-file provisioned
+                      (lambda (p) (read-string p)))
+                    #\newline))))
+     ;; hash 形态拒绝：非 hash 内容 fail closed
+     (let ((bad-cipher (string-append root "/bad.age")))
+       (invoke-with-stdin
+        "not-a-hash" "age" "--armor" "-r" recipient "-o" bad-cipher)
+       (test-assert "malformed hash refused"
+         (catch #t
+           (lambda () (provision-password-hash! "user" bad-cipher) #f)
+           (lambda (k . a) #t)))))))
 
 ;; ── unlock 缺密文 → 明确失败 ─────────────────────────────────
 (with-test-paths

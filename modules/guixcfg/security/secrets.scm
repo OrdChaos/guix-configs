@@ -19,7 +19,7 @@
 ;;; 用户密码 hash（scope install + account 注入）：ephemeral root 下
 ;;; @root-template 的 /etc/shadow 在 commit-root 时固化（account
 ;;; activation 只在首次 boot 运行），install 期注入无法跨 root
-;;; rebuild 保留（实测证明）——因此每 boot 由 password-inject 服务在
+;;; rebuild 保留（实测证明）——因此每 boot 由 password-project 服务在
 ;;; login 前把 hash 注入 ephemeral /etc/shadow。hash 不进 store、不进
 ;;; argv、不进日志。
 
@@ -44,8 +44,8 @@
                          runtime-secret-target
                          secrets-deploy-program
                          secrets-deploy-service
-                         password-inject-program
-                         password-inject-service
+                         password-project-program
+                         password-project-service
                          %vm-secrets))
 
 ;; runtime root（tmpfs，root 0700）。
@@ -172,84 +172,78 @@ installed stable age identity into /run/guixcfg-secrets (tmpfs).")
 ;;; ────────────────────────────────────────────────────────────
 ;;; 用户密码 hash 注入（install secret 的 account 消费路径）
 
-(define (password-inject-program user source)
-  "生成把 user-password.hash.age 的 hash 注入 /etc/shadow 的程序：
-  读 shadow、替换 USER 行的 password 字段、原子写回（保留其它字段）。
-  SOURCE 是仓库内相对路径字符串；ciphertext 经 local-file 进 closure
-  （assume-valid-file-name：从仓库根 reconfigure/build 时按 cwd 解析）；
-  hash 只在内存与 ephemeral /etc/shadow 间存在。"
+(define (password-project-program user)
+  "生成纯 password projector 程序：/persist/system/accounts/USER/
+password.hash → validate → 投影 /etc/shadow → provision
+account-state-ready。不调用 age、不读 .age、不访问 stable S、不碰
+/run/guixcfg-secrets。任何失败 fail closed：不产空密码用户、不删
+原 shadow 条目、不标 ready。"
   (program-file
-   "guixcfg-password-inject"
+   "guixcfg-password-project"
    (with-imported-modules (source-module-closure '((guix build utils)))
      #~(begin
-         (use-modules (guix build utils) (ice-9 rdelim) (srfi srfi-13))
-         (define age-bin #$(file-append age "/bin/age"))
-         (define identity "/persist/system/keys/age/identity")
-         (define cipher #$(local-file (assume-valid-file-name source)))
+         (use-modules (guix build utils) (ice-9 rdelim) (srfi srfi-13)
+                      (ice-9 regex))
          (define user #$user)
-         (unless (file-exists? identity)
-           (error "stable identity missing; refusing to prompt" identity))
-         (let ((tmp (string-append "/run/guixcfg-secrets/.pw-"
-                                   (number->string (getpid)))))
-           ;; 只确保目录存在；权限层级由 guixcfg-secrets-deploy 负责
-           ;; （runtime root 0755 可穿越）——这里不动目录权限，避免
-           ;; 两个服务的启动顺序影响最终权限。
-           (mkdir-p "/run/guixcfg-secrets")
-           (dynamic-wind
-             (lambda ()
-               (call-with-output-file tmp (lambda (p) #t))
-               (chmod tmp #o600))
-             (lambda ()
-               (invoke age-bin "--decrypt" "-i" identity "-o" tmp cipher)
-               (let* ((hash (string-trim-both
-                             (call-with-input-file tmp
-                               (lambda (p) (read-string p)))))
-                      (shadow (call-with-input-file "/etc/shadow"
-                                (lambda (p) (read-string p))))
-                      (lines (string-split shadow #\newline))
-                      (out-lines
-                       (map (lambda (line)
-                              (let ((fields (string-split line #\:)))
-                                (if (and (pair? fields)
-                                         (string=? (car fields) user))
-                                    (string-join
-                                     (cons hash (cdr fields)) ":")
-                                    line)))
-                            lines)))
-                 (unless (any (lambda (line)
-                                (let ((fields (string-split line #\:)))
-                                  (and (pair? fields)
-                                       (string=? (car fields) user))))
-                              lines)
-                   (error "user entry not found in /etc/shadow" user))
-                 (let ((new "/etc/.shadow.guixcfg-new"))
-                   (call-with-output-file new
-                     (lambda (p)
-                       (display (string-join out-lines "\n") p)))
-                   (chmod new #o600)
-                   (chown new 0 0)
-                   (rename-file new "/etc/shadow"))))
-             (lambda ()
-               (false-if-exception (delete-file tmp))))
-           #t)))))
+         (define hash-path
+           (string-append "/persist/system/accounts/" user
+                          "/password.hash"))
+         (define (valid-hash? s)
+           (and (string-match "^\\$[0-9a-z]+\\$[^:$]+\\$[^: \n]+$" s)
+                #t))
+         ;; hash 必须在且形态合法（否则 fail closed：不投影、不 ready）。
+         (unless (file-exists? hash-path)
+           (error "persistent password hash missing" hash-path))
+         (let* ((hash (string-trim-right
+                       (call-with-input-file hash-path
+                         (lambda (p) (read-string p)))
+                       #\newline))
+                (shadow (call-with-input-file "/etc/shadow"
+                          (lambda (p) (read-string p))))
+                (lines (string-split shadow #\newline)))
+           (unless (valid-hash? hash)
+             (error "persistent password hash malformed" user))
+           (unless (any (lambda (line)
+                          (let ((fields (string-split line #\:)))
+                            (and (pair? fields)
+                                 (string=? (car fields) user))))
+                        lines)
+             (error "target user missing from /etc/shadow" user))
+           (let ((out-lines
+                  (map (lambda (line)
+                         (let ((fields (string-split line #\:)))
+                           (if (and (pair? fields)
+                                    (string=? (car fields) user))
+                               (string-join (cons hash (cdr fields)) ":")
+                               line)))
+                       lines))
+                 (new "/etc/.shadow.guixcfg-new"))
+             ;; 原子投影：临时文件 0600 root → rename（失败保留原
+             ;; shadow——不删条目、不产空密码用户）。
+             (call-with-output-file new
+               (lambda (p) (display (string-join out-lines "\n") p)))
+             (chmod new #o600)
+             (chown new 0 0)
+             (rename-file new "/etc/shadow")
+             #t))))))
 
-
-(define (password-inject-service user source)
-  "boot 时把 install secret 中的用户密码 hash 注入 ephemeral
-/etc/shadow 的 one-shot 服务（account activation 之后、login 之前）。
-SOURCE 是仓库内相对路径字符串（ciphertext 随 closure 进 store）。"
-  (simple-service 'guixcfg-password-inject shepherd-root-service-type
+(define (password-project-service user)
+  "boot 时把 persistent password hash 投影进 ephemeral /etc/shadow 的
+one-shot 服务；成功完成才 provision account-state-ready（不是
+脚本启动了，而是投影已完成）。"
+  (simple-service 'guixcfg-password-project shepherd-root-service-type
                   (list (shepherd-service
-                         (provision '(guixcfg-password-inject))
+                         (provision '(guixcfg-password-project
+                                      account-state-ready))
                          (requirement '(file-systems user-homes))
                          (one-shot? #t)
                          (documentation
-                          "Inject the declarative user password hash \
-(install secret) into the ephemeral /etc/shadow at boot.")
+                          "Project the persistent login credential hash \
+into the ephemeral /etc/shadow at boot; provides account-state-ready.")
                          (start #~(lambda ()
                                     (zero? (system*
-                                            #$(password-inject-program
-                                               user source)))))
+                                            #$(password-project-program
+                                               user)))))
                          (stop #~(const #f))))))
 
 ;;; ────────────────────────────────────────────────────────────
