@@ -71,6 +71,7 @@
                "tests/test-age.scm"
                "tests/test-secrets.scm"
                "tests/test-accounts.scm"
+               "tests/test-runtime-exec.scm"
                "tests/test-store-leakage.scm"
                "tests/test-readiness.scm")))
  (lambda ()
