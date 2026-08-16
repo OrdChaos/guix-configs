@@ -21,7 +21,7 @@
 测试可用 GUIXCFG_AGE_PASSPHRASE_FD 指定的 fd（如 fd 3）注入（confirm
 时 fd 里两行）。"
   (let ((fd-str (getenv "GUIXCFG_AGE_PASSPHRASE_FD")))
-    (if fd-str
+    (if (and fd-str (not (string-null? fd-str)))
         (let* ((port (fdopen (string->number fd-str) "r"))
                (a (read-line port)))
           (if confirm?
