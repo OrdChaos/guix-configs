@@ -49,8 +49,12 @@
   (car (service-value (secrets-deploy-service %vm-secrets "user"))))
 (test-assert "deploy service one-shot"
   (shepherd-service-one-shot? deploy-shepherd))
-(test-assert "deploy service requires file-systems"
-  (member 'file-systems (shepherd-service-requirement deploy-shepherd)))
+(test-assert "deploy service requires persistent-state-ready"
+  (member 'persistent-state-ready
+          (shepherd-service-requirement deploy-shepherd)))
+(test-assert "deploy service provides interactive-secrets-ready"
+  (member 'interactive-secrets-ready
+          (shepherd-service-provision deploy-shepherd)))
 (test-assert "deploy provision"
   (member 'guixcfg-secrets-deploy
           (shepherd-service-provision deploy-shepherd)))
@@ -61,6 +65,9 @@
   (shepherd-service-one-shot? project-shepherd))
 (test-assert "projector service after user-homes (account activation done)"
   (member 'user-homes (shepherd-service-requirement project-shepherd)))
+(test-assert "projector requires persistent-state-ready"
+  (member 'persistent-state-ready
+          (shepherd-service-requirement project-shepherd)))
 (test-assert "projector provides account-state-ready"
   (member 'account-state-ready
           (shepherd-service-provision project-shepherd)))

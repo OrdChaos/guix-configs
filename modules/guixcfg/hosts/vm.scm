@@ -16,6 +16,7 @@
                #:use-module (guixcfg system packages)
                #:use-module (guixcfg system ssh)       ; secure-ssh-service、ssh-host-key-service
                #:use-module (guixcfg system user-persistence)  ; selected user persistence
+               #:use-module (guixcfg system readiness) ; boot readiness DAG
                #:use-module (guixcfg users user)       ; %primary-user（结构事实权威源）
                #:use-module (guixcfg home user)        ; %guix-home（挂入 system）
                #:use-module (guixcfg security secrets)  ; runtime secrets 部署
@@ -104,7 +105,10 @@
                            (service guix-home-service-type
                                     `((,(user-profile-name %primary-user)
                                        ,%guix-home))))
-                     %vm-services))))
+                     (append %vm-services
+                             ;; boot readiness DAG（capability 链；login
+                             ;; gate 的开启端在 interactive-session-ready）
+                             (readiness-services 'guix-home-user))))))
 
 ;; 末尾裸表达式：让本文件同时是 guix system 的入口文件——
 ;; guix system init/reconfigure 加载文件时取最后一个顶层表达式的值

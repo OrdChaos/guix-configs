@@ -223,8 +223,12 @@ docs/secrets.md 第 15.4 节）：
 secrets 的 one-shot 服务。"
   (simple-service 'guixcfg-secrets-deploy shepherd-root-service-type
                   (list (shepherd-service
-                         (provision '(guixcfg-secrets-deploy))
-                         (requirement '(file-systems))
+                         ;; 发布完成 = interactive-critical secrets 全部
+                         ;; 就位（当前无 login-critical 普通 secret——
+                         ;; 轻量 barrier，保留抽象）。
+                         (provision '(guixcfg-secrets-deploy
+                                      interactive-secrets-ready))
+                         (requirement '(persistent-state-ready))
                          (one-shot? #t)
                          (documentation
                           "Decrypt declarative runtime secrets with the \
@@ -301,7 +305,8 @@ one-shot 服务；成功完成才 provision account-state-ready（不是
                   (list (shepherd-service
                          (provision '(guixcfg-password-project
                                       account-state-ready))
-                         (requirement '(file-systems user-homes))
+                         (requirement '(persistent-state-ready
+                                        file-systems user-homes))
                          (one-shot? #t)
                          (documentation
                           "Project the persistent login credential hash \
