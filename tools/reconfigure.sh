@@ -3,20 +3,30 @@
 # 在 VM 阶段的最小实现；configctl 全套——git 干净检查/只读快照/部署记录——
 # 仍是规划中的未来工作）。
 #
-# 职责：system reconfigure + 成功后热激活绑定的 Guix Home。
+# 职责：system reconfigure + 成功后热激活绑定的 Guix Home + readiness
+# gate 事务语义（docs/system-home-boundaries.md J8）：
 #
-# 为什么需要显式热激活验证（错误语义见 docs/system-home-boundaries.md J5）：
-#   `guix system reconfigure` 的服务升级对 one-shot 服务是 fire-and-forget：
-#   shepherd 把 activate 进程 fork 出去即视为成功——Home activate 失败
-#   （如 ~/.guix-home 位置被非空目录阻塞、或上次失败残留的
-#   ~/.guix-home.new pivot）不会反馈到 reconfigure 退出码。这里在
-#   reconfigure 成功后显式 restart + 验证链接状态，失败时明确报告。
+#   close gate（新 interactive session 被拒；已有 session 不动）
+#     → guix system reconfigure
+#     → shepherd 升级自动 restart 变化的 one-shot 服务（secrets 代际
+#       发布、password 投影、Home 热激活）
+#     → 验证：Home 链接状态 + 各 readiness capability 无 failed
+#     → open gate
+#
+# 为什么需要显式热激活验证（错误语义见 docs/system-home-boundaries.md
+# J5）：`guix system reconfigure` 的服务升级对 one-shot 服务是
+# fire-and-forget：shepherd 把 activate 进程 fork 出去即视为成功——
+# Home activate 失败（如 ~/.guix-home 被非空目录阻塞、或上次失败残留
+# 的 ~/.guix-home.new pivot）不会反馈到 reconfigure 退出码。这里在
+# reconfigure 成功后显式 restart + 验证链接状态，失败时明确报告。
 #
 # 错误语义：
-#   1. system reconfigure 失败   → exit 1，Home 完全不动；
+#   1. system reconfigure 失败   → exit 1，Home 完全不动，gate 重新打开
+#      （system 没变，没有新的不一致）；
 #   2. system 成功 + Home 失败   → exit 2，明确报告 system 已切换、
-#      Home 热激活失败；不回滚 system；下次启动官方
-#      guix-home-service-type 会用当前 system generation 的 Home 恢复。
+#      Home 热激活失败；不回滚 system；**gate 保持关闭**（新 session
+#      拒绝）直到人工修复后重新运行本脚本（或 herd restart 各服务 +
+#      删 gate）恢复。
 #
 # 用法（root）：tools/reconfigure.sh [host]   # host 默认 vm
 # 环境变量：HOME_USER 指定 Home 绑定用户（默认 user）。
@@ -27,21 +37,28 @@ HOST="${1:-vm}"
 HOME_USER="${HOME_USER:-user}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
+GATE="/run/guixcfg/session-not-ready"
 cd "$ROOT"
+
+# ── 0. 关闭 gate：新 interactive session 被拒；已有 session 不动 ──
+mkdir -p /run/guixcfg
+printf 'A reconfigure is in progress.\n' > "$GATE"
 
 old_link=""
 if [ -L "/home/$HOME_USER/.guix-home" ]; then
   old_link="$(readlink "/home/$HOME_USER/.guix-home")"
 fi
 
-# 1. system reconfigure（失败则 Home 完全不动）
+# 1. system reconfigure（失败则 Home 完全不动、gate 重新打开）
 if ! guix time-machine -C channels.lock.scm -- system reconfigure \
        "modules/guixcfg/hosts/$HOST.scm" -L modules; then
-  echo "reconfigure: system reconfigure FAILED; Home left untouched." >&2
+  rm -f "$GATE"
+  echo "reconfigure: system reconfigure FAILED; Home left untouched;" >&2
+  echo "  gate reopened (no state changed)." >&2
   exit 1
 fi
 
-# 2. 热激活 Home（幂等：home closure 未变时 activate 重建同一组链接）
+# 2. Home 热激活（幂等：home closure 未变时 activate 重建同一组链接）
 #
 #    preflight：上次失败激活的 stale pivot（~/.guix-home.new）会让
 #    activate 的 (symlink new-home pivot) 永久 EEXIST（上游不处理残留）。
@@ -53,6 +70,7 @@ if ! guile -L "$ROOT/modules" -s "$ROOT/tools/home-pivot.scm" \
   echo "reconfigure: stale pivot $pivot exists but is NOT a recognizable" >&2
   echo "  Guix Home pivot symlink (plain file/directory/unknown link);" >&2
   echo "  refusing to touch it. Investigate manually, then retry." >&2
+  echo "  Gate remains CLOSED (system switched; Home not activated)." >&2
   exit 2
 fi
 
@@ -61,8 +79,8 @@ had_pivot_before=0
 
 if ! herd restart guix-home-"$HOME_USER" >/dev/null 2>&1; then
   echo "reconfigure: system generation switched, but Home hot-activation" >&2
-  echo "  could not be started (herd restart rejected). The official service" >&2
-  echo "  will restore Home from the current generation at next boot." >&2
+  echo "  could not be started (herd restart rejected). Gate remains" >&2
+  echo "  CLOSED; next boot recovers via the official service." >&2
   exit 2
 fi
 
@@ -99,11 +117,26 @@ if [ "$ok" -eq 0 ] || [ -e "$pivot" ]; then
   fi
   echo "reconfigure: system generation switched OK, but Home hot-activation" >&2
   echo "  FAILED (old Home: ${old_link:-none}; system is NOT rolled back)." >&2
+  echo "  Gate remains CLOSED (new interactive sessions refused)." >&2
   echo "  Investigate: pivot residue /home/$HOME_USER/.guix-home.new, or" >&2
-  echo "  ~/.guix-home occupied by a non-symlink. Next boot will recover via" >&2
-  echo "  the official guix-home-service-type from the current generation." >&2
+  echo "  ~/.guix-home occupied by a non-symlink. Fix, then re-run this" >&2
+  echo "  script to recover without reboot." >&2
   exit 2
 fi
+
+# 4. readiness 复查：各 capability 服务无 failed
+for svc in guixcfg-secrets-deploy guixcfg-password-project \
+           persistent-state-ready home-ready session-infra-ready \
+           interactive-session-ready; do
+  if herd status "$svc" 2>/dev/null | grep -q "Failed to start"; then
+    echo "reconfigure: capability $svc is FAILED; gate remains CLOSED." >&2
+    echo "  Fix the cause, then re-run this script to recover." >&2
+    exit 2
+  fi
+done
+
+# 5. 打开 gate
+rm -f "$GATE"
 
 if [ "$new_link" = "$old_link" ]; then
   echo "reconfigure: OK (Home closure unchanged; link idempotent: $new_link)"
