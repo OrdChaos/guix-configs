@@ -12,5 +12,5 @@
   (append (list btrfs-progs       ; 子卷/快照管理（恢复时必需）
                 cryptsetup        ; LUKS 维护（恢复时必需）
                 age)              ; secrets 解密（guixcfg-secrets-deploy
-                                  ; 与 password-project 的运行时依赖）
+          ; 与 password-project 的运行时依赖）
           %base-packages))

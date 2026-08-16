@@ -48,7 +48,7 @@
 (define activation-text
   (build-text (lower-object (operating-system-activation-script %vm-os))))
 (test-assert "activation script contains no secret plaintext"
-  (no-leak? activation-text))
+             (no-leak? activation-text))
 
 ;; 2. secrets 部署脚本 + 密码注入脚本
 (define deploy-text
@@ -70,11 +70,11 @@
   (run-with-store %store (lower-object %vm-os)))
 (define system-drv-text (file-text (derivation-file-name system-drv)))
 (test-assert "system drv contains no secret plaintext"
-  (no-leak? system-drv-text))
+             (no-leak? system-drv-text))
 
 ;; 4. ciphertext 本身允许进 store——但密文形态不含明文标记
 ;;    （反面验证：ciphertext 在 closure 中是被允许的）。
 (test-assert "ciphertext may enter store (armored age, no plaintext)"
-  (no-leak? (file-text "secrets/system/test-system.age")))
+             (no-leak? (file-text "secrets/system/test-system.age")))
 
 (test-end "store-leakage")

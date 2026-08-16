@@ -15,13 +15,13 @@
 
 (define (main args)
   (match (cdr args)
-    (((or "--check" "--clean") path)
-     (let* ((clean? (string=? (cadr args) "--clean"))
-            (d (if clean?
-                   (remove-stale-pivot! path)
-                   (stale-pivot-disposition path))))
-       (display d) (newline)
-       (exit (if (eq? d 'unsafe) (if clean? 2 1) 0))))
-    (_ (usage))))
+         (((or "--check" "--clean") path)
+          (let* ((clean? (string=? (cadr args) "--clean"))
+                 (d (if clean?
+                      (remove-stale-pivot! path)
+                      (stale-pivot-disposition path))))
+            (display d) (newline)
+            (exit (if (eq? d 'unsafe) (if clean? 2 1) 0))))
+         (_ (usage))))
 
 (main (command-line))

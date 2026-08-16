@@ -287,17 +287,9 @@ guix time-machine -C channels.lock.scm -- \
 
 PK 最后写入。
 
-如果 LiveCD 中因 `efitools` 没有 substitute 而触发本地构建，并在 Guix
-daemon 的 `mountIntoChroot` 阶段失败（`bind mount ... guix-build-efitools
-... No such file or directory`），**不需要因此阻塞系统安装**。该错误发生在
-真正编译 `efitools` 之前：前面的依赖拿到了 substitute，而 `efitools` 恰好
-没有，于是触发了本地 sandbox build——问题属于 installer LiveCD 的
-cow-store / `/gnu/store` / guix-daemon build sandbox 挂载环境，不是
-`efitools` 源码本身无法编译。`guix time-machine` 只更换 Guix client 与
-package definition，并不会替换 LiveCD 上正在运行的 guix-daemon；也不要
-手工创建 `/tmp/guix-build-*` 或 `.drv.chroot` 来绕过。正确做法：保持
-Secure Boot 关闭，先启动安装好的 Guix System，再在目标系统中运行同一
-enrollment 流程，此时路径改为：
+如果 LiveCD 中因 `efitools` 没有 substitute 而触发本地构建且构建失败，
+**不需要因此阻塞系统安装**。正确做法：保持 Secure Boot 关闭，
+先启动安装好的 Guix System，再在目标系统中运行同一 enrollment 流程，此时路径改为：
 
 ```text
 /persist/system/keys/secure-boot

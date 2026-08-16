@@ -22,56 +22,56 @@
 时 fd 里两行）。"
   (let ((fd-str (getenv "GUIXCFG_AGE_PASSPHRASE_FD")))
     (if (and fd-str (not (string-null? fd-str)))
-        (let* ((port (fdopen (string->number fd-str) "r"))
-               (a (read-line port)))
-          (if confirm?
-              (let ((b (read-line port)))
-                (unless (string=? a b)
-                  (error "passphrases do not match"))
-                a)
-              a))
-        (let ((a (read-secret-line "Master password: ")))
-          (if confirm?
-              (let ((b (read-secret-line "Confirm master password: ")))
-                (unless (string=? a b)
-                  (error "passphrases do not match"))
-                a)
-              a)))))
+      (let* ((port (fdopen (string->number fd-str) "r"))
+             (a (read-line port)))
+        (if confirm?
+          (let ((b (read-line port)))
+            (unless (string=? a b)
+              (error "passphrases do not match"))
+            a)
+          a))
+      (let ((a (read-secret-line "Master password: ")))
+        (if confirm?
+          (let ((b (read-secret-line "Confirm master password: ")))
+            (unless (string=? a b)
+              (error "passphrases do not match"))
+            a)
+          a)))))
 
 (define (main args)
   (match (cdr args)
-    (("init")
-     (let ((recipient (age-init! (repo-root)
-                                 (read-passphrase #t))))
-       (format #t "stable recipient: ~a~%" recipient)
-       (format #t "encrypted identity: ~a~%"
-               (string-append (repo-root) "/" %stable-identity-rel))
-       (format #t "Back up your master password offline; the repository \
+         (("init")
+          (let ((recipient (age-init! (repo-root)
+                                      (read-passphrase #t))))
+            (format #t "stable recipient: ~a~%" recipient)
+            (format #t "encrypted identity: ~a~%"
+                    (string-append (repo-root) "/" %stable-identity-rel))
+            (format #t "Back up your master password offline; the repository \
 ciphertext alone cannot recover secrets without it.~%")))
-    (("unlock")
-     (let ((r (age-unlock! (repo-root) (read-passphrase #f))))
-       (format #t "runtime identity ready at ~a (~a)~%"
-               (%runtime-identity-path) r)))
-    (("install")
-     (age-install! (repo-root))
-     (format #t "identity installed to ~a~%" (%installed-identity-path)))
-    (("verify")
-     (age-verify! (repo-root))
-     (format #t "installed identity matches repository recipient~%"))
-    (("provision-password" user ciphertext)
-     ;; explicit provisioning：解密 hash ciphertext → 校验 → 原子物化到
-     ;; /persist/system/accounts/USER/password.hash（root 0700/0600）。
-     (let ((path (provision-password-hash! user ciphertext)))
-       (format #t "password hash materialized: ~a~%" path)))
-    (("lock")
-     (age-lock!)
-     (format #t "runtime identity removed~%"))
-    (("decrypt" cipher out)
-     (age-decrypt-file cipher out 0 0 #o600)
-     (format #t "decrypted ~a -> ~a~%" cipher out))
-    (_
-     (format (current-error-port)
-             "usage: secrets.scm init|unlock|install|verify|lock|decrypt CIPHER OUT|provision-password USER CIPHER~%")
-     (exit 64))))
+         (("unlock")
+          (let ((r (age-unlock! (repo-root) (read-passphrase #f))))
+            (format #t "runtime identity ready at ~a (~a)~%"
+                    (%runtime-identity-path) r)))
+         (("install")
+          (age-install! (repo-root))
+          (format #t "identity installed to ~a~%" (%installed-identity-path)))
+         (("verify")
+          (age-verify! (repo-root))
+          (format #t "installed identity matches repository recipient~%"))
+         (("provision-password" user ciphertext)
+          ;; explicit provisioning：解密 hash ciphertext → 校验 → 原子物化到
+          ;; /persist/system/accounts/USER/password.hash（root 0700/0600）。
+          (let ((path (provision-password-hash! user ciphertext)))
+            (format #t "password hash materialized: ~a~%" path)))
+         (("lock")
+          (age-lock!)
+          (format #t "runtime identity removed~%"))
+         (("decrypt" cipher out)
+          (age-decrypt-file cipher out 0 0 #o600)
+          (format #t "decrypted ~a -> ~a~%" cipher out))
+         (_
+          (format (current-error-port)
+                  "usage: secrets.scm init|unlock|install|verify|lock|decrypt CIPHER OUT|provision-password USER CIPHER~%")
+          (exit 64))))
 
 (main (command-line))

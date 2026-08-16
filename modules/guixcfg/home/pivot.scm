@@ -32,20 +32,20 @@
        #t))
 
 (define* (store-home-path? s #:key (root "/gnu/store"))
-  "S 是否符合真实 Guix Home generation closure 的形态：
+         "S 是否符合真实 Guix Home generation closure 的形态：
   1. 路径形态 ROOT/<hash>-home（默认 /gnu/store）；
   2. target 实际存在（残留 pivot 指向的 generation 尚未被 GC）；
   3. target 是目录且含 Guix Home generation 的 activate 入口——
   形态近似但非真实 Home closure 的路径（如手工构造）一律拒绝。"
-  (and (store-home-path-form? s root)
-       (let ((st (false-if-exception (stat s))))
-         (and st
-              (eq? (stat:type st) 'directory)
-              (file-exists? (string-append s "/activate"))
-              #t))))
+         (and (store-home-path-form? s root)
+              (let ((st (false-if-exception (stat s))))
+                (and st
+                     (eq? (stat:type st) 'directory)
+                     (file-exists? (string-append s "/activate"))
+                     #t))))
 
 (define* (stale-pivot-disposition path #:key (root "/gnu/store"))
-  "判定 PATH（~/.guix-home.new pivot）的状态：
+         "判定 PATH（~/.guix-home.new pivot）的状态：
   absent            不存在——正常，无需处理；
   safe-stale-pivot  是指向真实 store home generation closure 的
                     symlink——可安全 unlink（Guix Home activation 失败的
@@ -54,20 +54,20 @@
                     symlink——fail closed，绝不自动删除（可能是用户数据
                     或攻击者构造）。
   只用 lstat/readlink，不 follow symlink。"
-  (cond
-   ((not (false-if-exception (lstat path)))
-    'absent)
-   ((eq? (stat:type (lstat path)) 'symlink)
-    (if (store-home-path? (readlink path) #:root root)
-        'safe-stale-pivot
-        'unsafe))
-   (else 'unsafe)))
+         (cond
+           ((not (false-if-exception (lstat path)))
+            'absent)
+           ((eq? (stat:type (lstat path)) 'symlink)
+            (if (store-home-path? (readlink path) #:root root)
+              'safe-stale-pivot
+              'unsafe))
+           (else 'unsafe)))
 
 (define* (remove-stale-pivot! path #:key (root "/gnu/store"))
-  "仅当 PATH 是安全可识别的 Guix Home stale pivot 时 unlink 该 symlink
+         "仅当 PATH 是安全可识别的 Guix Home stale pivot 时 unlink 该 symlink
 本身。返回 disposition（absent/safe-stale-pivot/unsafe）。unsafe 时不动
 任何文件。"
-  (let ((d (stale-pivot-disposition path #:root root)))
-    (when (eq? d 'safe-stale-pivot)
-      (delete-file path))
-    d))
+         (let ((d (stale-pivot-disposition path #:root root)))
+           (when (eq? d 'safe-stale-pivot)
+             (delete-file path))
+           d))

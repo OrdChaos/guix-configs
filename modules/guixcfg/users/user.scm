@@ -30,15 +30,15 @@
                          primary-user-account))
 
 (define-record-type* <user-profile> user-profile make-user-profile
-  user-profile?
-  (name                user-profile-name)                 ; string
-  (uid                 user-profile-uid)                  ; integer
-  (group               user-profile-group)                ; string
-  (supplementary-groups user-profile-supplementary-groups) ; list of strings
-  (shell               user-profile-shell)                ; file-like
-  (home-directory      user-profile-home-directory)       ; string
-  (comment             user-profile-comment)              ; string
-  (password-secret     user-profile-password-secret))     ; symbol（logical name）
+                     user-profile?
+                     (name                user-profile-name)                 ; string
+                     (uid                 user-profile-uid)                  ; integer
+                     (group               user-profile-group)                ; string
+                     (supplementary-groups user-profile-supplementary-groups) ; list of strings
+                     (shell               user-profile-shell)                ; file-like
+                     (home-directory      user-profile-home-directory)       ; string
+                     (comment             user-profile-comment)              ; string
+                     (password-secret     user-profile-password-secret))     ; symbol（logical name）
 
 ;; 当前仓库是 root + one primary user 的单用户设计。
 (define %primary-user

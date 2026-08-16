@@ -47,28 +47,28 @@
   (map user-group-name (filter user-group? %vm-accounts+groups)))
 
 (test-assert "folded accounts include root"
-  (member "root" acct-names))
+             (member "root" acct-names))
 (test-assert "folded accounts include primary user"
-  (member "user" acct-names))
+             (member "user" acct-names))
 (test-assert "folded accounts include guix builders"
-  (member "guixbuilder01" acct-names))
+             (member "guixbuilder01" acct-names))
 (test-assert "folded accounts include sshd"
-  (member "sshd" acct-names))
+             (member "sshd" acct-names))
 (test-assert "folded accounts include messagebus"
-  (member "messagebus" acct-names))
+             (member "messagebus" acct-names))
 (test-assert "folded accounts include polkitd"
-  (member "polkitd" acct-names))
+             (member "polkitd" acct-names))
 (test-assert "folded groups include wheel"
-  (member "wheel" group-names))
+             (member "wheel" group-names))
 (test-assert "folded groups include guixbuild"
-  (member "guixbuild" group-names))
+             (member "guixbuild" group-names))
 
 ;; primary user 的 UID 必须保留声明值 1000。
 (test-equal "primary user keeps uid 1000"
-  1000
-  (user-account-uid
-   (find (lambda (a) (string=? "user" (user-account-name a)))
-         (filter user-account? %vm-accounts+groups))))
+            1000
+            (user-account-uid
+             (find (lambda (a) (string=? "user" (user-account-name a)))
+                   (filter user-account? %vm-accounts+groups))))
 
 ;; ── B. 服务接线 ─────────────────────────────────────────────────
 ;; account-databases-service 是 activation-service-type 的扩展，OS 的
@@ -84,11 +84,11 @@
   (call-with-output-string (lambda (p) (write (gexp->approximate-sexp g) p))))
 
 (test-assert "OS activation includes account-databases projection"
-  (any (lambda (g)
-         ;; 投影 gexp 正文里必须引用纯写库入口 write-passwd。
-         (and (gexp? g)
-              (string-contains (gexp-source g) "write-passwd")))
-       activation-gexps))
+             (any (lambda (g)
+                    ;; 投影 gexp 正文里必须引用纯写库入口 write-passwd。
+                    (and (gexp? g)
+                         (string-contains (gexp-source g) "write-passwd")))
+                  activation-gexps))
 
 ;; ── C. 纯 Scheme 语义（无 FFI flock）─────────────────────────────
 ;; 投影 gexp 必须绕开上游 activate-users+groups / with-file-lock。
@@ -99,15 +99,15 @@
         activation-gexps))
 
 (test-assert "projection uses pure-Scheme user+group-databases"
-  (let ((s (gexp-source projection-gexp)))
-    (and (string-contains s "user+group-databases")
-         (string-contains s "write-group")
-         (string-contains s "write-shadow"))))
+             (let ((s (gexp-source projection-gexp)))
+               (and (string-contains s "user+group-databases")
+                    (string-contains s "write-group")
+                    (string-contains s "write-shadow"))))
 
 (test-assert "projection does NOT use upstream flock activation"
-  (let ((s (gexp-source projection-gexp)))
-    (not (or (string-contains s "with-file-lock")
-             (string-contains s "activate-users+groups")))))
+             (let ((s (gexp-source projection-gexp)))
+               (not (or (string-contains s "with-file-lock")
+                        (string-contains s "activate-users+groups")))))
 
 ;; 顺序语义：投影必须排在所有 getpw 依赖方之前（activation 脚本顺序 =
 ;; fold-services 对 activation-service-type 的值顺序）。上游 broken
@@ -116,21 +116,21 @@
 ;; user-persistence、guix-home）都看到完整数据库。
 ;; 注：投影自身也调用 getpwnam（写库后才建 home），不算消费者。
 (test-assert "projection runs before any getpw-using activation"
-  (let* ((index (lambda (pred)
-                  (list-index pred activation-gexps)))
-         (proj-idx (index (lambda (g)
-                            (string-contains (gexp-source g) "write-passwd"))))
-         (consumers (filter-map (lambda (i)
-                                  (and (not (= i proj-idx))
-                                       (string-contains (gexp-source
-                                                         (list-ref activation-gexps i))
-                                                        "getpw")
-                                       i))
-                                (iota (length activation-gexps)))))
-    (format #t "  projection at ~a, getpw consumers at ~a~%"
-            proj-idx consumers)
-    (and proj-idx
-         (every (lambda (i) (< proj-idx i)) consumers))))
+             (let* ((index (lambda (pred)
+                             (list-index pred activation-gexps)))
+                    (proj-idx (index (lambda (g)
+                                       (string-contains (gexp-source g) "write-passwd"))))
+                    (consumers (filter-map (lambda (i)
+                                             (and (not (= i proj-idx))
+                                                  (string-contains (gexp-source
+                                                                    (list-ref activation-gexps i))
+                                                                   "getpw")
+                                                  i))
+                                           (iota (length activation-gexps)))))
+               (format #t "  projection at ~a, getpw consumers at ~a~%"
+                       proj-idx consumers)
+               (and proj-idx
+                    (every (lambda (i) (< proj-idx i)) consumers))))
 
 ;; ── D. 纯 Scheme 计算产出正确内容 ────────────────────────────────
 ;; 用真实 account 列表（shell 取字符串形式，模拟 boot 时 sexp 重建后
@@ -138,10 +138,10 @@
 (define (string-shell user)
   (let ((s (user-account-shell user)))
     (if (string? s)
-        s
-        ;; gexp 未 lowering 时是 file-append；boot 时经 sexp->user-account
-        ;; 重建后是 store 路径字符串。这里用占位路径验证格式。
-        "/gnu/store/00000000000000000000000000000000-bash-5.2.37/bin/bash")))
+      s
+      ;; gexp 未 lowering 时是 file-append；boot 时经 sexp->user-account
+      ;; 重建后是 store 路径字符串。这里用占位路径验证格式。
+      "/gnu/store/00000000000000000000000000000000-bash-5.2.37/bin/bash")))
 
 (define (materialize user)
   (user-account
@@ -152,30 +152,30 @@
   (map materialize (filter user-account? %vm-accounts+groups)))
 
 (receive (groups passwd shadow)
-    (user+group-databases materialized
-                          (filter user-group? %vm-accounts+groups)
-                          #:current-passwd '()
-                          #:current-groups '()
-                          #:current-shadow '())
-  (define (entry-names entries getter)
-    (map getter entries))
-
-  (test-assert "passwd has root entry with uid 0"
-    (let ((root (find (lambda (e)
-                        (string=? "root" (password-entry-name e)))
-                      passwd)))
-      (and root (= 0 (password-entry-uid root)))))
-  (test-assert "passwd has user entry with uid 1000"
-    (let ((user-e (find (lambda (e)
-                          (string=? "user" (password-entry-name e)))
-                        passwd)))
-      (and user-e (= 1000 (password-entry-uid user-e)))))
-  (test-assert "shadow has entries for all users"
-    (= (length passwd) (length shadow)))
-  (test-assert "wheel group includes user"
-    (let ((wheel (find (lambda (e)
-                         (string=? "wheel" (group-entry-name e)))
-                       groups)))
-      (and wheel (member "user" (group-entry-members wheel))))))
+         (user+group-databases materialized
+                               (filter user-group? %vm-accounts+groups)
+                               #:current-passwd '()
+                               #:current-groups '()
+                               #:current-shadow '())
+         (define (entry-names entries getter)
+           (map getter entries))
+         
+         (test-assert "passwd has root entry with uid 0"
+                      (let ((root (find (lambda (e)
+                                          (string=? "root" (password-entry-name e)))
+                                        passwd)))
+                        (and root (= 0 (password-entry-uid root)))))
+         (test-assert "passwd has user entry with uid 1000"
+                      (let ((user-e (find (lambda (e)
+                                            (string=? "user" (password-entry-name e)))
+                                          passwd)))
+                        (and user-e (= 1000 (password-entry-uid user-e)))))
+         (test-assert "shadow has entries for all users"
+                      (= (length passwd) (length shadow)))
+         (test-assert "wheel group includes user"
+                      (let ((wheel (find (lambda (e)
+                                           (string=? "wheel" (group-entry-name e)))
+                                         groups)))
+                        (and wheel (member "user" (group-entry-members wheel))))))
 
 (test-end "accounts")

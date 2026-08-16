@@ -55,26 +55,26 @@
 (define %secrets-store-subdir "secrets")
 
 (define-record-type* <secret-decl> secret-decl make-secret-decl
-  secret-decl?
-  (name       secret-decl-name)          ; symbol（逻辑名）
-  (scope      secret-decl-scope)         ; 'install | 'system | 'user
-  (source     secret-decl-source)        ; string：仓库内相对路径（.age）
-  (target-name secret-decl-target-name)  ; string：runtime 文件名
-  (owner-user secret-decl-owner-user     ; string：owner 用户名
-              (default "root"))
-  (mode       secret-decl-mode           ; integer
-              (default #o400)))
+                     secret-decl?
+                     (name       secret-decl-name)          ; symbol（逻辑名）
+                     (scope      secret-decl-scope)         ; 'install | 'system | 'user
+                     (source     secret-decl-source)        ; string：仓库内相对路径（.age）
+                     (target-name secret-decl-target-name)  ; string：runtime 文件名
+                     (owner-user secret-decl-owner-user     ; string：owner 用户名
+                                 (default "root"))
+                     (mode       secret-decl-mode           ; integer
+                                 (default #o400)))
 
 (define (runtime-secret-target decl user)
   "DECL（scope system/user）的 runtime 绝对路径。"
   (match (secret-decl-scope decl)
-    ('system
-     (string-append %secrets-runtime-root "/system/"
-                    (secret-decl-target-name decl)))
-    ('user
-     (string-append %secrets-runtime-root "/users/" user "/"
-                    (secret-decl-target-name decl)))
-    (other (error "install scope has no runtime target" other))))
+         ('system
+          (string-append %secrets-runtime-root "/system/"
+                         (secret-decl-target-name decl)))
+         ('user
+          (string-append %secrets-runtime-root "/users/" user "/"
+                         (secret-decl-target-name decl)))
+         (other (error "install scope has no runtime target" other))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 部署程序（boot 时以 root 运行；age 经 -i 文件 identity，密语不经
@@ -97,126 +97,126 @@ docs/secrets.md 第 15.4 节）：
   (program-file
    "guixcfg-secrets-deploy"
    (with-imported-modules (source-module-closure '((guix build utils)))
-     #~(begin
-         (use-modules (guix build utils) (ice-9 ftw) (ice-9 regex)
-                      (srfi srfi-1))
-         ;; age 用 closure 内的绝对路径——不依赖服务进程的 PATH
-         ;; （shepherd 服务继承 boot 时的环境，PATH 里可能无 age）。
-         (define age-bin #$(file-append age "/bin/age"))
-         (define identity "/persist/system/keys/age/identity")
-         (define store-dir "/run/guixcfg-secrets.d")
-         (define current-link #$%secrets-runtime-root)
-
-         (define (decrypt-into cipher out-path uid gid mode)
-           ;; 输出先到同目录 .new（0600）再原子 rename——age 失败不写
-           ;; 输出文件，不留 partial plaintext。
-           (let ((tmp (string-append out-path ".new")))
-             (call-with-output-file tmp (lambda (p) #t))
-             (chmod tmp #o600)
-             (catch #t
-               (lambda ()
-                 (invoke age-bin "--decrypt" "-i" identity
-                         "-o" tmp cipher)
-                 (chmod tmp mode)
-                 (chown tmp uid gid)
-                 (rename-file tmp out-path))
-               (lambda (k . a)
-                 (false-if-exception (delete-file tmp))
-                 (apply throw k a)))))
-
-         (define (next-generation)
-           ;; 现有最大数字目录 + 1（boot 时从 1 开始）。
-           (let* ((ents (if (file-exists? store-dir)
-                            (scandir store-dir)
-                            '()))
-                  (nums (filter-map
-                         (lambda (e)
-                           (let ((m (string-match "^[0-9]+$" e)))
-                             (and m (string->number e))))
-                         ents)))
-             (if (null? nums) 1 (+ 1 (apply max nums)))))
-
-         (define (rm-rf path)
-           (when (file-exists? path)
-             (delete-file-recursively path)))
-
-         (unless (file-exists? identity)
-           (error "stable identity missing; refusing to prompt" identity))
-
-         (let* ((n (next-generation))
-                (tmp-dir (string-append store-dir "/." (number->string n)
-                                        ".tmp"))
-                (new-dir (string-append store-dir "/" (number->string n))))
-           (mkdir-p store-dir)
-           (chmod store-dir #o711)
-           (chown store-dir 0 0)
-           (catch #t
-             (lambda ()
-               ;; 1. NEW.tmp：最终目录权限先就位
-               (mkdir-p tmp-dir)
-               (chmod tmp-dir #o711)
-               (chown tmp-dir 0 0)
-               (let ((sys-dir (string-append tmp-dir "/system"))
-                     (users-dir (string-append tmp-dir "/users")))
-                 (mkdir-p sys-dir) (chmod sys-dir #o700) (chown sys-dir 0 0)
-                 (mkdir-p users-dir) (chmod users-dir #o711)
-                 (chown users-dir 0 0))
-               ;; 2. 解密全部 secret（含 owner/mode）
-               #$@(map
-                   (lambda (decl)
-                     (let* ((source (secret-decl-source decl))
-                            (scope (secret-decl-scope decl))
-                            (owner (secret-decl-owner-user decl))
-                            (mode (secret-decl-mode decl))
-                            (rel-target
-                             (match scope
-                               ('system (string-append
-                                         "system/"
-                                         (secret-decl-target-name decl)))
-                               ('user (string-append
-                                       "users/" user "/"
-                                       (secret-decl-target-name decl))))))
-                       #~(begin
-                           (let* ((pw (getpw #$owner))
-                                  (uid (passwd:uid pw))
-                                  (gid (passwd:gid pw))
-                                  (parent (dirname
-                                           (string-append tmp-dir "/"
-                                                          #$rel-target))))
-                             (mkdir-p parent)
-                             ;; users/<user>/ 归该用户 0700
-                             (when (string-prefix?
-                                    (string-append tmp-dir "/users/")
-                                    parent)
-                               (chown parent uid gid)
-                               (chmod parent #o700))
-                             (decrypt-into
-                              #$(local-file (assume-valid-file-name source))
-                              (string-append tmp-dir "/" #$rel-target)
-                              uid gid #$mode)))))
-                   (filter (lambda (d)
-                             (memq (secret-decl-scope d) '(system user)))
-                           decls))
-               ;; 3. 提交：rename NEW.tmp → NEW
-               (rename-file tmp-dir new-dir)
-               ;; 4. 原子切换 current symlink（临时 symlink + rename）
-               (let ((pivot (string-append current-link ".new")))
-                 (false-if-exception (delete-file pivot))
-                 (symlink new-dir pivot)
-                 (rename-file pivot current-link))
-               ;; 5. 清理旧代（保留当前代）
-               (for-each
-                (lambda (e)
-                  (let ((p (string-append store-dir "/" e)))
-                    (when (and (string-match "^[0-9]+$" e)
-                               (not (string=? e (number->string n))))
-                      (rm-rf p))))
-                (scandir store-dir))
-               #t)
-             (lambda (k . a)
-               ;; 任一失败：删 NEW.tmp，当前代不动
-               (rm-rf tmp-dir)
-               (apply throw k a))))))))
+                          #~(begin
+                             (use-modules (guix build utils) (ice-9 ftw) (ice-9 regex)
+                                          (srfi srfi-1))
+                             ;; age 用 closure 内的绝对路径——不依赖服务进程的 PATH
+                             ;; （shepherd 服务继承 boot 时的环境，PATH 里可能无 age）。
+                             (define age-bin #$(file-append age "/bin/age"))
+                             (define identity "/persist/system/keys/age/identity")
+                             (define store-dir "/run/guixcfg-secrets.d")
+                             (define current-link #$%secrets-runtime-root)
+                             
+                             (define (decrypt-into cipher out-path uid gid mode)
+                               ;; 输出先到同目录 .new（0600）再原子 rename——age 失败不写
+                               ;; 输出文件，不留 partial plaintext。
+                               (let ((tmp (string-append out-path ".new")))
+                                 (call-with-output-file tmp (lambda (p) #t))
+                                 (chmod tmp #o600)
+                                 (catch #t
+                                   (lambda ()
+                                     (invoke age-bin "--decrypt" "-i" identity
+                                             "-o" tmp cipher)
+                                     (chmod tmp mode)
+                                     (chown tmp uid gid)
+                                     (rename-file tmp out-path))
+                                   (lambda (k . a)
+                                     (false-if-exception (delete-file tmp))
+                                     (apply throw k a)))))
+                             
+                             (define (next-generation)
+                               ;; 现有最大数字目录 + 1（boot 时从 1 开始）。
+                               (let* ((ents (if (file-exists? store-dir)
+                                              (scandir store-dir)
+                                              '()))
+                                      (nums (filter-map
+                                             (lambda (e)
+                                               (let ((m (string-match "^[0-9]+$" e)))
+                                                 (and m (string->number e))))
+                                             ents)))
+                                 (if (null? nums) 1 (+ 1 (apply max nums)))))
+                             
+                             (define (rm-rf path)
+                               (when (file-exists? path)
+                                 (delete-file-recursively path)))
+                             
+                             (unless (file-exists? identity)
+                               (error "stable identity missing; refusing to prompt" identity))
+                             
+                             (let* ((n (next-generation))
+                                    (tmp-dir (string-append store-dir "/." (number->string n)
+                                                            ".tmp"))
+                                    (new-dir (string-append store-dir "/" (number->string n))))
+                               (mkdir-p store-dir)
+                               (chmod store-dir #o711)
+                               (chown store-dir 0 0)
+                               (catch #t
+                                 (lambda ()
+                                   ;; 1. NEW.tmp：最终目录权限先就位
+                                   (mkdir-p tmp-dir)
+                                   (chmod tmp-dir #o711)
+                                   (chown tmp-dir 0 0)
+                                   (let ((sys-dir (string-append tmp-dir "/system"))
+                                         (users-dir (string-append tmp-dir "/users")))
+                                     (mkdir-p sys-dir) (chmod sys-dir #o700) (chown sys-dir 0 0)
+                                     (mkdir-p users-dir) (chmod users-dir #o711)
+                                     (chown users-dir 0 0))
+                                   ;; 2. 解密全部 secret（含 owner/mode）
+                                   #$@(map
+                                       (lambda (decl)
+                                         (let* ((source (secret-decl-source decl))
+                                                (scope (secret-decl-scope decl))
+                                                (owner (secret-decl-owner-user decl))
+                                                (mode (secret-decl-mode decl))
+                                                (rel-target
+                                                 (match scope
+                                                        ('system (string-append
+                                                                  "system/"
+                                                                  (secret-decl-target-name decl)))
+                                                        ('user (string-append
+                                                                "users/" user "/"
+                                                                (secret-decl-target-name decl))))))
+                                           #~(begin
+                                              (let* ((pw (getpw #$owner))
+                                                     (uid (passwd:uid pw))
+                                                     (gid (passwd:gid pw))
+                                                     (parent (dirname
+                                                              (string-append tmp-dir "/"
+                                                                             #$rel-target))))
+                                                (mkdir-p parent)
+                                                ;; users/<user>/ 归该用户 0700
+                                                (when (string-prefix?
+                                                       (string-append tmp-dir "/users/")
+                                                       parent)
+                                                  (chown parent uid gid)
+                                                  (chmod parent #o700))
+                                                (decrypt-into
+                                                 #$(local-file (assume-valid-file-name source))
+                                                 (string-append tmp-dir "/" #$rel-target)
+                                                 uid gid #$mode)))))
+                                       (filter (lambda (d)
+                                                 (memq (secret-decl-scope d) '(system user)))
+                                               decls))
+                                   ;; 3. 提交：rename NEW.tmp → NEW
+                                   (rename-file tmp-dir new-dir)
+                                   ;; 4. 原子切换 current symlink（临时 symlink + rename）
+                                   (let ((pivot (string-append current-link ".new")))
+                                     (false-if-exception (delete-file pivot))
+                                     (symlink new-dir pivot)
+                                     (rename-file pivot current-link))
+                                   ;; 5. 清理旧代（保留当前代）
+                                   (for-each
+                                    (lambda (e)
+                                      (let ((p (string-append store-dir "/" e)))
+                                        (when (and (string-match "^[0-9]+$" e)
+                                                   (not (string=? e (number->string n))))
+                                          (rm-rf p))))
+                                    (scandir store-dir))
+                                   #t)
+                                 (lambda (k . a)
+                                   ;; 任一失败：删 NEW.tmp，当前代不动
+                                   (rm-rf tmp-dir)
+                                   (apply throw k a))))))))
 
 (define (secrets-deploy-service decls user)
   "boot 时（file-systems 后、user-processes 前）解密部署 runtime
@@ -251,51 +251,51 @@ account-state-ready。不调用 age、不读 .age、不访问 stable S、不碰
   (program-file
    "guixcfg-password-project"
    (with-imported-modules (source-module-closure '((guix build utils)))
-     #~(begin
-         (use-modules (guix build utils) (ice-9 rdelim) (srfi srfi-13)
-                      (ice-9 regex))
-         (define user #$user)
-         (define hash-path
-           (string-append "/persist/system/accounts/" user
-                          "/password.hash"))
-         (define (valid-hash? s)
-           (and (string-match "^\\$[0-9a-z]+\\$[^:$]+\\$[^: \n]+$" s)
-                #t))
-         ;; hash 必须在且形态合法（否则 fail closed：不投影、不 ready）。
-         (unless (file-exists? hash-path)
-           (error "persistent password hash missing" hash-path))
-         (let* ((hash (string-trim-right
-                       (call-with-input-file hash-path
-                         (lambda (p) (read-string p)))
-                       #\newline))
-                (shadow (call-with-input-file "/etc/shadow"
-                          (lambda (p) (read-string p))))
-                (lines (string-split shadow #\newline)))
-           (unless (valid-hash? hash)
-             (error "persistent password hash malformed" user))
-           (unless (any (lambda (line)
-                          (let ((fields (string-split line #\:)))
-                            (and (pair? fields)
-                                 (string=? (car fields) user))))
-                        lines)
-             (error "target user missing from /etc/shadow" user))
-           (let ((out-lines
-                  (map (lambda (line)
-                         (let ((fields (string-split line #\:)))
-                           (if (and (pair? fields)
-                                    (string=? (car fields) user))
-                               (string-join (cons hash (cdr fields)) ":")
-                               line)))
-                       lines))
-                 (new "/etc/.shadow.guixcfg-new"))
-             ;; 原子投影：临时文件 0600 root → rename（失败保留原
-             ;; shadow——不删条目、不产空密码用户）。
-             (call-with-output-file new
-               (lambda (p) (display (string-join out-lines "\n") p)))
-             (chmod new #o600)
-             (chown new 0 0)
-             (rename-file new "/etc/shadow")
-             #t))))))
+                          #~(begin
+                             (use-modules (guix build utils) (ice-9 rdelim) (srfi srfi-13)
+                                          (ice-9 regex))
+                             (define user #$user)
+                             (define hash-path
+                               (string-append "/persist/system/accounts/" user
+                                              "/password.hash"))
+                             (define (valid-hash? s)
+                               (and (string-match "^\\$[0-9a-z]+\\$[^:$]+\\$[^: \n]+$" s)
+                                    #t))
+                             ;; hash 必须在且形态合法（否则 fail closed：不投影、不 ready）。
+                             (unless (file-exists? hash-path)
+                               (error "persistent password hash missing" hash-path))
+                             (let* ((hash (string-trim-right
+                                           (call-with-input-file hash-path
+                                                                 (lambda (p) (read-string p)))
+                                           #\newline))
+                                    (shadow (call-with-input-file "/etc/shadow"
+                                                                  (lambda (p) (read-string p))))
+                                    (lines (string-split shadow #\newline)))
+                               (unless (valid-hash? hash)
+                                 (error "persistent password hash malformed" user))
+                               (unless (any (lambda (line)
+                                              (let ((fields (string-split line #\:)))
+                                                (and (pair? fields)
+                                                     (string=? (car fields) user))))
+                                            lines)
+                                 (error "target user missing from /etc/shadow" user))
+                               (let ((out-lines
+                                      (map (lambda (line)
+                                             (let ((fields (string-split line #\:)))
+                                               (if (and (pair? fields)
+                                                        (string=? (car fields) user))
+                                                 (string-join (cons hash (cdr fields)) ":")
+                                                 line)))
+                                           lines))
+                                     (new "/etc/.shadow.guixcfg-new"))
+                                 ;; 原子投影：临时文件 0600 root → rename（失败保留原
+                                 ;; shadow——不删条目、不产空密码用户）。
+                                 (call-with-output-file new
+                                                        (lambda (p) (display (string-join out-lines "\n") p)))
+                                 (chmod new #o600)
+                                 (chown new 0 0)
+                                 (rename-file new "/etc/shadow")
+                                 #t))))))
 
 (define (password-project-service user)
   "boot 时把 persistent password hash 投影进 ephemeral /etc/shadow 的

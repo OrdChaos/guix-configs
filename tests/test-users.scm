@@ -17,32 +17,32 @@
 (test-equal "primary user uid" 1000 (user-profile-uid %primary-user))
 (test-equal "primary user group" "users" (user-profile-group %primary-user))
 (test-equal "primary user supplementary groups"
-  '("wheel" "netdev")
-  (user-profile-supplementary-groups %primary-user))
+            '("wheel" "netdev")
+            (user-profile-supplementary-groups %primary-user))
 (test-equal "primary user home" "/home/user"
-  (user-profile-home-directory %primary-user))
+            (user-profile-home-directory %primary-user))
 (test-equal "password secret is a logical reference"
-  'primary-user-password (user-profile-password-secret %primary-user))
+            'primary-user-password (user-profile-password-secret %primary-user))
 
 ;; 生成的 user-account：password 恒为 #f（hash 不进 evaluator/store）
 (define acct (primary-user-account))
 (test-equal "account name from profile" "user" (user-account-name acct))
 (test-equal "account uid from profile" 1000 (user-account-uid acct))
 (test-assert "account password is #f (no hash in evaluation)"
-  (not (user-account-password acct)))
+             (not (user-account-password acct)))
 
 ;; U1：host 定义不再含 user 结构事实/password hash（文本级检查）
 (define (file-contains? path pattern)
   (call-with-input-file path
-    (lambda (port)
-      (let loop ((line (read-line port)))
-        (cond ((eof-object? line) #f)
-              ((string-contains line pattern) #t)
-              (else (loop (read-line port))))))))
+                        (lambda (port)
+                          (let loop ((line (read-line port)))
+                            (cond ((eof-object? line) #f)
+                              ((string-contains line pattern) #t)
+                              (else (loop (read-line port))))))))
 
 (test-assert "hosts/vm.scm contains no password hash literal"
-  (not (file-contains? "modules/guixcfg/hosts/vm.scm" "(password \"$")))
+             (not (file-contains? "modules/guixcfg/hosts/vm.scm" "(password \"$")))
 (test-assert "hosts/vm.scm references primary user profile"
-  (file-contains? "modules/guixcfg/hosts/vm.scm" "%primary-user"))
+             (file-contains? "modules/guixcfg/hosts/vm.scm" "%primary-user"))
 
 (test-end "users")

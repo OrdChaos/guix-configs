@@ -76,15 +76,15 @@ host 可选: vm, laptop~%"))
 luks-recovery.age（需先 secrets unlock；master password 只解锁一次
 stable S，安装过程复用 /run 中的临时 S）；否则交互读取。"
   (if use-luks-secret?
-      (unless (runtime-identity-present?)
-        (format (current-error-port)
-                "no unlocked stable identity; run 'secrets unlock' first~%")
-        (exit 1))
-      #t)
+    (unless (runtime-identity-present?)
+      (format (current-error-port)
+              "no unlocked stable identity; run 'secrets unlock' first~%")
+      (exit 1))
+    #t)
   (let ((reader (if use-luks-secret?
-                    (make-age-secret-reader
-                     "secrets/install/luks-recovery.age")
-                    read-luks-passphrase!)))
+                  (make-age-secret-reader
+                   "secrets/install/luks-recovery.age")
+                  read-luks-passphrase!)))
     (run-install (load-policy host) device
                  #:passphrase-reader reader)))
 

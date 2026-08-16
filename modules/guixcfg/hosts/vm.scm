@@ -55,12 +55,12 @@
    ;; PAM gate 是 correctness fallback（新增 frontend 漏加
    ;; requirement 也绕不过 readiness policy）。
    (modify-services %base-services
-     (mingetty-service-type config =>
-       (mingetty-configuration
-        (inherit config)
-        (shepherd-requirement
-         (append (mingetty-configuration-shepherd-requirement config)
-                 '(interactive-session-ready))))))))
+                    (mingetty-service-type config =>
+                                           (mingetty-configuration
+                                            (inherit config)
+                                            (shepherd-requirement
+                                             (append (mingetty-configuration-shepherd-requirement config)
+                                                     '(interactive-session-ready))))))))
 
 ;; 完整 user services（不含 account-databases 投影本身）。OS 的全部
 ;; 业务服务都在这一个列表里——用于 (a) 折叠完整 account 列表，

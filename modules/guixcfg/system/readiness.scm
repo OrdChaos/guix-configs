@@ -58,14 +58,10 @@
 available (provides persistent-state-ready).")
                          (start
                           #~(lambda ()
-                              ;; gexp 内只有 guile core + 显式列出的模块
-                              ;; 可用——every 来自 srfi-1，必须显式引入。
-                              (use-modules (srfi srfi-1))
-                              (every file-exists?
-                                     '("/persist/system"
-                                       "/persist/data-home"
-                                       "/var/guix"
-                                       "/gnu/store"))))
+                              (and (file-exists? "/persist/system")
+                                   (file-exists? "/persist/data-home")
+                                   (file-exists? "/var/guix")
+                                   (file-exists? "/gnu/store"))))
                          (stop #~(const #f))))))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -158,14 +154,14 @@ barrier 承担，不靠卡住 user-processes）。"
   "activation gexp：boot 早期关闭 gate（创建 gate 文件）。gate 由
 interactive-session-ready 服务在全部 prerequisite 成功后原子打开。"
   (with-imported-modules (source-module-closure '((guix build utils)))
-    #~(begin
-        (use-modules (guix build utils))
-        (mkdir-p "/run/guixcfg")
-        (chmod "/run/guixcfg" #o755)
-        (call-with-output-file #$%login-gate-path
-          (lambda (p)
-            (display "The system is not ready for interactive logins yet.\n"
-                     p))))))
+                         #~(begin
+                            (use-modules (guix build utils))
+                            (mkdir-p "/run/guixcfg")
+                            (chmod "/run/guixcfg" #o755)
+                            (call-with-output-file #$%login-gate-path
+                                                   (lambda (p)
+                                                     (display "The system is not ready for interactive logins yet.\n"
+                                                              p))))))
 
 (define (login-gate-pam-service)
   "PAM gate：对 login frontends（login、sshd——未来 greetd）的 account
@@ -179,18 +175,18 @@ pam-extension transformer（横切机制，同 elogind 的 pam_elogind
                           (lambda (pam)
                             (if (member (pam-service-name pam)
                                         '("login" "sshd"))
-                                (pam-service
-                                 (inherit pam)
-                                 (account
-                                  (cons (pam-entry
-                                         (control "required")
-                                         (module "pam_nologin.so")
-                                         (arguments
-                                          (list (string-append
-                                                 "file="
-                                                 %login-gate-path))))
-                                        (pam-service-account pam))))
-                                pam)))))))
+                              (pam-service
+                               (inherit pam)
+                               (account
+                                (cons (pam-entry
+                                       (control "required")
+                                       (module "pam_nologin.so")
+                                       (arguments
+                                        (list (string-append
+                                               "file="
+                                               %login-gate-path))))
+                                      (pam-service-account pam))))
+                              pam)))))))
 
 (define (login-gate-services)
   "login gate 完整组合：activation（boot 早期关 gate）+ PAM 横切

@@ -70,12 +70,12 @@
   "当前可用的 identity 路径：安装/bootstrap 期 runtime 临时 S 优先
 （此时 /persist 尚未就绪）；日常运行用 LUKS 内 installed S。"
   (if (runtime-identity-present?)
-      (%runtime-identity-path)
-      (%installed-identity-path)))
+    (%runtime-identity-path)
+    (%installed-identity-path)))
 
 (define (read-file-string path)
   (call-with-input-file path
-    (lambda (port) (read-string port))))
+                        (lambda (port) (read-string port))))
 
 (define (secret-file! path contents mode)
   "把 CONTENTS（字符串）原子写入 PATH，权限 MODE；父目录 fsync。"
@@ -122,27 +122,27 @@
 临时文件，读回即删）。"
   (let ((tmp (fresh-run-temp ".decrypt-out")))
     (dynamic-wind
-      (lambda () #t)
-      (lambda ()
-        (age-pty-run (string-append passphrase "\n")
-                     (string-append "age --decrypt -o " tmp " "
-                                    ciphertext-path))
-        (read-file-string tmp))
-      (lambda ()
-        (false-if-exception (delete-file tmp))))))
+     (lambda () #t)
+     (lambda ()
+       (age-pty-run (string-append passphrase "\n")
+                    (string-append "age --decrypt -o " tmp " "
+                                   ciphertext-path))
+       (read-file-string tmp))
+     (lambda ()
+       (false-if-exception (delete-file tmp))))))
 
 (define (derive-recipient identity-contents)
   "从 identity 内容（AGE-SECRET-KEY-...）推导 recipient；identity 经
 /run 0600 临时文件传入 age-keygen -y，不进 argv。"
   (let ((tmp (fresh-run-temp ".derive-in")))
     (dynamic-wind
-      (lambda ()
-        (call-with-output-file tmp
-          (lambda (port) (display identity-contents port))))
-      (lambda ()
-        (string-trim-both (invoke-capture "age-keygen" "-y" tmp)))
-      (lambda ()
-        (false-if-exception (delete-file tmp))))))
+     (lambda ()
+       (call-with-output-file tmp
+                              (lambda (port) (display identity-contents port))))
+     (lambda ()
+       (string-trim-both (invoke-capture "age-keygen" "-y" tmp)))
+     (lambda ()
+       (false-if-exception (delete-file tmp))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; lifecycle
@@ -165,20 +165,20 @@ stable-identity.age。默认拒绝覆盖已有 identity。明文 S 只在内存�
       (let ((plain-tmp (fresh-run-temp ".init-plain"))
             (enc-tmp (fresh-run-temp ".init-enc")))
         (dynamic-wind
-          (lambda ()
-            (call-with-output-file plain-tmp
-              (lambda (port) (display identity port))))
-          (lambda ()
-            (age-encrypt-passphrase! plain-tmp enc-tmp passphrase)
-            (let ((ciphertext (read-file-string enc-tmp)))
-              (mkdir-p (dirname pub-file))
-              (mkdir-p (dirname enc-file))
-              ;; 顺序：先 ciphertext 后公钥——失败时不留“有公钥无私钥”。
-              (secret-file! enc-file ciphertext #o644)
-              (secret-file! pub-file (string-append recipient "\n") #o644)))
-          (lambda ()
-            (false-if-exception (delete-file plain-tmp))
-            (false-if-exception (delete-file enc-tmp)))))
+         (lambda ()
+           (call-with-output-file plain-tmp
+                                  (lambda (port) (display identity port))))
+         (lambda ()
+           (age-encrypt-passphrase! plain-tmp enc-tmp passphrase)
+           (let ((ciphertext (read-file-string enc-tmp)))
+             (mkdir-p (dirname pub-file))
+             (mkdir-p (dirname enc-file))
+             ;; 顺序：先 ciphertext 后公钥——失败时不留“有公钥无私钥”。
+             (secret-file! enc-file ciphertext #o644)
+             (secret-file! pub-file (string-append recipient "\n") #o644)))
+         (lambda ()
+           (false-if-exception (delete-file plain-tmp))
+           (false-if-exception (delete-file enc-tmp)))))
       recipient)))
 
 (define (age-unlock! root passphrase)
@@ -194,22 +194,22 @@ already-unlocked（复用）或 unlocked（新解密）。"
            (string=? (string-trim-both (read-file-string pub-file))
                      (derive-recipient
                       (read-file-string (%runtime-identity-path)))))
-      'already-unlocked
-      (begin
-        (unless (file-exists? enc-file)
-          (error "encrypted stable identity missing" enc-file))
-        (let* ((decrypted (age-decrypt-passphrase enc-file passphrase))
-               (recipient (derive-recipient decrypted)))
-          ;; 错密码在 age 层已失败；这里再校验 recipient——fail closed。
-          (unless (and (file-exists? pub-file)
-                       (string=? (string-trim-both (read-file-string pub-file))
-                                 recipient))
-            (error "unlocked identity recipient does not match repository"
-                   recipient))
-          (mkdir-p (%runtime-identity-dir))
-          (chmod (%runtime-identity-dir) #o700)
-          (secret-file! (%runtime-identity-path) decrypted #o600)
-          'unlocked))))
+    'already-unlocked
+    (begin
+     (unless (file-exists? enc-file)
+       (error "encrypted stable identity missing" enc-file))
+     (let* ((decrypted (age-decrypt-passphrase enc-file passphrase))
+            (recipient (derive-recipient decrypted)))
+       ;; 错密码在 age 层已失败；这里再校验 recipient——fail closed。
+       (unless (and (file-exists? pub-file)
+                    (string=? (string-trim-both (read-file-string pub-file))
+                              recipient))
+         (error "unlocked identity recipient does not match repository"
+                recipient))
+       (mkdir-p (%runtime-identity-dir))
+       (chmod (%runtime-identity-dir) #o700)
+       (secret-file! (%runtime-identity-path) decrypted #o600)
+       'unlocked))))
 
 (define (age-lock!)
   "删除运行时临时 S（安装完成后调用）。"
@@ -262,19 +262,19 @@ already-unlocked（复用）或 unlocked（新解密）。"
   (let ((tmp (string-append out-path ".new")))
     (mkdir-p (dirname out-path))
     (dynamic-wind
-      (lambda ()
-        (call-with-output-file tmp (lambda (port) #t))
-        (chmod tmp #o600))
-      (lambda ()
-        ;; identity 经 -i 文件参数（路径无 secret 内容）；明文经 -o 文件。
-        (invoke-with-stdin "" "age" "--decrypt"
-                           "-i" (current-identity-path)
-                           "-o" tmp ciphertext-path)
-        (chmod tmp mode)
-        (chown tmp owner-uid owner-gid)
-        (rename-file tmp out-path))
-      (lambda ()
-        (false-if-exception (delete-file tmp))))
+     (lambda ()
+       (call-with-output-file tmp (lambda (port) #t))
+       (chmod tmp #o600))
+     (lambda ()
+       ;; identity 经 -i 文件参数（路径无 secret 内容）；明文经 -o 文件。
+       (invoke-with-stdin "" "age" "--decrypt"
+                          "-i" (current-identity-path)
+                          "-o" tmp ciphertext-path)
+       (chmod tmp mode)
+       (chown tmp owner-uid owner-gid)
+       (rename-file tmp out-path))
+     (lambda ()
+       (false-if-exception (delete-file tmp))))
     #t))
 
 (define (age-decrypt-to-string ciphertext-path)
@@ -285,16 +285,16 @@ already-unlocked（复用）或 unlocked（新解密）。"
     (mkdir-p (%runtime-identity-dir))
     (chmod (%runtime-identity-dir) #o700)
     (dynamic-wind
-      (lambda ()
-        (call-with-output-file tmp (lambda (port) #t))
-        (chmod tmp #o600))
-      (lambda ()
-        (invoke-with-stdin "" "age" "--decrypt"
-                           "-i" (current-identity-path)
-                           "-o" tmp ciphertext-path)
-        (read-file-string tmp))
-      (lambda ()
-        (false-if-exception (delete-file tmp))))))
+     (lambda ()
+       (call-with-output-file tmp (lambda (port) #t))
+       (chmod tmp #o600))
+     (lambda ()
+       (invoke-with-stdin "" "age" "--decrypt"
+                          "-i" (current-identity-path)
+                          "-o" tmp ciphertext-path)
+       (read-file-string tmp))
+     (lambda ()
+       (false-if-exception (delete-file tmp))))))
 
 (define (make-age-secret-reader ciphertext-path)
   "返回一个 reader thunk：首次调用解密 CIPHERTEXT-PATH（installed S）
