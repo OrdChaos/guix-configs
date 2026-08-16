@@ -11,7 +11,8 @@
 ;; guix repl 不提供 -L，这里显式把 modules/ 加入 load path（从仓库根目录运行）。
 (add-to-load-path (string-append (getcwd) "/modules"))
 
-(use-modules (guixcfg storage model)
+(use-modules (guixcfg security age)      ; runtime-identity-present?、make-age-secret-reader
+             (guixcfg storage model)
              (guixcfg storage policies)
              (guixcfg storage plan)
              (guixcfg storage validate)
