@@ -6,6 +6,7 @@
 (define-module (guixcfg hosts vm)
                #:use-module (gnu)                          ; operating-system、user-account、service 等
                #:use-module (gnu services networking)      ; dhcpcd-service-type
+               #:use-module (gnu system shadow)            ; account-service-type（折叠 account 列表）
                #:use-module (guixcfg storage model)
                #:use-module ((guixcfg storage policies) #:prefix storage:)
                #:use-module (guixcfg boot initrd)          ; ephemeral-root-initrd
@@ -17,6 +18,7 @@
                #:use-module (guixcfg system ssh)       ; secure-ssh-service、ssh-host-key-service
                #:use-module (guixcfg system user-persistence)  ; selected user persistence
                #:use-module (guixcfg system readiness) ; boot readiness DAG
+               #:use-module (guixcfg system accounts)  ; 纯 Scheme account 数据库投影
                #:use-module (guixcfg users user)       ; %primary-user（结构事实权威源）
                #:use-module (guixcfg home user)        ; %guix-home（挂入 system）
                #:use-module (guixcfg security secrets)  ; runtime secrets 部署
@@ -60,7 +62,42 @@
          (append (mingetty-configuration-shepherd-requirement config)
                  '(interactive-session-ready))))))))
 
-(define %os
+;; 完整 user services（不含 account-databases 投影本身）。OS 的全部
+;; 业务服务都在这一个列表里——用于 (a) 折叠完整 account 列表，
+;; (b) 组装最终 %os。
+(define %vm-user-services
+  (append
+   (list (secure-ssh-service)
+         (ssh-host-key-service)
+         (user-persistence-service
+          (user-profile-name %primary-user))
+         ;; 声明式 runtime secrets（boot 时 root 解密到
+         ;; /run/guixcfg-secrets；docs/secrets.md）
+         (secrets-deploy-service
+          %vm-secrets (user-profile-name %primary-user))
+         ;; 用户密码 hash 投影（persistent
+         ;; /persist/system/accounts/<user>/password.hash →
+         ;; ephemeral /etc/shadow；纯 projector，不碰 age）
+         (password-project-service
+          (user-profile-name %primary-user))
+         ;; Guix Home 挂入 system：home-environment 随 system generation
+         ;; 构建，boot 时由官方 guix-home-service-type 以 user 身份运行
+         ;; 其 activate（重建 ephemeral $HOME 中的 ~/.guix-home 与
+         ;; dotfile 链接，指向本 generation closure 内的 home）。
+         (service guix-home-service-type
+                  `((,(user-profile-name %primary-user)
+                     ,%guix-home))))
+   (append %vm-services
+           ;; boot readiness DAG（capability 链；login gate 的开启端在
+           ;; interactive-session-ready）
+           (readiness-services 'guix-home-user)
+           ;; login gate：activation 关闭 + PAM gate（login/sshd account
+           ;; 段 pam_nologin）
+           (login-gate-services))))
+
+;; 基础 OS：与最终 %os 完全相同，只是不含 account-databases 投影。
+;; 仅用于折叠 account 列表；真正启动用 %os。
+(define %os-without-account-databases
   (operating-system
    (host-name "guix-vm")
    (timezone %common-timezone)
@@ -92,36 +129,33 @@
    ;; /run/current-system/profile/bin/tpm2_{pcrread,createprimary,...}，
    ;; 必须来自锁定 Virelith 的 compat 包（docs/boot.md 第 16.4 节）。
    (packages (append (list tpm2-tools-compat) %system-packages))
-   (services (append (list (secure-ssh-service)
-                           (ssh-host-key-service)
-                           (user-persistence-service
-                            (user-profile-name %primary-user))
-                           ;; 声明式 runtime secrets（boot 时 root 解密到
-                           ;; /run/guixcfg-secrets；docs/secrets.md）
-                           (secrets-deploy-service
-                            %vm-secrets (user-profile-name %primary-user))
-                           ;; 用户密码 hash 投影（persistent
-                           ;; /persist/system/accounts/<user>/
-                           ;; password.hash → ephemeral /etc/shadow；
-                           ;; 纯 projector，不碰 age）
-                           (password-project-service
-                            (user-profile-name %primary-user))
-                           ;; Guix Home 挂入 system：home-environment 随
-                           ;; system generation 构建，boot 时由官方
-                           ;; guix-home-service-type 以 user 身份运行其
-                           ;; activate（重建 ephemeral $HOME 中的
-                           ;; ~/.guix-home 与 dotfile 链接，指向本
-                           ;; generation closure 内的 home）。
-                           (service guix-home-service-type
-                                    `((,(user-profile-name %primary-user)
-                                       ,%guix-home))))
-                     (append %vm-services
-                             ;; boot readiness DAG（capability 链；login
-                             ;; gate 的开启端在 interactive-session-ready）
-                             (readiness-services 'guix-home-user)
-                             ;; login gate：activation 关闭 + PAM gate
-                             ;;（login/sshd account 段 pam_nologin）
-                             (login-gate-services))))))
+   (services %vm-user-services)))
+
+;; 完整 account 列表 = account-service-type 的 folded value（root +
+;; 声明的 users/groups + 全部服务贡献的 account，如 guixbuilder01-10、
+;; sshd、messagebus、polkitd）。account-databases 投影自身不扩展
+;; account-service-type，因此含不含它对折叠结果无影响——先在一个
+;; 不含它的 probe OS 上折叠，再组装最终 %os（避免自引用）。
+(define %vm-accounts+groups
+  (service-value
+   (fold-services (operating-system-services
+                   %os-without-account-databases)
+                  #:target-type account-service-type)))
+
+;; 最终 OS：基础 OS + account-databases 纯 Scheme 投影（修复上游
+;; activate-users+groups 的 FFI flock 在 boot 环境失败导致
+;; /etc/passwd|group|shadow 为空、readiness 卡死的问题）。
+;; 投影放在 user-services 列表末尾：fold-services 反转处理顺序，
+;; 列表末尾 = user activation 中最早运行（紧随 essential 的
+;; account 步骤之后），保证后续 user activation（如 user-persistence
+;; 的 getpw）能看到完整数据库。
+(define %os
+  (operating-system
+   (inherit %os-without-account-databases)
+   (services (append (operating-system-user-services
+                      %os-without-account-databases)
+                     (list (account-databases-service
+                            %vm-accounts+groups))))))
 
 ;; 末尾裸表达式：让本文件同时是 guix system 的入口文件——
 ;; guix system init/reconfigure 加载文件时取最后一个顶层表达式的值

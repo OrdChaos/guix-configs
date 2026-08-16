@@ -173,6 +173,17 @@ persistent-state-ready
 account-state-ready
     Guix account topology + persistent login credential projected into
     ephemeral /etc/{passwd,group,shadow} (password projector succeeded)
+```
+
+account 数据库本身的正确性由 activation 阶段的纯 Scheme 投影保证
+（guixcfg/system/accounts.scm）：上游 activate-users+groups 把数据库
+写入包在 fcntl-flock（with-file-lock）里，boot 环境该 FFI 求值异常会
+让整个步骤失败，/etc/{passwd,group,shadow} 保持空 → 所有 getpw 失败 →
+readiness 卡死。因此 boot 时在（guarded 的）上游步骤之后、任何依赖
+getpw 的 activation 之前，用同一批纯 Scheme 函数（user+group-databases
++ write-passwd/group/shadow，无锁——activation 是单进程）重建三个文件。
+
+```text
 interactive-secrets-ready
     interactive-critical runtime secrets fully published (currently a
     light barrier: no login-critical ordinary app secrets exist)
