@@ -310,7 +310,9 @@ already-unlocked（复用）或 unlocked（新解密）。"
 ;; /persist/system/accounts/<user>/password.hash（root 0700/0600）；
 ;; parameter 化供测试覆盖。
 (define %account-credentials-dir
-  (make-parameter "/persist/system/accounts"))
+  ;; 安装期（LiveCD）写 /mnt/persist/...：GUIXCFG_ACCOUNTS_DIR 覆盖。
+  (make-parameter (or (getenv "GUIXCFG_ACCOUNTS_DIR")
+                      "/persist/system/accounts")))
 
 (define (password-hash-format? s)
   "S 是否是 shadow 兼容的 crypt hash（$id$salt$hash，非空、无换行/

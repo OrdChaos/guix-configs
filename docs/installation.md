@@ -38,11 +38,17 @@ cow-store 环境下 `system init` 的另一个坑：init 会先 `delete-file-rec
 stable identity S 解密。**master password 全程只输入一次**：
 
 ```bash
-guix time-machine -C channels.lock.scm -- repl -L modules -- \
-  tools/secrets.scm unlock
+guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/secrets.scm -- \
+  guile -L modules -s tools/secrets.scm unlock
 ```
 
-提示输入 master password 一次，得到 `/run/guixcfg-age/stable-identity`
+`manifests/secrets.scm` 提供工具链（age 加解密、util-linux 的
+script 伪终端——age 的 passphrase 只从 /dev/tty 读、coreutils 的
+stty——密码 noecho 读取）。
+
+提示输入 master password 一次（不回显；stty 缺失时明确报错而不是
+静默回显），得到 `/run/guixcfg-age/stable-identity`
 （0600，tmpfs）。之后所有 install secret 的解密都复用它，不再提示。
 
 如果跳过本步（纯交互安装），LUKS 密码走人工输入路径，用户密码在
@@ -162,10 +168,17 @@ install -m 600 /run/guixcfg-age/stable-identity \
 然后物化用户密码 hash（persistent authoritative credential）：
 
 ```bash
-guix time-machine -C channels.lock.scm -- repl -L modules -- \
-  tools/secrets.scm provision-password user \
+# LiveCD 安装期：写目标系统的 /mnt/persist（accounts 目录前缀经
+# 环境变量覆盖；工具链由 manifests/secrets.scm 提供）
+GUIXCFG_ACCOUNTS_DIR=/mnt/persist/system/accounts \
+  guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/secrets.scm -- \
+  guile -L modules -s tools/secrets.scm provision-password user \
   secrets/install/user-password.hash.age
 ```
+
+（已安装系统内日常 provision——密码更新——则不带前缀，直接写
+`/persist/system/accounts/`。）
 
 它把 hash 写到 `/mnt/persist/system/accounts/user/password.hash`
 （root 0700/0600）。**只保存 hash，不保存明文密码**。

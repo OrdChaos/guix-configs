@@ -33,14 +33,18 @@
 （-echo 关闭了回车键的回显，不显式换行会与上一行黏在一起）。
 stdin 非 tty（测试/管道）时直接读，不做终端控制。
 stty 属于 GNU coreutils，由 installer manifest 显式提供
-（manifests/installer.scm）。"
+（manifests/installer.scm）；stty 失败（不在 PATH 等）时明确报错，
+而不是静默回显密码。"
   (format #t "~a" prompt)
   (force-output)
   (let ((line (if (isatty? (current-input-port))
                 (dynamic-wind
-                 (lambda () (system "stty -echo"))
+                 (lambda ()
+                   (unless (zero? (system* "stty" "-echo"))
+                     (error "stty -echo failed (coreutils missing?); \
+refusing to echo password")))
                  (lambda () (read-line))
-                 (lambda () (system "stty echo")))
+                 (lambda () (system* "stty" "echo")))
                 (read-line))))
     (format #t "~%")
     line))
