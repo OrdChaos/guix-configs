@@ -261,6 +261,17 @@ account-state-ready。不调用 age、不读 .age、不访问 stable S、不碰
                              (define (valid-hash? s)
                                (and (string-match "^\\$[0-9a-z]+\\$[^:$]+\\$[^: \n]+$" s)
                                     #t))
+                             ;; core `any`（Guile 自带 srfi-1 在 boot runtime 不可
+                             ;; 依赖；generated program 只 import 显式列出的模块）。
+                             (define (shadow-has-user? lines user)
+                               (let loop ((lines lines))
+                                 (and (pair? lines)
+                                      (let* ((line (car lines))
+                                             (fields (string-split line #\:)))
+                                        (if (and (pair? fields)
+                                                 (string=? (car fields) user))
+                                          #t
+                                          (loop (cdr lines)))))))
                              ;; hash 必须在且形态合法（否则 fail closed：不投影、不 ready）。
                              (unless (file-exists? hash-path)
                                (error "persistent password hash missing" hash-path))
@@ -273,11 +284,7 @@ account-state-ready。不调用 age、不读 .age、不访问 stable S、不碰
                                     (lines (string-split shadow #\newline)))
                                (unless (valid-hash? hash)
                                  (error "persistent password hash malformed" user))
-                               (unless (any (lambda (line)
-                                              (let ((fields (string-split line #\:)))
-                                                (and (pair? fields)
-                                                     (string=? (car fields) user))))
-                                            lines)
+                               (unless (shadow-has-user? lines user)
                                  (error "target user missing from /etc/shadow" user))
                                (let ((out-lines
                                       (map (lambda (line)
