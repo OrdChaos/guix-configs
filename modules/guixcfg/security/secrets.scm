@@ -81,25 +81,36 @@
 ;;; argv；明文经 -o /run 0600 临时文件 + 原子 rename）。
 
 (define (secrets-deploy-program decls user)
-  "生成解密部署所有 runtime secrets（scope system/user）的程序。
-USER 是 primary user 名（user scope 的 owner）。ciphertext 经
-local-file 进 system closure（允许）；identity 与 plaintext 不进
-store。"
+  "生成 runtime secrets 事务性发布程序（generation publication，
+docs/secrets.md 第 15.4 节）：
+  /run/guixcfg-secrets.d/<N>/     root 0711（可穿越不可列）
+    system/                        root 0700
+    users/                         root 0711
+    users/<user>/                  owner=<user> 0700
+  /run/guixcfg-secrets -> secrets.d/<current>（symlink 原子切换）
+
+  流程：NEW.tmp 建好最终权限 → 解密全部 secret（.new 0600 内）→
+  owner/mode → 任一失败删 NEW.tmp（当前代不动）→ rename → 原子切换
+  current symlink → 清理旧代。consumer 永远看到完整旧代或完整新代。
+  本服务是 /run/guixcfg-secrets* 的唯一 owner（mkdir/chmod/chown/
+  发布/清理/代际切换全在这里；password projector 不碰它）。"
   (program-file
    "guixcfg-secrets-deploy"
    (with-imported-modules (source-module-closure '((guix build utils)))
      #~(begin
-         (use-modules (guix build utils))
-         (define runtime-root #$%secrets-runtime-root)
+         (use-modules (guix build utils) (ice-9 ftw) (ice-9 regex)
+                      (srfi srfi-1))
          ;; age 用 closure 内的绝对路径——不依赖服务进程的 PATH
          ;; （shepherd 服务继承 boot 时的环境，PATH 里可能无 age）。
          (define age-bin #$(file-append age "/bin/age"))
          (define identity "/persist/system/keys/age/identity")
-         (define (run-age-decrypt cipher out-path uid gid mode)
-           ;; 输出先到同目录 .new（0600）再原子 rename——失败不留
-           ;; partial plaintext（age 失败时不写输出文件）。
+         (define store-dir "/run/guixcfg-secrets.d")
+         (define current-link #$%secrets-runtime-root)
+
+         (define (decrypt-into cipher out-path uid gid mode)
+           ;; 输出先到同目录 .new（0600）再原子 rename——age 失败不写
+           ;; 输出文件，不留 partial plaintext。
            (let ((tmp (string-append out-path ".new")))
-             (mkdir-p (dirname out-path))
              (call-with-output-file tmp (lambda (p) #t))
              (chmod tmp #o600)
              (catch #t
@@ -112,45 +123,100 @@ store。"
                (lambda (k . a)
                  (false-if-exception (delete-file tmp))
                  (apply throw k a)))))
+
+         (define (next-generation)
+           ;; 现有最大数字目录 + 1（boot 时从 1 开始）。
+           (let* ((ents (if (file-exists? store-dir)
+                            (scandir store-dir)
+                            '()))
+                  (nums (filter-map
+                         (lambda (e)
+                           (let ((m (string-match "^[0-9]+$" e)))
+                             (and m (string->number e))))
+                         ents)))
+             (if (null? nums) 1 (+ 1 (apply max nums)))))
+
+         (define (rm-rf path)
+           (when (file-exists? path)
+             (delete-file-recursively path)))
+
          (unless (file-exists? identity)
            (error "stable identity missing; refusing to prompt" identity))
-         ;; 目录层级权限（user 要能穿越 root 目录读到自己的 secret）：
-         ;;   runtime-root   root 0755（可穿越）
-         ;;   system/        root 0700（仅 root）
-         ;;   users/         root 0755（可穿越）
-         ;;   users/<user>/  owner=<user> 0700（仅该用户）
-         (mkdir-p runtime-root)
-         (chmod runtime-root #o755)
-         (chown runtime-root 0 0)
-         (let ((sys-dir (string-append runtime-root "/system"))
-               (users-dir (string-append runtime-root "/users")))
-           (mkdir-p sys-dir) (chmod sys-dir #o700) (chown sys-dir 0 0)
-           (mkdir-p users-dir) (chmod users-dir #o755) (chown users-dir 0 0))
-         #$@(map
-             (lambda (decl)
-               (let* ((source (secret-decl-source decl))  ; local-file
-                      (target (runtime-secret-target decl user))
-                      (owner (secret-decl-owner-user decl))
-                      (mode (secret-decl-mode decl)))
-                 #~(begin
-                     (let* ((pw (getpw #$owner))
-                            (uid (passwd:uid pw))
-                            (gid (passwd:gid pw))
-                            (parent (dirname #$target)))
-                       ;; user scope：users/<user>/ 目录归该用户 0700
-                       (mkdir-p parent)
-                       (when (string-prefix?
-                              (string-append runtime-root "/users/")
-                              parent)
-                         (chown parent uid gid)
-                         (chmod parent #o700))
-                       (run-age-decrypt
-                        #$(local-file (assume-valid-file-name source))
-                        #$target uid gid #$mode)))))
-             (filter (lambda (d)
-                       (memq (secret-decl-scope d) '(system user)))
-                     decls))
-         #t))))
+
+         (let* ((n (next-generation))
+                (tmp-dir (string-append store-dir "/." (number->string n)
+                                        ".tmp"))
+                (new-dir (string-append store-dir "/" (number->string n))))
+           (mkdir-p store-dir)
+           (chmod store-dir #o711)
+           (chown store-dir 0 0)
+           (catch #t
+             (lambda ()
+               ;; 1. NEW.tmp：最终目录权限先就位
+               (mkdir-p tmp-dir)
+               (chmod tmp-dir #o711)
+               (chown tmp-dir 0 0)
+               (let ((sys-dir (string-append tmp-dir "/system"))
+                     (users-dir (string-append tmp-dir "/users")))
+                 (mkdir-p sys-dir) (chmod sys-dir #o700) (chown sys-dir 0 0)
+                 (mkdir-p users-dir) (chmod users-dir #o711)
+                 (chown users-dir 0 0))
+               ;; 2. 解密全部 secret（含 owner/mode）
+               #$@(map
+                   (lambda (decl)
+                     (let* ((source (secret-decl-source decl))
+                            (scope (secret-decl-scope decl))
+                            (owner (secret-decl-owner-user decl))
+                            (mode (secret-decl-mode decl))
+                            (rel-target
+                             (match scope
+                               ('system (string-append
+                                         "system/"
+                                         (secret-decl-target-name decl)))
+                               ('user (string-append
+                                       "users/" user "/"
+                                       (secret-decl-target-name decl))))))
+                       #~(begin
+                           (let* ((pw (getpw #$owner))
+                                  (uid (passwd:uid pw))
+                                  (gid (passwd:gid pw))
+                                  (parent (dirname
+                                           (string-append tmp-dir "/"
+                                                          #$rel-target))))
+                             (mkdir-p parent)
+                             ;; users/<user>/ 归该用户 0700
+                             (when (string-prefix?
+                                    (string-append tmp-dir "/users/")
+                                    parent)
+                               (chown parent uid gid)
+                               (chmod parent #o700))
+                             (decrypt-into
+                              #$(local-file (assume-valid-file-name source))
+                              (string-append tmp-dir "/" #$rel-target)
+                              uid gid #$mode)))))
+                   (filter (lambda (d)
+                             (memq (secret-decl-scope d) '(system user)))
+                           decls))
+               ;; 3. 提交：rename NEW.tmp → NEW
+               (rename-file tmp-dir new-dir)
+               ;; 4. 原子切换 current symlink（临时 symlink + rename）
+               (let ((pivot (string-append current-link ".new")))
+                 (false-if-exception (delete-file pivot))
+                 (symlink new-dir pivot)
+                 (rename-file pivot current-link))
+               ;; 5. 清理旧代（保留当前代）
+               (for-each
+                (lambda (e)
+                  (let ((p (string-append store-dir "/" e)))
+                    (when (and (string-match "^[0-9]+$" e)
+                               (not (string=? e (number->string n))))
+                      (rm-rf p))))
+                (scandir store-dir))
+               #t)
+             (lambda (k . a)
+               ;; 任一失败：删 NEW.tmp，当前代不动
+               (rm-rf tmp-dir)
+               (apply throw k a))))))))
 
 (define (secrets-deploy-service decls user)
   "boot 时（file-systems 后、user-processes 前）解密部署 runtime
