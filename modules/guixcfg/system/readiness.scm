@@ -25,7 +25,6 @@
                          home-ready-service
                          session-infra-ready-service
                          interactive-session-ready-service
-                         user-processes-requirements-service
                          readiness-services
                          login-gate-activation
                          login-gate-pam-service
@@ -134,29 +133,15 @@ the login gate (provides interactive-session-ready).")
                          (stop #~(const #f))))))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; user-processes 聚合（Section 20）：account-state-ready 与
-;;; interactive-secrets-ready 注入为 user-processes 的 prerequisite
-;;; ——其后启动的服务（guix-home-user 等）自然在 system-state 阶段
-;;; 完成后才开始。
-
-(define (user-processes-requirements-service)
-  "把 account-state-ready 与 interactive-secrets-ready 注入
-user-processes 的 requirement。user-processes-service-type 由
-essential-services 自动实例化（gnu system.scm）——本服务经
-simple-service 扩展其 requirement 列表（同 urandom-seed 等上游
-扩展的模式），值是 prerequisite provision 符号列表。"
-  (simple-service 'user-processes-interactive-prerequisites
-                  user-processes-service-type
-                  '(account-state-ready interactive-secrets-ready)))
-
-;;; ────────────────────────────────────────────────────────────
 ;;; 组合入口：host 挂一组 readiness 服务。
 
 (define (readiness-services home-provision)
   "完整 readiness DAG（HOME-PROVISION 是 guix-home-service-type 生成
-的服务 provision 名，如 guix-home-user）。"
+的服务 provision 名，如 guix-home-user）。account/secrets ready 不
+注入 user-processes（Section 28：sshd listener 与 session 分离——
+listener 可早开；readiness 的 join 由 interactive-session-ready
+barrier 承担，不靠卡住 user-processes）。"
   (list (persistent-state-ready-service)
-        (user-processes-requirements-service)
         (home-ready-service home-provision)
         (session-infra-ready-service)
         (interactive-session-ready-service)))

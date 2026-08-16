@@ -50,22 +50,10 @@
   (test-assert "interactive barrier one-shot"
     (shepherd-service-one-shot? s)))
 
-;; user-processes 注入（simple-service 扩展，值是 provision 符号列表）
-(let ((s (user-processes-requirements-service)))
-  (test-assert "user-processes gets account + secrets prerequisites"
-    (and (member 'account-state-ready (service-value s))
-         (member 'interactive-secrets-ready (service-value s))))
-  (test-assert "extends user-processes-service-type"
-    ;; simple-service 创建的新 type 的 extension target 是
-    ;; user-processes-service-type（不是 type 本身）。
-    (any (lambda (ext)
-           (eq? (service-extension-target ext)
-                user-processes-service-type))
-         (service-type-extensions (service-kind s)))))
-
-;; 组合：readiness-services 五个服务齐全
+;; 组合：readiness-services 四个服务齐全（persistent-state、home、
+;; session-infra、interactive-session barrier）
 (test-equal "readiness-services composition"
-  5 (length (readiness-services 'guix-home-user)))
+  4 (length (readiness-services 'guix-home-user)))
 
 ;; ── login gate ────────────────────────────────────────────────
 ;; gate 路径项目统一所有；activation 关闭 + PAM 横切仅 login/sshd。
