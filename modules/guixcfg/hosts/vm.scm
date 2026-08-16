@@ -48,7 +48,17 @@
    ;; 基础 session infrastructure（elogind：/run/user、XDG_RUNTIME_DIR、
    ;; PAM session——system/common 拥有）。
    %common-services
-   %base-services))
+   ;; TTY login prompt 的强语义（Section 57）：login: 出现 =
+   ;; interactive-session-ready 已过——mingetty 延迟到 barrier 之后；
+   ;; PAM gate 是 correctness fallback（新增 frontend 漏加
+   ;; requirement 也绕不过 readiness policy）。
+   (modify-services %base-services
+     (mingetty-service-type config =>
+       (mingetty-configuration
+        (inherit config)
+        (shepherd-requirement
+         (append (mingetty-configuration-shepherd-requirement config)
+                 '(interactive-session-ready))))))))
 
 (define %os
   (operating-system
@@ -108,7 +118,10 @@
                      (append %vm-services
                              ;; boot readiness DAG（capability 链；login
                              ;; gate 的开启端在 interactive-session-ready）
-                             (readiness-services 'guix-home-user))))))
+                             (readiness-services 'guix-home-user)
+                             ;; login gate：activation 关闭 + PAM gate
+                             ;;（login/sshd account 段 pam_nologin）
+                             (login-gate-services))))))
 
 ;; 末尾裸表达式：让本文件同时是 guix system 的入口文件——
 ;; guix system init/reconfigure 加载文件时取最后一个顶层表达式的值

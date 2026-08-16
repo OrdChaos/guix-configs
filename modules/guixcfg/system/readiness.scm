@@ -17,13 +17,20 @@
 (define-module (guixcfg system readiness)
                #:use-module (gnu services)              ; simple-service
                #:use-module (gnu services shepherd)     ; shepherd-service、user-processes-service-type
+               #:use-module (gnu system pam)           ; pam-extension、pam-entry、pam-service
+               #:use-module (gnu services base)        ; mingetty-service-type
                #:use-module (guix gexp)
+               #:use-module (guix modules)            ; source-module-closure
                #:export (persistent-state-ready-service
                          home-ready-service
                          session-infra-ready-service
                          interactive-session-ready-service
                          user-processes-requirements-service
                          readiness-services
+                         login-gate-activation
+                         login-gate-pam-service
+                         login-gate-services
+                         %login-gate-path
                          %interactive-session-requirements))
 
 ;; interactive-session-ready 的四个 prerequisite（Section 19）。
@@ -150,3 +157,56 @@ simple-service 扩展其 requirement 列表（同 urandom-seed 等上游
         (home-ready-service home-provision)
         (session-infra-ready-service)
         (interactive-session-ready-service)))
+
+;;; ────────────────────────────────────────────────────────────
+;;; Interactive login gate（docs/system-home-boundaries.md J8）。
+
+;; gate 文件：存在即拒绝普通 interactive 登录（pam_nologin 语义；
+;; root 豁免是 pam_nologin 的标准行为——保留 console recovery 路径）。
+;; 项目统一所有，不与系统其它 nologin owner 冲突。
+(define %login-gate-path "/run/guixcfg/session-not-ready")
+
+(define (login-gate-activation)
+  "activation gexp：boot 早期关闭 gate（创建 gate 文件）。gate 由
+interactive-session-ready 服务在全部 prerequisite 成功后原子打开。"
+  (with-imported-modules (source-module-closure '((guix build utils)))
+    #~(begin
+        (use-modules (guix build utils))
+        (mkdir-p "/run/guixcfg")
+        (chmod "/run/guixcfg" #o755)
+        (call-with-output-file #$%login-gate-path
+          (lambda (p)
+            (display "The system is not ready for interactive logins yet.\n"
+                     p))))))
+
+(define (login-gate-pam-service)
+  "PAM gate：对 login frontends（login、sshd——未来 greetd）的 account
+段插入 pam_nologin.so file=<gate>。gate 文件存在时普通用户认证失败；
+root 豁免是 pam_nologin 标准语义（console recovery 保留）。使用
+pam-extension transformer（横切机制，同 elogind 的 pam_elogind
+注入模式）。"
+  (simple-service 'login-gate-pam pam-root-service-type
+                  (list (pam-extension
+                         (transformer
+                          (lambda (pam)
+                            (if (member (pam-service-name pam)
+                                        '("login" "sshd"))
+                                (pam-service
+                                 (inherit pam)
+                                 (account
+                                  (cons (pam-entry
+                                         (control "required")
+                                         (module "pam_nologin.so")
+                                         (arguments
+                                          (list (string-append
+                                                 "file="
+                                                 %login-gate-path))))
+                                        (pam-service-account pam))))
+                                pam)))))))
+
+(define (login-gate-services)
+  "login gate 完整组合：activation（boot 早期关 gate）+ PAM 横切
+（login/sshd account 段 pam_nologin）。"
+  (list (simple-service 'login-gate activation-service-type
+                        (login-gate-activation))
+        (login-gate-pam-service)))
