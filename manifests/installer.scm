@@ -14,4 +14,5 @@
        "btrfs-progs"
        "dosfstools"
        "coreutils"      ; stty：LUKS 密码输入时关闭终端回显
-       "util-linux"))   ; lsblk、findmnt、udevadm 等设备工具
+       "util-linux"     ; lsblk、findmnt、udevadm 等设备工具
+       "age"))          ; --luks-secret：decrypt luks-recovery.age

@@ -88,9 +88,12 @@ stty——密码 noecho 读取）。
 ### 30.3.1 磁盘安装
 
 ```bash
-guix shell gptfdisk cryptsetup btrfs-progs dosfstools util-linux -- \
+guix shell -m manifests/installer.scm -- \
   guix repl tools/disk-install.scm -- apply vm /dev/vda
 ```
+
+（`manifests/installer.scm`：gptfdisk/cryptsetup/btrfs-progs/dosfstools/
+util-linux/coreutils/age——`age` 供 `--luks-secret` 的解密路径。）
 
 这里有意使用 LiveCD 当前的普通 `guix repl`，而不是 `guix time-machine`：
 此阶段 `/gnu/store` 还在 LiveCD 的内存盘上，只需要纯 storage policy 与磁盘
@@ -101,10 +104,12 @@ guix shell gptfdisk cryptsetup btrfs-progs dosfstools util-linux -- \
 
 ```bash
 # 交互输入（默认，两次确认）
-guix repl tools/disk-install.scm -- apply vm /dev/vda
+guix shell -m manifests/installer.scm -- \
+  guix repl tools/disk-install.scm -- apply vm /dev/vda
 
 # 或：从 stable S 解密 secrets/install/luks-recovery.age（需 30.2.1 已 unlock）
-guix repl tools/disk-install.scm -- apply vm /dev/vda --luks-secret
+guix shell -m manifests/installer.scm -- \
+  guix repl tools/disk-install.scm -- apply vm /dev/vda --luks-secret
 ```
 
 两条路径共用 installer 的 stdin 语义；明文只在内存，不进
