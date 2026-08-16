@@ -103,9 +103,11 @@
 (define (age-pty-run passphrase-lines age-command)
   "以 script 伪终端运行 AGE-COMMAND（shell 命令字符串，固定参数+
 公开路径），PASSPHRASE-LINES 为写入 script stdin 的密语行（加密两
-遍、解密一遍）。非零退出码抛错（age 失败不留 partial 输出文件）。"
+遍、解密一遍）。--echo=never 关闭转发回显——否则密语在 age 启动/
+关 echo 前的瞬间会被伪终端回显到输出。非零退出码抛错（age 失败不
+留 partial 输出文件）。"
   (invoke-with-stdin passphrase-lines "script" "-qec" age-command
-                     "/dev/null"))
+                     "--echo=never" "/dev/null"))
 
 (define (age-encrypt-passphrase! plaintext-path out-path passphrase)
   "passphrase 加密 PLAINTEXT-PATH → OUT-PATH（armor）。plaintext 与
