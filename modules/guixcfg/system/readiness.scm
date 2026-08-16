@@ -59,6 +59,9 @@
 available (provides persistent-state-ready).")
                          (start
                           #~(lambda ()
+                              ;; gexp 内只有 guile core + 显式列出的模块
+                              ;; 可用——every 来自 srfi-1，必须显式引入。
+                              (use-modules (srfi srfi-1))
                               (every file-exists?
                                      '("/persist/system"
                                        "/persist/data-home"
