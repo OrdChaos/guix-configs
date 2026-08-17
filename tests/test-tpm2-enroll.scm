@@ -4,16 +4,23 @@
 ;;;   C. error binding：(rnrs base) 不再覆盖 Guile 原生 error——replace
 ;;;      在未 enrollment 时是正常业务错误（非 wrong-number-of-arguments）
 ;;;   D. 模块 compile/load：tools/tpm2-enroll.scm 无 unbound/wrong-import
+;;;   T7-T14. CLI credential 来源解析（--luks-secret / --noninteractive）：
+;;;      互斥、status/preflight 拒绝、fail-closed、未知 flag
 ;;;
 ;;; 通过 GUIXCFG_TPM2_BIN / GUIXCFG_CRYPTSETUP 指向 mock 目录，在
 ;;; 本文件内控制加载顺序（%tpm2-bin 在模块加载时求值）。
 
+(add-to-load-path (string-append (getcwd) "/modules"))
+
 (use-modules (guix build utils)
+             (guixcfg security age)      ; %runtime-identity-dir/path
              (ice-9 ftw)
              (ice-9 rdelim)
              (rnrs io ports)
              (srfi srfi-1)
-             (srfi srfi-64))
+             (srfi srfi-13)              ; string-contains
+             (srfi srfi-64)
+             (system base compile))      ; compile-file（D 测试）
 
 (test-runner-current (test-runner-simple))
 
@@ -54,19 +61,19 @@
      (primitive-load "/tmp/guixcfg-enroll-nomain.scm")
      
      ;; Test A：齐全 → executable-checks 全通过
-     (test-assert "A: mock 齐全时全部 executable 检查通过"
+     (test-assert "A: all executable checks pass with full mocks"
                   (every identity (executable-checks)))
      
      ;; Test B：删 tpm2_pcrread → 检查失败（不静默 PASS）
      (delete-file (string-append mock "/tpm2_pcrread"))
-     (test-assert "B: 缺 tpm2_pcrread 时 executable 检查失败"
+     (test-assert "B: executable check fails without tpm2_pcrread"
                   (not (every identity (executable-checks))))
      
      ;; Test C：error binding——replace 在未 enrollment 时正常业务错误
-     (test-assert "C: replace 未 enrollment 抛正常业务错误（非 arity 错误）"
+     (test-assert "C: replace without enrollment throws proper business error (not arity)"
                   (let ((caught
                          (catch #t
-                           (lambda () (do-replace) #f)
+                           (lambda () (do-replace #f) #f)
                            (lambda (k . a)
                              (if (eq? k 'misc-error)
                                ;; error 单参数时：a = (#f "~A" (MESSAGE) #f)
@@ -79,8 +86,91 @@
      (false-if-exception (delete-file "/tmp/guixcfg-enroll-nomain.scm"))
      (delete-file-recursively mock))))
 
+;; ── T7-T14：CLI credential 来源解析 ────────────────────────
+;; parse-command/parse-credential-flag 是纯函数（不 exit、不改环境）；
+;; --luks-secret 的 fail-closed 前置在解析时发生（任何 TPM mutation 前）。
+(let ((no-identity-dir (mkdtemp "/tmp/guixcfg-enroll-noident-XXXXXX")))
+  (dynamic-wind
+   (lambda () #t)
+   (lambda ()
+     (parameterize ((%runtime-identity-dir no-identity-dir)
+                    (%runtime-identity-path
+                     (string-append no-identity-dir "/stable-identity")))
+       ;; T7：默认（无 flag）→ interactive reader
+       (test-assert "T7: enroll defaults to interactive source"
+                    (call-with-values
+                        (lambda () (parse-command '("prog" "enroll")))
+                      (lambda (cmd source)
+                        (and (eq? cmd 'enroll)
+                             (eq? source read-passphrase!)))))
+       ;; T8：--luks-secret 无 runtime identity → fail-closed 报错
+       (test-assert "T8: enroll --luks-secret without identity fails closed"
+                    (catch #t
+                      (lambda () (parse-command '("prog" "enroll" "--luks-secret")) #f)
+                      (lambda (k . a)
+                        (and (eq? k 'misc-error)
+                             (string-contains (car (caddr a))
+                                              "no unlocked stable identity")))))
+       ;; T9：--noninteractive → stdin 直读
+       (test-assert "T9: enroll --noninteractive reads one stdin line"
+                    (call-with-values
+                        (lambda ()
+                          (parse-command '("prog" "enroll" "--noninteractive")))
+                      (lambda (cmd source)
+                        (and (eq? cmd 'enroll)
+                             (string=? "pipe-pw"
+                                       (with-input-from-string "pipe-pw\n"
+                                                               source))))))
+       ;; T10：两个来源 flag 互斥
+       (test-assert "T10: --luks-secret and --noninteractive are mutually exclusive"
+                    (catch #t
+                      (lambda ()
+                        (parse-command '("prog" "enroll"
+                                         "--luks-secret" "--noninteractive"))
+                        #f)
+                      (lambda (k . a)
+                        (and (eq? k 'misc-error)
+                             (string-contains (car (caddr a))
+                                              "mutually exclusive")))))
+       ;; T11：replace --luks-secret 同样 fail-closed
+       (test-assert "T11: replace --luks-secret without identity fails closed"
+                    (catch #t
+                      (lambda () (parse-command '("prog" "replace" "--luks-secret")) #f)
+                      (lambda (k . a)
+                        (and (eq? k 'misc-error)
+                             (string-contains (car (caddr a))
+                                              "no unlocked stable identity")))))
+       ;; T12：status 拒绝 credential flag
+       (test-assert "T12: status rejects credential source flags"
+                    (catch #t
+                      (lambda () (parse-command '("prog" "status" "--luks-secret")) #f)
+                      (lambda (k . a)
+                        (and (eq? k 'misc-error)
+                             (string-contains (car (caddr a))
+                                              "does not accept")))))
+       ;; T13：preflight 拒绝 credential flag
+       (test-assert "T13: preflight rejects credential source flags"
+                    (catch #t
+                      (lambda ()
+                        (parse-command '("prog" "preflight" "--noninteractive"))
+                        #f)
+                      (lambda (k . a)
+                        (and (eq? k 'misc-error)
+                             (string-contains (car (caddr a))
+                                              "does not accept")))))
+       ;; T14：未知 flag 报错
+       (test-assert "T14: unknown flag errors"
+                    (catch #t
+                      (lambda () (parse-command '("prog" "enroll" "--bogus")) #f)
+                      (lambda (k . a)
+                        (and (eq? k 'misc-error)
+                             (string-contains (car (caddr a))
+                                              "unknown option")))))))
+   (lambda ()
+     (false-if-exception (delete-file-recursively no-identity-dir)))))
+
 ;; ── Test D：模块 compile/load 无 unbound/wrong-import 警告 ────
-(test-assert "D: tpm2-enroll.scm 可编译且无未绑定变量警告"
+(test-assert "D: tpm2-enroll.scm compiles without unbound-variable warnings"
              (let ((out (with-output-to-string
                          (lambda ()
                            (compile-file "tools/tpm2-enroll.scm"

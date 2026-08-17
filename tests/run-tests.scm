@@ -61,6 +61,7 @@
                "tests/test-device-resolver.scm"
                "tests/test-commit-root.scm"
                "tests/test-tpm2-enroll.scm"
+               "tests/test-credential-source.scm"
                "tests/test-ui-language.scm"
                "tests/test-ssh.scm"
                "tests/test-user-persistence.scm"
