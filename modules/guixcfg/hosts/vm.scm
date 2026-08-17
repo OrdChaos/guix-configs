@@ -75,10 +75,9 @@
          ;; /run/guixcfg-secrets；docs/secrets.md）
          (secrets-deploy-service
           %vm-secrets (user-profile-name %primary-user))
-         ;; 用户密码 hash 投影（persistent
-         ;; /persist/system/accounts/<user>/password.hash →
-         ;; ephemeral /etc/shadow；纯 projector，不碰 age）
-         (password-project-service
+         ;; account databases 投影（唯一 writer，含 persistent credential
+         ;; 内联注入）之后的只读验证：account-state-ready 的 provision 端。
+         (account-databases-verify-service
           (user-profile-name %primary-user))
          ;; Guix Home 挂入 system：home-environment 随 system generation
          ;; 构建，boot 时由官方 guix-home-service-type 以 user 身份运行

@@ -16,12 +16,12 @@
 ;;;   user     → /run/guixcfg-secrets/users/<user>/<name>
 ;;;            （owner=该 user，0600）。
 ;;;
-;;; 用户密码 hash（scope install + account 注入）：ephemeral root 下
-;;; @root-template 的 /etc/shadow 在 commit-root 时固化（account
-;;; activation 只在首次 boot 运行），install 期注入无法跨 root
-;;; rebuild 保留（实测证明）——因此每 boot 由 password-project 服务在
-;;; login 前把 hash 注入 ephemeral /etc/shadow。hash 不进 store、不进
-;;; argv、不进日志。
+;;; 用户密码 hash（scope install 的 provisioning source）：hash 由安装
+;;; 流程物化为 persistent verifier
+;;; （/persist/system/accounts/<user>/password.hash，root 0600），并由
+;;; account databases 投影（guixcfg/system/accounts.scm——唯一 writer）
+;;; 在每 boot 内联进 ephemeral /etc/shadow。本模块不再包含任何
+;;; /etc/shadow writer。hash 不进 store、不进 argv、不进日志。
 
 (define-module (guixcfg security secrets)
                #:use-module (gnu services)              ; simple-service
@@ -44,8 +44,6 @@
                          runtime-secret-target
                          secrets-deploy-program
                          secrets-deploy-service
-                         password-project-program
-                         password-project-service
                          %vm-secrets))
 
 ;; runtime root（tmpfs，root 0700）。
@@ -240,94 +238,6 @@ installed stable age identity into /run/guixcfg-secrets (tmpfs).")
                                     (zero? (system*
                                             #$(secrets-deploy-program
                                                decls user)))))
-                         (stop #~(const #f))))))
-
-;;; ────────────────────────────────────────────────────────────
-;;; 用户密码 hash 注入（install secret 的 account 消费路径）
-
-(define (password-project-program user)
-  "生成纯 password projector 程序：/persist/system/accounts/USER/
-password.hash → validate → 投影 /etc/shadow → provision
-account-state-ready。不调用 age、不读 .age、不访问 stable S、不碰
-/run/guixcfg-secrets。任何失败 fail closed：不产空密码用户、不删
-原 shadow 条目、不标 ready。"
-  (program-file
-   "guixcfg-password-project"
-   ;; closure seeds 与 runtime use-modules 一一对应：srfi-13（string-split/
-   ;; string-join/string-trim-right）显式列出，不依赖传递依赖。无 srfi-1。
-   (with-imported-modules (source-module-closure '((guix build utils)
-                                                   (srfi srfi-13)))
-                          #~(begin
-                             (use-modules (guix build utils) (ice-9 rdelim) (srfi srfi-13)
-                                          (ice-9 regex))
-                             (define user #$user)
-                             (define hash-path
-                               (string-append "/persist/system/accounts/" user
-                                              "/password.hash"))
-                             (define (valid-hash? s)
-                               (and (string-match "^\\$[0-9a-z]+\\$[^:$]+\\$[^: \n]+$" s)
-                                    #t))
-                             ;; core `any`（Guile 自带 srfi-1 在 boot runtime 不可
-                             ;; 依赖；generated program 只 import 显式列出的模块）。
-                             (define (shadow-has-user? lines user)
-                               (let loop ((lines lines))
-                                 (and (pair? lines)
-                                      (let* ((line (car lines))
-                                             (fields (string-split line #\:)))
-                                        (if (and (pair? fields)
-                                                 (string=? (car fields) user))
-                                          #t
-                                          (loop (cdr lines)))))))
-                             ;; hash 必须在且形态合法（否则 fail closed：不投影、不 ready）。
-                             (unless (file-exists? hash-path)
-                               (error "persistent password hash missing" hash-path))
-                             (let* ((hash (string-trim-right
-                                           (call-with-input-file hash-path
-                                                                 (lambda (p) (read-string p)))
-                                           #\newline))
-                                    (shadow (call-with-input-file "/etc/shadow"
-                                                                  (lambda (p) (read-string p))))
-                                    (lines (string-split shadow #\newline)))
-                               (unless (valid-hash? hash)
-                                 (error "persistent password hash malformed" user))
-                               (unless (shadow-has-user? lines user)
-                                 (error "target user missing from /etc/shadow" user))
-                               (let ((out-lines
-                                      (map (lambda (line)
-                                             (let ((fields (string-split line #\:)))
-                                               (if (and (pair? fields)
-                                                        (string=? (car fields) user))
-                                                 (string-join (cons hash (cdr fields)) ":")
-                                                 line)))
-                                           lines))
-                                     (new "/etc/.shadow.guixcfg-new"))
-                                 ;; 原子投影：临时文件 0600 root → rename（失败保留原
-                                 ;; shadow——不删条目、不产空密码用户）。
-                                 (call-with-output-file new
-                                                        (lambda (p) (display (string-join out-lines "\n") p)))
-                                 (chmod new #o600)
-                                 (chown new 0 0)
-                                 (rename-file new "/etc/shadow")
-                                 #t))))))
-
-(define (password-project-service user)
-  "boot 时把 persistent password hash 投影进 ephemeral /etc/shadow 的
-one-shot 服务；成功完成才 provision account-state-ready（不是
-脚本启动了，而是投影已完成）。"
-  (simple-service 'guixcfg-password-project shepherd-root-service-type
-                  (list (shepherd-service
-                         (provision '(guixcfg-password-project
-                                      account-state-ready))
-                         (requirement '(persistent-state-ready
-                                        file-systems user-homes))
-                         (one-shot? #t)
-                         (documentation
-                          "Project the persistent login credential hash \
-into the ephemeral /etc/shadow at boot; provides account-state-ready.")
-                         (start #~(lambda ()
-                                    (zero? (system*
-                                            #$(password-project-program
-                                               user)))))
                          (stop #~(const #f))))))
 
 ;;; ────────────────────────────────────────────────────────────

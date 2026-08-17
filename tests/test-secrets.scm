@@ -9,6 +9,7 @@
              (gnu services shepherd)
              (guix gexp)
              (guixcfg security secrets)
+             (guixcfg system accounts)
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -60,15 +61,15 @@
                      (shepherd-service-provision deploy-shepherd)))
 
 (define project-shepherd
-  (car (service-value (password-project-service "user"))))
-(test-assert "projector service one-shot"
+  (car (service-value (account-databases-verify-service "user"))))
+(test-assert "verify service one-shot"
              (shepherd-service-one-shot? project-shepherd))
-(test-assert "projector service after user-homes (account activation done)"
+(test-assert "verify service after user-homes (account activation done)"
              (member 'user-homes (shepherd-service-requirement project-shepherd)))
-(test-assert "projector requires persistent-state-ready"
+(test-assert "verify requires persistent-state-ready"
              (member 'persistent-state-ready
                      (shepherd-service-requirement project-shepherd)))
-(test-assert "projector provides account-state-ready"
+(test-assert "verify provides account-state-ready"
              (member 'account-state-ready
                      (shepherd-service-provision project-shepherd)))
 
@@ -96,26 +97,27 @@
                   (string-contains deploy-script "--decrypt")))
 (test-assert "deploy script contains no plaintext sentinel"
              (not (string-contains deploy-script "GUIXCFG_SECRET_SENTINEL")))
-(test-assert "projector script contains no password hash"
+(test-assert "verify script contains no password hash"
              (not (string-contains
                    (call-with-input-file
                     (build-script
-                     (gexp->file "guixcfg-password-project-test"
+                     (gexp->file "guixcfg-account-verify-test"
                                  (program-file-gexp
-                                  (password-project-program "user"))))
+                                  (account-databases-verify-program "user"))))
                     (lambda (p) (read-string p)))
                    "$6$")))
-;; projector 是纯文件操作——绝不调 age/读 .age/访问 stable S
-(test-assert "projector script does not touch age or runtime secrets"
+;; verify 是纯只读验证——绝不调 age/读 .age/访问 stable S、绝不写 shadow
+(test-assert "verify script is read-only, no age/runtime secrets"
              (let ((t (call-with-input-file
                        (build-script
-                        (gexp->file "guixcfg-password-project-pure-test"
+                        (gexp->file "guixcfg-account-verify-pure-test"
                                     (program-file-gexp
-                                     (password-project-program "user"))))
+                                     (account-databases-verify-program "user"))))
                        (lambda (p) (read-string p)))))
                (and (not (string-contains t "age --decrypt"))
                     (not (string-contains t "/persist/system/keys/age"))
                     (not (string-contains t "/run/guixcfg-secrets"))
+                    (not (string-contains t "rename-file"))
                     (string-contains t "/persist/system/accounts/"))))
 
 (test-end "secrets")

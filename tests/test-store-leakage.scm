@@ -15,6 +15,7 @@
              (guix derivations)
              (guix gexp)
              (guixcfg security secrets)
+             (guixcfg system accounts)
              (ice-9 rdelim)
              (srfi srfi-13)
              (srfi srfi-64))
@@ -58,12 +59,12 @@
                 (secrets-deploy-program %vm-secrets "user")))))
 (test-assert "secrets deploy script clean" (no-leak? deploy-text))
 
-(define inject-text
+(define verify-text
   (build-text
-   (gexp->file "leak-check-inject"
+   (gexp->file "leak-check-verify"
                (program-file-gexp
-                (password-project-program "user")))))
-(test-assert "password inject script clean" (no-leak? inject-text))
+                (account-databases-verify-program "user")))))
+(test-assert "account verify script clean" (no-leak? verify-text))
 
 ;; 3. system derivation 文本（内嵌引用面）
 (define system-drv

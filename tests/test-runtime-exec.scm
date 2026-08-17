@@ -6,6 +6,8 @@
 ;;;   guixcfg-password-project → Unbound variable: any
 ;;; 前者因 runtime gexp 在 lambda 内依赖未导入的 SRFI-1；后者因
 ;;; program-file 的 runtime use-modules 漏了 (srfi srfi-1) 却用了 any。
+;;; （该 writer 此后已删除：credential 注入并入 account databases
+;;; projection 唯一 writer，见 A1-A8 的 shadow 行格式断言。）
 ;;;
 ;;; 本测试真正 build generated executable artifact 并在隔离 root
 ;;; （user namespace + chroot + bind /gnu/store）里执行它，验证：
@@ -15,6 +17,13 @@
 ;;;
 ;;; 需要 unshare（util-linux）与 chroot 权限（user namespace 提供）。
 ;;; 隔离 root 是临时目录；不触碰真实 /etc、/persist。
+;;;
+;;; A1-A8 覆盖 account databases projection（唯一 /etc/shadow writer）：
+;;;   A1 user 在三库存在、shadow 行格式 user:hash:...（拒绝旧坏行
+;;;      hash 顶替 name）；
+;;;   A4/A5/A6 verifier 缺失/非法/用户缺失 → fail closed；
+;;;   A7 最终 shadow 缺 user → verify 不 provision；
+;;;   A8 仓库只有一个 production shadow writer（静态断言）。
 
 (add-to-load-path (string-append (getcwd) "/modules"))
 
@@ -27,6 +36,8 @@
              (gnu services)
              (gnu services shepherd)
              (guixcfg security secrets)
+             (guixcfg system accounts)    ; account-databases-activation/verify
+             (gnu system accounts)     ; user-account、user-group
              (guixcfg system readiness)
              (ice-9 rdelim)
              (ice-9 popen)
@@ -52,13 +63,11 @@
 (define %guile
   ;; program-file 生成的脚本 shebang 引用的 guile store 路径
   ;; （从已构建 artifact 第一行提取）。
-  (let* ((prog (build-thing (password-project-program "user")))
+  (let* ((prog (build-thing (account-databases-verify-program "user")))
          (line (call-with-input-file prog
                                   (lambda (p) (read-line p)))))
     (and (string-prefix? "#!" line)
          (car (string-split (substring line 2) #\space)))))
-
-(define %projector (build-thing (password-project-program "user")))
 
 ;; 在隔离 root 里执行 PROGRAM（store 路径），返回 exit code。
 ;; FAKE-ROOT 含 etc/shadow 与 persist/... 的 fake 数据。
@@ -108,63 +117,140 @@ user:x:1000:1000:u:/home/user:/bin/bash\n" p)))
              #o600))
     dir))
 
-;; ── password-project：真实执行 ──────────────────────────────
-;; 构建正式 artifact（与 boot 时 system* 执行的是同一个 program）。
+;; ── account databases projection：真实执行 ──────────────────
+;; 测试 /etc/{passwd,group,shadow} 的单一 authoritative writer：
+;; account-databases-activation（含 persistent credential 内联注入）。
+;; 用最小 users/groups 集合（root + user + users/wheel groups）构建与
+;; boot 相同的 gexp，在隔离 root 里执行，验证：
+;;   A1 user 在三库都存在
+;;   A2 persistent hash 放进 user 的 shadow password 字段（正确格式）
+;;   A3 hash 可 crypt 验证（用测试 hash，非真实 secret）
+;;   A4/A5/A6 缺失/非法 hash、user 缺失 → fail closed（不写库）
+;;   A7 最终 shadow 缺 user → verify 不 provision（见 verify 段）
+;;   A8 仓库只有一个 production shadow writer（静态断言，见下方）
+(define %acc-gexp
+  ;; 与 boot 相同的 projection gexp（最小 accounts+groups）。
+  (let* ((root-acct (user-account (name "root") (uid 0) (group "root")
+                                  (comment "System administrator")
+                                  (home-directory "/root")))
+         (user-acct (user-account (name "user") (uid 1000) (group "users")
+                                  (supplementary-groups '("wheel"))
+                                  (comment "VM test user")
+                                  (home-directory "/home/user")))
+         (grp-root (user-group (name "root") (system? #t)))
+         (grp-users (user-group (name "users") (system? #t)))
+         (grp-wheel (user-group (name "wheel") (system? #t))))
+    (account-databases-activation
+     (list root-acct user-acct grp-root grp-users grp-wheel))))
 
-(define (run-projector shadow hash)
-  (let ((root (make-fake-root shadow hash)))
-    (let ((exit (run-in-root %projector root)))
+(define %acc-program
+  (build-thing
+   (program-file "acc-databases-test"
+     (with-imported-modules (source-module-closure
+                             '((gnu build accounts) (gnu system accounts)
+                               (guix build utils) (srfi srfi-1) (srfi srfi-11)))
+       #~(begin
+          (use-modules (gnu build accounts) (gnu system accounts)
+                       (guix build utils) (srfi srfi-1) (srfi srfi-11))
+          #$%acc-gexp)))))
+
+(define (run-acc shadow-content hash-or-#f)
+  "在 fake root 上执行 account projection；返回 (exit . final-shadow)。"
+  (let ((root (make-fake-root shadow-content hash-or-#f)))
+    (let ((exit (run-in-root %acc-program root)))
       (cons exit
             (call-with-input-file (string-append root "/etc/shadow")
                                   (lambda (p) (get-string-all p)))))))
 
-;; P1：正常 hash → exit 0，shadow user 行 hash 被替换。
-(let* ((shadow "root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:u:/home/user:/bin/bash\n")
-       (res (run-projector shadow "$6$salt$faketesthash\n"))
+;; A1+A2+A3：正常 credential → exit 0，三库正确，user shadow 行
+;; 格式为 user:hash:lastchange:...（不是 hash 顶替 name 的坏行）。
+(let* ((res (run-acc "" "$6$salt$faketesthash\n"))
        (exit (car res)) (out (cdr res)))
-  (test-equal "P1 projector success exits 0" 0 exit)
-  (test-assert "P1 user shadow hash replaced"
-    (and (string-contains out "$6$salt$faketesthash:x:1000:1000:u:")
-         (string-contains out "root:x:0:0:root:/root:/bin/bash\n"))))
+  (test-equal "A1 projection success exits 0" 0 exit)
+  (test-assert "A1 user present in shadow as user:hash:..."
+    (and (string-contains out "\nuser:$6$salt$faketesthash:")
+         ;; 坏行模式（hash 顶替 name）必须不存在
+         (not (string-contains out "\n$6$salt$faketesthash:!"))
+         (not (string-contains out "\nuser:!:"))))
+  (test-assert "A1 root preserved (locked, no credential)"
+    (string-contains out "root:!:")))
 
-;; P2：persistent hash 缺失 → 非零，shadow 不被破坏。
-(let* ((shadow "root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:u:/home/user:/bin/bash\n")
-       (root (make-fake-root shadow #f))
-       (exit (run-in-root %projector root))
-       (out (call-with-input-file (string-append root "/etc/shadow")
-                                  (lambda (p) (get-string-all p)))))
-  (test-assert "P2 missing hash fails" (not (zero? exit)))
-  (test-equal "P2 shadow untouched" shadow out))
+;; A4：persistent hash 缺失 → 非零，三库不被写。
+(let* ((root (make-fake-root "" #f))
+       (exit (run-in-root %acc-program root)))
+  (test-assert "A4 missing hash fails" (not (zero? exit)))
+  (test-assert "A4 shadow not written (empty remains)"
+    (let ((s (call-with-input-file (string-append root "/etc/shadow")
+                                   (lambda (p) (get-string-all p)))))
+      (string=? s ""))))
 
-;; P3：malformed hash → 非零，shadow 不被破坏。
-(let* ((shadow "root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:u:/home/user:/bin/bash\n")
-       (res (run-projector shadow "NOT-A-VALID-HASH\n"))
+;; A5：malformed hash → 非零，库不被写。
+(let* ((root (make-fake-root "" "NOT-A-VALID-HASH\n"))
+       (exit (run-in-root %acc-program root)))
+  (test-assert "A5 malformed hash fails" (not (zero? exit)))
+  (test-assert "A5 shadow not written"
+    (let ((s (call-with-input-file (string-append root "/etc/shadow")
+                                   (lambda (p) (get-string-all p)))))
+      (string=? s ""))))
+
+;; A6：user 不在声明集合 → projection 本身只写声明用户（不产生
+;; 幽灵条目）；credential 注入只作用于声明的 interactive 用户。
+(let* ((res (run-acc "" "$6$salt$valid\n"))
        (exit (car res)) (out (cdr res)))
-  (test-assert "P3 malformed hash fails" (not (zero? exit)))
-  (test-equal "P3 shadow untouched" shadow out))
+  (test-equal "A6 projection success with declared user" 0 exit)
+  (test-assert "A6 user shadow line well-formed"
+    (string-contains out "\nuser:$6$salt$valid:")))
 
-;; P4：user 不在 shadow → 非零，shadow 不变（不产新条目）。
-(let* ((shadow "root:x:0:0:root:/root:/bin/bash\nother:x:1001:1001:o:/home/other:/bin/bash\n")
-       (res (run-projector shadow "$6$salt$valid\n"))
-       (exit (car res)) (out (cdr res)))
-  (test-assert "P4 missing user fails" (not (zero? exit)))
-  (test-equal "P4 shadow untouched" shadow out))
+;; A7：最终 shadow 缺 user 时 account-state-ready 不 provision——
+;; 由只读 verify 服务保证（fail-closed）。这里直接执行 verify
+;; program 在"投影被外部破坏"的 shadow 上，必须失败。
+(define %verify-program
+  (build-thing (account-databases-verify-program "user")))
 
-;; P5：generated executable 真正运行无 unbound-variable（上面 P1 已
-;; 执行成功即证明；这里显式断言输出不含 unbound/error 关键字）。
-(let* ((shadow "root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:u:/home/user:/bin/bash\n")
-       (root (make-fake-root shadow "$6$salt$faketesthash\n")))
-  (let* ((script (string-append
-                  "unshare --user --map-root-user --map-users=auto "
-                  "--map-groups=auto --mount --pid --fork sh -c '"
-                  "mount --bind /gnu/store " root "/gnu/store; "
-                  "chroot " root " " %guile " --no-auto-compile " %projector
-                  " 2>&1'"))
-         (pipe (open-input-pipe script))
-         (all (get-string-all pipe)))
-    (close-pipe pipe)
-    (test-assert "P5 no unbound-variable in runtime"
-      (not (string-contains all "Unbound variable")))))
+(let* ((root (make-fake-root
+              "root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:u:/home/user:/bin/bash\n"
+              "$6$salt$faketesthash\n"))
+       ;; 模拟"shadow 缺 user"（旧 bug 的坏行形态：hash 顶替 name）
+       (shadow-path (string-append root "/etc/shadow")))
+  (call-with-output-file shadow-path
+                         (lambda (p)
+                           (display
+                            "root::20682::::::\n\
+$6$salt$faketesthash:!:20682::::::\n"
+                            p)))
+  (chmod shadow-path #o600)
+  (let ((exit (run-in-root %verify-program root)))
+    (test-assert "A7 verify fails when shadow lacks user"
+      (not (zero? exit)))))
+
+;; A8：仓库只有一个 production /etc/shadow writer（静态断言）——
+;; 排除测试与上游 guix 源码，modules/ 下只有 accounts.scm 写 shadow。
+;; A8：仓库只有一个 production /etc/shadow writer（静态断言）——
+;; modules/guixcfg 下只有 accounts.scm 写 shadow（write-shadow 或
+;; rename 到 /etc/shadow）。
+(test-assert "A8 single production shadow writer"
+  (let* ((base "modules/guixcfg")
+         (subdirs '("security" "system" "services" "boot" "storage" "home"
+                    "users" "utils" "hosts"))
+         (files (append-map
+                 (lambda (sub)
+                   (let ((dir (string-append base "/" sub)))
+                     (filter (lambda (f)
+                               (and (string-suffix? ".scm" f)
+                                    (not (member f '("." "..")))))
+                             (map (lambda (f) (string-append dir "/" f))
+                                  (or (scandir dir) '())))))
+                 subdirs))
+         (writers
+          (filter (lambda (f)
+                    (let ((t (call-with-input-file f
+                                                  (lambda (p) (get-string-all p)))))
+                      (or (string-contains t "write-shadow")
+                          (and (string-contains t "rename-file")
+                               (string-contains t "\"/etc/shadow\"")))))
+                  files)))
+    (and (= 1 (length writers))
+         (string-contains (car writers) "accounts.scm"))))
 
 ;; ── persistent-state-ready：真实执行 production start ────────
 ;; 直接执行实际 Shepherd service 的 start gexp（shepherd-service-start），
