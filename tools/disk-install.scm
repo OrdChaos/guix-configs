@@ -11,7 +11,7 @@
 ;; guix repl 不提供 -L，这里显式把 modules/ 加入 load path（从仓库根目录运行）。
 (add-to-load-path (string-append (getcwd) "/modules"))
 
-(use-modules (guixcfg security age)      ; runtime-identity-present?、make-age-secret-reader
+(use-modules (guixcfg security credential-source) ; resolve-luks-passphrase-source
              (guixcfg storage model)
              (guixcfg storage policies)
              (guixcfg storage plan)
@@ -23,18 +23,18 @@
              (ice-9 match))
 
 (define (usage)
-  (format #t "用法:
-  disk-install inspect <device>        探测设备并打印事实与安全检查结果（只读）
-  disk-install plan <host> <device>    打印安装计划（只读，不执行）
-  disk-install apply <host> <device>   执行安装（破坏性，需要 root 和人工确认）
+  (format #t "Usage:
+  disk-install inspect <device>        probe the device and print facts and safety checks (read-only)
+  disk-install plan <host> <device>    print the install plan (read-only, nothing executed)
+  disk-install apply <host> <device>   run the install (destructive, needs root and confirmation)
   disk-install apply <host> <device> --luks-secret
-                                       LUKS passphrase 从 age secret 读取
-                                       （需先 secrets unlock）
-  disk-install commit-root [target]    system init 后提交 root generation
-                                       （@root-installing → @root-template + @root-0，
-                                       target 默认 /mnt；之后即可 umount 并重启）
+                                       LUKS passphrase read from an age secret
+                                       (run 'secrets unlock' first)
+  disk-install commit-root [target]    commit the root generation after 'system init'
+                                       (@root-installing -> @root-template + @root-0,
+                                       target defaults to /mnt; then umount and reboot)
 
-host 可选: vm, laptop~%"))
+host: vm, laptop~%"))
 
 (define (load-policy host)
   "从纯存储模块加载 HOST policy；这里不能加载完整 host OS 模块。"
@@ -74,17 +74,10 @@ host 可选: vm, laptop~%"))
 (define (cmd-apply host device use-luks-secret?)
   "USE-LUKS-SECRET? 时 LUKS passphrase 来自 secrets/install/
 luks-recovery.age（需先 secrets unlock；master password 只解锁一次
-stable S，安装过程复用 /run 中的临时 S）；否则交互读取。"
-  (if use-luks-secret?
-    (unless (runtime-identity-present?)
-      (format (current-error-port)
-              "no unlocked stable identity; run 'secrets unlock' first~%")
-      (exit 1))
-    #t)
-  (let ((reader (if use-luks-secret?
-                  (make-age-secret-reader
-                   "secrets/install/luks-recovery.age")
-                  read-luks-passphrase!)))
+stable S，安装过程复用 /run 中的临时 S）；否则交互读取。来源解析
+统一走 credential-source（与 tpm2-enroll 共享同一 resolver）。"
+  (let ((reader (resolve-luks-passphrase-source
+                 (if use-luks-secret? 'luks-secret 'interactive))))
     (run-install (load-policy host) device
                  #:passphrase-reader reader)))
 

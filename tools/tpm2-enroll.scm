@@ -3,9 +3,18 @@
 ;;;
 ;;; 用法（从仓库根目录，目标系统上以 root 运行）：
 ;;;   guix repl tools/tpm2-enroll.scm -- preflight
-;;;   guix repl tools/tpm2-enroll.scm -- enroll          # 首次 enrollment
-;;;   guix repl tools/tpm2-enroll.scm -- replace         # 显式重新 enrollment
+;;;   guix repl tools/tpm2-enroll.scm -- enroll [--luks-secret|--noninteractive]
+;;;   guix repl tools/tpm2-enroll.scm -- replace [--luks-secret|--noninteractive]
 ;;;   guix repl tools/tpm2-enroll.scm -- status
+;;;
+;;; LUKS recovery passphrase 来源（互斥三选一；绝不静默回退）：
+;;;   默认      交互读取（tty 关闭回显；stdin 非 tty 时直读）
+;;;   --luks-secret      从 age-encrypted luks-recovery.age 解密（需先
+;;;                      secrets unlock；identity 缺失/解密失败立即中止）
+;;;   --noninteractive   从 stdin 直读一行（脚本/自动化注入）
+;;; status/preflight 不接受任何 credential 来源 flag。
+;;; 来源解析统一走 (guixcfg security credential-source)（与
+;;; disk-install 共享同一 resolver；docs/operations/installation.md）。
 ;;;
 ;;; 职责边界：本工具是唯一允许修改机器 TPM/LUKS enrollment 的入口
 ;;; （luksAddKey / sealed object 创建 / credential 生成 / 状态推进）。
@@ -31,6 +40,7 @@
 
 (use-modules (guixcfg security tpm2 tpm2-tools)
              (guixcfg security tpm2 state)
+             (guixcfg security credential-source) ; resolve-luks-passphrase-source
              (guixcfg storage model)     ; %system-partlabel
              (guixcfg utils process)
              (guixcfg utils spawn)       ; wait-exit（unseal 管道回收）
@@ -187,7 +197,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
     ;; (guix build utils) 的 file-executable? 在 guix repl 环境未导出、
     ;; (ice-9 posix) 在 time-machine repl 环境不可用（均实测），
     ;; 用 guile 核心的 stat mode 位检查（零额外模块依赖）。
-    (check (string-append name " 可执行: " path)
+    (check (string-append name " executable: " path)
            (and (file-exists? path)
                 (let ((st (stat path)))
                   (not (zero? (logand (stat:mode st) #o111)))))))
@@ -204,17 +214,17 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
     ok?)
   (append
    (list
-    (check "TPM2 设备可用"
+    (check "TPM2 device available"
            (tpmrm0-present?))
-    (check "当前系统不是 Recovery"
+    (check "current system is not Recovery"
            (not (recovery-boot?)))
-    (check "目标设备是 LUKS2"
+    (check "target device is LUKS2"
            (and (file-exists? (luks-device)) (luks-is-luks2?)))
-    (check "Secure Boot 已启用（SecureBoot==1 且非 SetupMode）"
+    (check "Secure Boot enabled (SecureBoot==1 and not SetupMode)"
            (secure-boot-enabled?))
-    (check "ESP 已挂载（/efi/EFI/Guix 存在）"
+    (check "ESP mounted (/efi/EFI/Guix exists)"
            (file-exists? "/efi/EFI/Guix"))
-    (check "/persist 可写"
+    (check "/persist writable"
            (dir-writable? "/persist/system")))
    (executable-checks)))
 
@@ -228,8 +238,8 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
 ;;; ────────────────────────────────────────────────────────────
 ;;; enrollment 主体（enroll / replace 共用）
 
-(define* (do-enroll #:key (replace? #f) (passphrase #f))
-         "执行 enrollment（enroll / replace 共用主体）。PASSPHRASE 为 #f 时\n交互读取（do-replace 传入以复用一次密码输入）。\n所有明文临时材料只存在于 /run/guixcfg/tpm2-enroll/（tmpfs、root-only、\nunique 目录）；dynamic-wind 保证正常与异常路径都清理。"
+(define* (do-enroll #:key (replace? #f) (passphrase-source #f))
+         "执行 enrollment（enroll / replace 共用主体）。PASSPHRASE-SOURCE\n为 reader thunk（interactive / --luks-secret / --noninteractive 的解析\n结果）；#f 时交互读取（do-replace 传入以复用一次密码输入）。\n所有明文临时材料只存在于 /run/guixcfg/tpm2-enroll/（tmpfs、root-only、\nunique 目录）；dynamic-wind 保证正常与异常路径都清理。"
          (define id (string-append "enroll-" (number->string (current-time))))
          (define workdir (string-append "/run/guixcfg/tpm2-enroll/" id))
          ;; ── 硬性前置检查（任一不满足即中止，不做任何修改）────────
@@ -249,16 +259,17 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
          (dynamic-wind
           (lambda () #t)
           (lambda ()
-            (format #t "DBG0 pre-workdir~%")
+            
             (mkdir-p workdir)
             (let ((passphrase
-                   (or passphrase (read-passphrase! "输入 recovery LUKS 密码: "))))
-              (format #t "DBG1 passphrase~%")
+                   (or (and passphrase-source (passphrase-source))
+                       (read-passphrase! "Enter recovery LUKS passphrase: "))))
+              
               (unless
                 (luks-passphrase-valid? passphrase)
                 (error "recovery passphrase cannot unlock LUKS; aborting"))
               (format #t "recovery passphrase verified.~%")
-              (format #t "DBG2 pcrread~%")
+
               ;; 2. 显示当前 PCR7 并确认（Secure Boot 已启用状态下的机器 policy）
               (let* ((pcr7-hex (tpm2-pcrread! %tcti %tpm2-bin "sha256:7"))
                      (pcr7-file (string-append workdir "/pcr7.bin")))
@@ -275,7 +286,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                        (seal-ctx (string-append workdir "/seal.ctx")))
                   ;; trial PolicyPCR（期望值 = 当前 PCR7）
                   (tpm2-pcrread! %tcti %tpm2-bin "sha256:7" #:out pcr7-file)
-                  (format #t "DBG3 sealed~%")
+
                   (tpm2-policy-pcr-digest!
                    %tcti
                    %tpm2-bin
@@ -298,7 +309,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                   (format #t "sealed object created (credential held in memory only)~%")
                   ;; 4. 立即用当前 PCR7 验证 unseal（不通过不继续）。
                   (let ((sess (string-append workdir "/verify.session.ctx")))
-                    (format #t "DBG4 unseal-verify~%")
+
                     (tpm2-load-sealed!
                      %tcti
                      %tpm2-bin
@@ -325,7 +336,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                      pw-file
                      (lambda (p) (display passphrase p)))
                     (chmod pw-file 384)
-                    (format #t "DBG5 luksAddKey~%")
+
                     (let ((old-slots (or (luks-max-keyslot) -1)))
                       (invoke-with-stdin
                        credential
@@ -340,7 +351,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                               (lambda ()
                                 (format
                                  (current-error-port)
-                                 "回滚：删除 keyslot ~a~%"
+                                 "Rollback: removing keyslot ~a~%"
                                  keyslot)
                                 (invoke-with-stdin
                                  passphrase
@@ -408,21 +419,23 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                             (notes (if replace? '("replace") '("initial")))))
                           (format
                            #t
-                           "state 已写入（enrollment ~a，keyslot ~a）~%"
+                           "state written (enrollment ~a, keyslot ~a)~%"
                            id
                            keyslot))
                         (format #t "~%enrollment complete. Next boot will attempt TPM auto-unlock;\npassphrase fallback is unaffected.~%"))))))))
           (lambda () (false-if-exception (delete-file-recursively workdir)))))
 
-(define (do-replace)
+(define (do-replace passphrase-source)
   "rotate：先按 enroll 流程加新 keyslot + 发布 + 提交 state，成功后用
 recovery 密码删除旧 TPM keyslot（recovery keyslot 永不碰）。删除失败时
-新 enrollment 保持有效，只打印 WARNING 并提供 orphan 清理命令。"
+新 enrollment 保持有效，只打印 WARNING 并提供 orphan 清理命令。
+PASSPHRASE-SOURCE 为 reader thunk（互斥来源之一；#f 时交互读取）。"
   (let ((old (read-tpm2-state)))
     (unless (tpm2-enrolled? old)
       (error "No existing TPM enrollment; use the enroll command"))
     (let* ((old-keyslot (tpm2-enrollment-keyslot old))
-           (passphrase (read-passphrase! "输入 recovery LUKS 密码: ")))
+           (passphrase (or (and passphrase-source (passphrase-source))
+                           (read-passphrase! "Enter recovery LUKS passphrase: "))))
       (format #t "== TPM2 enrollment replace (old keyslot ~a) ==~%" old-keyslot)
       (unless (luks-passphrase-valid? passphrase)
         (error "recovery passphrase cannot unlock LUKS; aborting"))
@@ -436,10 +449,10 @@ recovery 密码删除旧 TPM keyslot（recovery keyslot 永不碰）。删除失
           (format #t "old TPM keyslot ~a removed.~%" old-keyslot))
         (lambda (key . args)
           (format (current-error-port)
-                  "WARNING: 删除旧 TPM keyslot ~a 失败；新 enrollment 保持有效。~%"
+                  "WARNING: failed to remove old TPM keyslot ~a; new enrollment remains valid.~%"
                   old-keyslot)
           (format (current-error-port)
-                  "orphan 清理：cryptsetup luksKillSlot ~a ~a --key-file=<recovery pw>~%"
+                  "Orphan cleanup: cryptsetup luksKillSlot ~a ~a --key-file=<recovery pw>~%"
                   (luks-device) old-keyslot))))))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -460,29 +473,84 @@ recovery 密码删除旧 TPM keyslot（recovery keyslot 永不碰）。删除失
        (format #t "  ESP side  : ~a~%"
                (if (and (file-exists? (string-append %esp-tpm2-dir "/seal.pub"))
                         (file-exists? (string-append %esp-tpm2-dir "/seal.priv")))
-                 "完整"
-                 "缺失/不完整"))
+                 "complete"
+                 "missing/incomplete"))
        (format #t "  /persist side: ~a~%"
                (if (enrollment-artifacts-present?
                     state %tpm2-state-dir)
-                 "完整"
-                 "缺失/不完整")))
+                 "complete"
+                 "missing/incomplete")))
       (format #t "  (no enrollment)~%"))))
+
+;;; ────────────────────────────────────────────────────────────
+;;; CLI 解析（纯函数，可单测）
+
+(define (parse-credential-flag flags)
+  "解析 enroll/replace 的 credential 来源 flag，返回 passphrase reader
+thunk。三个来源互斥：'() → 交互读取；--luks-secret → age 解密（identity
+缺失在解析时立即失败，绝不回退交互）；--noninteractive → stdin 直读一行。
+互斥违规/未知 flag 抛错。"
+  (match flags
+    (() read-passphrase!)
+    (("--luks-secret")
+     (resolve-luks-passphrase-source 'luks-secret))
+    (("--noninteractive")
+     ;; stdin 直读一行（脚本/自动化注入；无提示、无回显控制）。
+     (lambda () (read-line)))
+    (("--luks-secret" "--noninteractive")
+     (error "credential sources are mutually exclusive; use exactly one of --luks-secret / --noninteractive"))
+    (("--noninteractive" "--luks-secret")
+     (error "credential sources are mutually exclusive; use exactly one of --luks-secret / --noninteractive"))
+    (_ (error "unknown option for enroll/replace" flags))))
+
+(define (usage)
+  (display "Usage: guix repl tools/tpm2-enroll.scm -- preflight|status\n")
+  (display "       guix repl tools/tpm2-enroll.scm -- enroll|replace [--luks-secret|--noninteractive]\n"))
+
+(define (parse-command args)
+  "解析 CLI 参数（(command-line) 全列表）。返回 (values command source)。
+COMMAND：'preflight | 'enroll | 'replace | 'status。
+SOURCE：passphrase reader thunk（enroll/replace）；其余 #f。
+任何违规（未知命令、未知 flag、互斥冲突、status/preflight 携带
+credential flag、--luks-secret 的 fail-closed 前置）都在此抛错——
+发生在任何 TPM/LUKS mutation 之前。"
+  (let* ((rest (cdr args))
+         (cmd (and (pair? rest) (string->symbol (car rest))))
+         (flags (cdr rest)))
+    (define (reject-credential-flags! name)
+      (unless (null? flags)
+        (error (string-append name " does not accept credential source flags")
+               flags)))
+    (case cmd
+      ((preflight) (reject-credential-flags! "preflight") (values 'preflight #f))
+      ((status)    (reject-credential-flags! "status")    (values 'status #f))
+      ((enroll)    (values 'enroll (parse-credential-flag flags)))
+      ((replace)   (values 'replace (parse-credential-flag flags)))
+      (else (throw 'command-error "unknown command" (and cmd (symbol->string cmd)))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 入口
 
 (define (main)
-  (let ((args (command-line)))
-    (if (< (length args) 2)
-      (begin
-       (display "Usage: guix repl tools/tpm2-enroll.scm -- preflight|enroll|replace|status\n")
-       (exit 1))
-      (case (string->symbol (list-ref args 1))
-        ((preflight) (preflight))
-        ((enroll) (do-enroll #:replace? #f))
-        ((replace) (do-replace))
-        ((status) (status))
-        (else (display "unknown command\n") (exit 1))))))
+  (if (< (length (command-line)) 2)
+    (begin (usage) (exit 1))
+    (catch 'command-error
+      (lambda ()
+        (catch 'misc-error
+          (lambda ()
+            (let-values (((cmd source) (parse-command (command-line))))
+              (case cmd
+                ((preflight) (preflight))
+                ((status) (status))
+                ((enroll) (do-enroll #:replace? #f #:passphrase-source source))
+                ((replace) (do-replace source)))))
+          (lambda (key . args)
+            ;; error：args = (#f "~A" (MESSAGE . IRRITANTS) #f)
+            (format (current-error-port) "error: ~a~%" (car (caddr args)))
+            (exit 1))))
+      (lambda (key message . args)
+        (format (current-error-port) "error: ~a~%" message)
+        (usage)
+        (exit 1)))))
 
 (main)
