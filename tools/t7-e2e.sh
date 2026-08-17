@@ -89,7 +89,7 @@ serial_wait() { # $1=log $2=pattern $3=timeout
 }
 
 usage() {
-    echo "用法: SYSTEM_PATH=/gnu/store/xxx-system tools/t7-e2e.sh install|scenario <name>|cleanup"
+    echo "Usage: SYSTEM_PATH=/gnu/store/xxx-system tools/t7-e2e.sh install|scenario <name>|cleanup"
     exit 1
 }
 
@@ -101,8 +101,8 @@ case "${1:-}" in
         # 复制 closure、部署 UKI，见历史 era 的产物——该脚本本身不是
         # git 源文件，按需维护）
         BB=$(ls -d $STORE/*-busybox-static-*/bin 2>/dev/null | head -1)
-        [ -n "$BB" ] || { echo "缺少 busybox-static" >&2; exit 1; }
-        [ -n "${SYSTEM_PATH:-}" ] || { echo "需要 SYSTEM_PATH" >&2; exit 1; }
+        [ -n "$BB" ] || { echo "busybox-static missing" >&2; exit 1; }
+        [ -n "${SYSTEM_PATH:-}" ] || { echo "SYSTEM_PATH required" >&2; exit 1; }
         [ -f "$DISK" ] || qemu-img create -f qcow2 "$DISK" 25G
         rm -rf "$T7/initramfs"; mkdir -p "$T7/initramfs/bin" "$T7/initramfs/modules"
         cp "$T7_INSTALL_DIR/init" "$T7/initramfs/init"
@@ -121,7 +121,7 @@ case "${1:-}" in
         # ── 构建安装 UKI（ukify 路线；kernel + 安装 initramfs）────
         UKIFY=$(ls -d $STORE/*-ukify-*/bin/ukify | head -1)
         STUB=$(ls -d $STORE/*-systemd-stub-*/libexec/linuxx64.efi.stub | head -1)
-        [ -n "$UKIFY" ] && [ -n "$STUB" ] || { echo "缺少 ukify/systemd-stub" >&2; exit 1; }
+        [ -n "$UKIFY" ] && [ -n "$STUB" ] || { echo "ukify/systemd-stub missing" >&2; exit 1; }
         printf 'NAME="Guix System"\nID=guix\n' > "$T7/os-release"
         "$UKIFY" build --linux "$SYSTEM_PATH/kernel/bzImage" \
             --initrd "$T7/install-initrd.img" \
@@ -161,9 +161,9 @@ EOF
             -device virtio-blk-pci,drive=hd0,serial=guix-t7-disk \
             -virtfs local,path="$STORE",mount_tag=gnu-store,security_model=none,id=st
         if grep -q "T7-INSTALL-DONE" "$T7/install.log"; then
-            echo "* T7 install: PASS（磁盘构造 + closure 复制 + UKI 部署完成）"
+            echo "* T7 install: PASS (disk construction + closure copy + UKI deployment done)"
         else
-            echo "* T7 install: FAIL（见 $T7/install.log）"
+            echo "* T7 install: FAIL (see $T7/install.log)"
             grep -E "T7-INSTALL-FAIL|T7-INSTALL:|error" "$T7/install.log" | tail -8 || true
             exit 1
         fi
@@ -174,7 +174,7 @@ EOF
         serial_boot "$name" "$T7/scenario-$name.log" 600 \
             -drive file="$DISK",format=qcow2,if=none,id=hd0 \
             -device virtio-blk-pci,drive=hd0,serial=guix-t7-disk
-        echo "scenario $name 串口日志: $T7/scenario-$name.log"
+        echo "scenario $name serial log: $T7/scenario-$name.log"
         ;;
     cleanup)
         pkill -x swtpm 2>/dev/null || true

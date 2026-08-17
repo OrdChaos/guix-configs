@@ -35,8 +35,8 @@ mdev -s 2>/dev/null
 
 # ── 3. 9p 挂载（/gnu/store 必须挂在此处：动态链接器绝对路径）──
 mkdir -p /gnu/store /mnt/cfg
-mount -t 9p -o trans=virtio,version=9p2000.L gnu-store /gnu/store || { echo "T7-INSTALL-FAIL: 9p gnu-store 挂载失败"; poweroff -f; }
-mount -t 9p -o trans=virtio,version=9p2000.L guix-configs /mnt/cfg || { echo "T7-INSTALL-FAIL: 9p cfg 挂载失败"; poweroff -f; }
+mount -t 9p -o trans=virtio,version=9p2000.L gnu-store /gnu/store || { echo "T7-INSTALL-FAIL: 9p gnu-store mount failed"; poweroff -f; }
+mount -t 9p -o trans=virtio,version=9p2000.L guix-configs /mnt/cfg || { echo "T7-INSTALL-FAIL: 9p cfg mount failed"; poweroff -f; }
 
 # ── 4. 工具定位（store）────────────────────────────────────
 CRYPTSETUP=$(ls /gnu/store/*-cryptsetup-static-*/sbin/cryptsetup | head -1)
@@ -69,7 +69,7 @@ while [ ! -e /dev/vdb ] && [ $i -lt 30 ]; do
     i=$((i+1))
     sleep 1
 done
-[ -e /dev/vdb ] || { echo "T7-INSTALL-FAIL: 目标盘 vdb 未出现"; poweroff -f; }
+[ -e /dev/vdb ] || { echo "T7-INSTALL-FAIL: target disk vdb did not appear"; poweroff -f; }
 
 # ── 6. 分区：ESP(512M) + LUKS ───────────────────────────────
 # 分区节点手动创建（无 udev/partprobe）
@@ -123,11 +123,11 @@ mount -t btrfs -o subvolid=258 /dev/mapper/cryptroot /mnt/sys/persist/system
 ls -la /mnt/cfg/ 2>&1 | head -5
 ls -la /mnt/cfg/vms/ 2>&1 | head -5
 if [ ! -f /mnt/cfg/vms/requisites.txt ]; then
-    echo "T7-INSTALL-FAIL: requisites.txt 缺失"
+    echo "T7-INSTALL-FAIL: requisites.txt missing"
     poweroff -f
 fi
 SYSTEM=$(cat /mnt/cfg/vms/system-path)
-echo "T7-INSTALL: 复制 closure（system=$SYSTEM）"
+echo "T7-INSTALL: copying closure (system=$SYSTEM)"
 while read -r p; do
     n=$(basename "$p")
     if [ ! -e "/mnt/sys/gnu/store/$n" ]; then
@@ -153,7 +153,7 @@ cat > /mnt/sys/persist/system/root-generations/state.scm <<EOF
  (boot-status . first-boot)
  (source-template . "@root-template"))
 EOF
-echo "T7-INSTALL: facts 写入 luks-uuid=$LUKS_UUID"
+echo "T7-INSTALL: facts written luks-uuid=$LUKS_UUID"
 
 # ── 11. ESP + UKI 部署（真实系统 kernel/initrd）─────────────
 $MKFS -F 32 -n ESP /dev/vdb1 || { echo "T7-INSTALL-FAIL: mkfs.vfat"; poweroff -f; }
@@ -184,7 +184,7 @@ $UKIFY build --linux "$KERNEL" --initrd "$INITRD" \
 # 断言：inspect RECOVERY.EFI 的 .cmdline 必须含 rootmode=recovery
 # （fixture 正确性门禁——工具链回归时最先暴露）
 $UKIFY inspect /mnt/esp/EFI/Guix/A/RECOVERY.EFI | grep -q "rootmode=recovery" \
-    || { echo "T7-INSTALL-FAIL: RECOVERY.EFI 缺少 rootmode=recovery"; poweroff -f; }
+    || { echo "T7-INSTALL-FAIL: RECOVERY.EFI missing rootmode=recovery"; poweroff -f; }
 $SBSIGN --key "$SBKEY" --cert "$SBCRT" \
     --output /mnt/esp/EFI/BOOT/BOOTX64.EFI "$LIMINE" \
     || { echo "T7-INSTALL-FAIL: sbsign limine"; poweroff -f; }

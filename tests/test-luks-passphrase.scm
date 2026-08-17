@@ -53,13 +53,13 @@
 ;; ── 1. plan 不含 secret ────────────────────────────────────
 (let* ((plan (storage-plan %vm-storage-policy "/dev/vda"))
        (secret "sup3r-s3cret-value"))
-  (test-assert "plan 的 detail 不含 passphrase/password/secret 键"
+  (test-assert "plan detail has no passphrase/password/secret keys"
                (every (lambda (step)
                         (let ((keys (map car (plan-step-detail step))))
                           (not (any (lambda (k) (memq k keys))
                                     '(passphrase password secret)))))
                       plan))
-  (test-assert "plan 文本不包含秘密值"
+  (test-assert "plan text does not contain the secret"
                (not (string-contains (plan->text plan) secret))))
 
 ;; ── 2. passphrase 复用于两个 operation ─────────────────────
@@ -68,19 +68,19 @@
     (set! calls (1+ calls))
     "pw")
   (define source (make-luks-passphrase-source reader))
-  (test-assert "首次调用返回 reader 的值"
+  (test-assert "first call returns reader's value"
                (string=? "pw" (source)))
-  (test-assert "再次调用返回同一值（不重新读取）"
+  (test-assert "later calls return the same value (no re-read)"
                (string=? "pw" (source)))
-  (test-assert "reader 只被调用一次"
+  (test-assert "reader called exactly once"
                (= 1 calls)))
 
 ;; ── 3. 两次输入不一致 / 空密码：重试循环 ──────────────────
-(test-assert "两次不一致后重新输入"
+(test-assert "re-prompts after two mismatches"
              (string=? "okpw"
                        (with-input-from-string "foo\nbar\nokpw\nokpw\n"
                                                (lambda () (read-luks-passphrase!)))))
-(test-assert "空密码被拒绝"
+(test-assert "empty passphrase rejected"
              (string=? "realpw"
                        (with-input-from-string "\n\nrealpw\nrealpw\n"
                                                (lambda () (read-luks-passphrase!)))))
@@ -88,40 +88,40 @@
 ;; ── 4. luksFormat：--batch-mode + --key-file=-，stdin 是 passphrase ──
 (install-fake-cryptsetup 0)
 (execute-luks-format "pw4fmt")
-(test-assert "luksFormat 使用 --batch-mode 与 --key-file=-"
+(test-assert "luksFormat uses --batch-mode and --key-file=-"
              (let ((args (fake-argv)))
                (and args
                     (string-contains args "--batch-mode")
                     (string-contains args "--key-file=-"))))
-(test-assert "luksFormat stdin 收到 passphrase"
+(test-assert "luksFormat stdin receives passphrase"
              (string=? "pw4fmt" (fake-stdin)))
 ;; 关键：display + EOF 不附加换行——最终用户启动时交互输入的
 ;; recovery password 必须与安装时写入的完全一致（含字节边界）。
-(test-assert "luksFormat stdin 无尾随换行"
+(test-assert "luksFormat stdin has no trailing newline"
              (not (string-suffix? "\n" (fake-stdin))))
 
 ;; ── 5. open：--key-file=-，stdin 是 passphrase ─────────────
 (execute-luks-open "pw4open")
-(test-assert "open 使用 --key-file=-"
+(test-assert "open uses --key-file=-"
              (let ((args (fake-argv)))
                (and args (string-contains args "--key-file=-"))))
-(test-assert "open stdin 收到 passphrase"
+(test-assert "open stdin receives passphrase"
              (string=? "pw4open" (fake-stdin)))
-(test-assert "open stdin 无尾随换行"
+(test-assert "open stdin has no trailing newline"
              (not (string-suffix? "\n" (fake-stdin))))
 
 ;; 非 ASCII passphrase：UTF-8 多字节字符经 stdin 原样传递
 (execute-luks-format "秘密pw-✓")
-(test-assert "非 ASCII passphrase 字节与 stdin 完全一致"
+(test-assert "non-ASCII passphrase bytes match stdin exactly"
              (string=? "秘密pw-✓" (fake-stdin)))
 
 ;; ── 6. luksFormat 失败：抛错（不继续 open/Btrfs）────────────
 (install-fake-cryptsetup 1)
-(test-error "luksFormat 失败即抛错" #t
+(test-error "luksFormat failure throws" #t
             (execute-luks-format "pw"))
 
 ;; ── 7. open 失败：抛错 ────────────────────────────────────
-(test-error "open 失败即抛错" #t
+(test-error "open failure throws" #t
             (execute-luks-open "pw"))
 
 ;; 恢复 PATH，避免影响后续测试文件。

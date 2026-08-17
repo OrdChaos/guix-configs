@@ -48,7 +48,7 @@
 
 (test-begin "modules-compile")
 
-(test-assert "全部模块可编译加载，且无未绑定变量警告"
+(test-assert "all modules compile and load without unbound-variable warnings"
              (let ((warnings (open-output-string)))
                (let ((ok
                       (every (lambda (name)
@@ -58,7 +58,7 @@
                                                  (compile-file (module-file name) #:to 'value))
                                    #t)
                                  (lambda (key . args)
-                                   (format (current-error-port) "模块编译失败: ~a (~a ~a)~%"
+                                   (format (current-error-port) "module compile failed: ~a (~a ~a)~%"
                                            name key args)
                                    #f)))
                              %all-modules)))
@@ -70,7 +70,7 @@
 ;; operating-system 的 services 等字段是延迟求值的，compile-file 不会
 ;; 触发字段校验；这里显式实例化 %os，让“services 字段必须是服务列表”
 ;; 这类错误在测试期暴露，而不是留到 system build。
-(test-assert "hosts/vm.scm 的 %os 可实例化（services 字段合法）"
+(test-assert "hosts/vm.scm %os instantiates (valid services field)"
              (let ((os (module-ref (resolve-module '(guixcfg hosts vm)) '%os)))
                (list? ((@ (gnu system) operating-system-services) os))))
 

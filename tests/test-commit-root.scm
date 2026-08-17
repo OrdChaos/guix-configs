@@ -5,13 +5,13 @@
 ;;; 以 root 单独跑时完整执行——测试 VM/安装环境的真实路径）。
 ;;;
 ;;; 覆盖（Phase 12）：
-;;;   1. rename 保持 mounted view（TARGET 内容 commit 后仍可见）
+;;;   1. rename 保持 mounted view（TARGET content visible after commit）
 ;;;   2. template readonly（ro=true）
 ;;;   3. @root-0 内容 == 安装期 root 内容（rename 而非复制）
 ;;;   4. @root-installing 最终不存在
-;;;   5. @root-0 存在
+;;;   5. @root-0 exists
 ;;;   6. TARGET 在 commit 后仍有 etc/gnu/persist/boot
-;;;   7. @persist-var-guix 数据完整（收养）
+;;;   7. @persist-var-guix data intact（收养）
 ;;;   8. state current-generation = 0（first-boot）
 ;;;   9. deploy program 在 commit 后仍可执行（marker 实证）
 ;;;  10. rerun safe（第二次 commit-root 是 no-op）
@@ -32,7 +32,7 @@
 
 (define (sh . args)
   (unless (zero? (apply system* args))
-    (error "命令失败" args)))
+    (error "command failed" args)))
 
 (define (run-out . args)
   (let ((port (apply open-pipe* OPEN_READ args)))
@@ -45,7 +45,7 @@
 (if (not (zero? (getuid)))
   (begin
    (test-skip 19)
-   (format #t "commit-root 测试跳过：需要 root（scratch loopback Btrfs）~%"))
+   (format #t "commit-root test skipped: needs root (scratch loopback Btrfs)~%"))
   (let* ((loop (string-trim-right (run-out "losetup" "-f") #\newline))
          (cleanup (lambda ()
                     (false-if-exception (sh "umount" "-R" target))
@@ -91,26 +91,26 @@
        ;; ── commit（真实调用）──────────────────────────────
        (commit-root-generation target)
        ;; 1. mounted view 保持
-       (test-equal "TARGET 内容 commit 后仍可见"
+       (test-equal "TARGET content visible after commit"
                    "sentinel-commit"
                    (call-with-input-file (string-append target "/file")
                                          get-string-all))
-       (test-assert "TARGET/etc 存在"
+       (test-assert "TARGET/etc exists"
                     (file-exists? (string-append target "/etc/issue")))
        ;; 6. TARGET 关键目录
        (for-each
         (lambda (d)
-          (test-assert (string-append "TARGET/" d " 存在")
+          (test-assert (string-append "TARGET/" d " exists")
                        (file-exists? (string-append target "/" d))))
         '("etc" "gnu" "persist" "boot"))
-       ;; 5. @root-0 存在
-       (test-assert "@root-0 存在"
+       ;; 5. @root-0 exists
+       (test-assert "@root-0 exists"
                     (file-exists? (string-append top "/@root-0")))
-       ;; 4. @root-installing 不存在
-       (test-assert "@root-installing 不存在"
+       ;; 4. @root-installing absent
+       (test-assert "@root-installing absent"
                     (not (file-exists? (string-append top "/@root-installing"))))
        ;; 3. 内容 == 安装期 root（rename 非复制）
-       (test-equal "@root-0 内容 == 安装期内容"
+       (test-equal "@root-0 content == install-time content"
                    "sentinel-commit"
                    (call-with-input-file (string-append top "/@root-0/file")
                                          get-string-all))
@@ -121,7 +121,7 @@
                               (string-append top "/@root-template") "ro")
                      "ro=true"))
        ;; 7. @persist-var-guix 收养完整
-       (test-equal "@persist-var-guix 数据完整"
+       (test-equal "@persist-var-guix data intact"
                    "guix-db"
                    (call-with-input-file
                     (string-append top "/@persist-var-guix/db/registry")
@@ -133,16 +133,16 @@
          (test-equal "state current-generation = 0"
                      0 (assq-ref state 'current-generation)))
        ;; 9. deploy 实际执行（marker）
-       (test-equal "deploy-uki 已执行"
+       (test-equal "deploy-uki executed"
                    "deployed\n"
                    (call-with-input-file "/tmp/commit-deploy-marker"
                                          get-string-all))
        ;; 10. rerun safe（no-op：返回 committed，不破坏任何状态）
-       (test-eq "rerun 是 no-op（返回 committed）"
+       (test-eq "rerun is a no-op (returns committed)"
                 'committed (commit-root-generation target))
-       (test-assert "rerun 后 @root-0 仍存在"
+       (test-assert "@root-0 still present after rerun"
                     (file-exists? (string-append top "/@root-0")))
-       (test-assert "rerun 后 template 仍 readonly"
+       (test-assert "template still readonly after rerun"
                     (string-contains
                      (run-out "btrfs" "property" "get"
                               (string-append top "/@root-template") "ro")
@@ -195,12 +195,12 @@
                                  (string-append
                                   "(use-modules (guixcfg storage commit)) "
                                   "(commit-root-generation \"" target2 "\")")))))
-           (test-assert "deploy 失败时 commit 退出非零"
+           (test-assert "commit exits non-zero when deploy fails"
                         (and status (not (zero? status)))))
          ;; 回滚后：@root-installing 恢复、@root-0 不存在、template 删除
-         (test-assert "回滚后 @root-installing 恢复"
+         (test-assert "@root-installing restored after rollback"
                       (file-exists? (string-append top2 "/@root-installing")))
-         (test-assert "回滚后 @root-0 不存在"
+         (test-assert "@root-0 absent after rollback"
                       (not (file-exists? (string-append top2 "/@root-0")))))
        cleanup))))
 

@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 source tools/t7-e2e.sh
 
-SCEN="${1:?需要场景名: auto-unlock|secboot-off|tpm-clear|corrupt|recovery}"
+SCEN="${1:?scenario name required: auto-unlock|secboot-off|tpm-clear|corrupt|recovery}"
 export MTOOLSRC="$T7/mtoolsrc"
 
 # 场景启动：所有场景共享同一磁盘（enrollment 状态持久在磁盘 /persist）
@@ -28,7 +28,7 @@ case "$SCEN" in
         dd if=/dev/urandom of="$T7/bad-seal.bin" bs=1 count=64 status=none
         MTOOLSRC="$T7/mtoolsrc" "$MTOOLS_BIN/mcopy" -o "$T7/bad-seal.bin" \
             x:/EFI/Guix/tpm2/seal.priv 2>/dev/null || \
-            echo "（corrupt 场景需要先有 tpm2 材料；若尚无则跳过篡改）"
+            echo "(corrupt scenario needs tpm2 materials first; skipping tamper if absent)"
         ;;
     recovery)
         # Recovery：把 RECOVERY.EFI（内置 rootmode=recovery）作为
@@ -49,7 +49,7 @@ EOF
         # 从数据盘 ESP 提取 RECOVERY.EFI（活动槽；A/B 任一）
         (MTOOLSRC="$T7/mtoolsrc" "$MTOOLS_BIN/mcopy" -o x:/EFI/Guix/A/RECOVERY.EFI "$T7/recovery.efi" 2>/dev/null) || \
             (MTOOLSRC="$T7/mtoolsrc" "$MTOOLS_BIN/mcopy" -o x:/EFI/Guix/B/RECOVERY.EFI "$T7/recovery.efi" 2>/dev/null) || \
-            { echo "ESP 上找不到 RECOVERY.EFI（需先 reconfigure 生成）" >&2; exit 1; }
+            { echo "RECOVERY.EFI not found on ESP (run reconfigure first)" >&2; exit 1; }
         "$MTOOLS_BIN/mcopy" -o "$T7/recovery.efi" x:/EFI/BOOT/BOOTX64.EFI
         # 用普通 VARS（Recovery 不依赖 Secure Boot 状态）
         OVMF_CODE=/usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd
@@ -76,4 +76,4 @@ serial_boot "$SCEN" "$T7/scenario-$SCEN.log" 600 \
     -drive file="$DISK",format=qcow2,if=none,id=hd0 \
     -device virtio-blk-pci,drive=hd0,serial=guix-t7-disk
 
-echo "=== 场景 $SCEN 串口日志: $T7/scenario-$SCEN.log"
+echo "=== scenario $SCEN serial log: $T7/scenario-$SCEN.log"

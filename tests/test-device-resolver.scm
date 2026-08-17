@@ -13,7 +13,7 @@
 (test-begin "device-resolver")
 
 ;; ── hex->bytes 往返 + config identity（4.2 gexp 边界）────────
-(test-equal "hex->bytes 基本"
+(test-equal "hex->bytes basic"
             #vu8(18 52 86 120 154 188 222 240)
             (hex->bytes "123456789abcdef0"))
 
@@ -25,7 +25,7 @@
   (test-equal "config identity == runtime identity (4.2)"
               bv
               (hex->bytes hex))
-  (test-equal "hex 为 32 个 hex 字符（无连字符）"
+  (test-equal "hex is 32 hex chars (no dashes)"
               32 (string-length hex)))
 
 ;; ── resolve-esp-device：sibling 语义（0/1/多）──────────────
@@ -43,7 +43,7 @@
        (symlink (string-append real "/vda2") (string-append sysfs "/vda2"))
        
        ;; 0 个 esp → error
-       (test-assert "0 个 sibling esp → error"
+       (test-assert "0 sibling ESPs -> error"
                     (catch #t
                       (lambda ()
                         (resolve-esp-device "/dev/vda2" #:sysfs sysfs)
@@ -55,7 +55,7 @@
        (call-with-output-file (string-append vda "/vda1/uevent")
                               (lambda (port)
                                 (display "PARTNAME=esp\n" port)))
-       (test-equal "1 个 sibling esp → 使用它"
+       (test-equal "1 sibling ESP -> used"
                    "/dev/vda1"
                    (resolve-esp-device "/dev/vda2" #:sysfs sysfs))
        
@@ -65,7 +65,7 @@
        (call-with-output-file (string-append sysfs "/vdb/vdb1/uevent")
                               (lambda (port)
                                 (display "PARTNAME=esp\n" port)))
-       (test-equal "其他 disk 的 esp 不影响本盘解析"
+       (test-equal "other disk's ESP does not affect this disk"
                    "/dev/vda1"
                    (resolve-esp-device "/dev/vda2" #:sysfs sysfs))
        
@@ -75,7 +75,7 @@
        (call-with-output-file (string-append vda "/vda3/uevent")
                               (lambda (port)
                                 (display "PARTNAME=esp\n" port)))
-       (test-assert "多个 sibling esp → error"
+       (test-assert "multiple sibling ESPs -> error"
                     (catch #t
                       (lambda ()
                         (resolve-esp-device "/dev/vda2" #:sysfs sysfs)
@@ -86,7 +86,7 @@
      (delete-file-recursively dir))))
 
 ;; ── resolve-system-device：错误 UUID fail-closed（D2）─────────
-(test-assert "错误 UUID 拒绝解析（D2）"
+(test-assert "wrong UUID refused (D2)"
              (catch #t
                (lambda ()
                  (resolve-system-device "ffffffffffffffffffffffffffffffff" #:tries 0)

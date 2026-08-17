@@ -95,17 +95,17 @@ UUID 是权威身份。"
             (tpm-off (proc-cmdline-option "guixcfg.tpm-unlock")))
         (when (or (and tpm-off (string=? tpm-off "0"))
                   (and raw-mode (string-prefix? "recovery" raw-mode)))
-          (throw 'tpm-skip "cmdline 禁用（Recovery/显式）")))
+          (throw 'tpm-skip "cmdline disabled (Recovery/explicit)")))
       
       ;; ── TPM 设备可用性（生产 /dev/tpmrm0）
       (unless (file-exists? "/dev/tpmrm0")
-        (throw 'tpm-skip "无 /dev/tpmrm0"))
+        (throw 'tpm-skip "no /dev/tpmrm0"))
       
       ;; ── 设备发现：PARTLABEL 固定事实（model.scm）
       (let* ((system-part (resolve-system-device luks-uuid-hex))
              (esp-part (resolve-esp-device system-part)))
         (unless (and system-part esp-part)
-          (throw 'tpm-skip "未找到 system/esp 分区"))
+          (throw 'tpm-skip "system/esp partition not found"))
         (format #t "TPM: system=~a esp=~a~%" system-part esp-part)
         
         ;; ── 挂 ESP，读机器级 tpm2/ 材料（固定路径，无 slot 概念）
@@ -118,7 +118,7 @@ UUID 是权威身份。"
                   (seal-pub (string-append tpm2-dir "/seal.pub"))
                   (seal-priv (string-append tpm2-dir "/seal.priv")))
              (unless (and (file-exists? seal-pub) (file-exists? seal-priv))
-               (throw 'tpm-skip "ESP 缺少 tpm2 材料"))
+               (throw 'tpm-skip "ESP lacks tpm2 materials"))
              (format #t "TPM: tpm2 materials ready, attempting automatic unlock~%")
              
              ;; ── unseal：重建 SRK → load sealed → policy session
@@ -133,14 +133,14 @@ UUID 是权威身份。"
                (catch #t
                  (lambda ()
                    (tpm2-createprimary! %tpm2-tools-tcti tpm2-bin #:out primary))
-                 (lambda (k . a) (throw 'tpm-fail "SRK 创建失败")))
+                 (lambda (k . a) (throw 'tpm-fail "SRK creation failed")))
                (catch #t
                  (lambda ()
                    (tpm2-load-sealed! %tpm2-tools-tcti tpm2-bin
                                       primary seal-pub seal-priv
                                       #:out seal-ctx))
                  (lambda (k . a)
-                   (throw 'tpm-fail "sealed object 加载失败（artifact 无效或 TPM 状态不符）")))
+                   (throw 'tpm-fail "sealed object load failed (invalid artifact or TPM state mismatch)")))
                (tpm2-start-policy-session! %tpm2-tools-tcti tpm2-bin
                                            #:out sess)
                (tpm2-policy-pcr-session! %tpm2-tools-tcti tpm2-bin sess
@@ -164,16 +164,16 @@ UUID 是权威身份。"
                                                system-part
                                                %luks-mapper-name)))
                                             (unless (zero? crypt-status)
-                                              (throw 'tpm-fail "cryptsetup 拒绝 credential"))
+                                              (throw 'tpm-fail "cryptsetup rejected credential"))
                                             (unless (zero? unseal-status)
-                                              (throw 'tpm-fail "tpm2_unseal 失败")))))
+                                              (throw 'tpm-fail "tpm2_unseal failed")))))
                    (tpm2-flush-session! %tpm2-tools-tcti tpm2-bin sess)
                    (format #t "TPM: LUKS auto-unlock succeeded~%")
                    #t)
                  (lambda (k . a)
                    (if (eq? k 'tpm-fail)
                      (apply throw k a)
-                     (throw 'tpm-fail "PCR policy 不匹配或 TPM 命令失败")))))))
+                     (throw 'tpm-fail "PCR policy mismatch or TPM command failure")))))))
          (lambda ()
            (false-if-exception (umount %esp-tpm-mount))))))
     (lambda (key . args)

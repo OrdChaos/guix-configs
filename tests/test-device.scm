@@ -41,26 +41,26 @@
 
 (test-group "parse-lsblk-json"
             (let ((disk (parse-lsblk-json %mounted-disk-json)))
-              (test-equal "识别整盘类型" "disk" (device-node-type disk))
-              (test-equal "容量为整数（-b）" 26843545600 (device-node-size disk))
-              (test-equal "解析出两个子分区" 2 (length (device-node-children disk)))
-              (test-assert "整盘自身未挂载" (not (device-node-mounted? disk)))
-              (test-assert "子分区 vda2 已挂载"
+              (test-equal "recognizes whole-disk type" "disk" (device-node-type disk))
+              (test-equal "size is integer (-b)" 26843545600 (device-node-size disk))
+              (test-equal "parses two child partitions" 2 (length (device-node-children disk)))
+              (test-assert "whole disk itself not mounted" (not (device-node-mounted? disk)))
+              (test-assert "child partition vda2 mounted"
                            (device-node-mounted?
                             (cadr (device-node-children disk)))))
             
             (let ((disk (parse-lsblk-json %clean-disk-json)))
-              (test-assert "干净盘未挂载且无子节点"
+              (test-assert "clean disk unmounted and childless"
                            (and (not (device-node-mounted? disk))
                                 (null? (device-node-children disk)))))
             
             (let ((part (parse-lsblk-json %partition-json)))
-              (test-equal "识别分区类型" "part" (device-node-type part))
-              (test-assert "分区已挂载" (device-node-mounted? part)))
+              (test-equal "recognizes partition type" "part" (device-node-type part))
+              (test-assert "partition mounted" (device-node-mounted? part)))
             
             (let ((rom (parse-lsblk-json %legacy-lsblk-json)))
-              (test-equal "旧版单字符串 mountpoint 被归一化"
+              (test-equal "legacy single-string mountpoint normalized"
                           '("/run/install") (device-node-mountpoints rom))
-              (test-assert "LiveCD 介质识别为已挂载" (device-node-mounted? rom))))
+              (test-assert "LiveCD media recognized as mounted" (device-node-mounted? rom))))
 
 (test-end)

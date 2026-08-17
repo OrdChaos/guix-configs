@@ -77,7 +77,7 @@ if serial_mode == "pty":
                 pty_path = m.group(1).decode()
                 break
     if not pty_path:
-        print(f"[t7] FATAL: QEMU 未报告 pty 路径，stderr: {stderr_remain[:500]!r}", flush=True)
+        print(f"[t7] FATAL: QEMU did not report a pty path, stderr: {stderr_remain[:500]!r}", flush=True)
         p.kill()
         sys.exit(1)
     print(f"[t7] QEMU pty: {pty_path}", flush=True)
@@ -109,7 +109,7 @@ elif serial_mode == "socket":
             err = os.read(p.stderr.fileno(), 2000)
         except OSError:
             pass
-        print(f"[t7] FATAL: 无法连接 {sock_path} (qemu rc={rc}) stderr: {err[:500]!r}", flush=True)
+        print(f"[t7] FATAL: cannot connect to {sock_path} (qemu rc={rc}) stderr: {err[:500]!r}", flush=True)
         p.kill()
         sys.exit(1)
     conn.settimeout(0.2)
@@ -203,7 +203,7 @@ for kind, arg in steps:
         snap = buf.decode("utf-8", "replace")
         with open(f"/tmp/t7-snapshot-{arg}.log", "w") as f:
             f.write(snap)
-        print(f"[t7] mark: {arg}（{len(snap)} 字符）", flush=True)
+        print(f"[t7] mark: {arg} ({len(snap)} chars)", flush=True)
     elif kind == "sleep":
         time.sleep(int(arg))
 

@@ -159,8 +159,8 @@
        (error "UKI bootloader deployed (ESP has limine.conf) but deploy-uki script is missing"
               deploy))
       (else
-       (format #t "（无 deploy-uki：非 UKI bootloader 属预期，跳过部署刷新；\
-若非 GRUB host 请人工检查）~%")))))
+       (format #t "(no deploy-uki: non-UKI bootloader is expected; skipping deploy refresh; \
+check manually on non-GRUB hosts)~%")))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 初始状态写入（commit record，最后写——deploy 成功后才宣布提交）。
@@ -239,8 +239,8 @@
          ;; 6. state 最后写（commit record）
          (write-initial-state!)
          (execute-unmount-top)
-         (format #t "~%安装期提交完成。可以 umount -R ~a 并重启，
-首次启动将使用 @root-0（状态 first-boot）。~%" target)
+         (format #t "~%Install-time commit complete. You may umount -R ~a and reboot; \
+first boot will use @root-0 (state first-boot).~%" target)
          'committed)))
     (lambda (key . args)
       ;; 失败：回滚（rename 已发生则还原）并清理残留，然后报告。

@@ -14,13 +14,13 @@
    (lambda ()
      (atomic-write-file! path
                          (lambda (port) (display "first\n" port)))
-     (test-equal "首次提交写入主文件"
+     (test-equal "first commit writes main file"
                  "first\n"
                  (call-with-input-file path get-string-all))
      
      (atomic-write-file! path
                          (lambda (port) (display "second\n" port)))
-     (test-equal "再次提交原子替换主文件"
+     (test-equal "second commit atomically replaces main file"
                  "second\n"
                  (call-with-input-file path get-string-all)))
    (lambda ()

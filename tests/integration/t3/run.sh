@@ -76,7 +76,7 @@ fresh() {
     rm -rf "$T7_DIR"/{disk.qcow2,vars-*.fd,tpm-*,swtpm-*.sock,ssh,*.log,*.img,*.efi,mtoolsrc,os-release,system-path,requisites.txt,initramfs,facts.scm,keys}
     gen-ssh-key
     printf '((luks-uuid . "%s"))\n' "$LUKS_UUID" > "$T7_DIR/facts.scm"
-    echo "fresh workspace 就绪（runtime: $T7_DIR）"
+    echo "fresh workspace ready (runtime: $T7_DIR)"
 }
 
 build-system() {
@@ -103,7 +103,7 @@ install() {
         | while read -r m; do cp "$m" "$idir/modules/"; done
     T7_INSTALL_DIR="$idir" SYSTEM_PATH="$sys" \
         timeout 1500 tools/t7-e2e.sh install
-    echo "安装完成；下一步：sb-keygen → sb-enroll → enroll-tpm"
+    echo "Install done; next: sb-keygen -> sb-enroll -> enroll-tpm"
 }
 
 # Secure Boot 密钥：宿主生成（不依赖 VM），输出 vms/t3/keys/（gitignored）。
@@ -127,7 +127,7 @@ sb-enroll() {
                      sbkeysync --keystore /mnt/cfg/vms/t3/keys/keystore --verbose --pk"'
     vm-ssh 'herd power-off root' >/dev/null 2>&1 || true
     sleep 8
-    echo "Secure Boot enrollment 完成；重启验证 SecureBoot=1"
+    echo "Secure Boot enrollment done; reboot to verify SecureBoot=1"
 }
 
 # TPM enrollment：boot（SB on）→ VM 内 tpm2-enroll。
@@ -149,7 +149,7 @@ enroll-tpm() {
          && "$G" --no-auto-compile -L "$S" -L modules -s tools/tpm2-enroll.scm enroll'
     vm-ssh 'herd power-off root' >/dev/null 2>&1 || true
     sleep 8
-    echo "TPM enrollment 完成；重启后 Scenario A 验证自动解锁"
+    echo "TPM enrollment done; Scenario A verifies auto-unlock after reboot"
 }
 
 # 场景：boot + 交互 + 日志断言。
@@ -176,14 +176,14 @@ scenario() {
     case "$name" in
         A|a)
             T7_KEEP_VM=1 tests/integration/t3/boot.sh boot stage-b >/dev/null
-            grep -a "TPM: LUKS 自动解锁成功" "$T7_DIR/interact-stage-b.log" >/dev/null \
+            grep -a "TPM: LUKS auto-unlock succeeded" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && echo "* A auto-unlock: PASS" || { echo "* A FAIL"; exit 1; }
             ;;
         B|b)
             tests/integration/t3/boot.sh fresh-tpm stage-b
             T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
                 "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
-            grep -a "回退密码" "$T7_DIR/interact-stage-b.log" >/dev/null \
+            grep -a "falling back to passphrase" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && echo "* B tpm-clear fallback: PASS" || { echo "* B FAIL"; exit 1; }
             ;;
         C|c)
@@ -192,8 +192,8 @@ scenario() {
             tests/integration/t3/boot.sh fresh-vars stage-b
             T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
                 "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
-            grep -a "尝试自动解锁" "$T7_DIR/interact-stage-b.log" >/dev/null \
-                && grep -a "回退密码" "$T7_DIR/interact-stage-b.log" >/dev/null \
+            grep -a "attempting automatic unlock" "$T7_DIR/interact-stage-b.log" >/dev/null \
+                && grep -a "falling back to passphrase" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && echo "* C PCR7 change fallback: PASS" || { echo "* C FAIL"; exit 1; }
             ;;
         D|d)
@@ -211,8 +211,8 @@ scenario() {
             T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
                 "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" \
                 -kernel "$T7_DIR/recovery-t3.efi" >/dev/null
-            grep -a "跳过（cmdline 禁用" "$T7_DIR/interact-stage-b.log" >/dev/null \
-                && ! grep -a "尝试自动解锁" "$T7_DIR/interact-stage-b.log" >/dev/null \
+            grep -a "skipped (cmdline disabled" "$T7_DIR/interact-stage-b.log" >/dev/null \
+                && ! grep -a "attempting automatic unlock" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && echo "* D recovery skip: PASS" || { echo "* D FAIL"; exit 1; }
             ;;
         E|e)
@@ -226,11 +226,11 @@ scenario() {
             sleep 8
             T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
                 "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
-            grep -a "尝试自动解锁" "$T7_DIR/interact-stage-b.log" >/dev/null \
-                && grep -a "回退密码" "$T7_DIR/interact-stage-b.log" >/dev/null \
+            grep -a "attempting automatic unlock" "$T7_DIR/interact-stage-b.log" >/dev/null \
+                && grep -a "falling back to passphrase" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && echo "* E corrupt artifact fallback: PASS" || { echo "* E FAIL"; exit 1; }
             ;;
-        *) echo "未知场景: $name（A B C D E）"; exit 1;;
+        *) echo "Unknown scenario: $name (A B C D E)"; exit 1;;
     esac
 }
 

@@ -15,13 +15,13 @@
 
 (test-begin "home")
 
-(test-assert "%guix-home 是可用的 home-environment"
+(test-assert "%guix-home is a usable home-environment"
              (home-environment? %guix-home))
 
-(test-assert "home packages 非空"
+(test-assert "home packages non-empty"
              (pair? (home-environment-packages %guix-home)))
 
-(test-assert "home packages 只含 normal-user CLI 工具"
+(test-assert "home packages only contain normal-user CLI tools"
              (every (lambda (p)
                       (not (member (package-name p)
                                    '("cryptsetup" "btrfs-progs" "tpm2-tools"

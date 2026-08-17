@@ -46,57 +46,57 @@
   (call-with-output-file truncated-file
                          (lambda (p) (display "((luks-uuid . \"abc" p)))
   
-  ;; 1. 显式 override 优先于默认路径
-  (test-equal "显式 override 优先于默认路径"
+  ;; 1. explicit override wins over default path
+  (test-equal "explicit override wins over default path"
               custom-file
               (resolve-facts-path custom-file default-file))
   ;; 2. 已安装系统自动发现：无 override 时默认路径
-  (test-equal "无 override 时自动发现默认路径"
+  (test-equal "default path auto-discovered without override"
               default-file
               (resolve-facts-path #f default-file))
   ;; 3. 都没有 → 无 facts
-  (test-equal "无 facts 时返回 #f"
+  (test-equal "returns #f without facts"
               #f
               (resolve-facts-path #f missing-file))
   ;; 4. 空字符串视为未设置
-  (test-equal "空字符串 override 视为未设置（有默认）"
+  (test-equal "empty-string override treated as unset (default exists)"
               default-file
               (resolve-facts-path "" default-file))
-  (test-equal "空字符串 override 视为未设置（无默认）"
+  (test-equal "empty-string override treated as unset (no default)"
               #f
               (resolve-facts-path "" missing-file))
   ;; 5. 显式 override 文件不存在 → 显式拒绝
-  (test-error "override 文件不存在 → 显式报错"
+  (test-error "missing override file -> explicit error"
               #t
               (resolve-facts-path missing-file default-file))
   ;; 6. 显式 override 是目录 → 显式拒绝
-  (test-error "override 是目录 → 显式报错"
+  (test-error "override is a directory -> explicit error"
               #t
               (resolve-facts-path %tmp-dir default-file))
-  ;; 7. 默认路径是目录 → 显式报错（异常状态，不静默当无 facts）
-  (test-error "默认路径是目录 → 显式报错"
+  ;; 7. default path is a directory -> explicit error（异常状态，不静默当无 facts）
+  (test-error "default path is a directory -> explicit error"
               #t
               (resolve-facts-path #f %tmp-dir))
   ;; 8. 格式非法 → 显式拒绝
-  (test-error "facts 内容非 alist → 显式报错"
+  (test-error "facts content not an alist -> explicit error"
               #t
               (load-machine-facts bad-file))
-  (test-error "facts 无法解析 → 显式报错"
+  (test-error "unparseable facts -> explicit error"
               #t
               (load-machine-facts truncated-file))
   ;; 9. require-fact：缺失立即失败（fail-closed）
-  (test-error "缺失 required fact → 立即报错"
+  (test-error "missing required fact -> immediate error"
               #t
               (require-fact '() 'luks-uuid))
-  (test-equal "required fact 存在时返回其值"
+  (test-equal "returns value when required fact present"
               "00000000-0000-0000-0000-000000000000"
               (require-fact %test-facts 'luks-uuid))
   ;; 10. 正确读取文件内容
-  (test-equal "load-machine-facts 正确读出 luks-uuid"
+  (test-equal "load-machine-facts reads luks-uuid correctly"
               "11111111-1111-1111-1111-111111111111"
               (assq-ref (load-machine-facts default-file) 'luks-uuid))
   ;; 11. 错误消息必须可诊断（而不是 unbound variable 之类）
-  (test-assert "override 不存在时错误消息含路径信息"
+  (test-assert "error message includes path when override missing"
                (let ((msg (catch #t
                             (lambda ()
                               (resolve-facts-path missing-file default-file)
@@ -105,7 +105,7 @@
                               (cadr args)))))
                  (and (string? msg)
                       (string-contains msg "GUIX_CONFIG_FACTS points to a missing file"))))
-  (test-assert "缺失 luks-uuid 时错误消息含 fact 名"
+  (test-assert "error message includes fact name when luks-uuid missing"
                (let ((msg (catch #t
                             (lambda ()
                               (require-fact '() 'luks-uuid)
@@ -118,7 +118,7 @@
 ;; 12. 集成：正式 root LUKS mapped-device source 是 facts 中的 UUID，
 ;;     绝不是 /dev/disk/by-partlabel/ 字符串。
 (let ((md (car ((fs-ref 'cryptroot-mapped-devices)))))
-  (test-assert "root LUKS mapped-device source 是 facts 中的 <uuid>"
+  (test-assert "root LUKS mapped-device source is the facts <uuid>"
                (uuid=? (uuid "00000000-0000-0000-0000-000000000000")
                        (mapped-device-source md))))
 
@@ -154,17 +154,17 @@ Virelith 频道提供的 tpm2-tools-compat，宿主 guix 的频道不可见）�
                              (write '((foo . 1)) p)
                              (newline p)))
     (let ((r1 (repro-failure missing)))
-      (test-assert "override 指向不存在文件：清晰报错，非 unbound variable"
+      (test-assert "override points at missing file: clear error, not unbound variable"
                    (and (not (zero? (car r1)))
                         (string-contains (cdr r1)
                                          "GUIX_CONFIG_FACTS points to a missing file")
                         (not (string-contains (cdr r1) "unbound variable")))))
     (let ((r2 (repro-failure no-luks)))
-      (test-assert "facts 缺 luks-uuid：清晰报错，非 unbound variable"
+      (test-assert "facts lack luks-uuid: clear error, not unbound variable"
                    (and (not (zero? (car r2)))
                         (string-contains (cdr r2) "missing required machine fact")
                         (not (string-contains (cdr r2) "unbound variable"))))))
   (format (current-error-port)
-          "跳过子进程集成测试：PATH 中无 guix~%"))
+          "subprocess integration test skipped: no guix in PATH~%"))
 
 (test-end)

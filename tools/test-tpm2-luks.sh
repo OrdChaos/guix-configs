@@ -25,12 +25,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-command -v swtpm >/dev/null || { echo "缺少 swtpm" >&2; exit 1; }
-command -v cryptsetup >/dev/null || { echo "缺少 cryptsetup" >&2; exit 1; }
+command -v swtpm >/dev/null || { echo "swtpm missing" >&2; exit 1; }
+command -v cryptsetup >/dev/null || { echo "cryptsetup missing" >&2; exit 1; }
 # swtpm 测试必须用带 tcti-swtpm 插件的 tpm2-tools（宿主包；store 包不带）
 TPM2_BIN=$(dirname "$(command -v tpm2_createprimary)" 2>/dev/null || true)
 TPM2_BIN=${TPM2_BIN:-/usr/sbin}
-[ -x "$TPM2_BIN/tpm2_createprimary" ] || { echo "缺少 tpm2-tools（$TPM2_BIN）" >&2; exit 1; }
+[ -x "$TPM2_BIN/tpm2_createprimary" ] || { echo "tpm2-tools missing ($TPM2_BIN)" >&2; exit 1; }
 
 W=/tmp/guixcfg-tpm2-luks-$$
 PASS=0; FAIL=0
@@ -52,7 +52,7 @@ start_swtpm() { # $1=state dir
         [ -S "$1/tpm.sock" ] && break
         sleep 0.1
     done
-    [ -S "$1/tpm.sock" ] || { echo "swtpm socket 未就绪" >&2; exit 1; }
+    [ -S "$1/tpm.sock" ] || { echo "swtpm socket not ready" >&2; exit 1; }
 }
 
 stop_swtpm() { pkill -x swtpm 2>/dev/null || true; sleep 0.2; }
@@ -74,7 +74,7 @@ printf '%s' "$RECOVERY_PW" | cryptsetup luksFormat --type luks2 \
     --batch-mode --key-file=- luks.img
 printf '%s' "$RECOVERY_PW" | cryptsetup open --test-passphrase \
     --key-file=- luks.img \
-    && ok "T2 准备：recovery 密码 keyslot 可用" || bad "T2 准备：recovery 密码 keyslot 可用"
+    && ok "T2 setup: recovery passphrase keyslot usable" || bad "T2 setup: recovery passphrase keyslot unusable"
 
 # ════════════════════════════════════════════════════════════
 # T2-1：PCR7=A enroll → unseal → credential 解锁
@@ -104,9 +104,9 @@ run "$TPM2_BIN/tpm2_startauthsession" --policy-session -S sess.ctx
 run "$TPM2_BIN/tpm2_policypcr" -S sess.ctx -l sha256:7
 if "$TPM2_BIN/tpm2_unseal" -c seal.ctx -p session:sess.ctx \
         | cryptsetup open --test-passphrase --key-file=- luks.img; then
-    ok "T2-1 PCR7=A → unseal 管道 → LUKS credential 解锁"
+    ok "T2-1 PCR7=A -> unseal pipe -> LUKS credential unlock"
 else
-    bad "T2-1 PCR7=A → unseal 管道 → LUKS credential 解锁"
+    bad "T2-1 PCR7=A -> unseal pipe -> LUKS credential unlock failed"
 fi
 run "$TPM2_BIN/tpm2_flushcontext" sess.ctx
 flush_t
@@ -119,15 +119,15 @@ run "$TPM2_BIN/tpm2_pcrextend" "7:sha256=$CHANGED"
 run "$TPM2_BIN/tpm2_startauthsession" --policy-session -S sess2.ctx
 run "$TPM2_BIN/tpm2_policypcr" -S sess2.ctx -l sha256:7
 if "$TPM2_BIN/tpm2_unseal" -c seal.ctx -p session:sess2.ctx >/dev/null 2>&1; then
-    bad "T2-2 PCR7 改变 → unseal 失败"
+    bad "T2-2 PCR7 changed -> unseal should have failed"
 else
-    ok "T2-2 PCR7 改变 → unseal 失败"
+    ok "T2-2 PCR7 changed -> unseal fails as expected"
 fi
 run "$TPM2_BIN/tpm2_flushcontext" sess2.ctx
 flush_t
 printf '%s' "$RECOVERY_PW" | cryptsetup open --test-passphrase \
     --key-file=- luks.img \
-    && ok "T2-2 PCR7 改变 → recovery 密码解锁" || bad "T2-2 PCR7 改变 → recovery 密码解锁"
+    && ok "T2-2 PCR7 changed -> recovery passphrase unlocks" || bad "T2-2 PCR7 changed -> recovery passphrase unlock failed"
 
 # ════════════════════════════════════════════════════════════
 # T2-3：sealed blob 损坏 → unseal 失败 → 密码解锁
@@ -139,18 +139,18 @@ if run "$TPM2_BIN/tpm2_load" -C primary.ctx -u seal.pub -r seal.priv -c seal2.ct
     run "$TPM2_BIN/tpm2_startauthsession" --policy-session -S sess3.ctx
     run "$TPM2_BIN/tpm2_policypcr" -S sess3.ctx -l sha256:7
     if "$TPM2_BIN/tpm2_unseal" -c seal2.ctx -p session:sess3.ctx >/dev/null 2>&1; then
-        bad "T2-3 blob 损坏 → unseal 失败"
+        bad "T2-3 corrupted blob -> unseal should have failed"
     else
-        ok "T2-3 blob 损坏 → unseal 失败"
+        ok "T2-3 corrupted blob -> unseal fails as expected"
     fi
     run "$TPM2_BIN/tpm2_flushcontext" sess3.ctx
 else
-    ok "T2-3 blob 损坏 → load 失败（等价于 unseal 失败）"
+    ok "T2-3 corrupted blob -> load fails (equivalent to unseal failure)"
 fi
 flush_t
 printf '%s' "$RECOVERY_PW" | cryptsetup open --test-passphrase \
     --key-file=- luks.img \
-    && ok "T2-3 blob 损坏 → recovery 密码解锁" || bad "T2-3 blob 损坏 → recovery 密码解锁"
+    && ok "T2-3 corrupted blob -> recovery passphrase unlocks" || bad "T2-3 corrupted blob -> recovery passphrase unlock failed"
 cp seal.priv.bak seal.priv
 
 # ════════════════════════════════════════════════════════════
@@ -166,15 +166,15 @@ run "$TPM2_BIN/tpm2_load" -C primary2.ctx -u seal.pub -r seal.priv -c seal3.ctx 
 run "$TPM2_BIN/tpm2_startauthsession" --policy-session -S sess4.ctx
 run "$TPM2_BIN/tpm2_policypcr" -S sess4.ctx -l sha256:7
 if "$TPM2_BIN/tpm2_unseal" -c seal3.ctx -p session:sess4.ctx >/dev/null 2>&1; then
-    bad "T2-4 TPM clear → 旧 blob 无法 unseal"
+    bad "T2-4 TPM clear -> old blob should not unseal"
 else
-    ok "T2-4 TPM clear → 旧 blob 无法 unseal"
+    ok "T2-4 TPM clear -> old blob cannot unseal"
 fi
 run "$TPM2_BIN/tpm2_flushcontext" sess4.ctx
 flush_t
 printf '%s' "$RECOVERY_PW" | cryptsetup open --test-passphrase \
     --key-file=- luks.img \
-    && ok "T2-4 TPM clear → recovery 密码解锁" || bad "T2-4 TPM clear → recovery 密码解锁"
+    && ok "T2-4 TPM clear -> recovery passphrase unlocks" || bad "T2-4 TPM clear -> recovery passphrase unlock failed"
 
 # ════════════════════════════════════════════════════════════
 # T2-5：Recovery 门控——不调 TPM 的路径 = 纯密码解锁
@@ -182,8 +182,8 @@ printf '%s' "$RECOVERY_PW" | cryptsetup open --test-passphrase \
 # ════════════════════════════════════════════════════════════
 printf '%s' "$RECOVERY_PW" | cryptsetup open --test-passphrase \
     --key-file=- luks.img \
-    && ok "T2-5 Recovery 门控路径（不调 TPM）→ 密码解锁" \
-    || bad "T2-5 Recovery 门控路径（不调 TPM）→ 密码解锁"
+    && ok "T2-5 Recovery gated path (no TPM) -> passphrase unlock" \
+    || bad "T2-5 Recovery gated path (no TPM) -> passphrase unlock failed"
 
 echo
 echo "== $PASS passed, $FAIL failed =="

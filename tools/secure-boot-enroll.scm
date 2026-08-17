@@ -146,22 +146,22 @@ VAR 是字符串 \"KEK\" 或 \"db\"，SIGN-KEY 是签名者名（\"PK\"/\"KEK\"�
                         (() %default-keydir)
                         ((dir) dir)
                         (_ (format (current-error-port)
-                                   "用法: secure-boot-enroll [keydir]~%")
+                                   "Usage: secure-boot-enroll [keydir]~%")
                            (exit 1))))
          (work (string-append keydir "/keystore/.work"))
          (keystore (string-append keydir "/keystore")))
     (let ((missing (missing-key-files keydir)))
       (unless (null? missing)
         (format (current-error-port)
-                "Secure Boot 密钥集不完整：~%")
+                "Secure Boot key set is incomplete:~%")
         (for-each
          (lambda (name)
            (format (current-error-port)
-                   "  缺少 ~a/~a~%"
+                   "  missing ~a/~a~%"
                    keydir name))
          missing)
         (format (current-error-port)
-                "请先成功运行 tools/secure-boot-keygen.scm。~%")
+                "Please run tools/secure-boot-keygen.scm first.~%")
         (exit 1)))
     (mkdir-p work)
     

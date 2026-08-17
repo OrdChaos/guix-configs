@@ -41,7 +41,7 @@
                     ((dir) dir)
                     (_
                      (format (current-error-port)
-                             "用法: secure-boot-keygen [目标目录]~%")
+                             "Usage: secure-boot-keygen [directory]~%")
                      (exit 1)))))
     ;; 不允许覆盖部分存在的 keyset。
     ;; 如果上一次生成中途失败，也要求人工确认并删除后重建。
@@ -49,14 +49,14 @@
            (filter file-exists? (key-material-paths dir))))
       (unless (null? existing)
         (format (current-error-port)
-                "发现已有 Secure Boot 密钥材料，拒绝覆盖：~%")
+                "Existing Secure Boot key material found; refusing to overwrite:~%")
         (for-each
          (lambda (path)
            (format (current-error-port)
                    "  ~a~%" path))
          existing)
         (format (current-error-port)
-                "如需重建，请先手动删除整个目录：~a~%"
+                "To regenerate, manually delete the whole directory: ~a~%"
                 dir)
         (exit 1)))
     
@@ -75,12 +75,12 @@
      %key-names)
     
     (format #t
-            "~%完成。仅生成 key/crt：~%
+            "~%Done. Only key/crt generated:~%
   ~a~%
 
-下一步：
-  1. system init/reconfigure 生成并签名 UKI；
-  2. 再运行 secure-boot-enroll.scm 构建固件注册材料。~%"
+Next steps:
+  1. system init/reconfigure generates and signs the UKI;
+  2. then run secure-boot-enroll.scm to build firmware enrollment materials.~%"
             dir)))
 
 (main (command-line))

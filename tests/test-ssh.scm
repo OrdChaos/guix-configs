@@ -18,7 +18,7 @@
 ;; 上下文，这里直接取 service 值）。
 (define ssh-config (service-value (secure-ssh-service)))
 
-(test-assert "permit-root-login = no（root 一切认证方式禁止）"
+(test-assert "permit-root-login = no (all root auth forbidden)"
              (eq? #f (openssh-configuration-permit-root-login ssh-config)))
 (test-assert "PasswordAuthentication yes"
              (openssh-configuration-password-authentication? ssh-config))
@@ -26,7 +26,7 @@
              (openssh-configuration-public-key-authentication? ssh-config))
 (test-assert "empty passwords disabled"
              (not (openssh-configuration-allow-empty-passwords? ssh-config)))
-(test-assert "generate-host-keys? off（默认 /etc/ssh 生成禁用）"
+(test-assert "generate-host-keys? off (no /etc/ssh generation by default)"
              (not (openssh-configuration-generate-host-keys? ssh-config)))
 (test-assert "port 22"
              (= 22 (openssh-configuration-port-number ssh-config)))

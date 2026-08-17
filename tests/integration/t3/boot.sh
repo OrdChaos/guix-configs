@@ -95,5 +95,5 @@ case "${1:-}" in
               fi;;
     fresh-vars) shift; rm -f "$T7/vars-$1.fd";;
     fresh-tpm)  shift; rm -rf "$T7/tpm-$1" "$T7/swtpm-$1.sock";;
-    *) echo "用法: $0 interact|boot|fresh-vars|fresh-tpm"; exit 1;;
+    *) echo "Usage: $0 interact|boot|fresh-vars|fresh-tpm"; exit 1;;
 esac

@@ -66,23 +66,23 @@
    (list
     (list 'resolvable-by-id
           (lambda (f) (device-facts-by-id f))
-          "无法解析 /dev/disk/by-id 或 by-path 符号链接，无法可靠辨认设备")
+          "Cannot resolve /dev/disk/by-id or by-path symlink; device cannot be reliably identified")
     (list 'whole-disk
           (lambda (f) (not (device-facts-partition? f)))
-          "目标是分区而不是整块磁盘，拒绝操作")
+          "Target is a partition, not a whole disk; refusing to proceed")
     (list 'not-mounted
           (lambda (f) (not (device-facts-mounted? f)))
-          "目标设备或其分区已挂载，拒绝操作")
+          "Target device or one of its partitions is mounted; refusing to proceed")
     (list 'not-system-disk
           (lambda (f) (not (device-facts-system-disk? f)))
-          "目标是当前正在运行的系统盘，拒绝操作")
+          "Target is the currently running system disk; refusing to proceed")
     (list 'not-live-media
           (lambda (f) (not (device-facts-live-media? f)))
-          "目标是 LiveCD 介质，拒绝操作")
+          "Target is the LiveCD medium; refusing to proceed")
     (list 'sufficient-size
           (lambda (f) (>= (device-facts-size f)
                           (host-storage-policy-min-disk-size policy)))
-          "目标设备容量低于 host policy 下限"))))
+          "Target device capacity is below the host policy minimum"))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; Policy 自校验：在生成任何计划之前，先保证 policy 本身没写错。
@@ -98,16 +98,16 @@
           (lambda (p) (<= %esp-min-size
                           (host-storage-policy-esp-size p)
                           %esp-max-size))
-          "ESP 大小超出 2–4 GiB 策略范围")
+          "ESP size is outside the 2-4 GiB policy range")
     (list 'swapfile-positive
           (lambda (p) (> (host-storage-policy-swapfile-size p) 0))
-          "swapfile 大小必须为正")
+          "Swapfile size must be positive")
     (list 'keep-at-least-two
           (lambda (p) (>= (host-storage-policy-keep-root-generations p) 2))
-          "至少保留 2 个 root generation（current + last-good）")
+          "At least 2 root generations must be kept (current + last-good)")
     (list 'disk-fits-layout
           (lambda (p) (> (host-storage-policy-min-disk-size p)
                          (+ (host-storage-policy-esp-size p)
                             (host-storage-policy-swapfile-size p)
                             (gib 10))))
-          "磁盘下限装不下 ESP + swapfile + 最小系统（10 GiB 余量）"))))
+          "Disk minimum cannot fit ESP + swapfile + minimal system (10 GiB headroom)"))))

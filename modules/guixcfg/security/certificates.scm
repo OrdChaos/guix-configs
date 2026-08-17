@@ -48,7 +48,7 @@
 
 (define microsoft-uefi-ca-2011
   (ms-cert 'microsoft-uefi-ca-2011 'db
-           "shim 及第三方 UEFI 驱动/程序"
+           "shim and third-party UEFI drivers/programs"
            "db/MicCorUEFCA2011_2011-06-27.der"
            "01w54h03a3f479h8v7wv49a73i2q1bzrnna9c7vm5z2p3ycrpsa8"))
 
@@ -60,13 +60,13 @@
 
 (define microsoft-option-rom-uefi-ca-2023
   (ms-cert 'microsoft-option-rom-uefi-ca-2023 'db
-           "PCIe/显卡 Option ROM（实机点亮的兼容性关键）"
+           "PCIe/GPU Option ROM (compatibility-critical for real hardware)"
            "db/microsoft%20option%20rom%20uefi%20ca%202023.der"
            "1wfqm15w241c4r202fiammx5g1q7dl6wxppcawa2hsp6qrj3xgp5"))
 
 (define microsoft-uefi-ca-2023
   (ms-cert 'microsoft-uefi-ca-2023 'db
-           "shim 及第三方 UEFI 驱动/程序 (2023)"
+           "shim and third-party UEFI drivers/programs (2023)"
            "db/microsoft%20uefi%20ca%202023.der"
            "00frv88xdvvq24r1m74jknyygh4igfm4wmwsszk3zvjv28s4w4pn"))
 
@@ -80,13 +80,13 @@
 
 (define microsoft-kek-ca-2011
   (ms-cert 'microsoft-kek-ca-2011 'KEK
-           "微软生态 db/dbx 更新授权 (2011)"
+           "Microsoft ecosystem db/dbx update authorization (2011)"
            "KEK/MicCorKEKCA2011_2011-06-24.der"
            "00x50bc6b7p0jswx1q4gprmzswkrm08cw6id7yxgrkijd98py4d1"))
 
 (define microsoft-kek-2k-ca-2023
   (ms-cert 'microsoft-kek-2k-ca-2023 'KEK
-           "微软生态 db/dbx 更新授权 (2023)"
+           "Microsoft ecosystem db/dbx update authorization (2023)"
            "KEK/microsoft%20corporation%20kek%202k%20ca%202023.der"
            "17bgmkl9gpf9qf62x3r1spxw9zsakw6x8vcpg9v2iqnskqqg1lrw"))
 

@@ -21,48 +21,48 @@
 
 (test-begin "storage-validate")
 
-(test-group "目标设备校验（docs/architecture/storage.md）"
-            (test-assert "好设备通过全部检查"
+(test-group "target device validation (docs/architecture/storage.md)"
+            (test-assert "good device passes all checks"
                          (null? (validate-target %good-facts %vm-storage-policy)))
             
-            (test-equal "无法解析 by-id 被拒绝"
+            (test-equal "unresolvable by-id rejected"
                         '(resolvable-by-id)
                         (failure-names (validate-target (device-facts (inherit %good-facts)
                                                                       (by-id #f))
                                                         %vm-storage-policy)))
             
-            (test-equal "分区设备被拒绝"
+            (test-equal "partition device rejected"
                         '(whole-disk)
                         (failure-names (validate-target (device-facts (inherit %good-facts)
                                                                       (path "/dev/vda1")
                                                                       (partition? #t))
                                                         %vm-storage-policy)))
             
-            (test-equal "已挂载设备被拒绝"
+            (test-equal "mounted device rejected"
                         '(not-mounted)
                         (failure-names (validate-target (device-facts (inherit %good-facts)
                                                                       (mounted? #t))
                                                         %vm-storage-policy)))
             
-            (test-equal "当前系统盘被拒绝"
+            (test-equal "current system disk rejected"
                         '(not-system-disk)
                         (failure-names (validate-target (device-facts (inherit %good-facts)
                                                                       (system-disk? #t))
                                                         %vm-storage-policy)))
             
-            (test-equal "LiveCD 介质被拒绝"
+            (test-equal "LiveCD media rejected"
                         '(not-live-media)
                         (failure-names (validate-target (device-facts (inherit %good-facts)
                                                                       (live-media? #t))
                                                         %vm-storage-policy)))
             
-            (test-equal "容量不足被拒绝"
+            (test-equal "undersized device rejected"
                         '(sufficient-size)
                         (failure-names (validate-target (device-facts (inherit %good-facts)
                                                                       (size (gib 8)))
                                                         %vm-storage-policy)))
             
-            (test-assert "多项违规同时报告"
+            (test-assert "multiple violations reported together"
                          (let ((failures (validate-target (device-facts (inherit %good-facts)
                                                                         (by-id #f)
                                                                         (partition? #t)
@@ -71,25 +71,25 @@
                                                           %vm-storage-policy)))
                            (>= (length failures) 4))))
 
-(test-group "policy 自校验"
-            (test-assert "内置 VM policy 合法"
+(test-group "policy self-validation"
+            (test-assert "built-in VM policy valid"
                          (null? (validate-policy %vm-storage-policy)))
-            (test-assert "内置 Laptop policy 合法"
+            (test-assert "built-in Laptop policy valid"
                          (null? (validate-policy %laptop-storage-policy)))
             
-            (test-equal "ESP 超出 2–4 GiB 范围"
+            (test-equal "ESP outside 2-4 GiB range"
                         '(esp-size-in-range)
                         (failure-names (validate-policy
                                         (host-storage-policy (inherit %vm-storage-policy)
                                                              (esp-size (gib 1))))))
             
-            (test-equal "保留代数小于 2"
+            (test-equal "keep generations below 2"
                         '(keep-at-least-two)
                         (failure-names (validate-policy
                                         (host-storage-policy (inherit %vm-storage-policy)
                                                              (keep-root-generations 1)))))
             
-            (test-equal "磁盘下限装不下布局"
+            (test-equal "disk minimum too small for layout"
                         '(disk-fits-layout)
                         (failure-names (validate-policy
                                         (host-storage-policy (inherit %vm-storage-policy)

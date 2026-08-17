@@ -15,60 +15,60 @@
 
 (test-begin "storage-plan")
 
-(test-group "执行顺序（docs/operations/installation.md流程）"
-            (test-assert "确认目标在最前"       (eq? 'confirm-target (car %test-ids)))
-            (test-assert "wipe 在分区之前"      (step-before? 'wipe 'partition))
-            (test-assert "分区后等待 udev"      (step-before? 'partition 'wait-udev))
-            (test-assert "udev 就位后才格式化"  (step-before? 'wait-udev 'format-esp))
-            (test-assert "LUKS 格式化在解锁之前" (step-before? 'luks-format 'luks-open))
-            (test-assert "解锁后才能建 Btrfs"   (step-before? 'luks-open 'format-btrfs))
-            (test-assert "Btrfs 顶层挂载后建子卷" (step-before? 'mount-top 'make-subvolume))
-            (test-assert "持久子卷先于安装期 root" (step-before? 'make-subvolume 'make-root-installing))
-            (test-assert "swapfile 在卸载顶层之前" (step-before? 'make-swapfile 'unmount-top))
-            (test-assert "先挂 root 再挂持久子卷" (step-before? 'mount-root 'mount-subvolume))
-            (test-assert "持久子卷先于 ESP"     (step-before? 'mount-subvolume 'mount-esp))
-            (test-assert "ESP 挂载后写机器事实" (step-before? 'mount-esp 'write-facts))
-            (test-assert "事实在就绪前写完"     (step-before? 'write-facts 'ready))
-            (test-assert "ready 在最后"         (eq? 'ready (last %test-ids))))
+(test-group "execution order (docs/operations/installation.md)"
+            (test-assert "target confirmation first"       (eq? 'confirm-target (car %test-ids)))
+            (test-assert "wipe before partition"      (step-before? 'wipe 'partition))
+            (test-assert "wait for udev after partition"      (step-before? 'partition 'wait-udev))
+            (test-assert "format only after udev ready"  (step-before? 'wait-udev 'format-esp))
+            (test-assert "LUKS format before open" (step-before? 'luks-format 'luks-open))
+            (test-assert "Btrfs only after unlock"   (step-before? 'luks-open 'format-btrfs))
+            (test-assert "subvolumes after Btrfs top-level mount" (step-before? 'mount-top 'make-subvolume))
+            (test-assert "persistent subvolumes before install root" (step-before? 'make-subvolume 'make-root-installing))
+            (test-assert "swapfile before top-level unmount" (step-before? 'make-swapfile 'unmount-top))
+            (test-assert "root mounted before persistent subvolumes" (step-before? 'mount-root 'mount-subvolume))
+            (test-assert "persistent subvolumes before ESP"     (step-before? 'mount-subvolume 'mount-esp))
+            (test-assert "machine facts after ESP mount" (step-before? 'mount-esp 'write-facts))
+            (test-assert "facts written before ready"     (step-before? 'write-facts 'ready))
+            (test-assert "ready last"         (eq? 'ready (last %test-ids))))
 
-(test-group "内容完整性"
-            (test-equal "建子卷步骤数等于持久子卷数"
+(test-group "content completeness"
+            (test-equal "make-subvolume count equals persistent subvolume count"
                         (length %persist-subvolumes)
                         (length (filter (lambda (id) (eq? id 'make-subvolume)) %test-ids)))
-            (test-equal "挂载子卷步骤数等于安装期挂载的持久子卷数"
+            (test-equal "mount-subvolume count equals install-time mounted count"
                         (length (filter subvolume-mount-at-install?
                                         %persist-subvolumes))
                         (length (filter (lambda (id) (eq? id 'mount-subvolume)) %test-ids)))
-            (test-assert "挂载点都在 /mnt 下"
+            (test-assert "all mount points under /mnt"
                          (every (lambda (step)
                                   (or (not (memq (plan-step-id step) '(mount-root mount-subvolume mount-esp)))
                                       (string-prefix? "/mnt" (assq-ref (plan-step-detail step) 'target))))
                                 %test-plan))
-            (test-assert "swapfile 使用 policy 的大小"
+            (test-assert "swapfile uses policy size"
                          (any (lambda (step)
                                 (and (eq? (plan-step-id step) 'make-swapfile)
                                      (= (assq-ref (plan-step-detail step) 'size)
                                         (host-storage-policy-swapfile-size %vm-storage-policy))))
                               %test-plan))
-            (test-assert "partition 步骤携带 policy 的 ESP 大小"
+            (test-assert "partition step carries policy ESP size"
                          (any (lambda (step)
                                 (and (eq? (plan-step-id step) 'partition)
                                      (= (assq-ref (plan-step-detail step) 'esp-size)
                                         (host-storage-policy-esp-size %vm-storage-policy))))
                               %test-plan))
-            (test-assert "swapfile 步骤使用子卷名（@persist- 前缀），不是挂载点"
+            (test-assert "swapfile step uses subvolume name (@persist- prefix), not mount point"
                          (any (lambda (step)
                                 (and (eq? (plan-step-id step) 'make-swapfile)
                                      (persist-subvolume-name?
                                       (assq-ref (plan-step-detail step) 'subvolume))))
                               %test-plan)))
 
-(test-group "人类可读输出"
+(test-group "human-readable output"
             (let ((text (plan->text %test-plan)))
-              (test-assert "包含 mapper 路径" (string-contains text "/dev/mapper/cryptroot"))
-              (test-assert "包含所有持久子卷名"
+              (test-assert "includes mapper path" (string-contains text "/dev/mapper/cryptroot"))
+              (test-assert "includes all persistent subvolume names"
                            (every (lambda (sv) (string-contains text (subvolume-name sv)))
                                   %persist-subvolumes))
-              (test-assert "包含目标设备" (string-contains text "/dev/vda"))))
+              (test-assert "includes target device" (string-contains text "/dev/vda"))))
 
 (test-end)

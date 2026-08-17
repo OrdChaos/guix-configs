@@ -19,7 +19,7 @@
    (lambda () #t)
    (lambda ()
      ;; candidate 元数据：缺失 / 格式合法
-     (test-equal "无 candidate 时返回 #f"
+     (test-equal "returns #f without candidate"
                  #f (candidate-meta dir))
      (let ((meta-dir (string-append dir "/EFI/Guix")))
        (mkdir-p meta-dir)
@@ -39,12 +39,12 @@
                                 (display "timeout: 3\n\n/GNU Guix\n    protocol: efi_chainload\n    image_path: boot():/EFI/Guix/A/CURRENT.EFI\n" port)))
        (add-recovery-menu-entry! dir)
        (let ((content (call-with-input-file conf get-string-all)))
-         (test-assert "首次追加 Recovery 入口"
+         (test-assert "appends Recovery entry first time"
                       (string-contains content "image_path: boot():/EFI/Guix/RECOVERY.EFI")))
        ;; 幂等：再次调用不重复追加
        (add-recovery-menu-entry! dir)
        (let ((content (call-with-input-file conf get-string-all)))
-         (test-equal "幂等（不重复追加）"
+         (test-equal "idempotent (no duplicate entries)"
                      1
                      (let loop ((count 0) (pos 0))
                        (let ((i (string-contains content
@@ -80,13 +80,13 @@
                         #:current-system "/gnu/store/REAL-CURRENT"
                         #:boot-states-path boot-state
                         #:gc-root gc-root)
-     (test-assert "identity mismatch 拒绝 promote artifact（R3）"
+     (test-assert "identity mismatch refuses artifact promote (R3)"
                   (not (file-exists? (string-append dir "/EFI/Guix/RECOVERY.EFI"))))
-     (test-assert "identity mismatch：GC root 保护当前系统"
+     (test-assert "identity mismatch: GC root protects current system"
                   (string=? "/gnu/store/REAL-CURRENT"
                             (readlink (string-append gc-root "/last-good-system"))))
      (let ((state (call-with-input-file boot-state read)))
-       (test-equal "identity mismatch：boot-state 记录当前系统"
+       (test-equal "identity mismatch: boot-state records current system"
                    "/gnu/store/REAL-CURRENT"
                    (assq-ref (assq-ref state 'last-good) 'system))))
    (lambda ()
@@ -123,13 +123,13 @@
                     (let ((msg (call-with-output-string
                                 (lambda (p) (write a p)))))
                       (string-contains msg "cannot resolve"))))))
-       (test-assert "identity 无法解析 → fail-closed 中止（抛错）" err)
-       (test-assert "fail-closed：boot-state 未被写入"
+       (test-assert "unresolvable identity -> fail-closed abort (throws)" err)
+       (test-assert "fail-closed: boot-state not written"
                     (not (file-exists? boot-state)))
-       (test-assert "fail-closed：GC root 未被创建"
+       (test-assert "fail-closed: GC root not created"
                     (not (file-exists?
                           (string-append gc-root "/last-good-system"))))
-       (test-assert "fail-closed：artifact 未被 promote"
+       (test-assert "fail-closed: artifact not promoted"
                     (not (file-exists? (string-append dir "/EFI/Guix/RECOVERY.EFI"))))))
    (lambda ()
      (delete-file-recursively dir)
@@ -158,18 +158,18 @@
                         #:current-system "/gnu/store/MATCH-SYSTEM"
                         #:boot-states-path boot-state
                         #:gc-root gc-root)
-     (test-assert "identity match：artifact promote 到稳定路径"
+     (test-assert "identity match: artifact promoted to stable path"
                   (file-exists? (string-append dir "/EFI/Guix/RECOVERY.EFI")))
-     (test-assert "identity match：limine 入口已加"
+     (test-assert "identity match: limine entry added"
                   (string-contains
                    (call-with-input-file (string-append dir "/limine.conf")
                                          get-string-all)
                    "RECOVERY.EFI"))
-     (test-assert "identity match：GC root 指向 confirmed system"
+     (test-assert "identity match: GC root points at confirmed system"
                   (string=? "/gnu/store/MATCH-SYSTEM"
                             (readlink (string-append gc-root "/last-good-system"))))
      (let ((state (call-with-input-file boot-state read)))
-       (test-equal "identity match：boot-state 记录 confirmed system"
+       (test-equal "identity match: boot-state records confirmed system"
                    "/gnu/store/MATCH-SYSTEM"
                    (assq-ref (assq-ref state 'last-good) 'system))))
    (lambda ()

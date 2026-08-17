@@ -47,7 +47,7 @@ fi
 
 mkdir -p vms
 if [ ! -f "$IMG" ]; then
-    echo "创建空白数据盘 $IMG (25G)"
+    echo "Creating blank data disk $IMG (25G)"
     qemu-img create -f qcow2 "$IMG" 25G
 fi
 
@@ -60,7 +60,7 @@ if [ "$SECBOOT" = 1 ]; then
              /usr/share/OVMF/OVMF_CODE.secboot.fd; do
         if [ -f "$p" ]; then OVMF_CODE="$p"; break; fi
     done
-    [ -n "$OVMF_CODE" ] || { echo "找不到 OVMF_CODE.secboot（请安装 edk2-ovmf）" >&2; exit 1; }
+    [ -n "$OVMF_CODE" ] || { echo "OVMF_CODE.secboot not found (install edk2-ovmf)" >&2; exit 1; }
     # secboot 变体的认证变量存储在 SMM 里：缺了这两个参数，
     # 任何 UEFI 变量写入都会被固件拒绝（Invalid argument）。
     MACHINE=q35,smm=on
@@ -73,7 +73,7 @@ else
              /usr/share/qemu/OVMF_CODE.fd; do
         if [ -f "$p" ]; then OVMF_CODE="$p"; break; fi
     done
-    [ -n "$OVMF_CODE" ] || { echo "找不到 OVMF_CODE（请安装 edk2-ovmf）" >&2; exit 1; }
+    [ -n "$OVMF_CODE" ] || { echo "OVMF_CODE not found (install edk2-ovmf)" >&2; exit 1; }
     MACHINE=q35
     PFLASH_SECURE=()
 fi
@@ -86,7 +86,7 @@ if [ ! -f "$VARS" ]; then
              /usr/share/OVMF/OVMF_VARS.fd; do
         if [ -f "$p" ]; then OVMF_VARS="$p"; break; fi
     done
-    [ -n "$OVMF_VARS" ] || { echo "找不到 OVMF_VARS" >&2; exit 1; }
+    [ -n "$OVMF_VARS" ] || { echo "OVMF_VARS not found" >&2; exit 1; }
     cp "$OVMF_VARS" "$VARS"
 fi
 
@@ -96,7 +96,7 @@ FIRMWARE=(-drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE"
 # ── TPM2（仅 --secboot 模式，swtpm 虚拟 TPM）────────────────
 TPM=()
 if [ "$SECBOOT" = 1 ]; then
-    command -v swtpm >/dev/null || { echo "找不到 swtpm（请安装）" >&2; exit 1; }
+    command -v swtpm >/dev/null || { echo "swtpm not found (install it)" >&2; exit 1; }
     mkdir -p vms/tpm
     rm -f vms/swtpm-sock
     swtpm socket --tpm2 --tpmstate dir=vms/tpm \
@@ -127,30 +127,33 @@ fi
 # LiveCD 的 root 是内存盘，重启即消失，所以每次进 VM 都要重新挂载共享目录。
 # 启动前把这行打印出来，方便直接复制粘贴到 VM 里：
 cat <<'EOF'
-────────────────────────────────────────────────────────────
-VM 启动后，在 guest 里粘贴这一行（挂载仓库共享目录）：
+--------------------------------------------------------------------
+Once the VM is up, paste this line into the guest (mounts the repo share):
 
   mkdir -p /root/src && mount -t 9p -o trans=virtio guix-configs /root/src && cd /root/src
 
-然后（guix shell 提供 ISO 里没有的 sgdisk 等工具）：
+Then (guix shell provides tools missing from the ISO, e.g. sgdisk):
   guix shell gptfdisk cryptsetup btrfs-progs dosfstools util-linux -- \
     guix repl tools/disk-install.scm -- apply vm /dev/vda
-  （这里故意不用 time-machine：disk-install 的早期依赖只到 storage/policies，
-   不应加载 Rosenthal/Nonguix；先把 /gnu/store 切到目标盘再进入锁定频道。）
+  (deliberately no time-machine here: disk-install only needs the early
+   storage/policies deps and must not load Rosenthal/Nonguix; switch
+   /gnu/store to the target disk before entering the locked channels.)
 
-磁盘安装完成后，先把 store 挪到目标盘（LiveCD 的 /gnu/store 在内存里，
-直接跑 time-machine/system init 会把内存写满）：
+After disk install, move the store onto the target disk first (LiveCD
+/gnu/store lives in RAM; running time-machine/system init directly
+would fill it):
   herd start cow-store /mnt
 
-安装系统（注意：init 不接受 -e，直接用 host 文件——它末尾的裸 %os
-让它同时是合法入口。GUIX_CONFIG_FACTS 指向目标盘上的机器事实文件）：
+Install the system (note: init does not accept -e; use the host file
+directly -- the bare %os at its end makes it a valid entry point.
+GUIX_CONFIG_FACTS points at the machine facts file on the target disk):
   GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
     guix time-machine -C channels.lock.scm -- system init \
     -L modules modules/guixcfg/hosts/vm.scm /mnt
 
-然后提交安装期 root：
+Then commit the install-time root:
   guix repl tools/disk-install.scm -- commit-root /mnt
-────────────────────────────────────────────────────────────
+--------------------------------------------------------------------
 EOF
 
 exec qemu-system-x86_64 \
