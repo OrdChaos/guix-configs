@@ -28,6 +28,7 @@
 (add-to-load-path (string-append (getcwd) "/modules"))
 
 (use-modules (guix store)
+             (guixcfg system substitutes) ; %transition-substitute-urls
              (guix monads)
              (guix gexp)
              (guix derivations)
@@ -54,6 +55,13 @@
 ;; ── 基础设施 ────────────────────────────────────────────────
 ;; 构建 file-like → store 路径。
 (define %store (open-connection))
+
+;; 显式 bootstrap substitute URLs（宿主 daemon 尚未配置 Nonguix
+;; substitute；经 per-connection set-build-options 传入，让测试的
+;; build 请求命中官方 Nonguix substitute 而不是本地编译 kernel——
+;; 与 CLI 的 --substitute-urls 等价；%transition-substitute-urls 的
+;; 唯一定义在 (guixcfg system substitutes)）。
+(set-build-options %store #:substitute-urls %transition-substitute-urls)
 
 (define (build-thing thing)
   (let ((drv (run-with-store %store (lower-object thing))))
