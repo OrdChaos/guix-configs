@@ -1,4 +1,4 @@
-;;; 外部 vendor 证书：Secure Boot 兼容信任链（docs/boot.md 第 16.3 节）。
+;;; 外部 vendor 证书：Secure Boot 兼容信任链（docs/architecture/boot.md（Secure Boot））。
 ;;;
 ;;; 信任模型：PK/KEK/db 的私钥全部自有；这里只是公开 CA 证书，
 ;;; 在注册（enrollment）时合并进固件的 KEK/db，保留硬件兼容性

@@ -2,7 +2,7 @@
 ;;; 每个函数对应 plan.scm 中的一个步骤 id，由 install.scm 分派调用。
 ;;; 分区工具用 sgdisk（gptfdisk）：一条命令完成建表 + 两个分区 + 类型码 +
 ;;; 命名，参数语义明确，避免 parted mkpart 的参数位置问题。
-;;; 对应 docs/installation.md 第 30 章、docs/storage.md 第 11 章。
+;;; 对应 docs/operations/installation.md、docs/architecture/storage.md（磁盘布局）。
 
 (define-module (guixcfg storage partition)
                #:use-module (guixcfg storage model)
@@ -37,7 +37,7 @@ ESP：1 号分区，大小来自 host policy（2–4 GiB），类型 EF00；
             device)))
 
 (define (execute-wait-udev device)
-  "等待 udev 为 /by-partlabel/ 节点就位（docs/storage.md 第 31 章）。"
+  "等待 udev 为 /by-partlabel/ 节点就位（docs/architecture/storage.md）。"
   (invoke "udevadm" "settle" "--timeout=15")
   (let ((deadline (+ (current-time) 15))
         (targets (map by-partlabel-path

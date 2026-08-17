@@ -7,7 +7,7 @@
 ;;;     事实）——不含任何 secret 值；
 ;;;   - password 只保存 logical secret 引用（install secret 名），
 ;;;     hash 由 installer 在 LUKS 建立后注入目标系统 shadow（见
-;;;     tools/secrets.scm 与 docs/secrets.md）；
+;;;     tools/secrets.scm 与 docs/architecture/secrets.md）；
 ;;;   - Guix Home 绑定、persistence 路径、SSH 允许用户等消费方都从
 ;;;     本模块取 name，不再各自硬编码。
 
@@ -58,7 +58,7 @@
   "由 %primary-user 生成 <user-account>。password 恒为 #f——hash 不进入
 evaluation/store（ephemeral root 下 account activation 复用既有
 shadow 条目，安装期注入的 hash 跨 boot/reconfigure 保留，见
-docs/secrets.md 与 tests/test-users.scm）。"
+docs/architecture/secrets.md 与 tests/test-users.scm）。"
   (let ((u %primary-user))
     (user-account
      (name (user-profile-name u))

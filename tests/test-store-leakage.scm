@@ -1,4 +1,4 @@
-;;; Store leakage 回归（docs/secrets.md 不变量 9）：secret plaintext
+;;; Store leakage 回归（docs/architecture/secrets.md 不变量 9）：secret plaintext
 ;;; （sentinel / password hash）绝不进入 /gnu/store。
 ;;;
 ;;; 扫描范围（合理的注入面，非全盘 grep）：

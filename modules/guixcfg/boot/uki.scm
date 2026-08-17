@@ -38,7 +38,7 @@
                          ;; 部署脚本生成
                          make-uki-deploy-program))
 
-;; Secure Boot 密钥的固定语义路径（docs/boot.md 第 16.3 节）。
+;; Secure Boot 密钥的固定语义路径（docs/architecture/boot.md（Secure Boot））。
 (define %secure-boot-keydir "/persist/system/keys/secure-boot")
 
 ;; ESP 上 UKI 的存放子目录。

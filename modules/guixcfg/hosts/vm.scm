@@ -1,4 +1,4 @@
-;;; VM 最终 <operating-system> 组装点（docs/project-definition.md 第 21 章）。
+;;; VM 最终 <operating-system> 组装点（docs/README.md）。
 ;;;
 ;;; 构建：guix time-machine -C channels.lock.scm -- system build \
 ;;;         -L modules -e '(@ (guixcfg hosts vm) %os)'
@@ -34,7 +34,7 @@
 ;; 唯一来源：username/uid/groups/shell/home）。密码 hash 不在此处——
 ;; user-account password 为 #f，hash 由 install secret 在 LUKS 建立后
 ;; 注入目标 shadow（ephemeral root 下 account activation 复用既有
-;; shadow 条目，跨 boot/reconfigure 保留；docs/secrets.md）。
+;; shadow 条目，跨 boot/reconfigure 保留；docs/architecture/secrets.md）。
 (define %vm-users
   (list (primary-user-account)))
 
@@ -44,7 +44,7 @@
     ;; 已由 dhcpcd-service-type 取代）。
          (service dhcpcd-service-type))
    ;; 无状态根的用户态服务：启动确认（last-good）与旧 generation 清理
-   ;; （docs/storage.md 第 17.4、17.8 节）。
+   ;; （docs/architecture/storage.md，Root generation 一节）。
    (ephemeral-root-shepherd-services
     (host-storage-policy-keep-root-generations %vm-storage-policy))
    ;; 基础 session infrastructure（elogind：/run/user、XDG_RUNTIME_DIR、
@@ -72,7 +72,7 @@
          (user-persistence-service
           (user-profile-name %primary-user))
          ;; 声明式 runtime secrets（boot 时 root 解密到
-         ;; /run/guixcfg-secrets；docs/secrets.md）
+         ;; /run/guixcfg-secrets；docs/architecture/secrets.md）
          (secrets-deploy-service
           %vm-secrets (user-profile-name %primary-user))
          ;; account databases 投影（唯一 writer，含 persistent credential
@@ -102,7 +102,7 @@
    (timezone %common-timezone)
    (locale %common-locale)
    
-   ;; Limine + UKI + UEFI 直启（docs/boot.md 第 16 章）。
+   ;; Limine + UKI + UEFI 直启（docs/architecture/boot.md）。
    ;; ESP 部署由 (guixcfg boot uki) 的部署脚本完成。
    (bootloader (bootloader-configuration
                 (bootloader uki-bootloader)
@@ -110,7 +110,7 @@
    
    (mapped-devices (cryptroot-mapped-devices))
    
-   ;; 无状态根（docs/storage.md 第 17 章）：initrd 启动时按
+   ;; 无状态根（docs/architecture/storage.md）：initrd 启动时按
    ;; @persist-system/root-generations/state.scm 选择/创建 @root-N，
    ;; 挂到 /selected-root 后由 boot-system bind 成系统根。
    (initrd ephemeral-root-initrd)
@@ -126,7 +126,7 @@
    ;; tpm2-tools-compat 显式加入 system profile：tpm2-enroll 工具
    ;; （guix repl tools/tpm2-enroll.scm）依赖
    ;; /run/current-system/profile/bin/tpm2_{pcrread,createprimary,...}，
-   ;; 必须来自锁定 Virelith 的 compat 包（docs/boot.md 第 16.4 节）。
+   ;; 必须来自锁定 Virelith 的 compat 包（docs/architecture/boot.md（TPM2））。
    (packages (append (list tpm2-tools-compat) %system-packages))
    (services %vm-user-services)))
 

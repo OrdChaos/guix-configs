@@ -1,5 +1,5 @@
 ;;; 安装编排：校验 → 打印计划 → 人工确认 → 逐步执行（失败即停）。
-;;; 对应 docs/installation.md 第 30 章与 docs/storage.md 第 31 章。
+;;; 对应 docs/operations/installation.md与 docs/architecture/storage.md。
 
 (define-module (guixcfg storage install)
                #:use-module (guixcfg storage model)
@@ -19,7 +19,7 @@
                          make-luks-passphrase-source))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; LUKS passphrase 交互（docs/installation.md 第 30.3 节）。
+;;; LUKS passphrase 交互（docs/operations/installation.md）。
 ;;;
 ;;; 目标：安装器只要求用户输入两次密码（设置 + 确认），同一
 ;;; passphrase 经 stdin 复用于 luksFormat（--batch-mode）与首次
@@ -52,7 +52,7 @@ refusing to echo password")))
 (define (read-luks-passphrase!)
   "交互设置 LUKS recovery password：两次输入一致且非空，否则重试。
 TPM2 使用独立随机 credential/keyslot，本密码保留为人工 recovery
-password（docs/boot.md 第 16.4 节）。"
+password（docs/architecture/boot.md（TPM2））。"
   (let loop ()
     (let ((a (read-secret-line "Set LUKS passphrase: "))
           (b (read-secret-line "Repeat LUKS passphrase: ")))
@@ -125,7 +125,7 @@ password（docs/boot.md 第 16.4 节）。"
     (executor (plan-step-detail step) passphrase!)))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 人工确认：必须输入完整设备路径（docs/storage.md 第 31 章）。
+;;; 人工确认：必须输入完整设备路径（docs/architecture/storage.md）。
 
 (define (confirm-device! device)
   (format #t "~%This will perform an IRREVERSIBLE DESTRUCTIVE operation on ~a.~%" device)
@@ -137,7 +137,7 @@ password（docs/boot.md 第 16.4 节）。"
       (exit 1))))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 失败即停（docs/storage.md 第 31 章）：
+;;; 失败即停（docs/architecture/storage.md）：
 ;;; 任何一步抛异常，立即报告并退出非零，不做任何自动清理或续跑。
 
 (define* (execute-plan plan #:key (passphrase-reader read-luks-passphrase!))
@@ -146,7 +146,7 @@ LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值�
 它只存在于本次 apply session（不进 plan、不落盘、不进 argv/env）。
 PASSPHRASE-READER 默认交互读取；也可是 age secret reader（installer
 用 --luks-secret 时经 stable S 解密 secrets/install/luks-recovery.age，
-见 tools/secrets.scm 与 docs/secrets.md）——两种来源共用 stdin 语义。"
+见 tools/secrets.scm 与 docs/architecture/secrets.md）——两种来源共用 stdin 语义。"
          (let ((passphrase! (make-luks-passphrase-source passphrase-reader)))
            (catch #t
              (lambda ()
@@ -193,7 +193,7 @@ PASSPHRASE-READER 默认交互读取；也可是 age secret reader（installer
   (format #t "environment checks passed (root, commands, mapper free, device writable).~%"))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 机器事实（docs/storage.md 第 19 章）：安装时生成、可重新探测、不进 Git。
+;;; 机器事实（docs/architecture/storage.md（固定命名事实））：安装时生成、可重新探测、不进 Git。
 ;;; initrd 里没有 udev，mapped-device 的 source 只能用 LUKS UUID
 ;;; （initrd 会扫描块设备匹配，无需 /dev/disk/by-* 符号链接）。
 
@@ -215,7 +215,7 @@ PASSPHRASE-READER 默认交互读取；也可是 age secret reader（installer
 ;;; ────────────────────────────────────────────────────────────
 ;;; 安装后提醒：LiveCD 的 /gnu/store 在内存盘（tmpfs）上。
 ;;; 若忘记 herd start cow-store /mnt 就直接 guix system init，
-;;; 下载和构建会写满内存盘（docs/installation.md 第 30.2 节）。
+;;; 下载和构建会写满内存盘（docs/operations/installation.md）。
 
 (define (warn-if-store-in-ram)
   "若 /gnu/store 仍在 tmpfs 上，醒目提醒先 herd start cow-store /mnt。"

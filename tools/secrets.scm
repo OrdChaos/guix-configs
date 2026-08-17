@@ -1,4 +1,4 @@
-;;; age secrets CLI（docs/secrets.md）。master password 从终端 noecho
+;;; age secrets CLI（docs/architecture/secrets.md）。master password 从终端 noecho
 ;;; 读取（read-secret-line），或 GUIXCFG_AGE_PASSPHRASE_FD 指定的 fd
 ;;; （测试/脚本化）；绝不出现在 argv/环境变量明文/log。
 ;;;

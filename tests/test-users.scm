@@ -1,4 +1,4 @@
-;;; User Profile 拆分测试（docs/secrets.md）：host 只 select，
+;;; User Profile 拆分测试（docs/architecture/secrets.md）：host 只 select，
 ;;; %primary-user 是结构事实的唯一 authoritative source；password 为
 ;;; #f（hash 由 install secret 注入，不进 evaluation/store）。
 

@@ -1,6 +1,6 @@
 ;;; 设备探测：在真实系统上收集 validate.scm 需要的“设备事实”。
 ;;; IO 尽量压薄：所有解析逻辑都是纯函数，可以用样例 JSON 脱离硬件测试。
-;;; 对应 docs/storage.md 第 31 章（安装器安全要求的输入侧）。
+;;; 对应 docs/architecture/storage.md（安装器安全要求的输入侧）。
 
 (define-module (guixcfg storage device)
                #:use-module (guixcfg storage model)

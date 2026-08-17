@@ -59,7 +59,7 @@ EOF
         # 默认：secboot OVMF + 现有 VARS/swtpm 状态重建。
         # 注意：serial_boot 会重建 vars-$SCEN.fd 与 tpm-$SCEN——
         # 首次跑会得到全新 swtpm（PCR7 从 0 开始），此时应配合
-        # TPM enrollment 流程（见 docs/boot.md）；enrollment 后的
+        # TPM enrollment 流程（见 docs/architecture/boot.md）；enrollment 后的
         # 再次启动才验证自动解锁。
         cp "$OVMF_VARS_SRC" "$T7/vars-$SCEN.fd" 2>/dev/null || true
         ;;

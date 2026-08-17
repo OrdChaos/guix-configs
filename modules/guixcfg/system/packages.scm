@@ -1,4 +1,4 @@
-;;; 系统级软件：所有用户都需要的基础工具（docs/system.md 第 23.1 节）。
+;;; 系统级软件：所有用户都需要的基础工具（docs/architecture/overview.md）。
 ;;; 服务自己依赖的软件由 service 直接引用，不放在这里。
 
 (define-module (guixcfg system packages)

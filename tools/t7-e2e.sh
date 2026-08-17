@@ -3,7 +3,7 @@
 # swtpm + LUKS root。PCR7-only 版本（从 d832ef4 修剪：graft-kernel →
 # ukify，去掉 PCR11 预测 / signed authorization / patch-cmdline）。
 #
-# 场景（docs/boot.md 第 16.4 节，T3）：
+# 场景（docs/architecture/boot.md（TPM2），T3）：
 #   auto-unlock      正常启动，TPM 自动解锁（无需密码）进入系统
 #   secboot-off      Secure Boot 关闭 → PCR7 变化 → TPM fail → 密码回退
 #   tpm-clear        fresh swtpm → 旧 blob 无法 unseal → 密码回退

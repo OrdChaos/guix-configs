@@ -1,4 +1,4 @@
-;;; Account databases projection（docs/system-home-boundaries.md
+;;; Account databases projection（docs/architecture/accounts-sessions.md
 ;;; System-state phase / account projection）。
 ;;;
 ;;; 背景：上游 (gnu build activation)::activate-users+groups 把数据库

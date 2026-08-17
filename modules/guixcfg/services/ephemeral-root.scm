@@ -1,4 +1,4 @@
-;;; 无状态根的用户态服务（docs/storage.md 第 17 章）：
+;;; 无状态根的用户态服务（docs/architecture/storage.md）：
 ;;;
 ;;;   ephemeral-root-confirm   启动成功进入系统后，把 current 标记为
 ;;;                            last-good（boot-status: trying → ok）。
@@ -133,7 +133,7 @@
          "运行 PROGRAM 一次的 shepherd 服务。"
          (shepherd-service
           (provision (list name))
-          ;; 健康门槛（docs/storage.md 第 17.4 节）：不能只依赖 file-systems
+          ;; 健康门槛（docs/architecture/storage.md（Root generation））：不能只依赖 file-systems
           ;; ——那时网络/显示管理器等关键服务还没起，过早把 current 标成
           ;; last-good 会让“上次能启动”失去意义。user-processes 是
           ;; shepherd 启动顺序中较晚的锚点；更精细的健康检查

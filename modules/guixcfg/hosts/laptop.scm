@@ -1,5 +1,5 @@
 ;;; Laptop 最终 <operating-system> 组装点（阶段 6）。
-;;; Host 负责组合硬件、存储 policy、boot 配置和服务（docs/project-definition.md 第 21 章）。
+;;; Host 负责组合硬件、存储 policy、boot 配置和服务（docs/README.md）。
 
 (define-module (guixcfg hosts laptop)
                #:use-module ((guixcfg storage policies) #:prefix storage:)

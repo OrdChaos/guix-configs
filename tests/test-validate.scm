@@ -21,7 +21,7 @@
 
 (test-begin "storage-validate")
 
-(test-group "目标设备校验（docs/storage.md 第 31 章）"
+(test-group "目标设备校验（docs/architecture/storage.md）"
             (test-assert "好设备通过全部检查"
                          (null? (validate-target %good-facts %vm-storage-policy)))
             

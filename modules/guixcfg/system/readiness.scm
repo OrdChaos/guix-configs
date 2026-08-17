@@ -1,4 +1,4 @@
-;;; Boot readiness capabilities（docs/system-home-boundaries.md J8 /
+;;; Boot readiness capabilities（docs/architecture/accounts-sessions.md J8 /
 ;;; Boot Readiness Contract）。
 ;;;
 ;;; 六个语义 capability（阶段语义，不是函数执行状态）：
@@ -153,7 +153,7 @@ barrier 承担，不靠卡住 user-processes）。"
         (interactive-session-ready-service)))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; Interactive login gate（docs/system-home-boundaries.md J8）。
+;;; Interactive login gate（docs/architecture/accounts-sessions.md J8）。
 
 ;; gate 文件：存在即拒绝普通 interactive 登录（pam_nologin 语义；
 ;; root 豁免是 pam_nologin 的标准行为——保留 console recovery 路径）。

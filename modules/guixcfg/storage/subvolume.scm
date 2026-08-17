@@ -1,5 +1,5 @@
 ;;; Btrfs 子卷创建与挂载：持久子卷、安装期 root、swapfile、最终挂载树。
-;;; 对应 docs/storage.md 第 12、13 章；swapfile 约束见第 13.5 节。
+;;; 对应 docs/architecture/storage.md（持久子卷）；swapfile 约束见 Swap 一节。
 
 (define-module (guixcfg storage subvolume)
                #:use-module (guixcfg storage model)
@@ -40,7 +40,7 @@
 
 (define (execute-make-swapfile subvolume-name size-bytes)
   "在子卷 SUBVOLUME-NAME（如 @persist-swap）里创建 swapfile
-（docs/storage.md 第 13.5 节）：btrfs filesystem mkswapfile 自动满足
+（docs/architecture/storage.md（Swap））：btrfs filesystem mkswapfile 自动满足
 NOCOW、不压缩、预分配；@persist-swap 不做快照，swapfile 不进备份。"
   (invoke "btrfs" "filesystem" "mkswapfile"
           "--size" (number->string size-bytes)

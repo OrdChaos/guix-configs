@@ -1,4 +1,4 @@
-;;; age stable identity 核心逻辑（docs/secrets.md）。
+;;; age stable identity 核心逻辑（docs/architecture/secrets.md）。
 ;;;
 ;;; 威胁模型与不变量：
 ;;;   - 一个个人 trust domain 只有一个长期稳定的 age identity S；
@@ -307,7 +307,7 @@ already-unlocked（复用）或 unlocked（新解密）。"
 ;;; ────────────────────────────────────────────────────────────
 ;;; 账户凭据的持久物化（三层模型：repo ciphertext → persistent
 ;;; authoritative credential → ephemeral /etc/shadow 投影；
-;;; docs/secrets.md 第 15.5 节）。
+;;; docs/architecture/secrets.md（用户密码））。
 
 ;; /persist/system/accounts/<user>/password.hash（root 0700/0600）；
 ;; parameter 化供测试覆盖。

@@ -1,6 +1,6 @@
 ;;; 文件系统声明：LUKS 映射、root、ESP、全部持久子卷。
 ;;; 由 storage/model.scm 的固定事实生成，不重复手写子卷清单。
-;;; 对应 docs/storage.md 第 10–13 章；语义名称（PARTLABEL/mapper 名）见第 19 章。
+;;; 对应 docs/architecture/storage.md；语义名称（PARTLABEL/mapper 名）见固定命名事实一节。
 
 (define-module (guixcfg system file-systems)
                #:use-module (guixcfg storage model)
@@ -19,7 +19,7 @@
                          system-file-systems
                          %swap-spaces))
 
-;; 机器事实（docs/storage.md 第 19 章）：安装器写入，可重新探测，不进 Git。
+;; 机器事实（docs/architecture/storage.md（固定命名事实））：安装器写入，可重新探测，不进 Git。
 ;; 构建期读取，路径解析规则：
 ;;   1. GUIX_CONFIG_FACTS（非空）→ 显式 override，必须存在且格式合法，
 ;;      否则立即报错——显式指定不允许静默忽略；
@@ -173,7 +173,7 @@ reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
 ;; 缺少 luks-uuid 时 fail-closed，绝不回退 /dev/disk/by-partlabel/。
 ;; 函数而非变量：构造时（首次调用）才触发 facts 校验，模块加载不失败。
 ;; 解锁类型：luks-tpm2-device-mapping——先尝试 TPM2 PCR7 自动解锁，
-;; 失败回退标准交互密码（docs/boot.md 第 16.4 节）。
+;; 失败回退标准交互密码（docs/architecture/boot.md（TPM2））。
 (define (cryptroot-mapped-devices)
   (list (mapped-device
          (source (uuid (require-machine-fact 'luks-uuid)))
@@ -208,7 +208,7 @@ create-mount-point?：阶段 4 起每个新 root generation 都是空子卷，
 (define (root-file-system root-subvolume)
   "固定子卷的 root 文件系统（调试用）。
 正常系统用 %ephemeral-root-file-system：root generation 由 initrd
-在启动时选择（docs/storage.md 第 17 章）。"
+在启动时选择（docs/architecture/storage.md）。"
   (file-system
    (device %mapper-path)
    (mount-point "/")
@@ -246,7 +246,7 @@ ROOT-FS 是根文件系统记录，正常传 %ephemeral-root-file-system。"
          %esp-file-system
          (map persist-subvolume->file-system %persist-subvolumes)))
 
-;; Btrfs swapfile（docs/storage.md 第 13.5 节）。
+;; Btrfs swapfile（docs/architecture/storage.md（Swap））。
 (define %swap-spaces
   (list (swap-space
          (target "/persist/swap/swapfile"))))

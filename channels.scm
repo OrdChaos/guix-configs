@@ -7,7 +7,7 @@
 ;;;   guix time-machine -C channels.scm -- describe -f channels > channels.lock.scm
 ;;; 重建后先用新锁跑一遍 tests/run-tests.scm 和 system build，
 ;;; 确认无误再把 channels.lock.scm 一起提交。
-;;; 见 docs/deployment.md 第 7 章。
+;;; 见 docs/operations/reconfigure.md。
 
 (list (channel
        (name 'guix)
@@ -27,7 +27,7 @@
          "897c1a470da759236cc11798f4e0a5f7d4d59fbc"
          (openpgp-fingerprint
           "2A39 3FFF 68F4 EF7A 3D29 12AF 6F51 20A0 22FB B2D5"))))
-      ;; UKI 工具链（systemd-stub、ukify；没有 systemd-boot，见 docs/boot.md）
+      ;; UKI 工具链（systemd-stub、ukify；没有 systemd-boot，见 docs/architecture/boot.md）
       (channel
        (name 'rosenthal)
        (url "https://codeberg.org/hako/rosenthal.git")

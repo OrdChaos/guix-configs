@@ -1,7 +1,7 @@
 ;;; 安全校验：安装器破坏性操作之前的全部检查（纯函数）。
 ;;; 输入是“设备事实”——由阶段 2 的 device.scm 在真实系统上探测填充；
 ;;; 本模块只做判断，因此可以脱离真实硬件完整测试。
-;;; 对应 docs/storage.md 第 31 章（存储安装器安全要求）。
+;;; 对应 docs/architecture/storage.md（存储安装器安全要求）。
 
 (define-module (guixcfg storage validate)
                #:use-module (guixcfg storage model)
@@ -50,7 +50,7 @@
                      (message check-failure-message))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 目标设备校验（docs/storage.md 第 31 章的清单）。
+;;; 目标设备校验（docs/architecture/storage.md的清单）。
 ;;; 返回失败列表；空列表表示通过。
 
 (define (validate-target facts policy)

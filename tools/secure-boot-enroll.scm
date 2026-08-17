@@ -1,4 +1,4 @@
-;;; Secure Boot 注册材料构建（docs/boot.md 第 16.3 节）。
+;;; Secure Boot 注册材料构建（docs/architecture/boot.md（Secure Boot））。
 ;;;
 ;;; 安全模型（实机策略）：自有 PK/KEK/db + 微软兼容证书 + 固件默认值。
 ;;;   PK：  只有我们自己的（平台所有权归本机）

@@ -8,7 +8,7 @@
 
 (test-begin "storage-model")
 
-(test-group "持久子卷（docs/storage.md 第 12 章）"
+(test-group "持久子卷（docs/architecture/storage.md（持久子卷））"
             (test-equal "固定 8 个持久子卷"
                         8 (length %persist-subvolumes))
             
@@ -45,7 +45,7 @@
             (test-assert "拒绝空后缀 @root-" (not (parse-root-generation "@root-")))
             (test-assert "拒绝无前缀" (not (parse-root-generation "root-3"))))
 
-(test-group "host policy 实例（docs/storage.md 第 20.2 节，定义在各自 host 模块）"
+(test-group "host policy 实例（docs/architecture/storage.md（持久子卷），定义在各自 host 模块）"
             (test-eq "VM policy 名字" 'vm (host-storage-policy-name %vm-storage-policy))
             (test-eq "Laptop policy 名字" 'laptop (host-storage-policy-name %laptop-storage-policy))
             (test-assert "两个 policy 的 ESP 都在 2–4 GiB 范围内"

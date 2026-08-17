@@ -7,7 +7,7 @@
 ;;;  version-compare 在模块加载时 dlsym strverscmp），guile-static-initrd
 ;;;  静态链接无法解析符号，module-import-compiled 构建失败——实测。）
 ;;;
-;;; 语义（docs/boot.md 第 16.4 节，PCR7-only）：
+;;; 语义（docs/architecture/boot.md（TPM2），PCR7-only）：
 ;;;   - cmdline 门控（rootmode=recovery / guixcfg.tpm-unlock=0 → 跳过）
 ;;;   - PARTLABEL 设备发现（initrd 无 udev：/sys/block 扫描）
 ;;;   - 挂 ESP → 读机器级 artifact（/EFI/Guix/tpm2/，不随 UKI slot 变化）

@@ -47,7 +47,7 @@
   "activation gexp：确保 /persist/data-home/USER 与 selected 子目录
 存在且 owner 为 USER（首次系统激活自动完成；不重建已有用户数据）。
 已有的 /home/USER/guix-configs 等存量目录的迁移是显式人工步骤
-（docs/installation.md 第 30 节——先迁移到 /persist 再 reconfigure
+（docs/operations/installation.md——先迁移到 /persist 再 reconfigure
 启用 bind，避免静默覆盖）。
 
 注意：/home/USER 本身是 ephemeral，但 file-systems 阶段为 bind mount

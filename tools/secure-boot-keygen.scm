@@ -1,4 +1,4 @@
-;;; Secure Boot 密钥生成（docs/boot.md 第 16.3 节）。
+;;; Secure Boot 密钥生成（docs/architecture/boot.md（Secure Boot））。
 ;;;
 ;;; 只负责生成 PK/KEK/db 的 PEM 私钥与 X.509 证书。
 ;;; 不生成 .esl/.auth，不读取或写入固件变量。

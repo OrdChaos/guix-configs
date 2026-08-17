@@ -5,7 +5,7 @@
 
 (test-begin "root-generation")
 
-;;; ── 状态序列化（docs/storage.md 第 17.7 节）
+;;; ── 状态序列化（docs/architecture/storage.md（Root generation））
 
 (define %sample-state
   (root-state (next-generation 3)

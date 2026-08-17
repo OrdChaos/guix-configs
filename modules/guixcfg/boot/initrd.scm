@@ -1,5 +1,5 @@
 ;;; 无状态根 initrd：启动时在 initrd 里选择/创建本次的 root generation。
-;;; 对应 docs/storage.md 第 17 章。
+;;; 对应 docs/architecture/storage.md。
 ;;;
 ;;; 为什么不能直接给 raw-initrd 传 #:pre-mount（尝试过，不可行）：
 ;;;   1. raw-initrd 把用户 pre-mount 排在 mapped-devices 解锁之前，

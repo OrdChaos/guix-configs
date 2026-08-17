@@ -1,6 +1,6 @@
 ;;; 存储模型：GPT / LUKS2 / Btrfs 布局的纯数据结构与固定事实。
 ;;; 本模块只描述“磁盘应该是什么样”，不执行任何磁盘操作（阶段 2 才执行）。
-;;; 对应 docs/storage.md 第 10–13、20 章。
+;;; 对应 docs/architecture/storage.md。
 ;;;
 ;;; 记录类型一律使用 (guix records) 的 define-record-type*（项目约定）：
 ;;; 具名字段构造、(default ...)、(inherit ...) 都由它提供。
@@ -10,7 +10,7 @@
                #:use-module (srfi srfi-13)  ; 字符串工具（string-prefix? 等）
                #:export (;; 单位换算
                          mib gib
-                         ;; 固定命名事实（docs/storage.md 第 11、19 章）
+                         ;; 固定命名事实（docs/architecture/storage.md（固定命名事实））
                          %esp-partlabel %system-partlabel
                          %esp-gpt-typecode %system-gpt-typecode
                          %esp-filesystem-label %btrfs-filesystem-label
@@ -44,7 +44,7 @@
 (define (gib n) (* n 1024 1024 1024))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 固定命名事实（docs/storage.md 第 20.1 节：直接写进实现，不做配置项）。
+;;; 固定命名事实（docs/architecture/storage.md（固定命名事实）：直接写进实现，不做配置项）。
 ;;; 启动和挂载优先使用这些语义名称，而不是安装时生成的 UUID（第 19 章）。
 
 (define %esp-partlabel "esp")            ; GPT PARTLABEL：EFI 系统分区
@@ -59,12 +59,12 @@
 (define %luks-label "cryptroot")         ; LUKS2 头标签
 (define %luks-mapper-name "cryptroot")   ; device-mapper 名：/dev/mapper/cryptroot
 
-;; ESP 大小策略范围（docs/storage.md 第 11 章：2–4 GiB）。
+;; ESP 大小策略范围（docs/architecture/storage.md（磁盘布局）：2–4 GiB）。
 (define %esp-min-size (gib 2))
 (define %esp-max-size (gib 4))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; Host policy：真正因机器而不同的内容（docs/storage.md 第 20.2 节）。
+;;; Host policy：真正因机器而不同的内容（docs/architecture/storage.md（持久子卷））。
 ;;;
 ;;; define-record-type* 的形式是：
 ;;;   (define-record-type* <类型名> 具名构造器 位置构造器 谓词?
@@ -88,7 +88,7 @@
                                             (default #f)))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 持久子卷（docs/storage.md 第 12 章：固定项目事实）。
+;;; 持久子卷（docs/architecture/storage.md（持久子卷）：固定项目事实）。
 
 (define-record-type* <subvolume>
                      subvolume make-subvolume
@@ -135,11 +135,11 @@
                    (mount-point "/persist/snapshots"))))
 
 (define (persist-subvolume-name? name)
-  "NAME 是否符合持久子卷命名规则（docs/storage.md 第 10.1 节）。"
+  "NAME 是否符合持久子卷命名规则（docs/architecture/storage.md）。"
   (string-prefix? "@persist-" name))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; Root generation 命名（docs/storage.md 第 17.1 节）。
+;;; Root generation 命名（docs/architecture/storage.md）。
 ;;; 不带 @persist- 前缀：它们是可替换的 root，不是长期状态（第 10.3 节）。
 
 (define %root-installing-name "@root-installing")  ; 安装期工作 root

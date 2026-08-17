@@ -1,4 +1,4 @@
-;;; 声明式 runtime secrets 部署（docs/secrets.md）。
+;;; 声明式 runtime secrets 部署（docs/architecture/secrets.md）。
 ;;;
 ;;; 模型：
 ;;;   - ciphertext 随 system closure 进 store（允许）；
@@ -80,7 +80,7 @@
 
 (define (secrets-deploy-program decls user)
   "生成 runtime secrets 事务性发布程序（generation publication，
-docs/secrets.md 第 15.4 节）：
+docs/architecture/secrets.md（Runtime secrets））：
   /run/guixcfg-secrets.d/<N>/     root 0711（可穿越不可列）
     system/                        root 0700
     users/                         root 0711

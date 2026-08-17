@@ -1,6 +1,6 @@
 ;;; 安装期提交：system init 完成后，把 @root-installing 固化为
 ;;; 只读 @root-template + 可写 @root-0，并写入初始 root generation 状态。
-;;; 对应 docs/storage.md 第 17.3 节。
+;;; 对应 docs/architecture/storage.md。
 ;;;
 ;;; 时机：disk-install apply → herd start cow-store /mnt → guix system init
 ;;; 之后、umount /mnt 之前执行（此时 /mnt 仍挂着 @root-installing）。
@@ -193,7 +193,7 @@
    (invoke "btrfs" "subvolume" "delete" (top-path (template-new-name)))))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 提交本体（docs/storage.md 第 17.3 节）：
+;;; 提交本体（docs/architecture/storage.md）：
 ;;; 收养 /var/guix → 发布只读模板 → rename @root-0 → 验证 TARGET →
 ;;; deploy UKI → 最后写初始状态。state 是 commit record：关键步骤
 ;;; 未成功时不宣布 generation 0 committed。

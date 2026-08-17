@@ -15,7 +15,7 @@
 
 (test-begin "storage-plan")
 
-(test-group "执行顺序（docs/installation.md 第 30 章流程）"
+(test-group "执行顺序（docs/operations/installation.md流程）"
             (test-assert "确认目标在最前"       (eq? 'confirm-target (car %test-ids)))
             (test-assert "wipe 在分区之前"      (step-before? 'wipe 'partition))
             (test-assert "分区后等待 udev"      (step-before? 'partition 'wait-udev))

@@ -1,10 +1,10 @@
 #!/bin/sh
-# reconfigure orchestration（docs/deployment.md 的 configctl system switch
+# reconfigure orchestration（docs/operations/reconfigure.md 的 configctl system switch
 # 在 VM 阶段的最小实现；configctl 全套——git 干净检查/只读快照/部署记录——
 # 仍是规划中的未来工作）。
 #
 # 职责：system reconfigure + 成功后热激活绑定的 Guix Home + readiness
-# gate 事务语义（docs/system-home-boundaries.md J8）：
+# gate 事务语义（docs/architecture/accounts-sessions.md J8）：
 #
 #   close gate（新 interactive session 被拒；已有 session 不动）
 #     → guix system reconfigure
@@ -13,7 +13,7 @@
 #     → 验证：Home 链接状态 + 各 readiness capability 无 failed
 #     → open gate
 #
-# 为什么需要显式热激活验证（错误语义见 docs/system-home-boundaries.md
+# 为什么需要显式热激活验证（错误语义见 docs/architecture/accounts-sessions.md
 # J5）：`guix system reconfigure` 的服务升级对 one-shot 服务是
 # fire-and-forget：shepherd 把 activate 进程 fork 出去即视为成功——
 # Home activate 失败（如 ~/.guix-home 被非空目录阻塞、或上次失败残留

@@ -1,7 +1,7 @@
 ;;; Root generation 生命周期模型：状态文件、启动模式、启动决策与清理规则。
 ;;; 本模块是纯模型——只描述“状态应该是什么样、这次启动该做什么”，
 ;;; 不做任何 Btrfs / 挂载操作（initrd 和用户态服务分别消费这些决策）。
-;;; 对应 docs/storage.md 第 17 章（root generation）与第 19 章（机器事实）。
+;;; 对应 docs/architecture/storage.md（root generation）与第 19 章（机器事实）。
 
 (define-module (guixcfg storage root-generation)
                #:use-module (guix records)  ; define-record-type*
@@ -49,7 +49,7 @@
                          generations-to-delete))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 状态文件位置（docs/storage.md 第 17.7 节）。
+;;; 状态文件位置（docs/architecture/storage.md（Root generation））。
 ;;;
 ;;; 状态放在 @persist-system 子卷里。同一份状态有两个视角：
 ;;;   启动后的系统：  /persist/system/root-generations/state.scm
@@ -66,7 +66,7 @@
                  %root-generations-dir-name "/" %state-file-name))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 状态记录（docs/storage.md 第 17.7 节要求的字段）。
+;;; 状态记录（docs/architecture/storage.md（Root generation）要求的字段）。
 
 (define-record-type* <root-state>
                      root-state make-root-state
@@ -179,7 +179,7 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
                                      "@root-template")))))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 启动模式（docs/storage.md 第 17.6 节）。
+;;; 启动模式（docs/architecture/storage.md）。
 ;;; 通过内核命令行参数 rootmode= 选择，缺省为 normal：
 ;;;   rootmode=normal      从模板新建 generation（默认）
 ;;;   rootmode=keep        复用 current generation
@@ -302,7 +302,7 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
                        (root-state-created-at state)))))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 清理（docs/storage.md 第 17.8 节）。
+;;; 清理（docs/architecture/storage.md（Root generation））。
 ;;; 保留最新的 KEEP 个旧 generation，且绝不删除：
 ;;;   当前 generation、last-good generation。
 ;;; （recovery 引用的就是 last-good；事务中的 @root-N.new 不是合法

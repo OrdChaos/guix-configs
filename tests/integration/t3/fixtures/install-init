@@ -163,7 +163,7 @@ printf 'NAME="Guix System"\nID=guix\n' > /tmp/os-release
 KERNEL="$SYSTEM/kernel/bzImage"
 INITRD="$SYSTEM/initrd"
 # root=/selected-root：initrd 先选/建 @root-N 挂到 /selected-root，
-# boot-system 按 root= 参数原样挂载（docs/storage.md 第 17 章）
+# boot-system 按 root= 参数原样挂载（docs/architecture/storage.md）
 CMDLINE="root=/selected-root gnu.system=$SYSTEM gnu.load=$SYSTEM/boot console=ttyS0"
 $UKIFY build --linux "$KERNEL" --initrd "$INITRD" \
     --os-release /tmp/os-release --cmdline "$CMDLINE" \

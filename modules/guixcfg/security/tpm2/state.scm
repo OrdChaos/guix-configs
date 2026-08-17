@@ -15,7 +15,7 @@
 ;;; 注意：sealed blob 需要「解锁前可读」，不能只放 /persist/system
 ;;; （访问它要先解锁 LUKS，循环依赖）——/persist 侧的 blobs 是管理
 ;;; 副本/备份，解锁前读取用 ESP 侧副本（见 (guixcfg boot tpm-unlock)
-;;; 与 docs/boot.md 第 16.4 节）。
+;;; 与 docs/architecture/boot.md（TPM2））。
 
 (define-module (guixcfg security tpm2 state)
                #:use-module (guixcfg utils atomic-file)  ; atomic-write-file!
@@ -46,7 +46,7 @@
 (define %tpm2-state-dir "/persist/system/tpm2")
 (define %tpm2-state-file (string-append %tpm2-state-dir "/state.scm"))
 
-;; 本项目 PCR 选择的固定事实（docs/boot.md 第 16.4 节）：PCR7-only，
+;; 本项目 PCR 选择的固定事实（docs/architecture/boot.md（TPM2））：PCR7-only，
 ;; SHA-256 bank。enrollment 与 initrd 解锁共用，不允许配置漂移。
 (define %tpm2-pcr-bank "sha256")
 (define %tpm2-pcr-list '("7"))

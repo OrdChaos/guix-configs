@@ -1,5 +1,5 @@
 ;;; 文件系统与加密层：VFAT（ESP）、LUKS2、Btrfs。
-;;; 对应 docs/storage.md 第 11 章（固定物理布局）。
+;;; 对应 docs/architecture/storage.md（磁盘布局）（固定物理布局）。
 
 (define-module (guixcfg storage filesystem)
                #:use-module (guixcfg storage model)
@@ -19,7 +19,7 @@
 (define (execute-luks-format passphrase)
   "初始化 LUKS2。PASSPHRASE 由安装器确认后经 stdin 传入（--key-file=-）；
 --batch-mode 使 cryptsetup 不再交互要求输入 YES。安装器已完成设备
-路径确认与密码确认（docs/installation.md 第 30.3 节）。"
+路径确认与密码确认（docs/operations/installation.md）。"
   (invoke-with-stdin passphrase
                      "cryptsetup" "luksFormat"
                      "--type" "luks2"

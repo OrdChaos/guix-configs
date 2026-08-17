@@ -1,7 +1,7 @@
 ;;; 操作计划：把存储模型 + host policy 展开成一串有序步骤。
 ;;; 本模块只生成计划（纯函数），不执行；阶段 2 的 install.scm 负责执行，
 ;;; tools/disk-install.scm 的 plan/dry-run 子命令直接打印这里的输出。
-;;; 对应 docs/installation.md 第 30 章和 docs/storage.md 第 31 章。
+;;; 对应 docs/operations/installation.md和 docs/architecture/storage.md。
 
 (define-module (guixcfg storage plan)
                #:use-module (guixcfg storage model)
@@ -31,7 +31,7 @@
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 由 policy 和目标设备生成完整计划。
-;;; 步骤顺序即执行顺序；调整顺序前先看 docs/installation.md 第 30 章的流程。
+;;; 步骤顺序即执行顺序；调整顺序前先看 docs/operations/installation.md的流程。
 
 (define (storage-plan policy device)
   "生成把空盘 DEVICE 安装成 POLICY 描述布局的有序步骤列表。"
@@ -115,7 +115,7 @@
                  (summary "挂载 ESP 到 /mnt/efi")
                  (detail `((partlabel . ,%esp-partlabel)
                            (target . "/mnt/efi"))))
-      ;; 机器事实（docs/storage.md 第 19 章）：LUKS UUID 等安装时生成的值，
+      ;; 机器事实（docs/architecture/storage.md（固定命名事实））：LUKS UUID 等安装时生成的值，
       ;; 必须在 guix system init 之前写入（配置在构建期读取它）。
       (plan-step (id 'write-facts)
                  (summary "写入机器事实文件 /persist/system/facts/host.scm")

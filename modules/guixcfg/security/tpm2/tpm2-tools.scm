@@ -1,5 +1,5 @@
 ;;; tpm2-tools 适配层：本仓库唯一知道 tpm2-tools CLI 的模块
-;;; （docs/boot.md 第 16.4 节）。PCR7-only 版本：只保留 PolicyPCR
+;;; （docs/architecture/boot.md（TPM2））。PCR7-only 版本：只保留 PolicyPCR
 ;;; 机制，不包含 PolicyAuthorize / PCR11 内容。
 ;;;
 ;;; 所有命令语义以【实测】为准（2026-08，tpm2-tools 5.7 + swtpm）：

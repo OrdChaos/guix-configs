@@ -6,7 +6,7 @@
 ;;;   guix time-machine -C channels.lock.scm -- repl tools/disk-install.scm -- apply vm /dev/vda
 ;;;
 ;;; inspect 和 plan 是只读操作；apply 是破坏性操作，校验和确认见
-;;; docs/storage.md 第 31 章。
+;;; docs/architecture/storage.md。
 
 ;; guix repl 不提供 -L，这里显式把 modules/ 加入 load path（从仓库根目录运行）。
 (add-to-load-path (string-append (getcwd) "/modules"))
