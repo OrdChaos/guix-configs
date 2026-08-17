@@ -36,14 +36,14 @@
   plaintext 只存在于进程内存与 /run 0600 中转文件（age.scm），
   不进 argv/env/log/store。"
   (cond
-   ((eq? source 'luks-secret)
-    ;; fail-closed：identity 缺失时在进入任何 TPM/LUKS mutation 前失败。
-    (unless (runtime-identity-present?)
-      (error "no unlocked stable identity; run 'secrets unlock' first"))
-    (make-age-secret-reader (%luks-recovery-secret-rel)))
-   ((eq? source 'interactive)
-    read-luks-passphrase!)
-   ((procedure? source)
-    source)
-   (else
-    (error "unknown LUKS passphrase source" source))))
+    ((eq? source 'luks-secret)
+     ;; fail-closed：identity 缺失时在进入任何 TPM/LUKS mutation 前失败。
+     (unless (runtime-identity-present?)
+       (error "no unlocked stable identity; run 'secrets unlock' first"))
+     (make-age-secret-reader (%luks-recovery-secret-rel)))
+    ((eq? source 'interactive)
+     read-luks-passphrase!)
+    ((procedure? source)
+     source)
+    (else
+     (error "unknown LUKS passphrase source" source))))

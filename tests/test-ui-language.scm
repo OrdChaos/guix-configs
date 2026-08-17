@@ -36,12 +36,12 @@
 (define (read-file-lines path)
   "读取 PATH 全部行（含行尾）为列表。"
   (call-with-input-file path
-    (lambda (p)
-      (let loop ((acc '()))
-        (let ((line (read-line p)))
-          (if (eof-object? line)
-            (reverse acc)
-            (loop (cons line acc))))))))
+                        (lambda (p)
+                          (let loop ((acc '()))
+                            (let ((line (read-line p)))
+                              (if (eof-object? line)
+                                (reverse acc)
+                                (loop (cons line acc))))))))
 
 (define (extract-string-literals line)
   "提取行内的双引号字符串字面量列表。"
@@ -59,13 +59,13 @@
       line
       (let ((c (string-ref line i)))
         (cond
-         (in-str
-          (cond ((char=? c #\\) (loop (+ i 2) #t))
-                ((char=? c #\") (loop (+ i 1) #f))
-                (else (loop (+ i 1) #t))))
-         ((char=? c #\") (loop (+ i 1) #t))
-         ((char=? c comment-char) (substring line 0 i))
-         (else (loop (+ i 1) #f)))))))
+          (in-str
+           (cond ((char=? c #\\) (loop (+ i 2) #t))
+             ((char=? c #\") (loop (+ i 1) #f))
+             (else (loop (+ i 1) #t))))
+          ((char=? c #\") (loop (+ i 1) #t))
+          ((char=? c comment-char) (substring line 0 i))
+          (else (loop (+ i 1) #f)))))))
 
 (define (scan-lines lines pred)
   "对 LINES（(行号 . 行) 列表）中满足 PRED 的行提取字符串字面量，
@@ -151,24 +151,24 @@ usage 帮助文本。"
                        (line (cdar lines))
                        (plain (strip-comment line #\#)))
                   (cond
-                   (heredoc
-                    (let ((end? (string=? (string-trim-right line) heredoc)))
-                      (loop (cdr lines)
-                            (and (not end?) heredoc)
-                            (if (and (not end?) (string-has-non-ascii? line))
-                              (cons (cons n line) acc)
-                              acc))))
-                   ((string-match "<<(-?)[[:space:]]*'?([A-Za-z_][A-Za-z0-9_]*)" line)
-                    => (lambda (m)
-                         (loop (cdr lines) (match:substring m 2) acc)))
-                   ((or (string-match "^[[:space:]]*(echo|printf)\\b" plain)
-                        (string-match "\\$\\{[^}]*:\\?[^}]*\\}" plain))
-                    (loop (cdr lines) #f
-                          (append (map (lambda (s) (cons n s))
-                                       (filter string-has-non-ascii?
-                                               (extract-string-literals plain)))
-                                  acc)))
-                   (else (loop (cdr lines) #f acc))))))))
+                    (heredoc
+                     (let ((end? (string=? (string-trim-right line) heredoc)))
+                       (loop (cdr lines)
+                             (and (not end?) heredoc)
+                             (if (and (not end?) (string-has-non-ascii? line))
+                               (cons (cons n line) acc)
+                               acc))))
+                    ((string-match "<<(-?)[[:space:]]*'?([A-Za-z_][A-Za-z0-9_]*)" line)
+                     => (lambda (m)
+                          (loop (cdr lines) (match:substring m 2) acc)))
+                    ((or (string-match "^[[:space:]]*(echo|printf)\\b" plain)
+                         (string-match "\\$\\{[^}]*:\\?[^}]*\\}" plain))
+                     (loop (cdr lines) #f
+                           (append (map (lambda (s) (cons n s))
+                                        (filter string-has-non-ascii?
+                                                (extract-string-literals plain)))
+                                   acc)))
+                    (else (loop (cdr lines) #f acc))))))))
         files)))
    dirs))
 
@@ -229,39 +229,39 @@ usage 帮助文本。"
 
 (test-assert "disk-install usage output is printable ASCII"
              (call-with-values
-                 (lambda () (run-captured "repl" "tools/disk-install.scm"))
-               (lambda (out code)
-                 (format #t "exit=~a~%~a~%" code out)
-                 (and (not (string-has-non-ascii? out))
-                      (string-contains out "Usage:")
-                      (string-contains out "commit-root")))))
+              (lambda () (run-captured "repl" "tools/disk-install.scm"))
+              (lambda (out code)
+                (format #t "exit=~a~%~a~%" code out)
+                (and (not (string-has-non-ascii? out))
+                     (string-contains out "Usage:")
+                     (string-contains out "commit-root")))))
 
 (test-assert "disk-install plan output is printable ASCII"
              (call-with-values
-                 (lambda ()
-                   (run-captured "repl" "tools/disk-install.scm"
-                                 "--" "plan" "vm" "/dev/vda"))
-               (lambda (out code)
-                 (format #t "exit=~a~%" code)
-                 (and (zero? code)
-                      (not (string-has-non-ascii? out))
-                      (string-contains out "Disk ready for guix system init")))))
+              (lambda ()
+                (run-captured "repl" "tools/disk-install.scm"
+                              "--" "plan" "vm" "/dev/vda"))
+              (lambda (out code)
+                (format #t "exit=~a~%" code)
+                (and (zero? code)
+                     (not (string-has-non-ascii? out))
+                     (string-contains out "Disk ready for guix system init")))))
 
 (test-assert "tpm2-enroll usage output is printable ASCII"
              (call-with-values
-                 (lambda () (run-captured "repl" "tools/tpm2-enroll.scm"))
-               (lambda (out code)
-                 (format #t "exit=~a~%" code)
-                 (and (not (string-has-non-ascii? out))
-                      (string-contains out "Usage:")))))
+              (lambda () (run-captured "repl" "tools/tpm2-enroll.scm"))
+              (lambda (out code)
+                (format #t "exit=~a~%" code)
+                (and (not (string-has-non-ascii? out))
+                     (string-contains out "Usage:")))))
 
 (test-assert "secure-boot-enroll error path is printable ASCII"
              (call-with-values
-                 (lambda () (run-captured "repl" "tools/secure-boot-enroll.scm"))
-               (lambda (out code)
-                 (format #t "exit=~a~%" code)
-                 (and (not (zero? code))
-                      (not (string-has-non-ascii? out))
-                      (string-contains out "key set is incomplete")))))
+              (lambda () (run-captured "repl" "tools/secure-boot-enroll.scm"))
+              (lambda (out code)
+                (format #t "exit=~a~%" code)
+                (and (not (zero? code))
+                     (not (string-has-non-ascii? out))
+                     (string-contains out "key set is incomplete")))))
 
 (test-end "ui-language")

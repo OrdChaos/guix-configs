@@ -102,7 +102,7 @@ needed and the FFI-dependent flock path is bypassed entirely.
   (define credential-assoc
     (map (lambda (name) (cons name (user-credential-path name)))
          credential-user-names))
-
+  
   (with-imported-modules (source-module-closure
                           '((gnu build accounts)
                             (gnu system accounts)
@@ -121,12 +121,12 @@ needed and the FFI-dependent flock path is bypassed entirely.
                                          (srfi srfi-13)          ; string-trim-both
                                          (ice-9 rdelim)          ; read-string
                                          (ice-9 regex))          ; string-match
-
+                            
                             (define users
                               (map sexp->user-account (list #$@user-specs)))
                             (define user-groups
                               (map sexp->user-group (list #$@group-specs)))
-
+                            
                             ;; 读 persistent credential verifier；任何缺失/非法 fail closed。
                             (define (read-credential-hash path)
                               (unless (file-exists? path)
@@ -140,7 +140,7 @@ needed and the FFI-dependent flock path is bypassed entirely.
                                 (unless (string-match #$%credential-hash-regex hash)
                                   (error "persistent credential malformed" path))
                                 hash))
-
+                            
                             ;; 在 shadow entries 中注入 persistent credential。
                             (define (inject-credentials entries)
                               (map (lambda (entry)
@@ -152,7 +152,7 @@ needed and the FFI-dependent flock path is bypassed entirely.
                                           (password (read-credential-hash (cdr cred))))
                                          entry)))
                                    entries))
-
+                            
                             ;; 最终验证：从写好的 /etc/shadow 文本解析每个目标 user 的
                             ;; password 字段，与 persistent verifier 比对（非 empty/!/locked）。
                             ;; shadow-entry-password 访问器未从 (gnu build accounts) 导出，
@@ -183,10 +183,10 @@ needed and the FFI-dependent flock path is bypassed entirely.
                                          (error "account projection credential mismatch"
                                                 name)))))
                                  '#$credential-user-names)))
-
+                            
                             ;; /var/lib 是系统账号 home 的前置目录（上游在锁外创建）。
                             (mkdir-p "/var/lib")
-
+                            
                             ;; 纯 Scheme 重建三个数据库（原子写：mkstemp! + rename，
                             ;; 无 FFI）。user+group-databases 读当前文件保留 stateful
                             ;; 位（UID/GID/password/shell），重复运行幂等。
@@ -198,7 +198,7 @@ needed and the FFI-dependent flock path is bypassed entirely.
                                            (write-passwd passwd-entries)
                                            (write-shadow shadow-entries*)
                                            (verify-projection)))
-
+                            
                             ;; system account 的 home（如 /var/empty、/var/run/sshd、
                             ;; /run/dbus）：上游在锁块之后创建，锁失败时也被跳过，
                             ;; 这里补上。
@@ -215,7 +215,7 @@ needed and the FFI-dependent flock path is bypassed entirely.
                                        (and (user-account-system? user)
                                             (user-account-create-home-directory? user)))
                                      users))
-
+                            
                             ;; 共享 home（被多个 system account 使用，如 /var/empty）
                             ;; 转成 root-owned 只读，与上游一致。
                             (for-each (lambda (directory)
@@ -226,7 +226,7 @@ needed and the FFI-dependent flock path is bypassed entirely.
                                                      (and (user-account-system? user)
                                                           (user-account-home-directory user)))
                                                    users)))
-
+                            
                             #t)))
 
 (define (account-databases-service accounts+groups)

@@ -65,7 +65,7 @@
   ;; （从已构建 artifact 第一行提取）。
   (let* ((prog (build-thing (account-databases-verify-program "user")))
          (line (call-with-input-file prog
-                                  (lambda (p) (read-line p)))))
+                                     (lambda (p) (read-line p)))))
     (and (string-prefix? "#!" line)
          (car (string-split (substring line 2) #\space)))))
 
@@ -146,13 +146,13 @@ user:x:1000:1000:u:/home/user:/bin/bash\n" p)))
 (define %acc-program
   (build-thing
    (program-file "acc-databases-test"
-     (with-imported-modules (source-module-closure
-                             '((gnu build accounts) (gnu system accounts)
-                               (guix build utils) (srfi srfi-1) (srfi srfi-11)))
-       #~(begin
-          (use-modules (gnu build accounts) (gnu system accounts)
-                       (guix build utils) (srfi srfi-1) (srfi srfi-11))
-          #$%acc-gexp)))))
+                 (with-imported-modules (source-module-closure
+                                         '((gnu build accounts) (gnu system accounts)
+                                                                (guix build utils) (srfi srfi-1) (srfi srfi-11)))
+                                        #~(begin
+                                           (use-modules (gnu build accounts) (gnu system accounts)
+                                                        (guix build utils) (srfi srfi-1) (srfi srfi-11))
+                                           #$%acc-gexp)))))
 
 (define (run-acc shadow-content hash-or-#f)
   "在 fake root 上执行 account projection；返回 (exit . final-shadow)。"
@@ -168,30 +168,30 @@ user:x:1000:1000:u:/home/user:/bin/bash\n" p)))
        (exit (car res)) (out (cdr res)))
   (test-equal "A1 projection success exits 0" 0 exit)
   (test-assert "A1 user present in shadow as user:hash:..."
-    (and (string-contains out "\nuser:$6$salt$faketesthash:")
-         ;; 坏行模式（hash 顶替 name）必须不存在
-         (not (string-contains out "\n$6$salt$faketesthash:!"))
-         (not (string-contains out "\nuser:!:"))))
+               (and (string-contains out "\nuser:$6$salt$faketesthash:")
+                    ;; 坏行模式（hash 顶替 name）必须不存在
+                    (not (string-contains out "\n$6$salt$faketesthash:!"))
+                    (not (string-contains out "\nuser:!:"))))
   (test-assert "A1 root preserved (locked, no credential)"
-    (string-contains out "root:!:")))
+               (string-contains out "root:!:")))
 
 ;; A4：persistent hash 缺失 → 非零，三库不被写。
 (let* ((root (make-fake-root "" #f))
        (exit (run-in-root %acc-program root)))
   (test-assert "A4 missing hash fails" (not (zero? exit)))
   (test-assert "A4 shadow not written (empty remains)"
-    (let ((s (call-with-input-file (string-append root "/etc/shadow")
-                                   (lambda (p) (get-string-all p)))))
-      (string=? s ""))))
+               (let ((s (call-with-input-file (string-append root "/etc/shadow")
+                                              (lambda (p) (get-string-all p)))))
+                 (string=? s ""))))
 
 ;; A5：malformed hash → 非零，库不被写。
 (let* ((root (make-fake-root "" "NOT-A-VALID-HASH\n"))
        (exit (run-in-root %acc-program root)))
   (test-assert "A5 malformed hash fails" (not (zero? exit)))
   (test-assert "A5 shadow not written"
-    (let ((s (call-with-input-file (string-append root "/etc/shadow")
-                                   (lambda (p) (get-string-all p)))))
-      (string=? s ""))))
+               (let ((s (call-with-input-file (string-append root "/etc/shadow")
+                                              (lambda (p) (get-string-all p)))))
+                 (string=? s ""))))
 
 ;; A6：user 不在声明集合 → projection 本身只写声明用户（不产生
 ;; 幽灵条目）；credential 注入只作用于声明的 interactive 用户。
@@ -199,7 +199,7 @@ user:x:1000:1000:u:/home/user:/bin/bash\n" p)))
        (exit (car res)) (out (cdr res)))
   (test-equal "A6 projection success with declared user" 0 exit)
   (test-assert "A6 user shadow line well-formed"
-    (string-contains out "\nuser:$6$salt$valid:")))
+               (string-contains out "\nuser:$6$salt$valid:")))
 
 ;; A7：最终 shadow 缺 user 时 account-state-ready 不 provision——
 ;; 由只读 verify 服务保证（fail-closed）。这里直接执行 verify
@@ -221,7 +221,7 @@ $6$salt$faketesthash:!:20682::::::\n"
   (chmod shadow-path #o600)
   (let ((exit (run-in-root %verify-program root)))
     (test-assert "A7 verify fails when shadow lacks user"
-      (not (zero? exit)))))
+                 (not (zero? exit)))))
 
 ;; A8：仓库只有一个 production /etc/shadow writer（静态断言）——
 ;; 排除测试与上游 guix 源码，modules/ 下只有 accounts.scm 写 shadow。
@@ -229,28 +229,28 @@ $6$salt$faketesthash:!:20682::::::\n"
 ;; modules/guixcfg 下只有 accounts.scm 写 shadow（write-shadow 或
 ;; rename 到 /etc/shadow）。
 (test-assert "A8 single production shadow writer"
-  (let* ((base "modules/guixcfg")
-         (subdirs '("security" "system" "services" "boot" "storage" "home"
-                    "users" "utils" "hosts"))
-         (files (append-map
-                 (lambda (sub)
-                   (let ((dir (string-append base "/" sub)))
+             (let* ((base "modules/guixcfg")
+                    (subdirs '("security" "system" "services" "boot" "storage" "home"
+                                          "users" "utils" "hosts"))
+                    (files (append-map
+                            (lambda (sub)
+                              (let ((dir (string-append base "/" sub)))
+                                (filter (lambda (f)
+                                          (and (string-suffix? ".scm" f)
+                                               (not (member f '("." "..")))))
+                                        (map (lambda (f) (string-append dir "/" f))
+                                             (or (scandir dir) '())))))
+                            subdirs))
+                    (writers
                      (filter (lambda (f)
-                               (and (string-suffix? ".scm" f)
-                                    (not (member f '("." "..")))))
-                             (map (lambda (f) (string-append dir "/" f))
-                                  (or (scandir dir) '())))))
-                 subdirs))
-         (writers
-          (filter (lambda (f)
-                    (let ((t (call-with-input-file f
-                                                  (lambda (p) (get-string-all p)))))
-                      (or (string-contains t "write-shadow")
-                          (and (string-contains t "rename-file")
-                               (string-contains t "\"/etc/shadow\"")))))
-                  files)))
-    (and (= 1 (length writers))
-         (string-contains (car writers) "accounts.scm"))))
+                               (let ((t (call-with-input-file f
+                                                              (lambda (p) (get-string-all p)))))
+                                 (or (string-contains t "write-shadow")
+                                     (and (string-contains t "rename-file")
+                                          (string-contains t "\"/etc/shadow\"")))))
+                             files)))
+               (and (= 1 (length writers))
+                    (string-contains (car writers) "accounts.scm"))))
 
 ;; ── persistent-state-ready：真实执行 production start ────────
 ;; 直接执行实际 Shepherd service 的 start gexp（shepherd-service-start），
@@ -306,11 +306,11 @@ $6$salt$faketesthash:!:20682::::::\n"
 
 ;; R1：全部 %persistent-state-paths 存在 → production start 成功。
 (test-equal "R1 production start succeeds with all paths"
-  0 (run-psr %persistent-state-paths))
+            0 (run-psr %persistent-state-paths))
 
 ;; R2：缺一个关键路径 → production start 失败。
 (test-equal "R2 production start fails on missing path"
-  1 (run-psr (cdr %persistent-state-paths)))
+            1 (run-psr (cdr %persistent-state-paths)))
 
 ;; R3：production start 可执行、无 unbound-variable（R1/R2 执行本身即证）。
 
@@ -413,37 +413,37 @@ $6$salt$faketesthash:!:20682::::::\n"
          (all (get-string-all pipe)))
     (close-pipe pipe)
     (test-assert "deploy executes without unbound-variable"
-      (not (string-contains all "Unbound variable")))
+                 (not (string-contains all "Unbound variable")))
     (test-assert "deploy publishes generation and symlink"
-      (let ((d (string-append root "/run/guixcfg-secrets.d")))
-        (and (file-exists? d)
-             (let ((subs (filter (lambda (e)
-                                   (string-match "^[0-9]+$" e))
-                                 (or (scandir d) '()))))
-               (pair? subs)))))
+                 (let ((d (string-append root "/run/guixcfg-secrets.d")))
+                   (and (file-exists? d)
+                        (let ((subs (filter (lambda (e)
+                                              (string-match "^[0-9]+$" e))
+                                            (or (scandir d) '()))))
+                          (pair? subs)))))
     (test-assert "deploy publishes decrypted secret with mode 0400"
-      (let* ((cur (string-append root "/run/guixcfg-secrets"))
-             (resolved (readlink cur))
-             ;; deploy 的 symlink 目标是绝对 /run/guixcfg-secrets.d/<N>；
-             ;; 相对 fake root 即 root + (去前导 / 的目标)。
-             (rel (if (string-prefix? "/" resolved)
-                    (substring resolved 1)
-                    resolved))
-             (secret (string-append root "/" rel "/system/runtime-test")))
-        (and (file-exists? secret)
-             (string-contains (call-with-input-file secret
-                                                    (lambda (p) (get-string-all p)))
-                              "GUIXCFG_RUNTIME_TEST_SECRET"))))
+                 (let* ((cur (string-append root "/run/guixcfg-secrets"))
+                        (resolved (readlink cur))
+                        ;; deploy 的 symlink 目标是绝对 /run/guixcfg-secrets.d/<N>；
+                        ;; 相对 fake root 即 root + (去前导 / 的目标)。
+                        (rel (if (string-prefix? "/" resolved)
+                               (substring resolved 1)
+                               resolved))
+                        (secret (string-append root "/" rel "/system/runtime-test")))
+                   (and (file-exists? secret)
+                        (string-contains (call-with-input-file secret
+                                                               (lambda (p) (get-string-all p)))
+                                         "GUIXCFG_RUNTIME_TEST_SECRET"))))
     (test-assert "deploy sets 0400 mode"
-      (let* ((cur (readlink (string-append root "/run/guixcfg-secrets")))
-             (rel (if (string-prefix? "/" cur)
-                    (substring cur 1)
-                    cur))
-             (secret (string-append root "/" rel "/system/runtime-test")))
-        ;; 常规文件 + 0400：stat:mode = S_IFREG(0100000) | 0400。
-        ;; ownership 在 user namespace 下不可靠（namespace root 映射回宿主
-        ;; uid），这里只断言权限位；属主语义由 production 的 chown 0 0
-        ;; 保证（P1 之外，见 secrets.scm decrypt-into）。
-        (eq? (stat:mode (stat secret)) #o100400)))))
+                 (let* ((cur (readlink (string-append root "/run/guixcfg-secrets")))
+                        (rel (if (string-prefix? "/" cur)
+                               (substring cur 1)
+                               cur))
+                        (secret (string-append root "/" rel "/system/runtime-test")))
+                   ;; 常规文件 + 0400：stat:mode = S_IFREG(0100000) | 0400。
+                   ;; ownership 在 user namespace 下不可靠（namespace root 映射回宿主
+                   ;; uid），这里只断言权限位；属主语义由 production 的 chown 0 0
+                   ;; 保证（P1 之外，见 secrets.scm decrypt-into）。
+                   (eq? (stat:mode (stat secret)) #o100400)))))
 
 (test-end "runtime-exec")

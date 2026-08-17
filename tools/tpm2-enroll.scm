@@ -269,7 +269,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                 (luks-passphrase-valid? passphrase)
                 (error "recovery passphrase cannot unlock LUKS; aborting"))
               (format #t "recovery passphrase verified.~%")
-
+              
               ;; 2. 显示当前 PCR7 并确认（Secure Boot 已启用状态下的机器 policy）
               (let* ((pcr7-hex (tpm2-pcrread! %tcti %tpm2-bin "sha256:7"))
                      (pcr7-file (string-append workdir "/pcr7.bin")))
@@ -286,7 +286,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                        (seal-ctx (string-append workdir "/seal.ctx")))
                   ;; trial PolicyPCR（期望值 = 当前 PCR7）
                   (tpm2-pcrread! %tcti %tpm2-bin "sha256:7" #:out pcr7-file)
-
+                  
                   (tpm2-policy-pcr-digest!
                    %tcti
                    %tpm2-bin
@@ -309,7 +309,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                   (format #t "sealed object created (credential held in memory only)~%")
                   ;; 4. 立即用当前 PCR7 验证 unseal（不通过不继续）。
                   (let ((sess (string-append workdir "/verify.session.ctx")))
-
+                    
                     (tpm2-load-sealed!
                      %tcti
                      %tpm2-bin
@@ -336,7 +336,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                      pw-file
                      (lambda (p) (display passphrase p)))
                     (chmod pw-file 384)
-
+                    
                     (let ((old-slots (or (luks-max-keyslot) -1)))
                       (invoke-with-stdin
                        credential
@@ -491,17 +491,17 @@ thunk。三个来源互斥：'() → 交互读取；--luks-secret → age 解密
 缺失在解析时立即失败，绝不回退交互）；--noninteractive → stdin 直读一行。
 互斥违规/未知 flag 抛错。"
   (match flags
-    (() read-passphrase!)
-    (("--luks-secret")
-     (resolve-luks-passphrase-source 'luks-secret))
-    (("--noninteractive")
-     ;; stdin 直读一行（脚本/自动化注入；无提示、无回显控制）。
-     (lambda () (read-line)))
-    (("--luks-secret" "--noninteractive")
-     (error "credential sources are mutually exclusive; use exactly one of --luks-secret / --noninteractive"))
-    (("--noninteractive" "--luks-secret")
-     (error "credential sources are mutually exclusive; use exactly one of --luks-secret / --noninteractive"))
-    (_ (error "unknown option for enroll/replace" flags))))
+         (() read-passphrase!)
+         (("--luks-secret")
+          (resolve-luks-passphrase-source 'luks-secret))
+         (("--noninteractive")
+          ;; stdin 直读一行（脚本/自动化注入；无提示、无回显控制）。
+          (lambda () (read-line)))
+         (("--luks-secret" "--noninteractive")
+          (error "credential sources are mutually exclusive; use exactly one of --luks-secret / --noninteractive"))
+         (("--noninteractive" "--luks-secret")
+          (error "credential sources are mutually exclusive; use exactly one of --luks-secret / --noninteractive"))
+         (_ (error "unknown option for enroll/replace" flags))))
 
 (define (usage)
   (display "Usage: guix repl tools/tpm2-enroll.scm -- preflight|status\n")
@@ -539,11 +539,11 @@ credential flag、--luks-secret 的 fail-closed 前置）都在此抛错——
         (catch 'misc-error
           (lambda ()
             (let-values (((cmd source) (parse-command (command-line))))
-              (case cmd
-                ((preflight) (preflight))
-                ((status) (status))
-                ((enroll) (do-enroll #:replace? #f #:passphrase-source source))
-                ((replace) (do-replace source)))))
+                        (case cmd
+                          ((preflight) (preflight))
+                          ((status) (status))
+                          ((enroll) (do-enroll #:replace? #f #:passphrase-source source))
+                          ((replace) (do-replace source)))))
           (lambda (key . args)
             ;; error：args = (#f "~A" (MESSAGE . IRRITANTS) #f)
             (format (current-error-port) "error: ~a~%" (car (caddr args)))

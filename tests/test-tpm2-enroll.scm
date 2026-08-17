@@ -96,76 +96,76 @@
      (parameterize ((%runtime-identity-dir no-identity-dir)
                     (%runtime-identity-path
                      (string-append no-identity-dir "/stable-identity")))
-       ;; T7：默认（无 flag）→ interactive reader
-       (test-assert "T7: enroll defaults to interactive source"
-                    (call-with-values
-                        (lambda () (parse-command '("prog" "enroll")))
-                      (lambda (cmd source)
-                        (and (eq? cmd 'enroll)
-                             (eq? source read-passphrase!)))))
-       ;; T8：--luks-secret 无 runtime identity → fail-closed 报错
-       (test-assert "T8: enroll --luks-secret without identity fails closed"
-                    (catch #t
-                      (lambda () (parse-command '("prog" "enroll" "--luks-secret")) #f)
-                      (lambda (k . a)
-                        (and (eq? k 'misc-error)
-                             (string-contains (car (caddr a))
-                                              "no unlocked stable identity")))))
-       ;; T9：--noninteractive → stdin 直读
-       (test-assert "T9: enroll --noninteractive reads one stdin line"
-                    (call-with-values
-                        (lambda ()
-                          (parse-command '("prog" "enroll" "--noninteractive")))
-                      (lambda (cmd source)
-                        (and (eq? cmd 'enroll)
-                             (string=? "pipe-pw"
-                                       (with-input-from-string "pipe-pw\n"
-                                                               source))))))
-       ;; T10：两个来源 flag 互斥
-       (test-assert "T10: --luks-secret and --noninteractive are mutually exclusive"
-                    (catch #t
-                      (lambda ()
-                        (parse-command '("prog" "enroll"
-                                         "--luks-secret" "--noninteractive"))
-                        #f)
-                      (lambda (k . a)
-                        (and (eq? k 'misc-error)
-                             (string-contains (car (caddr a))
-                                              "mutually exclusive")))))
-       ;; T11：replace --luks-secret 同样 fail-closed
-       (test-assert "T11: replace --luks-secret without identity fails closed"
-                    (catch #t
-                      (lambda () (parse-command '("prog" "replace" "--luks-secret")) #f)
-                      (lambda (k . a)
-                        (and (eq? k 'misc-error)
-                             (string-contains (car (caddr a))
-                                              "no unlocked stable identity")))))
-       ;; T12：status 拒绝 credential flag
-       (test-assert "T12: status rejects credential source flags"
-                    (catch #t
-                      (lambda () (parse-command '("prog" "status" "--luks-secret")) #f)
-                      (lambda (k . a)
-                        (and (eq? k 'misc-error)
-                             (string-contains (car (caddr a))
-                                              "does not accept")))))
-       ;; T13：preflight 拒绝 credential flag
-       (test-assert "T13: preflight rejects credential source flags"
-                    (catch #t
-                      (lambda ()
-                        (parse-command '("prog" "preflight" "--noninteractive"))
-                        #f)
-                      (lambda (k . a)
-                        (and (eq? k 'misc-error)
-                             (string-contains (car (caddr a))
-                                              "does not accept")))))
-       ;; T14：未知 flag 报错
-       (test-assert "T14: unknown flag errors"
-                    (catch #t
-                      (lambda () (parse-command '("prog" "enroll" "--bogus")) #f)
-                      (lambda (k . a)
-                        (and (eq? k 'misc-error)
-                             (string-contains (car (caddr a))
-                                              "unknown option")))))))
+                   ;; T7：默认（无 flag）→ interactive reader
+                   (test-assert "T7: enroll defaults to interactive source"
+                                (call-with-values
+                                 (lambda () (parse-command '("prog" "enroll")))
+                                 (lambda (cmd source)
+                                   (and (eq? cmd 'enroll)
+                                        (eq? source read-passphrase!)))))
+                   ;; T8：--luks-secret 无 runtime identity → fail-closed 报错
+                   (test-assert "T8: enroll --luks-secret without identity fails closed"
+                                (catch #t
+                                  (lambda () (parse-command '("prog" "enroll" "--luks-secret")) #f)
+                                  (lambda (k . a)
+                                    (and (eq? k 'misc-error)
+                                         (string-contains (car (caddr a))
+                                                          "no unlocked stable identity")))))
+                   ;; T9：--noninteractive → stdin 直读
+                   (test-assert "T9: enroll --noninteractive reads one stdin line"
+                                (call-with-values
+                                 (lambda ()
+                                   (parse-command '("prog" "enroll" "--noninteractive")))
+                                 (lambda (cmd source)
+                                   (and (eq? cmd 'enroll)
+                                        (string=? "pipe-pw"
+                                                  (with-input-from-string "pipe-pw\n"
+                                                                          source))))))
+                   ;; T10：两个来源 flag 互斥
+                   (test-assert "T10: --luks-secret and --noninteractive are mutually exclusive"
+                                (catch #t
+                                  (lambda ()
+                                    (parse-command '("prog" "enroll"
+                                                            "--luks-secret" "--noninteractive"))
+                                    #f)
+                                  (lambda (k . a)
+                                    (and (eq? k 'misc-error)
+                                         (string-contains (car (caddr a))
+                                                          "mutually exclusive")))))
+                   ;; T11：replace --luks-secret 同样 fail-closed
+                   (test-assert "T11: replace --luks-secret without identity fails closed"
+                                (catch #t
+                                  (lambda () (parse-command '("prog" "replace" "--luks-secret")) #f)
+                                  (lambda (k . a)
+                                    (and (eq? k 'misc-error)
+                                         (string-contains (car (caddr a))
+                                                          "no unlocked stable identity")))))
+                   ;; T12：status 拒绝 credential flag
+                   (test-assert "T12: status rejects credential source flags"
+                                (catch #t
+                                  (lambda () (parse-command '("prog" "status" "--luks-secret")) #f)
+                                  (lambda (k . a)
+                                    (and (eq? k 'misc-error)
+                                         (string-contains (car (caddr a))
+                                                          "does not accept")))))
+                   ;; T13：preflight 拒绝 credential flag
+                   (test-assert "T13: preflight rejects credential source flags"
+                                (catch #t
+                                  (lambda ()
+                                    (parse-command '("prog" "preflight" "--noninteractive"))
+                                    #f)
+                                  (lambda (k . a)
+                                    (and (eq? k 'misc-error)
+                                         (string-contains (car (caddr a))
+                                                          "does not accept")))))
+                   ;; T14：未知 flag 报错
+                   (test-assert "T14: unknown flag errors"
+                                (catch #t
+                                  (lambda () (parse-command '("prog" "enroll" "--bogus")) #f)
+                                  (lambda (k . a)
+                                    (and (eq? k 'misc-error)
+                                         (string-contains (car (caddr a))
+                                                          "unknown option")))))))
    (lambda ()
      (false-if-exception (delete-file-recursively no-identity-dir)))))
 
