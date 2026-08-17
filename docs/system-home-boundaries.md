@@ -172,7 +172,8 @@ persistent-state-ready
 ```text
 account-state-ready
     Guix account topology + persistent login credential projected into
-    ephemeral /etc/{passwd,group,shadow} (password projector succeeded)
+    ephemeral /etc/{passwd,group,shadow} (account databases projection
+    succeeded AND read-only verification of the final shadow passed)
 ```
 
 account 数据库本身的正确性由 activation 阶段的纯 Scheme 投影保证
@@ -182,6 +183,28 @@ account 数据库本身的正确性由 activation 阶段的纯 Scheme 投影保�
 readiness 卡死。因此 boot 时在（guarded 的）上游步骤之后、任何依赖
 getpw 的 activation 之前，用同一批纯 Scheme 函数（user+group-databases
 + write-passwd/group/shadow，无锁——activation 是单进程）重建三个文件。
+
+**单写者模型**：`/etc/{passwd,group,shadow}` 的唯一 authoritative
+writer 是 `account-databases-activation`。interactive 用户（非系统、
+非 root）的登录 credential 在写库前从 persistent verifier
+（`/persist/system/accounts/<user>/password.hash`，root 0600）内联进
+shadow 的 password 字段——不存在第二个独立 writer 覆盖 shadow。
+历史教训：早期独立 password-project writer 在替换 hash 时用
+`(cons hash (cdr fields))` 把 hash 写进了 name 字段（正确应为
+`(cons (car fields) (cons hash (cddr fields)))`），产生
+`$6$…:!:` 坏行、user 名丢失，而结构测试因用 passwd 格式断言而假阳性
+通过——导致 fresh boot 后 shadow 无 user、无法登录。该 writer 已删除。
+
+**fail-closed**：以下任一条件 → projection 抛错中止，不写任何文件，
+account-state-ready 不 provision、interactive-session-ready 不 provision、
+login 不开放：
+- persistent hash 缺失/空/非法形态；
+- 目标 user 不在声明拓扑；
+- 最终 shadow 缺 user、password 字段为空/`!`/与 verifier 不符。
+
+`account-state-ready` 由只读验证服务（guixcfg-account-databases-verify）
+在**验证最终 /etc/shadow**（user 存在、hash == verifier、非 locked）
+后才 provision；该服务绝不写任何文件。
 
 ```text
 interactive-secrets-ready

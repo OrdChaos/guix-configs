@@ -117,6 +117,58 @@ store 中公开模板
 14. 结构性 user profile 与 secrets 是两个概念。
 ```
 
+## 15.0.1 威胁模型（正式）
+
+**保护目标**：攻击者只拿到公开配置仓库时，不能因此得到本机的登录
+密码、stable private identity、或 runtime secrets 明文。
+
+**PUBLIC REPOSITORY 不得包含**：
+
+```text
+- plaintext login password；
+- plaintext stable private identity；
+- 直接暴露的 login verifier/hash（默认原则：hash 即使不是明文，
+  也只允许离线猜测者获得猜测目标，故也不进 public repo）；
+- plaintext runtime secrets。
+```
+
+**明确不防御**：攻击者已取得本机 root 或 LUKS 解锁后的 plaintext
+访问能力（此时 root 能读 password.hash、/etc/shadow、runtime
+secrets 均被接受）。此边界由用户明确设定，不在本模型的防御范围内。
+
+**允许进入 public repo**：recipient（公钥）、`.age` ciphertext、
+passphrase 加密的 stable private identity（见 15.0.1.1 风险记录）。
+
+### 15.0.1.1 stable identity 的长期安全边界（TODO，不擅自迁移）
+
+当前模型：`secrets/bootstrap/stable-identity.age`（passphrase 加密的
+私钥 S）位于 public repo。风险：public repo + encrypted private
+identity 给攻击者一个**离线尝试 master passphrase 的目标**。
+
+推荐长期选择之一（本轮不改变 provisioning architecture，写入 TODO）：
+
+- A：public repo 只含 recipient + ciphertext；private identity 另存
+  密码管理器/离线备份；
+- B：repo 继续包含 passphrase-encrypted private identity，但 master
+  passphrase 必须独立于登录密码、高熵、足以抵抗离线猜测。
+
+当前阶段接受 B（master password 已独立于登录密码），长期按 A 演进。
+
+### 15.0.1.2 未来 password rotation（TODO，不实现半套 CLI）
+
+`configctl passwd`（或等价）的未来语义：
+
+```text
+generate new strong crypt hash
+  → update encrypted provisioning source（user-password.hash.age）
+  → atomically update installed persistent hash
+  → trigger/revalidate account projection
+  → preserve fail-closed semantics
+```
+
+不能长期依赖运行期 `passwd user`（只改 ephemeral /etc/shadow，reboot
+后丢失）。
+
 ## 15.1 仓库布局
 
 ```text
@@ -202,28 +254,39 @@ password。
 `user-account` 的 password 字段恒为 `#f`（guixcfg/users/user.scm）——
 hash 不进 evaluator/store。
 
-**为什么是 boot-time 注入而不是 install-only**（pinned Guix 源码 +
-VM 实测，修正后架构第 5-8 条的决定性实验）：
+**Credential 三层模型**（encrypted provisioning source → persistent
+verifier → runtime account DB projection）：
 
-- `user-account-password` 直接序列化进 activation gexp → 进 store；
-- `passwd->shadow` 复用 `/etc/shadow` 已有条目（reconfigure 不覆盖，
-  VM 实测确认）；
-- 但 ephemeral root 下 `@root-template` 在 commit-root 时固化，而
-  account activation 只在首次 boot 运行——template 的 `/etc/shadow`
-  没有 install 期注入的 hash；每 boot `@root-N = snapshot(template)`
-  → current-shadow 无该条目 → 回退 user-account-password（#f →
-  locked）。实测：password=#f + reconfigure 后 hash 保留（reuse），
-  reboot（ephemeral rebuild）后登录失效。
+```text
+secrets/install/user-password.hash.age（加密 provisioning source）
+    ↓ 安装期 unlock S 解密
+/persist/system/accounts/<user>/password.hash（persistent verifier，
+    root 0600；normal boot 唯一读取的 credential input）
+    ↓ 每 boot 由 account databases projection 内联
+/etc/shadow 中 user 的 password 字段（ephemeral composite DB）
+```
 
-因此 `guixcfg-password-inject`（one-shot，file-systems+user-homes 后、
-login 前）每 boot 把 install secret 的 hash 注入 ephemeral
-`/etc/shadow`（读 shadow、替换该行、0600 原子 rename）。hash 不进
-store/argv/log。
+account databases projection（guixcfg/system/accounts.scm）是
+`/etc/{passwd,group,shadow}` 的**唯一 writer**——interactive 用户的
+credential 在写库前从 persistent verifier 读入并校验（存在、形态合法、
+非 locked），写库后验证最终 shadow（user 存在、hash == verifier、
+非 empty/!/locked）才成功。不存在独立的第二 shadow writer。
 
-密码修改工作流（本轮定义的唯一官方路径）：在可信环境生成新 hash →
-用 S 更新 `user-password.hash.age` → 部署生效（下次 boot 注入）。
-运行期 `passwd` 产生的状态不持久（ephemeral），属 unsupported
-workflow（不要留下两套 authoritative password state）。
+normal boot 不 decrypt age、不读取 stable S 获取登录密码、不访问
+repo ciphertext——只读 `/persist/system/accounts/<user>/password.hash`。
+hash 不进 store/argv/log。
+
+**历史教训**：早期独立 password-project writer 在替换 shadow hash 时
+误用 `(cons hash (cdr fields))`（把 hash 写进 name 字段，正确应为
+`(cons (car fields) (cons hash (cddr fields)))`），产生
+`$6$…:!:` 坏行且 user 名丢失；同时结构测试用 passwd 格式断言 shadow
+而假阳性通过。该 writer 已删除，credential 注入合并进唯一 projection
+writer，测试改为真实执行并验证 shadow 行格式。
+
+密码修改工作流（未来 `configctl passwd` 的规划语义，见 15.10）：在
+可信环境生成新 hash → 更新 `user-password.hash.age` → 重新物化
+persistent verifier → 下次 boot 的 projection 生效。运行期 `passwd`
+只改 ephemeral `/etc/shadow`、reboot 后丢失，属 unsupported workflow。
 
 ### LUKS recovery credential
 
@@ -283,4 +346,15 @@ target 在 tmpfs /run。
 - external encrypted-bootstrap-identity storage；
 - secret rotation UX；
 - Home preview/test tooling；greetd/desktop；
-- hardware-backed identity（仅当未来威胁模型变化）。
+- hardware-backed identity（仅当未来威胁模型变化）；
+- **login-critical vs ordinary secrets 分类（TODO）**：当前
+  `interactive-secrets-ready` 由全部 `%vm-secrets`（含 test/普通应用
+  secret）共同 provision——普通非关键 secret 失败会阻塞 interactive
+  login。未来将 secrets 分为 login-critical 与 ordinary application
+  两类，`interactive-secrets-ready` 只代表前者；
+- **root Last Good / readiness 边界（TODO）**：`ephemeral-root-confirm`
+  在 user-processes 后标记 boot ok / promote Last Good，可能先于真正
+  interactive readiness（no usable login 但 root 被标 Last Good）。
+  未来应与正确的 interactive readiness/health 语义对齐；
+- **stable identity 离线攻击边界（TODO）**：见 15.0.1.1；
+- **password rotation 正式入口（TODO）**：见 15.0.1.2。

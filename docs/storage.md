@@ -264,6 +264,80 @@ Btrfs swapfile 必须满足：
 
 ---
 
+# 16. 持久化核心不变量：single canonical backing
+
+## 16.1 原则
+
+**Persistent mutable state has ONE canonical backing object.**
+
+每一份 mutable persistent data 只在持久层存在一个 canonical backing
+object。正常应用使用路径不应维护第二份 mutable copy；应通过
+**bind mount / symlink / direct reference** 访问同一 backing object。
+
+**禁止**默认采用 boot 时 copy persistent → ephemeral、shutdown 时
+copy ephemeral → persistent 的双副本同步模型（两份可漂移的 mutable
+copy 会在异常时产生不可审计的不一致）。
+
+## 16.2 Exposure primitives 分类
+
+| primitive | 用途 | 说明 |
+|---|---|---|
+| bind mount | 目录型 mutable data（用户目录、standalone file 的容器） | 对应用透明，canonical path 是普通路径，数据仍只有一份 |
+| symlink | 单文件引用（consumer 接受 symlink、不原子替换目标时） | 审计 pathname 即可见 canonical owner |
+| direct reference | consumer 配置直接指向 canonical path（如 sshd HostKey） | 最简，无中间层 |
+| hard link | **不作为 persistence deployment mechanism** | 见 16.3 |
+
+**Hard link 排除理由**：
+
+- persistence 与 ephemeral root 位于不同 Btrfs subvolume；
+- hardlink 不适合作为跨 subvolume deployment contract；
+- 应用常见 atomic replace（write temp → rename）会产生新 inode，
+  破坏 hardlink 关系；
+- 难以从 pathname 审计 canonical ownership。
+
+## 16.3 Projection exceptions（允许 runtime materialization）
+
+以下允许存在 runtime materialization 而不违反 single-backing 原则：
+
+1. `/etc/{passwd,group,shadow}`——composite account database，由
+   generation topology + persistent credential 合成；唯一 writer 是
+   account databases projection（guixcfg/system/accounts.scm）；
+2. `/run/guixcfg-secrets*`——plaintext runtime secret 本身不应
+   persistent；source 是 ciphertext + identity，运行时解密；
+3. Guix/UKI/build artifacts——generated/immutable deployment
+   artifacts；
+4. 必须生成的 cache/index——可重建且 ephemeral，不属于 persistent
+   source。
+
+## 16.4 当前 persistence inventory
+
+| logical state | canonical backing | consumer path | exposure | mutable? | derived? | owner/mode |
+|---|---|---|---|---|---|---|
+| `/gnu/store` | `@persist-gnu-store` | `/gnu/store` | direct（subvol mount） | no（store 不可变） | no | store |
+| `/var/guix` | `@persist-var-guix` | `/var/guix` | direct（subvol mount，安装期不挂） | yes | no | root |
+| user Documents/Projects/等 | `/persist/data-home/user/<d>` | `/home/user/<d>` | directory bind | yes | no | uid 1000 |
+| guix-configs | `/persist/data-home/user/guix-configs` | `/home/user/guix-configs` | directory bind | yes | no | uid 1000 |
+| SSH host keys | `/persist/system/ssh/ssh_host_ed25519_key` | sshd HostKey 直接引用 | direct reference | yes | no | root 0600 |
+| age stable identity | `/persist/system/keys/age/identity` | secrets 解密输入 | direct reference | yes | no | root 0600 |
+| Secure Boot keys | `/persist/system/keys/secure-boot/*` | UKI 签名/enrollment | direct reference | yes | no | root 0400 |
+| TPM state | `/persist/system/tpm2`（若启用） | tpm2-enroll | direct | yes | no | root |
+| password.hash | `/persist/system/accounts/<user>/password.hash` | account projection 输入 | direct reference | yes | no | root 0600 |
+| root-generation state | `/persist/system/root-generations/state.scm` | initrd + confirm/cleanup | direct reference | yes | no | root |
+| application data | `/persist/data-app`（骨架/规划） | 未实现 | — | yes | no | — |
+| runtime secrets | `/run/guixcfg-secrets*` | consumers | projection exception | yes（ephemeral） | decrypt | root/user |
+| Guix Home | `~/.guix-home` + dotfiles | — | symlink-manager（derived） | no | **yes（derived）** | user |
+
+**Guix Home 不属于 persistent mutable data**：`~/.guix-home`、声明式
+dotfiles、`~/.config` 中 Guix Home 生成内容都是 generation/store
+derived artifacts，由官方 guix-home-service-type activate 经
+symlink-manager 恢复；不搬进 `/persist/data-home`。
+
+**未来 app persistence 规则**：每增加一个 app persistence rule 必须
+指定 canonical backing、consumer path、bind/symlink/direct、backup
+class、ownership、lifecycle。
+
+---
+
 # 17. Root generation
 
 ## 17.1 命名
