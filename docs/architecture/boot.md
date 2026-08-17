@@ -116,6 +116,18 @@ luksAddKey 独立 keyslot → 新 keyslot 验证 → 发布 ESP artifact（失�
 回滚 luksKillSlot）→ /persist 副本 + 原子写 state。`replace` 先加新
 keyslot 再发布，绝不先删旧；recovery keyslot 永不触碰。
 
+recovery 密码来源三选一（互斥；`enroll`/`replace` 都支持，
+`status`/`preflight` 拒绝）：
+- 交互读取（默认，tty 关闭回显）；
+- `--luks-secret`：stable S 解密 `secrets/install/luks-recovery.age`
+  （需先 `secrets unlock`；identity 缺失或解密失败立即中止，不静默
+  回退交互；plaintext 不进 argv/env/log/store）；
+- `--noninteractive`：stdin 直读一行。
+
+来源解析统一走 `(guixcfg security credential-source)`——与
+disk-install 的 `apply --luks-secret` 共享同一个 resolver，两个入口
+不允许出现第二份实现（second implementation 一律改为调用它）。
+
 initrd 解锁：cmdline 门控（recovery / guixcfg.tpm-unlock=0）→
 /dev/tpmrm0 → 分区发现 → 挂 ESP → 读 seal 材料 → 确定性 SRK →
 load sealed → policy session → unseal → 管道直连 cryptsetup

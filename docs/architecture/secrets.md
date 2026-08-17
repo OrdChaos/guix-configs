@@ -112,6 +112,23 @@ account databases projection 是 `/etc/{passwd,group,shadow}` 的唯一
 writer（见 `architecture/accounts-sessions.md`）。normal boot 不
 decrypt age、不访问 repo ciphertext。hash 不进 store/argv/log。
 
+## LUKS recovery passphrase 的 install secret 消费（--luks-secret）
+
+`secrets/install/luks-recovery.age`（age-encrypted LUKS recovery
+passphrase）由两个 CLI 入口消费，来源解析统一走
+`(guixcfg security credential-source)`（唯一实现；second
+implementation 一律改为调用它）：
+
+```text
+disk-install apply --luks-secret      → luksFormat/luks-open 的 passphrase
+tpm2-enroll enroll|replace --luks-secret → recovery passphrase 验证与 keyslot 操作
+```
+
+来源三选一且互斥（interactive / --luks-secret / --noninteractive）；
+`--luks-secret` 在 runtime identity 缺失或解密失败时立即中止，绝不
+静默回退交互输入；plaintext 只存在于进程内存与 /run 0600 中转文件，
+不进 argv/env/log/store。`status`/`preflight` 不消费密码。
+
 ## Runtime secrets
 
 - scope 语义：install（仅安装/恢复消费，不 runtime 部署）、system

@@ -53,6 +53,13 @@ GUIX_CONFIG_FACTS=<facts> \
 
 不证明：……不需要，这就是最终证明。
 
+验收标准：fresh install 后的 **core baseline acceptance
+checklist**（root generation state、/run/user/<uid> 生命周期、
+Guix Home links、persistent bind mounts、shadow verifier、
+失败 readiness boot 不 promote Last Good、第二次冷启动复查）
+见 `operations/vm-testing.md`（Fresh install core baseline
+acceptance checklist）。
+
 ## 标准命令
 
 ```bash

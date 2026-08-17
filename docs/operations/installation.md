@@ -154,6 +154,24 @@ guix repl tools/tpm2-enroll.scm -- status
 guix repl tools/tpm2-enroll.scm -- replace     # Secure Boot policy 变化后
 ```
 
+LUKS recovery passphrase 来源三选一（互斥；绝不静默回退）：
+
+```bash
+guix repl tools/tpm2-enroll.scm -- enroll                       # 交互读取
+guix repl tools/tpm2-enroll.scm -- enroll --luks-secret         # age 解密
+guix repl tools/tpm2-enroll.scm -- enroll --noninteractive      # stdin 直读
+```
+
+- `--luks-secret`：与 disk-install 的 apply 同一来源——stable S 解密
+  `secrets/install/luks-recovery.age`（需先 `secrets unlock`；
+  安装流程见 30.2.1）。runtime identity 缺失或解密失败立即中止，
+  不会回退到交互输入；plaintext 不进 argv/env/log/store。
+- `--noninteractive`：从 stdin 直读一行（脚本/自动化注入）。
+- `status` / `preflight` 不接受任何 credential 来源 flag。
+- 来源解析统一走 `(guixcfg security credential-source)`（与
+  disk-install 共享同一 resolver；测试见 tests/test-credential-source.scm、
+  tests/test-tpm2-enroll.scm 的 T7-T14）。
+
 ## 失败/重试边界
 
 - 网络失败（channel fetch / substitute）：直接重跑该步。
