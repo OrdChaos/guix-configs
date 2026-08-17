@@ -78,10 +78,13 @@
   "KEEP 是保留的旧 root generation 数量（host policy）。"
   (program-file
    "ephemeral-root-cleanup"
+   ;; closure seeds 与 runtime use-modules 对应：srfi-1（filter-map）显式
+   ;; 列出，不依赖 guix build utils 传递；ice-9 ftw 为 guile 自带模块。
    (with-imported-modules
     (source-module-closure '((guixcfg storage root-generation)
                              (guix build syscalls)  ; mount、umount
-                             (guix build utils))   ; mkdir-p
+                             (guix build utils)   ; mkdir-p
+                             (srfi srfi-1))      ; filter-map
                            #:select? guixcfg-module-select?)
     #~(begin
        (use-modules (guixcfg storage root-generation)

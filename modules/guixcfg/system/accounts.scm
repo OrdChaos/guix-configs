@@ -64,7 +64,9 @@ needed and the FFI-dependent flock path is bypassed entirely."
   (with-imported-modules (source-module-closure
                           '((gnu build accounts)
                             (gnu system accounts)
-                            (guix build utils)))
+                            (guix build utils)
+                            (srfi srfi-1)       ; delete-duplicates、member、filter
+                            (srfi srfi-11)))    ; let*-values（与 runtime use-modules 一一对应）
                          #~(begin
                             (use-modules (gnu build accounts)     ; user+group-databases、write-*
                                          (gnu system accounts)    ; sexp->user-account、user-account-*

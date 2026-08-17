@@ -96,7 +96,10 @@ docs/secrets.md 第 15.4 节）：
   发布/清理/代际切换全在这里；password projector 不碰它）。"
   (program-file
    "guixcfg-secrets-deploy"
-   (with-imported-modules (source-module-closure '((guix build utils)))
+   ;; closure seeds 与 runtime use-modules 一一对应：srfi-1（filter-map）
+   ;; 显式列出，不依赖 guix build utils 的传递依赖碰巧带入。
+   (with-imported-modules (source-module-closure '((guix build utils)
+                                                   (srfi srfi-1)))
                           #~(begin
                              (use-modules (guix build utils) (ice-9 ftw) (ice-9 regex)
                                           (srfi srfi-1))
@@ -250,7 +253,10 @@ account-state-ready。不调用 age、不读 .age、不访问 stable S、不碰
 原 shadow 条目、不标 ready。"
   (program-file
    "guixcfg-password-project"
-   (with-imported-modules (source-module-closure '((guix build utils)))
+   ;; closure seeds 与 runtime use-modules 一一对应：srfi-13（string-split/
+   ;; string-join/string-trim-right）显式列出，不依赖传递依赖。无 srfi-1。
+   (with-imported-modules (source-module-closure '((guix build utils)
+                                                   (srfi srfi-13)))
                           #~(begin
                              (use-modules (guix build utils) (ice-9 rdelim) (srfi srfi-13)
                                           (ice-9 regex))

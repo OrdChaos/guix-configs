@@ -30,7 +30,8 @@
                          login-gate-pam-service
                          login-gate-services
                          %login-gate-path
-                         %interactive-session-requirements))
+                         %interactive-session-requirements
+                         %persistent-state-paths))
 
 ;; interactive-session-ready 的四个 prerequisite（Section 19）。
 (define %interactive-session-requirements
@@ -43,6 +44,16 @@
 ;;; persistent-state-ready：file-systems 的就绪 + 关键持久路径在位
 ;;; 的语义聚合（不复制 mount 逻辑——只确认 boot-critical persistent
 ;;; substrate 可用）。
+
+;; boot-critical 持久路径（persistent-state-ready 的判定依据）。
+;; 单一来源：Shepherd start thunk 由此展开，execution test 也用它
+;; 构造 fake root——杜绝两套等价逻辑/字符串漂移。展开后 runtime
+;; 只是纯 core `and`/`file-exists?`，无模块依赖。
+(define %persistent-state-paths
+  '("/persist/system"
+    "/persist/data-home"
+    "/var/guix"
+    "/gnu/store"))
 
 (define (persistent-state-ready-service)
   "确认 boot-critical persistent filesystem 已挂载的 one-shot 服务
@@ -58,10 +69,9 @@
 available (provides persistent-state-ready).")
                          (start
                           #~(lambda ()
-                              (and (file-exists? "/persist/system")
-                                   (file-exists? "/persist/data-home")
-                                   (file-exists? "/var/guix")
-                                   (file-exists? "/gnu/store"))))
+                              (and #$@(map (lambda (p)
+                                             #~(file-exists? #$p))
+                                           %persistent-state-paths))))
                          (stop #~(const #f))))))
 
 ;;; ────────────────────────────────────────────────────────────

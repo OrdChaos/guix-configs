@@ -181,7 +181,8 @@
                                     (guix build syscalls)
                                     (guixcfg storage root-generation)
                                     (guixcfg boot tpm-unlock)
-                                    (guixcfg security tpm2 tpm2-tools))
+                                    (guixcfg security tpm2 tpm2-tools)
+                                    (srfi srfi-1))   ; 与 runtime use-modules 对应
                                   #:select? (lambda (name)
                                               (or (guix-module-name? name)
                                                   (eq? (car name) 'guixcfg))))
