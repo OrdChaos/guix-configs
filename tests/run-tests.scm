@@ -3,10 +3,39 @@
 ;;;   guix time-machine -C channels.lock.scm -- repl tests/run-tests.scm
 ;;; 全部通过时退出码为 0，有失败时退出码为 1。
 
-;; guix repl 不提供 -L，这里显式把 modules/ 加入 load path。
+;; guix repl 不提供 -L，这里显式把 modules/ 加入 load path；
+;; 另外把 pinned Nonguix channel 源（store 中的 checkout）加入——
+;; (guixcfg system kernel-platform)（M1）依赖 (nongnu packages linux)
+;; 与 (nongnu system linux-initrd)，guix repl 不会自动带上 channel
+;; 模块路径。
 (add-to-load-path (string-append (getcwd) "/modules"))
 
-(use-modules (srfi srfi-64))
+(use-modules (guix channels)     ; channel-name、channel-commit（解析 lock）
+             (srfi srfi-1)
+             (ice-9 ftw)         ; scandir
+             (srfi srfi-64))
+
+(define %nonguix-store-dir
+  ;; store 中 pinned Nonguix channel 源（channel 内容是内容寻址的：
+  ;; channels.lock.scm 锁定的 commit 对应唯一 store 路径）。缺失时
+  ;; 明确报错（先跑一次 time-machine 下载 channel 源）。
+  (let* ((lock (eval (call-with-input-file "channels.lock.scm" read)
+                     (current-module)))
+         (commit (channel-commit
+                  (find (lambda (ch) (eq? (channel-name ch) 'nonguix))
+                        lock)))
+         ;; store 中 channel 源目录名用 7 字符短 hash。
+         (short (substring commit 0 7))
+         (hits (scandir "/gnu/store"
+                        (lambda (name)
+                          (string-contains name
+                                           (string-append "-nonguix-" short))))))
+    (if (pair? hits)
+      (string-append "/gnu/store/" (car hits))
+      (error "nonguix channel source not in store; run time-machine first"
+             commit))))
+
+(add-to-load-path %nonguix-store-dir)
 
 ;; 必须先设置 runner，再加载测试文件：
 ;; SRFI-64 的计数器都记录在“当前 runner”上。
@@ -62,6 +91,8 @@
                "tests/test-commit-root.scm"
                "tests/test-tpm2-enroll.scm"
                "tests/test-credential-source.scm"
+               "tests/test-kernel-platform.scm"
+               "tests/test-substitutes.scm"
                "tests/test-ui-language.scm"
                "tests/test-ssh.scm"
                "tests/test-user-persistence.scm"

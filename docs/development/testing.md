@@ -74,3 +74,50 @@ GUIX_CONFIG_FACTS=/tmp/facts.scm \
 
 不要把 "gexp successfully builds" 当作 "runtime program definitely
 works"——Level 3 才证明后者。
+
+## Substitute availability 的正确 probe 方式
+
+判断“某个 package 有无 binary substitute”，**必须用
+`guix build --dry-run`**，不要用 raw repl 里的
+`(package-derivation ...)`：
+
+```bash
+guix time-machine -C channels.lock.scm -- build --dry-run \
+  -L modules \
+  --substitute-urls='https://ci.guix.gnu.org https://bordeaux.guix.gnu.org https://substitutes.nonguix.org' \
+  -e '(@ (guixcfg system kernel-platform) %kernel)'
+```
+
+**为什么 raw `(package-derivation %store PKG)` 不安全**（pinned
+Guix 94a84f9 实测，graft A/B probe）：graft 默认开启（`%graft?`）时，
+`package->derivation` 走 `bag-grafts` → 对依赖中带 replacement 的
+包（如 glibc/gcc）收集 grafts → `graft-derivation*` →
+`non-self-references` 查询 PKG output 的 runtime references →
+output 不在 store 时 **`build-derivations` 被真实执行**（
+guix/grafts.scm：guard 捕获 store-protocol-error 后 build）。
+`guix build --dry-run` 安全是因为 CLI 注册了 build-handler
+（`call-with-build-handler`），把 build 请求累积而不执行。
+
+**结论**：raw repl + `package-derivation` 不是 substitute
+availability probe；结构性单测如需避免无意 realize 大包，可在
+明确的测试边界用 `#:graft? #f`（production configuration 保持
+默认 graft 语义）。
+
+## 昂贵构建预检
+
+对于设计上预期由 substitute 提供的昂贵包（Linux kernel、大
+toolchain、WebKit/Chromium 类），如果 dry-run 意外显示
+`will be built locally`，**先停止并诊断**，不要默认让昂贵构建
+完成：
+
+```bash
+# 例：exact selected kernel 的 substitute-aware dry-run
+guix time-machine -C channels.lock.scm -- build --dry-run \
+  -L modules -e '(@ (guixcfg system kernel-platform) %kernel)'
+```
+
+这不是宣称“大包必须有 substitute”；语义是：**预期有 substitute
+却缺失 → 先调查（URL？signing key？current daemon？derivation 被
+修改？官方缓存缺 exact build？）再花昂贵构建时间**。首次迁移/
+fresh install 的 bootstrap 步骤见
+`operations/installation.md`（阶段 4.5）。

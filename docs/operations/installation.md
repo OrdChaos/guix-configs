@@ -60,6 +60,44 @@ guix time-machine -C channels.lock.scm -- \
   guix repl tools/secure-boot-keygen.scm /mnt/persist/system/keys/secure-boot
 ```
 
+## 阶段 4.5：Nonguix substitute bootstrap（首次 transition 必需）
+
+本项目的 runtime kernel 是 Nonguix standard Linux
+（docs/architecture/overview.md（Nonguix integration））。**当前
+LiveCD/旧 daemon 只知道官方 Guix substitute**（bordeaux/ci）——
+不 bootstrap 的话 `system init` 会在本地全量编译 kernel（数十分钟、
+tmpfs 可能不够）。目标 installed 系统的 guix-daemon 配置（
+`guix-service-type` 的 additive extension，
+modules/guixcfg/system/substitutes.scm）**不会 retroactively 改变
+当前已运行的 daemon**，因此首次 transition 必须显式 bootstrap：
+
+```bash
+# 1. 授权官方 Nonguix signing public key（当前 daemon 的 ACL；
+#    key 是公开信任材料，canonical 副本在仓库：
+#    modules/guixcfg/system/nonguix-key.pub）
+sudo guix archive --authorize < modules/guixcfg/system/nonguix-key.pub
+
+# 2. system init 时显式提供 substitute URLs（pinned Nonguix README
+#    的官方 bootstrap 方法；之后 installed daemon 已声明式配置，
+#    不再需要）
+GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
+  guix time-machine -C channels.lock.scm -- system init \
+  --substitute-urls='https://ci.guix.gnu.org https://bordeaux.guix.gnu.org https://substitutes.nonguix.org' \
+  -L modules modules/guixcfg/hosts/vm.scm /mnt
+```
+
+**昂贵构建预检**（development/testing.md）：`system init` 前先对
+exact kernel 做 substitute-aware dry-run——kernel 必须显示为
+download，而不是 will be built：
+
+```bash
+guix time-machine -C channels.lock.scm -- build --dry-run \
+  -L modules -e '(@ (guixcfg system kernel-platform) %kernel)'
+```
+
+如果 exact pinned derivation 没有可用 substitute，**停止并报告**
+（BLOCKED），不要默认开始本地编译。
+
 ## 阶段 5：system init
 
 ```bash

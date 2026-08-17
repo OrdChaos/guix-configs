@@ -4,6 +4,7 @@
 (define-module (guixcfg system common)
                #:use-module (gnu services)         ; service
                #:use-module (gnu services desktop) ; elogind-service-type
+               #:use-module (guixcfg system substitutes) ; nonguix-substitute-service
                #:export (%common-timezone
                          %common-locale
                          %common-services))
@@ -20,5 +21,11 @@
 ;; XDG_RUNTIME_DIR。它是系统层职责——Home/persistence 都不碰 runtime
 ;; 目录。所有 host（VM: sshd+elogind；未来 desktop: greetd+elogind）
 ;; 共享这一层；%base-services 不含 elogind，这里显式补充。
+;;
+;; Nonguix substitute trust（docs/architecture/overview.md（Nonguix
+;; integration））：guix-daemon 的 additive extension——官方 Guix
+;; substitutes 保留，追加 official Nonguix substitute URL + signing
+;; key。所有 host 共享同一 policy（不 per-host 重复）。
 (define %common-services
-  (list (service elogind-service-type)))
+  (list (service elogind-service-type)
+        nonguix-substitute-service))
