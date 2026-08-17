@@ -140,8 +140,7 @@ cd /root
 herd stop cow-store
 umount -R /mnt
 sync
-# 关机（不 reboot、不 first boot——留给用户首启验证）
-/run/current-system/profile/sbin/halt
+reboot
 ```
 
 ## TPM enrollment（Secure Boot 启用后，可选）
