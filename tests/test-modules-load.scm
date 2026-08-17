@@ -38,6 +38,7 @@
     (guixcfg system common)
     (guixcfg system packages)
     (guixcfg system file-systems)
+    (guixcfg system kernel-platform)  ; M1：nonguix linux/firmware/microcode
     (guixcfg hosts vm)
     (guixcfg hosts laptop)))
 

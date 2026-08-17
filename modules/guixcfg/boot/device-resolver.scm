@@ -66,7 +66,7 @@ PARTNAME 猜测（配置与磁盘事实不一致时必须失败）。"
   "返回分区（如 /dev/vda2）所在 disk 名（vda）或 #f。
 分区条目位置随内核版本变化（实测）：
   - 旧内核：/sys/block/<part> 是独立 symlink（realpath 到 .../vda/vda2）
-  - 新内核（linux-libre 7.x）：/sys/block 只列 disk（vda），分区在
+  - 新内核（linux 7.x）：/sys/block 只列 disk（vda），分区在
     /sys/block/<disk>/<part> 与 /sys/class/block/<part>（symlink 到
     ../../devices/.../vda/vda2，dirname 即 disk）
 两个位置都尝试；disk 名取 realpath 的 dirname basename。"

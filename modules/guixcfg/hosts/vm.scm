@@ -11,6 +11,7 @@
                #:use-module ((guixcfg storage policies) #:prefix storage:)
                #:use-module (guixcfg boot initrd)          ; ephemeral-root-initrd
                #:use-module (guixcfg boot uki-bootloader)  ; uki-bootloader
+               #:use-module (guixcfg system kernel-platform) ; %kernel、microcode-ephemeral-initrd（M1）
                #:use-module (guixcfg services ephemeral-root)
                #:use-module (guixcfg system common)
                #:use-module (guixcfg system file-systems)
@@ -110,10 +111,18 @@
    
    (mapped-devices (cryptroot-mapped-devices))
    
+   ;; Kernel platform（M1）：Nonguix standard Linux + linux-firmware +
+   ;; Intel microcode。kernel/firmware/microcode 的唯一权威定义在
+   ;; (guixcfg system kernel-platform)（docs/architecture/boot.md）。
+   (kernel %kernel)
+   (firmware (list %kernel-firmware))
+   
    ;; 无状态根（docs/architecture/storage.md）：initrd 启动时按
    ;; @persist-system/root-generations/state.scm 选择/创建 @root-N，
    ;; 挂到 /selected-root 后由 boot-system bind 成系统根。
-   (initrd ephemeral-root-initrd)
+   ;; microcode-ephemeral-initrd = microcode cpio 拼接 custom initrd
+   ;; （composition，custom initrd 仍是 authoritative payload）。
+   (initrd microcode-ephemeral-initrd)
    (file-systems (append (system-file-systems %ephemeral-root-file-system)
                          ;; selected user persistence（bind mounts，login 前就位）
                          (user-persistence-file-systems

@@ -221,7 +221,7 @@ Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
        (let ((candidate-meta (string-append uki-dir "/candidate.scm")))
          ;; candidate 的 system = 本次部署的 system 目录。从部署 cmdline
          ;; 的 gnu.system= 解析——不能从 kernel 路径 dirname 推断：
-         ;; kernel 是 <hash>-linux-libre-x/bzImage 时 dirname 两次会退到
+         ;; kernel 是 <hash>-linux-<version>/bzImage 时 dirname 两次会退到
          ;; /gnu/store（实测 bug，导致 candidate 永不匹配 → promote 跳过
          ;; → limine 永不出现 Recovery 项）。
          (define (cmdline-system cmdline)

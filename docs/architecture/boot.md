@@ -13,12 +13,42 @@ Limine（EFI/BOOT/BOOTX64.EFI fallback，无启动项也能进菜单）
   ↓
 签名 UKI（ESP/EFI/Guix/{A,B}/*.EFI，efi_chainload）
   ↓
-ephemeral-root-initrd
+microcode cpio + ephemeral-root-initrd（combined-initrd）
   ↓
 LUKS2（TPM PCR7 自动解锁或人工密码）
   ↓
 Btrfs root generation
 ```
+
+## Kernel platform（M1：standard Linux）
+
+kernel/firmware/microcode 的唯一权威定义在
+`(guixcfg system kernel-platform)`（one fact, one authoritative
+definition；VM/laptop 都消费它，host 不得各自定义 kernel）：
+
+- **kernel**：Nonguix standard Linux（`(nongnu packages linux)` 的
+  `linux`，当前 pinned revision 为 7.1 系列），经 channels.lock.scm
+  锁定的 Nonguix revision 提供。Linux-libre 不再被任何 host 选中。
+- **firmware**：`linux-firmware`（完整 generic firmware 集）由
+  `operating-system` 的 `firmware` 字段 declaratively 提供——不经
+  installer 手工复制、不从 /persist 注入、不用 runtime shell hack。
+- **microcode**：Intel microcode（`intel-microcode`；实机为 Intel
+  CPU）。AMD microcode 不混入 common base——host fact 与 common
+  policy 保持区分。
+- **initrd**：`microcode-ephemeral-initrd` = `microcode-initrd`
+  （Nonguix helper）把 microcode cpio 拼接在 `ephemeral-root-initrd`
+  之前（`combined-initrd`，kernel 从单文件加载多个 initrd
+  archive）。**custom initrd 仍是 authoritative payload
+  implementation**——microcode 是围绕它的 composition，不是替换；
+  storage discovery / LUKS / TPM / password fallback / root
+  generation 选择全部保留。
+- **UKI / boot-plan**：消费 selected kernel 的 bzImage 路径
+  （menu-entry-linux），不识别 package 名称、不绑定 Linux-libre。
+  仓库无 graft-kernel（早期修剪）；kernel artifact 直接经
+  menu-entry → boot-plan → ukify。
+
+NVIDIA proprietary driver / Wayland Desktop 属于后续 milestone
+（M2），不进入当前 baseline。
 
 ## 菜单语义（两轴模型）
 

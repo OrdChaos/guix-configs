@@ -75,5 +75,8 @@ lifecycle。
   工作区、后台监控、开机自动 reconfigure、自动删 Flatpak、自动选择
   可破坏磁盘。
 - Desktop / greetd：login gate 从 mingetty 扩展到 greetd。
-- Laptop：host 组装点 + 硬件驱动 + firmware 选择。
+- Laptop：host 组装点 + 硬件驱动（kernel platform 已就位：
+  `(guixcfg system kernel-platform)` 的 standard Linux +
+  linux-firmware + Intel microcode 直接复用；实机 firmware 选择与
+  microcode revision 验收属 laptop phase）。
 - Mihomo / Flatpak 应用管理（docs 已规划，未实现）。
