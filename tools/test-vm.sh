@@ -19,6 +19,13 @@
 #   5. 系统安装：      guix time-machine -C channels.lock.scm -- system init \
 #                        -L modules -e '(@ (guixcfg hosts vm) %os)' /mnt
 #
+# 图形后端：显式 VirGL 3D——-device virtio-vga-gl + -display gtk,gl=on
+# （QEMU virtio-gpu docs / Niri 官方 VM 建议；guest 看到带 3D 加速的
+# virtio-gpu）。virtio-vga-gl 需要宿主 QEMU 带 virglrenderer 构建：
+# 启动前检测（-device help），缺失则明确报错，不静默降级——降级会
+# 掩盖 3D 能力问题。无图形环境（无 DISPLAY/WAYLAND_DISPLAY）退回
+# -nographic + -vga virtio（无 display 后端就没有 GL 上下文）。
+#
 # 数据盘是 virtio（/dev/vda）。注意两点（已查证）：
 # - by-id/virtio-* 链接要求磁盘有非空 serial，所以下面用 -device virtio-blk-pci
 #   显式指定 serial=guix-test-disk，安装器的 by-id 校验才能通过；
@@ -118,9 +125,22 @@ if [ -w /dev/kvm ]; then
     ACCEL=(-enable-kvm -cpu host)
 fi
 
-# 有图形环境用 GTK，否则退回串口终端。
+# ── 图形后端：显式 VirGL 3D ─────────────────────────────────
+# 有图形环境用 gtk,gl=on + virtio-vga-gl（guest 获 VirGL 3D）；
+# 否则退回串口终端（-nographic，-vga virtio 不变）。
+GPU_ARGS=(-vga virtio)
 DISPLAY_ARGS=(-display gtk)
-if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+if [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    if qemu-system-x86_64 -device help 2>/dev/null | grep -qw virtio-vga-gl; then
+        GPU_ARGS=(-device virtio-vga-gl)
+        DISPLAY_ARGS=(-display gtk,gl=on)
+    else
+        echo "host qemu-system-x86_64 has no virtio-vga-gl (built without virglrenderer)" >&2
+        echo "install a virgl-enabled QEMU, e.g. Arch 'qemu-desktop'/'qemu-full'; verify with:" >&2
+        echo "  qemu-system-x86_64 -device help | grep virtio-vga-gl" >&2
+        exit 1
+    fi
+else
     DISPLAY_ARGS=(-nographic)
 fi
 
@@ -158,7 +178,7 @@ EOF
 
 exec qemu-system-x86_64 \
     -machine "$MACHINE" "${ACCEL[@]}" -m 8G -smp 2 \
-    -vga virtio \
+    "${GPU_ARGS[@]}" \
     "${PFLASH_SECURE[@]}" \
     "${FIRMWARE[@]}" \
     "${TPM[@]}" \
