@@ -95,7 +95,23 @@ guix time-machine -C channels.lock.scm -- build --dry-run \
   -L modules -e '(@ (guixcfg system kernel-platform) %kernel)'
 ```
 
-## 阶段 5：system init
+## 阶段 5：安装 stable S 到 persist
+
+**必须先于 system init**：漏装/后装会导致首次启动的 secrets-deploy
+无法解密（boot 后无 runtime identity，只用 installed identity），
+interactive-secrets-ready 失败 → login barrier 卡死 → 无 login
+prompt（已两次实测；secrets-deploy 与 commit-root 都会在缺失时
+给出明确错误，但不要在第一次 boot 才暴露）。
+
+```bash
+install -d -m 700 /mnt/persist/system/keys/age
+install -m 600 /run/guixcfg-age/stable-identity \
+  /mnt/persist/system/keys/age/identity
+```
+
+验证：目录 0700、identity 0600、root。
+
+## 阶段 6：system init
 
 ```bash
 GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
@@ -106,21 +122,6 @@ GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
 
 成功标志：system-1-link、EFI/Guix/A/{CURRENT,RECOVERY}.EFI、
 bootloader installed。有 db.key 则 UKI 已签名。
-
-## 阶段 6：安装 stable S 到 persist
-
-**本阶段不可跳过**：漏装会导致首次启动的 secrets-deploy 无法解密
-（boot 后无 runtime identity，只用 installed identity），
-interactive-secrets-ready 失败 → login barrier 卡死 → 无 login
-prompt（secrets-deploy 现在会在 identity 缺失时给出明确错误）。
-
-```bash
-install -d -m 700 /mnt/persist/system/keys/age
-install -m 600 /run/guixcfg-age/stable-identity \
-  /mnt/persist/system/keys/age/identity
-```
-
-验证：目录 0700、identity 0600、root。
 
 ## 阶段 7：provision 用户密码 hash
 
@@ -139,6 +140,10 @@ GUIXCFG_ACCOUNTS_DIR=/mnt/persist/system/accounts \
 ```bash
 guix repl tools/disk-install.scm -- commit-root /mnt
 ```
+
+兜底：若阶段 5 漏装 identity，commit-root 会从 /run 自动安装
+（stage 5 fallback）；无 runtime identity（未 unlock）则明确报错，
+提示先 secrets unlock。
 
 成功标志：/var/guix adopted、@root-template 只读发布、@root-0
 committed、state = `(boot-status . first-boot)`、UKI 部署 B committed。

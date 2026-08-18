@@ -11,7 +11,8 @@
 ;; guix repl 不提供 -L，这里显式把 modules/ 加入 load path（从仓库根目录运行）。
 (add-to-load-path (string-append (getcwd) "/modules"))
 
-(use-modules (guixcfg security credential-source) ; resolve-luks-passphrase-source
+(use-modules (guix build utils)           ; mkdir-p、copy-file、chmod
+             (guixcfg security credential-source) ; resolve-luks-passphrase-source
              (guixcfg storage model)
              (guixcfg storage policies)
              (guixcfg storage plan)
@@ -81,7 +82,26 @@ stable S，安装过程复用 /run 中的临时 S）；否则交互读取。来�
     (run-install (load-policy host) device
                  #:passphrase-reader reader)))
 
+(define* (ensure-installed-identity! target #:optional (runtime "/run/guixcfg-age/stable-identity"))
+  "安装收尾（阶段 6 兜底）：/persist/system/keys/age/identity 必须就位——
+首次 boot 的 secrets-deploy 用它解密（boot 后无 runtime identity），缺失
+会导致 interactive-secrets-ready 失败、login barrier 卡死。缺失时从
+RUNTIME（同一安装会话 unlock 的 identity）自动安装；无 runtime identity
+则 fail fast（提示先 secrets unlock）。"
+  (let ((installed (string-append target "/persist/system/keys/age/identity")))
+    (unless (file-exists? installed)
+      (if (file-exists? runtime)
+        (begin
+          (mkdir-p (dirname installed))
+          (chmod (dirname installed) #o700)
+          (copy-file runtime installed)
+          (chmod installed #o600)
+          (format #t "installed stable identity to ~a (stage 6 fallback)~%"
+                  installed))
+        (error "installed identity missing and no runtime identity; run 'secrets unlock' first (installation stage 6)")))))
+
 (define (cmd-commit-root target)
+  (ensure-installed-identity! target)
   (commit-root-generation target))
 
 (define (main args)
