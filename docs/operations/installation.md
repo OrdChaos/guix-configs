@@ -75,7 +75,7 @@ modules/guixcfg/system/substitutes.scm）**不会 retroactively 改变
 # 1. 授权官方 Nonguix signing public key（当前 daemon 的 ACL；
 #    key 是公开信任材料，canonical 副本在仓库：
 #    modules/guixcfg/system/nonguix-key.pub）
-sudo guix archive --authorize < modules/guixcfg/system/nonguix-key.pub
+guix archive --authorize < modules/guixcfg/system/nonguix-key.pub
 
 # 2. system init 时显式提供 substitute URLs（pinned Nonguix README
 #    的官方 bootstrap 方法；之后 installed daemon 已声明式配置，
@@ -95,14 +95,12 @@ guix time-machine -C channels.lock.scm -- build --dry-run \
   -L modules -e '(@ (guixcfg system kernel-platform) %kernel)'
 ```
 
-如果 exact pinned derivation 没有可用 substitute，**停止并报告**
-（BLOCKED），不要默认开始本地编译。
-
 ## 阶段 5：system init
 
 ```bash
 GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
   guix time-machine -C channels.lock.scm -- system init \
+  --substitute-urls='https://ci.guix.gnu.org https://bordeaux.guix.gnu.org https://substitutes.nonguix.org' \
   -L modules modules/guixcfg/hosts/vm.scm /mnt
 ```
 
