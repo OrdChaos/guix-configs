@@ -44,8 +44,9 @@ GPT
 - `@root-installing` → 安装期根 → commit 后 rename 为 `@root-0`，
   同时发布只读 `@root-template`。
 - 每次 boot 由 initrd 读 `state.scm`，按 `rootmode=` 参数
-  （normal / keep:N / previous:K / recovery）选择或从模板创建
-  `@root-N`。
+  （normal / recovery）选择或从模板创建 `@root-N`。公开 boot
+  model 只有 Normal / Recovery；历史 @root 不作为菜单项
+  （previous:K / keep:N 选择器已删除，无法识别的值 fail closed）。
 - `@root-template` 只读（ro=true），`@root-N` 可写。
 - 状态文件：`/persist/system/root-generations/state.scm`
   （原子写，含 `.prev` 回退）。

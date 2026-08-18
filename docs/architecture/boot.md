@@ -54,15 +54,21 @@ NVIDIA proprietary driver / Wayland Desktop 属于后续 milestone
 
 ```text
 GNU Guix              当前系统 + 新建 fresh root（normal）
-Previous boots        当前系统 + 历史 root（previous:K，最多 3 项）
-GNU Guix (Recovery)   last-good Guix generation + last-good root
+GNU Guix (Recovery)   previous confirmed root + 与该 root 配对的 system generation（rootmode=recovery）
 ```
 
-两轴（root 轴 = Btrfs generation，Guix 轴 = system generation）
-**正交独立确认**。Recovery 有意组合"旧 Guix generation + 旧 root"，
-但不把这对组合提升为正常启动的稳定状态；Current/Previous 始终用
-当前 Guix generation。**部署成功 ≠ 启动成功**：boot-state 与
-root-state 都只由用户态确认服务更新。
+公开 boot model 只有 **Normal / Recovery** 两个用户可选启动项——
+历史 @root 不再作为 Limine 菜单项（previous:K 菜单与 PREV-K.EFI
+已删除）。两轴（root 轴 = Btrfs generation，Guix 轴 = system
+generation）**正交独立确认**，Recovery 的 root 轴来自 root-state 的
+last-good，Guix 轴来自 boot-state 的 last-good——两者在同一次
+用户态确认中同步写入，构成 previous confirmed boot pair。
+**部署成功 ≠ 启动成功**：boot-state 与 root-state 都只由用户态确认
+服务更新；failed Normal 不得污染 Recovery pair。
+
+磁盘上的旧 @root 仍由清理服务按 retention 策略保留/删除（数据
+恢复与事务安全），但它们不再是 boot choices——retention depth 与
+boot menu depth 解耦。
 
 ## UKI
 
@@ -72,9 +78,9 @@ root-state 都只由用户态确认服务更新。
 - A/B 完整槽：`EFI/Guix/{A,B}/`。每次只重建非活动槽；所有构建、
   签名、落盘完成后先原子更新 Limine fallback，最后以 `limine.conf`
   原子替换为唯一 commit point。掉电最多留下未被菜单引用的新槽。
-- 槽内命名固定（`CURRENT.EFI`、`PREV-K.EFI`、`RECOVERY.EFI`）；
-  历史选择靠 initrd 的 `rootmode=previous:K` 相对选择器，菜单永不
-  因 root 轮转过期。
+- 槽内命名固定（`CURRENT.EFI`、`RECOVERY.EFI`）；Normal 指向
+  CURRENT.EFI（rootmode 缺省 = normal），Recovery 指向稳定路径
+  RECOVERY.EFI（rootmode=recovery，promote 后出现在菜单）。
 - Recovery UKI 的 Guix 轴数据源：`/persist/system/boot-states.scm`
   （保存 last-good generation 及实际 kernel command line，剔除
   `rootmode=`）。

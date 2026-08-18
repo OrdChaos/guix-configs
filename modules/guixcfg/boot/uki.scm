@@ -19,7 +19,6 @@
 
 (define-module (guixcfg boot uki)
                #:use-module (guixcfg boot boot-state)
-               #:use-module (guixcfg storage model)  ; %luks-mapper-name
                #:use-module (rosenthal packages bootloaders)  ; limine、systemd-stub、ukify
                #:use-module (gnu packages efi)   ; sbsigntools
                #:use-module (guix gexp)
@@ -35,6 +34,8 @@
                          ;; 固定位置
                          %secure-boot-keydir
                          %uki-esp-subdir
+                         ;; Limine 配置文本（纯函数，供部署脚本与测试）
+                         limine-config-text
                          ;; 部署脚本生成
                          make-uki-deploy-program))
 
@@ -43,6 +44,33 @@
 
 ;; ESP 上 UKI 的存放子目录。
 (define %uki-esp-subdir "EFI/Guix")
+
+;;; ────────────────────────────────────────────────────────────
+;;; Limine 菜单：公开 boot model 只有两个用户可选启动项——
+;;;   Normal   （GNU Guix，CURRENT.EFI，rootmode 缺省 = normal）
+;;;   Recovery （GNU Guix (Recovery)，RECOVERY.EFI，rootmode=recovery；
+;;;             只有 promote 后（文件就位）才出现在菜单）
+;;; 历史 @root 不作为菜单项（previous:K 菜单与 PREV-K.EFI 已删除）。
+
+(define (limine-config-text target-slot recovery-present?)
+  "生成 Limine 配置文本：Normal（指向 TARGET-SLOT 的 CURRENT.EFI）+
+Recovery（指向稳定路径 RECOVERY.EFI；RECOVERY-PRESENT? 为 #f 时不
+输出）。返回字符串。"
+  (call-with-output-string
+   (lambda (port)
+     (format port "\
+timeout: 3
+
+/GNU Guix
+    protocol: efi_chainload
+    image_path: boot():/EFI/Guix/~a/CURRENT.EFI
+" target-slot)
+     (when recovery-present?
+       (format port "\
+/GNU Guix (Recovery)
+    protocol: efi_chainload
+    image_path: boot():/EFI/Guix/RECOVERY.EFI
+")))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; Boot Plan：一个可启动项的全部输入（框架无关）。
@@ -73,7 +101,6 @@ Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
    (with-imported-modules
     (source-module-closure '((guix build utils)
                              (guix build syscalls)
-                             (guixcfg storage root-generation)
                              (guixcfg utils atomic-file))
                            #:select? (lambda (name)
                                        (or (guix-module-name? name)
@@ -81,10 +108,7 @@ Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
     #~(begin
        (use-modules ((guix build utils) #:hide (delete))
                     (guix build syscalls)
-                    (guixcfg storage root-generation)
-                    (guixcfg storage model)
                     (guixcfg utils atomic-file)
-                    (ice-9 ftw)
                     (ice-9 rdelim)
                     (ice-9 regex)          ; cmdline-system（gnu.system= 解析）
                     (srfi srfi-1)
@@ -144,29 +168,6 @@ Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
        (define target-dir (string-append uki-dir "/" target-slot))
        (define staging-dir (string-append uki-dir "/." target-slot ".new"))
        
-       ;; 历史 root 深度：临时挂 Btrfs 顶层，异常也保证卸载。
-       (define prev-count
-         (let ((state-path (string-append mnt
-                                          "/persist/system/root-generations/state.scm")))
-           (if (not (file-exists? state-path))
-             0
-             (let ((top "/run/guixcfg-deploy-top")
-                   (mounted? #f))
-               (dynamic-wind
-                (lambda ()
-                  (mkdir-p top)
-                  (mount #$(string-append "/dev/mapper/" %luks-mapper-name)
-                         top "btrfs" 0 "subvolid=5")
-                  (set! mounted? #t))
-                (lambda ()
-                  (min 3
-                       (length
-                        (filter-map parse-root-generation
-                                    (or (scandir top) '())))))
-                (lambda ()
-                  (when mounted?
-                    (umount top))))))))
-       
        ;; ── 1. 在非活动 staging 槽中构建完整 UKI 集合 ────────────────
        ;; 任何失败都不会改变当前 limine.conf 指向的活动槽。
        (remove-path! staging-dir)
@@ -203,13 +204,6 @@ Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
        
        (build-uki current-kernel current-initrd current-cmdline
                   "CURRENT.EFI")
-       (for-each
-        (lambda (k)
-          (build-uki current-kernel current-initrd
-                     (string-append current-cmdline
-                                    " rootmode=previous:" (number->string k))
-                     (string-append "PREV-" (number->string k) ".EFI")))
-        (iota prev-count 1))
        ;; Recovery candidate：总是为本次部署的 system 准备（同 CURRENT 的
        ;; kernel/initrd + rootmode=recovery），并记录 system identity。
        ;; candidate 不是正式 Recovery——只有 userspace confirm 验证
@@ -261,31 +255,12 @@ Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
        (define config-new (string-append config-file ".new"))
        (call-with-output-file config-new
                               (lambda (port)
-                                (format port "\
-timeout: 3
-
-/GNU Guix
-    protocol: efi_chainload
-    image_path: boot():/EFI/Guix/~a/CURRENT.EFI
-" target-slot)
-                                (when (> prev-count 0)
-                                  (format port "\n/Previous boots\n")
-                                  (for-each
-                                   (lambda (k)
-                                     (format port "\
-    //Previous boot ~a
-        protocol: efi_chainload
-        image_path: boot():/EFI/Guix/~a/PREV-~a.EFI
-" k target-slot k))
-                                   (iota prev-count 1)))
-                                ;; Recovery 入口指向稳定路径（EFI/Guix/RECOVERY.EFI）；只有
-                                ;; promote 后（文件就位）才出现在菜单（见 (guixcfg boot recovery)）。
-                                (when (file-exists? (string-append uki-dir "/RECOVERY.EFI"))
-                                  (format port "\
-/GNU Guix (Recovery)
-    protocol: efi_chainload
-    image_path: boot():/EFI/Guix/RECOVERY.EFI
-"))
+                                (display
+                                 (limine-config-text
+                                  target-slot
+                                  (file-exists?
+                                   (string-append uki-dir "/RECOVERY.EFI")))
+                                 port)
                                 (fsync port)))
        
        ;; ── 3. 提交 ─────────────────────────────────────────────────
@@ -300,10 +275,7 @@ timeout: 3
        ;; 非活动槽，因此总能留下上一套完整 deployment。
        (define (legacy-flat-uki? name)
          (or (string=? name "CURRENT.EFI")
-             (string=? name "RECOVERY.EFI")
-             (and (string-prefix? "PREV-" name)
-                  (string-suffix? ".EFI" name)
-                  (not (string-contains name "/")))))
+             (string=? name "RECOVERY.EFI")))
        (when (file-exists? deployed-file)
          (let ((old (false-if-exception
                      (call-with-input-file deployed-file read))))

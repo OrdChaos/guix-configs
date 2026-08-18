@@ -4,8 +4,12 @@ LiveCD 救援流程。系统坏了从这里开始。
 
 ## 日常回滚（无需 LiveCD）
 
-- **Last Good / Recovery**：boot 菜单（Limine）选择。任一旧
-  generation 启动都重新经过完整 readiness 链（不绕过 barrier）。
+- **Recovery**：boot 菜单（Limine）选择 `GNU Guix (Recovery)`。
+  恢复 previous confirmed boot pair（last-good root + 与之配对的
+  system generation），重新经过完整 readiness 链（不绕过
+  barrier）。公开 boot model 只有 Normal / Recovery 两项；历史
+  @root 不作为菜单项（磁盘保留由清理服务管理，见
+  docs/architecture/boot.md）。
 - **secrets 恢复**：master password → `tools/secrets.scm unlock` →
   原 ciphertext 无 rekey 即可解密（stable S 模型）。
 - **密码/账户恢复**：provision 新 hash（见安装 阶段 7）或直接编辑

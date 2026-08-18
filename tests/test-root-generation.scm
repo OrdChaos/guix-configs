@@ -28,6 +28,19 @@
                                          (last-good-generation . #f)
                                          (boot-status . first-boot)))))
             
+            ;; T10：旧状态文件里的未知/废弃字段（历史选择器从未写入
+            ;; state 文件，但保持宽容读取）——被忽略，不重新生成旧
+            ;; 菜单语义。
+            (test-equal "unknown legacy fields ignored"
+                        'ok
+                        (root-state-boot-status
+                         (alist->state '((next-generation . 2)
+                                         (current-generation . 1)
+                                         (last-good-generation . 1)
+                                         (boot-status . ok)
+                                         (previous-roots . (0 1))
+                                         (history-index . 1)))))
+            
             (test-error "missing required fields throw" #t
                         (alist->state '((next-generation . 1))))
             
@@ -47,41 +60,19 @@
                         "/btrfs-top/@persist-system/root-generations/state.scm"
                         (state-file-path "/btrfs-top/@persist-system")))
 
-;;; ── 启动模式解析（第 17.6 节）
+;;; ── 启动模式解析（第 17.6 节；公开 boot model 只有 normal/recovery）
 
 (test-group "rootmode= parsing"
             (test-eq "normal" 'normal
                      (boot-mode-kind (parse-boot-mode "normal")))
             (test-eq "recovery" 'recovery
                      (boot-mode-kind (parse-boot-mode "recovery")))
-            (test-eq "keep without number" 'keep
-                     (boot-mode-kind (parse-boot-mode "keep")))
-            (test-assert "generation #f when keep has no number"
-                         (not (boot-mode-generation (parse-boot-mode "keep"))))
-            (test-equal "keep:3" 3
-                        (boot-mode-generation (parse-boot-mode "keep:3")))
             (test-assert "rejects unknown value" (not (parse-boot-mode "bogus")))
-            (test-assert "rejects keep: empty number" (not (parse-boot-mode "keep:")))
-            (test-assert "rejects keep:-1" (not (parse-boot-mode "keep:-1")))
-            (test-eq "previous:1 recognized as previous"
-                     'previous
-                     (boot-mode-kind (parse-boot-mode "previous:1")))
-            (test-equal "previous:2 number"
-                        2 (boot-mode-generation (parse-boot-mode "previous:2")))
-            (test-assert "rejects previous:0" (not (parse-boot-mode "previous:0")))
-            (test-assert "rejects bare previous:" (not (parse-boot-mode "previous:"))))
-
-(test-group "previous-generation (relative selector anchored at latest boot)"
-            (test-equal "K=1 is most recent boot"
-                        4 (previous-generation '(0 1 2 3 4) 1))
-            (test-equal "2nd from newest"
-                        3 (previous-generation '(0 1 2 3 4) 2))
-            (test-equal "3rd from newest"
-                        2 (previous-generation '(0 1 2 3 4) 3))
-            (test-assert "returns #f when fewer than K"
-                         (not (previous-generation '(0 1) 3)))
-            (test-assert "empty list returns #f"
-                         (not (previous-generation '() 1))))
+            ;; 历史选择器已删除（previous:K / keep:N 不再是 boot mode）：
+            ;; 必须 fail closed，绝不静默回退。
+            (test-assert "rejects previous:1" (not (parse-boot-mode "previous:1")))
+            (test-assert "rejects keep" (not (parse-boot-mode "keep")))
+            (test-assert "rejects keep:3" (not (parse-boot-mode "keep:3"))))
 
 ;;; ── 启动决策（第 17.4–17.6 节）
 
@@ -116,31 +107,22 @@
                           (test-equal "created-at records new generation"
                                       3000 (assq-ref (root-state-created-at after) 1))))
             
-            (test-group "Keep mode"
-                        (let ((plan (plan-boot %sample-state (parse-boot-mode "keep") 4000)))
-                          (test-equal "reuses current (@root-2)"
-                                      "@root-2" (boot-plan-target-subvolume plan))
-                          (test-assert "no snapshot created"
-                                       (not (boot-plan-create-from-template? plan))))
-                        (let ((plan (plan-boot %sample-state (parse-boot-mode "keep:1") 4000)))
-                          (test-equal "reuses specified @root-1"
-                                      "@root-1" (boot-plan-target-subvolume plan))
-                          (test-equal "current becomes 1"
-                                      1 (root-state-current-generation
-                                         (boot-plan-state-after plan))))
-                        (test-error "keep without current throws" #t
-                                    (plan-boot (root-state (next-generation 0)
-                                                           (current-generation #f)
-                                                           (last-good-generation #f)
-                                                           (boot-status 'ok))
-                                               (parse-boot-mode "keep") 4000)))
-            
             (test-group "Recovery mode"
                         (let ((plan (plan-boot %sample-state (parse-boot-mode "recovery") 4000)))
                           (test-equal "returns to last-good (@root-1)"
                                       "@root-1" (boot-plan-target-subvolume plan))
                           (test-assert "no snapshot created"
                                        (not (boot-plan-create-from-template? plan))))
+                        ;; T5/T9：Recovery 不创建 root、non-advancing——
+                        ;; next/last-good 都不变。
+                        (let* ((plan (plan-boot %sample-state (parse-boot-mode "recovery") 4000))
+                               (after (boot-plan-state-after plan)))
+                          (test-equal "Recovery does not advance next"
+                                      3 (root-state-next-generation after))
+                          (test-equal "Recovery does not rotate last-good"
+                                      1 (root-state-last-good-generation after))
+                          (test-equal "Recovery reuses previous confirmed root"
+                                      1 (root-state-current-generation after)))
                         (test-error "no last-good throws" #t
                                     (plan-boot %installed (parse-boot-mode "recovery") 4000))))
 

@@ -70,27 +70,15 @@
        (unless (file-exists? state-path)
          (error "root generation state file missing" state-path))
        (let* ((state (read-state state-path))
-              ;; 2. 启动模式：rootmode=normal/keep[:N]/previous:K/recovery
-              (raw-mode (or (and=> (find-long-option "rootmode"
-                                                     (linux-command-line))
-                                   (lambda (s)
-                                     (or (parse-boot-mode s)
-                                         (error "unrecognized rootmode" s))))
-                            %default-boot-mode))
-              ;; previous:K 是运行期相对选择器（历史启动菜单），
-              ;; 从顶层目录的现存 generation 解析成具体编号，
-              ;; 再按 keep:N 走——部署期的菜单因此永不过期。
-              (mode  (if (eq? (boot-mode-kind raw-mode) 'previous)
-                       (boot-mode
-                        (kind 'keep)
-                        (generation
-                         (or (previous-generation
-                              (filter-map parse-root-generation
-                                          (scandir top))
-                              (boot-mode-generation raw-mode))
-                             (error "not enough historical root generations"
-                                    (boot-mode-generation raw-mode)))))
-                       raw-mode))
+              ;; 2. 启动模式：rootmode=normal/recovery（公开 boot model
+              ;; 只有 Normal / Recovery；历史 @root 不作为菜单项，
+              ;; previous:K/keep:N 选择器已删除）。
+              (mode (or (and=> (find-long-option "rootmode"
+                                                 (linux-command-line))
+                               (lambda (s)
+                                 (or (parse-boot-mode s)
+                                     (error "unrecognized rootmode" s))))
+                        %default-boot-mode))
               (plan   (plan-boot state mode (current-time)))
               (target (boot-plan-target-subvolume plan)))
          
@@ -116,8 +104,8 @@
              (rename-file new-path final-path)))
          
          ;; 4. 先把选中子卷挂到 staging——只有目标确实存在且可挂载，
-         ;;    事务才允许继续（比如 rootmode=keep:999 在这里就会失败，
-         ;;    而不会先把 current=999 写进状态再死）。
+         ;;    事务才允许继续（而不是先把 current 写进状态再死；
+         ;;    无法识别的 rootmode= 值在 parse 阶段就 fail closed）。
          (mkdir-p staging)
          (mount mapper staging "btrfs" 0
                 (string-append "subvol=" target))
@@ -196,9 +184,7 @@
                            (guix build syscalls)   ; mount、umount
                            (srfi srfi-1)
                            (srfi srfi-26)
-                           (ice-9 ftw)              ; scandir（previous:K 解析）
                            (guixcfg storage root-generation)
-                           (guixcfg storage model)  ; parse-root-generation
                            (guixcfg boot tpm-unlock)
                            (guixcfg security tpm2 tpm2-tools)
                            #$@(append-map (lambda (md)

@@ -87,6 +87,7 @@
                "tests/test-tpm2-state.scm"
                "tests/test-tpm-unlock.scm"
                "tests/test-recovery.scm"
+               "tests/test-uki-menu.scm"
                "tests/test-device-resolver.scm"
                "tests/test-commit-root.scm"
                "tests/test-tpm2-enroll.scm"

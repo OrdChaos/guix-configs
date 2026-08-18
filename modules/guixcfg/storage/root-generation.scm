@@ -29,10 +29,9 @@
                          ;; 启动模式
                          <boot-mode>
                          boot-mode make-boot-mode boot-mode?
-                         boot-mode-kind boot-mode-generation
+                         boot-mode-kind
                          parse-boot-mode
                          %default-boot-mode
-                         previous-generation
                          ;; 启动决策
                          <boot-plan>
                          boot-plan make-boot-plan boot-plan?
@@ -181,19 +180,18 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
 ;;; ────────────────────────────────────────────────────────────
 ;;; 启动模式（docs/architecture/storage.md）。
 ;;; 通过内核命令行参数 rootmode= 选择，缺省为 normal：
-;;;   rootmode=normal      从模板新建 generation（默认）
-;;;   rootmode=keep        复用 current generation
-;;;   rootmode=keep:3      复用指定的 @root-3
-;;;   rootmode=previous:1  复用“当前往前第 1 个现存 generation”
-;;;                        （历史启动菜单用：启动时解析，不随启动轮次过期）
-;;;   rootmode=recovery    回到 last-good generation
+;;;   rootmode=normal      从模板新建 generation（默认；首次启动用 @root-0）
+;;;   rootmode=recovery    复用 last-good generation（previous confirmed root）
+;;;
+;;; 公开 boot model 只有 Normal / Recovery 两个用户可选启动项——
+;;; 历史 @root 不再作为 Limine 菜单项（previous:K / keep:N 选择器已删除；
+;;; 磁盘上的旧 @root 由清理服务按 retention 策略保留/删除，与菜单解耦）。
+;;; 无法识别的 rootmode 值 fail closed（initrd 报错，绝不静默回退）。
 
 (define-record-type* <boot-mode>
                      boot-mode make-boot-mode
                      boot-mode?
-                     (kind       boot-mode-kind)       ; normal / keep / previous / recovery
-                     (generation boot-mode-generation  ; keep:N / previous:K 时为编号
-                                 (default #f)))
+                     (kind boot-mode-kind))       ; normal / recovery
 
 (define %default-boot-mode (boot-mode (kind 'normal)))
 
@@ -202,29 +200,9 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
   (cond
     ((string=? str "normal")
      (boot-mode (kind 'normal)))
-    ((string=? str "keep")
-     (boot-mode (kind 'keep)))
     ((string=? str "recovery")
      (boot-mode (kind 'recovery)))
-    ((string-prefix? "keep:" str)
-     (let ((n (string->number (string-drop str 5))))
-       (and (integer? n) (>= n 0)
-            (boot-mode (kind 'keep) (generation n)))))
-    ((string-prefix? "previous:" str)
-     (let ((k (string->number (string-drop str 9))))
-       (and (integer? k) (>= k 1)
-            (boot-mode (kind 'previous) (generation k)))))
     (else #f)))
-
-(define (previous-generation existing k)
-  "返回 EXISTING（现存 generation 编号列表）中「从最新往旧数第 K 个」
-（K 从 1 计，含最新——Previous boot 1 即最近一次实际启动；
-正常启动项永远是新建 fresh root，与「复用最近一次」不同）。
-锚定最新编号而不是 current：历史启动菜单的语义因此稳定，
-不随上次启动选择的 root 漂移。"
-  (let ((newest-first (sort existing >)))
-    (and (>= (length newest-first) k)
-         (list-ref newest-first (- k 1)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 启动决策：给定当前状态与启动模式，产出一份“启动计划”。
@@ -260,9 +238,6 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
        (unless last-good
          (error "no recoverable last-good generation"))
        (reuse-plan last-good)))
-    ((keep)
-     (reuse-plan (or (boot-mode-generation mode)
-                     (root-state-current-generation state))))
     ((normal)
      (if (eq? (root-state-boot-status state) 'first-boot)
        ;; 首次启动：直接用安装期建好的 @root-0（第 17.4 节）

@@ -12,9 +12,9 @@
             "recovery"
             (cmdline-option "root=/selected-root rootmode=recovery foo=bar"
                             "rootmode"))
-(test-equal "rootmode=keep:3 recognized"
-            "keep:3"
-            (cmdline-option "rootmode=keep:3" "rootmode"))
+(test-equal "rootmode=normal recognized"
+            "normal"
+            (cmdline-option "rootmode=normal" "rootmode"))
 (test-equal "guixcfg.tpm-unlock=0 recognized"
             "0"
             (cmdline-option "guixcfg.tpm-unlock=0" "guixcfg.tpm-unlock"))
@@ -49,8 +49,8 @@
 (test-assert "guixcfg.tpm-unlock=0 -> gate disables TPM"
              (recovery-cmdline? "guixcfg.tpm-unlock=0"))
 (test-assert "normal boot -> not gated"
-             (not (recovery-cmdline? "root=/selected-root rootmode=keep:3")))
-(test-assert "rootmode=keep (non-recovery) -> not gated"
-             (not (recovery-cmdline? "rootmode=keep")))
+             (not (recovery-cmdline? "root=/selected-root rootmode=normal")))
+(test-assert "rootmode=normal (non-recovery) -> not gated"
+             (not (recovery-cmdline? "rootmode=normal")))
 
 (test-end)
