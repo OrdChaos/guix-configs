@@ -21,7 +21,8 @@
                #:use-module (gnu packages glib)       ; dbus（dbus-run-session）
                #:use-module (gnu packages window-management) ; niri
                #:use-module (guix gexp)
-               #:export (niri-wayland-session
+               #:export (session-path-helpers
+                         niri-wayland-session
                          desktop-services))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -36,15 +37,54 @@
 ;;;     base/Home profile——§35 B 排除）；
 ;;;   - XDG_RUNTIME_DIR 由 elogind（PAM）建立，缺失即 fail fast。
 
+(define session-path-helpers
+  ;; graphical session PATH 构造 helper（单一 gexp——launcher 注入，
+  ;; 测试执行同一 runtime code path）。纯 Guile core（不引入 SRFI
+  ;; runtime 依赖：login-critical bootstrap 的 runtime bindings 与
+  ;; imports 必须一致）。
+  #~(begin
+      ;; 顺序去重（语义同 SRFI-1 delete-duplicates：保留首次出现）。
+      (define (dedupe lst)
+        (let loop ((lst lst) (seen '()) (out '()))
+          (if (null? lst)
+            (reverse out)
+            (if (member (car lst) seen)
+              (loop (cdr lst) seen out)
+              (loop (cdr lst) (cons (car lst) seen)
+                    (cons (car lst) out))))))
+      ;; 按 : 拆分（跳过空段——PATH 空段等价当前目录，不安全）。
+      (define (split-colon s)
+        (let loop ((i 0) (start 0) (out '()))
+          (cond
+           ((>= i (string-length s))
+            (reverse (if (< start (string-length s))
+                       (cons (substring s start) out)
+                       out)))
+           ((char=? (string-ref s i) #\:)
+            (loop (+ i 1) (+ i 1)
+                  (if (> i start)
+                    (cons (substring s start i) out)
+                    out)))
+           (else (loop (+ i 1) start out)))))
+      ;; 拼接（空列表 → 空串）。
+      (define (join-colon lst)
+        (let loop ((lst lst) (acc ""))
+          (if (null? lst)
+            acc
+            (loop (cdr lst)
+                  (if (string=? acc "")
+                    (car lst)
+                    (string-append acc ":" (car lst)))))))))
+
 (define niri-wayland-session
   (program-file
    "niri-wayland-session"
    #~(begin
+       #$session-path-helpers
        ;; 1. session-wide PATH：Home profile 在前（用户程序优先）、
        ;;    system profile 次之、继承 PATH 保留（PAM/安全根）。
-       ;;    纯 Guile core 构造（string-append/string=?）——不做去重
-       ;;    （PATH 重复无害），login-critical bootstrap 不引入 SRFI
-       ;;    runtime 依赖（runtime bindings 与 imports 必须一致）。
+       ;;    顺序去重（dedupe）——重复无害但保持 PATH 干净；全部
+       ;;    纯 Guile core（runtime bindings 与 imports 一致）。
        (let* ((home (or (getenv "HOME")
                         (and=> (false-if-exception (getpwuid (getuid)))
                                passwd:dir)))
@@ -52,11 +92,10 @@
               (system-profile "/run/current-system/profile/bin")
               (inherited (or (getenv "PATH") "")))
          (setenv "PATH"
-                 (string-append
-                  home-profile ":" system-profile
-                  (if (string=? inherited "")
-                    ""
-                    (string-append ":" inherited)))))
+                 (join-colon
+                  (dedupe
+                   (append (list home-profile system-profile)
+                           (split-colon inherited))))))
        ;; 2. elogind 的 PAM 必须已建立 session runtime 目录（非空）。
        (unless (and (getenv "XDG_RUNTIME_DIR")
                     (not (string=? (getenv "XDG_RUNTIME_DIR") "")))

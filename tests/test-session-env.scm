@@ -185,6 +185,52 @@ gexp-input 包装，先解包。"
                 (lambda ()
                   (false-if-exception (delete-file-recursively tmp))))))
 
+;; ── PATH helpers：去重行为（执行同一 session-path-helpers gexp）─
+(test-assert "PATH helpers: dedupe keeps order and first occurrence"
+             (let* ((drv (run-with-store
+                           %store
+                           (gexp->script
+                            "session-path-test"
+                            #~(begin
+                                #$session-path-helpers
+                                (display
+                                 (join-colon
+                                  (dedupe
+                                   (list "/a/bin" "/b/bin" "/a/bin"
+                                         "/c/bin" "/b/bin"))))))))
+                    (path (begin
+                            (build-derivations %store (list drv))
+                            (derivation->output-path drv)))
+                    (run (begin
+                           ;; gexp->script 输出已可执行（#o555）
+                           (let ((pipe (open-pipe* OPEN_READ path)))
+                             (let ((s (get-string-all pipe)))
+                               (close-pipe pipe)
+                               s)))))
+               (string=? run "/a/bin:/b/bin:/c/bin")))
+
+(test-assert "PATH helpers: split skips empty segments"
+             (let* ((drv (run-with-store
+                           %store
+                           (gexp->script
+                            "session-path-test2"
+                            #~(begin
+                                #$session-path-helpers
+                                (display
+                                 (join-colon
+                                  (dedupe
+                                   (split-colon "/a/bin::/b/bin:"))))))))
+                    (path (begin
+                            (build-derivations %store (list drv))
+                            (derivation->output-path drv)))
+                    (run (begin
+                           ;; gexp->script 输出已可执行（#o555）
+                           (let ((pipe (open-pipe* OPEN_READ path)))
+                             (let ((s (get-string-all pipe)))
+                               (close-pipe pipe)
+                               s)))))
+               (string=? run "/a/bin:/b/bin")))
+
 ;; ── RUNTIME：真实执行 generated launcher（§7/8）────────────
 ;; materialize launcher → 无 XDG_RUNTIME_DIR 执行：launcher 在 execl
 ;; 前 error（"XDG_RUNTIME_DIR unset"）——generated runtime 的 PATH
