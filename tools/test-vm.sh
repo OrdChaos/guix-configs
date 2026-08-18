@@ -54,8 +54,8 @@ fi
 
 mkdir -p vms
 if [ ! -f "$IMG" ]; then
-    echo "Creating blank data disk $IMG (25G)"
-    qemu-img create -f qcow2 "$IMG" 25G
+    echo "Creating blank data disk $IMG (100G)"
+    qemu-img create -f qcow2 "$IMG" 100G
 fi
 
 # ── OVMF 固件 ──────────────────────────────────────────────
