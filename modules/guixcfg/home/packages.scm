@@ -13,7 +13,7 @@
                #:use-module (gnu packages freedesktop) ; wl-clipboard
                #:use-module (gnu packages less)    ; less
                #:use-module (gnu packages linux)   ; pipewire、wireplumber
-               #:use-module (gnu packages polkit)  ; polkit-gnome
+               #:use-module (gnu packages lxde)     ; lxsession（lxpolkit）
                #:use-module (gnu packages terminals) ; foot
                #:use-module (gnu packages version-control) ; git
                #:use-module (gnu packages rust-apps) ; fd、ripgrep
@@ -29,6 +29,6 @@
    (list git ripgrep fd tree jq curl wget unzip zip less file
          ;; M2 Wayland desktop 用户会话（GPU-neutral；docs/architecture/
          ;; graphics.md）
-         foot fuzzel mako polkit-gnome
+         foot fuzzel mako lxsession   ; lxpolkit（graphical polkit agent，binary 在 bin/）
          pipewire wireplumber
          xwayland-satellite wl-clipboard)))

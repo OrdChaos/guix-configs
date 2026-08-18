@@ -14,7 +14,7 @@ input {
 
 // 会话服务（单实例 owner = niri session；退出随 session 结束清理）
 spawn-at-startup "mako"                 // notification daemon
-spawn-at-startup "polkit-gnome-authentication-agent-1"  // graphical polkit agent
+spawn-at-startup "lxpolkit"  // graphical polkit agent (lxsession)
 spawn-at-startup "pipewire"             // audio/video
 spawn-at-startup "wireplumber"          // session policy
 

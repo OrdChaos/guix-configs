@@ -26,17 +26,47 @@
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; niri Wayland session（greetd 认证后以用户身份运行）。
+;;;
+;;; 这是 graphical session 环境的【唯一权威构造点】：
+;;;   - PATH = Guix Home profile（用户命令命名空间）+ system profile
+;;;     （系统命令）+ 继承的 PAM/安全 PATH（保留）；不依赖任何 shell
+;;;     rc / .profile（greetd 的 session 不经过 login shell——§5 实证）；
+;;;   - dbus-run-session 与 dbus-daemon 是 bootstrap 基础设施：显式
+;;;     store 引用（§2.1），dbus-daemon 不作为 PATH 成员（dbus 不在
+;;;     base/Home profile——§35 B 排除）；
+;;;   - XDG_RUNTIME_DIR 由 elogind（PAM）建立，缺失即 fail fast。
 
 (define niri-wayland-session
   (program-file
    "niri-wayland-session"
    #~(begin
-       ;; 单一 user D-Bus session（dbus-run-session 设置并清理
-       ;; DBUS_SESSION_BUS_ADDRESS——不写死静态路径、不重复启动
-       ;; session bus）；随后 exec niri --session（niri 26 的官方
-       ;; 非 systemd 入口，pinned guix 的 .desktop Exec 同款）。
+       (use-modules (ice-9 match))
+       ;; 1. session-wide PATH：Home profile 在前（用户程序优先）、
+       ;;    system profile 次之、继承 PATH 保留（PAM/安全根）。
+       (let* ((home (or (getenv "HOME")
+                        (and=> (false-if-exception (getpwuid (getuid)))
+                               passwd:dir)))
+              (home-profile (string-append home "/.guix-home/profile/bin"))
+              (system-profile "/run/current-system/profile/bin")
+              (inherited (or (getenv "PATH") "")))
+         (setenv "PATH"
+                 (string-join
+                  (delete-duplicates
+                   (append (list home-profile system-profile)
+                           (if (string-null? inherited)
+                             '()
+                             (string-split inherited #\:))))
+                  ":")))
+       ;; 2. elogind 的 PAM 必须已建立 session runtime 目录。
+       (unless (getenv "XDG_RUNTIME_DIR")
+         (error "XDG_RUNTIME_DIR unset: elogind session not established"))
+       ;; 3. 单一 user D-Bus session；dbus-daemon 显式 store 引用
+       ;;    （bootstrap 依赖，不属于 PATH 命名空间——避免
+       ;;    "dbus-daemon: No such file or directory" 类解析失败）。
        (execl #$(file-append dbus "/bin/dbus-run-session")
               "dbus-run-session"
+              (string-append "--dbus-daemon="
+                             #$(file-append dbus "/bin/dbus-daemon"))
               "--" #$(file-append niri "/bin/niri") "--session"))))
 
 ;;; ────────────────────────────────────────────────────────────
