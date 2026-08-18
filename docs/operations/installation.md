@@ -111,6 +111,11 @@ bootloader installed。有 db.key 则 UKI 已签名。
 
 ## 阶段 6：安装 stable S 到 persist
 
+**本阶段不可跳过**：漏装会导致首次启动的 secrets-deploy 无法解密
+（boot 后无 runtime identity，只用 installed identity），
+interactive-secrets-ready 失败 → login barrier 卡死 → 无 login
+prompt（secrets-deploy 现在会在 identity 缺失时给出明确错误）。
+
 ```bash
 install -d -m 700 /mnt/persist/system/keys/age
 install -m 600 /run/guixcfg-age/stable-identity \

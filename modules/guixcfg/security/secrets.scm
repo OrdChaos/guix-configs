@@ -107,6 +107,13 @@ docs/architecture/secrets.md（Runtime secrets））：
                              (define identity "/persist/system/keys/age/identity")
                              (define store-dir "/run/guixcfg-secrets.d")
                              (define current-link #$%secrets-runtime-root)
+                             ;; 预检：identity 缺失（如 fresh install 漏装阶段 6）
+                             ;; 会让所有 decrypt 失败、interactive-secrets-ready
+                             ;; 卡死 login barrier——这里先给出明确错误。
+                             (unless (file-exists? identity)
+                               (error "secrets-deploy: age identity missing; \
+install stable identity to /persist/system/keys/age/identity (installation \
+stage 6)"))
                              
                              (define (decrypt-into cipher out-path uid gid mode)
                                ;; 输出先到同目录 .new（0600）再原子 rename——age 失败不写

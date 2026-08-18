@@ -454,4 +454,25 @@ $6$salt$faketesthash:!:20682::::::\n"
                    ;; 保证（P1 之外，见 secrets.scm decrypt-into）。
                    (eq? (stat:mode (stat secret)) #o100400)))))
 
+;; identity 缺失（fresh install 漏装阶段 6 的场景）：deploy 必须给出
+;; 清晰错误（含 "identity missing"），而不是模糊失败后卡死
+;; interactive-secrets-ready → login barrier。
+(let* ((root (make-fake-root
+              "root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:u:/home/user:/bin/bash\n"
+              #f))
+       (run-dir (string-append root "/run")))
+  (mkdir run-dir)
+  (chmod run-dir #o755)
+  (let* ((script (string-append
+                  "unshare --user --map-root-user --map-users=auto "
+                  "--map-groups=auto --mount --pid --fork sh -c '"
+                  "mount --bind /gnu/store " root "/gnu/store; "
+                  "chroot " root " " %guile " --no-auto-compile " %deploy-with-secret
+                  " 2>&1'"))
+         (pipe (open-input-pipe script))
+         (all (get-string-all pipe)))
+    (close-pipe pipe)
+    (test-assert "deploy without identity fails with clear error"
+                 (string-contains all "identity missing"))))
+
 (test-end "runtime-exec")
