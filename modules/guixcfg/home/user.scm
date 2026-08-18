@@ -13,7 +13,11 @@
                #:use-module (gnu home)
                #:use-module (gnu home services)
                #:use-module (gnu home services shells)  ; home-bash-service-type
+               #:use-module (gnu home services desktop) ; home-dbus-service-type
+               #:use-module (gnu home services niri)    ; home-niri-service-type
+               #:use-module (gnu home services sound)   ; home-pipewire-service-type
                #:use-module (guix gexp)
+               #:use-module (guix records)
                #:use-module (guixcfg home packages)
                #:export (%guix-home))
 
@@ -35,12 +39,22 @@
               `((".gitconfig"
                  ,(plain-file
                    "gitconfig"
-                   "[init]\n\tdefaultBranch = main\n"))
-                ;; M2：niri 配置（declarative derived state——
-                ;; ~/.config/niri/config.kdl 由 Home 生成，每次 fresh
-                ;; root/Home activation 恢复，不持久化、app 不是第二
-                ;; authority；docs/architecture/graphics.md）。
-                (".config/niri/config.kdl"
+                   "[init]\n\tdefaultBranch = main\n"))))
+     ;; M2：官方 Home 用户桌面生命周期（docs/architecture/
+     ;; upstream-boundaries.md——capability owner 回归 pinned Guix）：
+     ;;   单 user session D-Bus（home-dbus-service-type）
+     ;;   niri 用户生命周期（home-niri-service-type：bash -l -c
+     ;;     "exec niri --session"；profile 自动贡献 dbus/niri/
+     ;;     xdg-desktop-portal-* / xwayland-satellite；requirement dbus）
+     ;;   PipeWire + WirePlumber（home-pipewire-service-type）
+     (service home-dbus-service-type)
+     (service home-niri-service-type)
+     (service home-pipewire-service-type)
+     ;; niri 配置：XDG 官方 mechanism（home-xdg-configuration-files-
+     ;; service-type——声明式 derived state，每次 fresh root/Home
+     ;; activation 恢复；不持久化、app 不是第二 authority）。
+     (service home-xdg-configuration-files-service-type
+              `(("niri/config.kdl"
                  ,(local-file "../../../files/niri/config.kdl"
                               "niri-config.kdl"))))))))
 

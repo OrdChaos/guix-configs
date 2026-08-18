@@ -29,6 +29,10 @@
    (list git ripgrep fd tree jq curl wget unzip zip less file
          ;; M2 Wayland desktop 用户会话（GPU-neutral；docs/architecture/
          ;; graphics.md）
-         foot fuzzel mako lxsession   ; lxpolkit（graphical polkit agent，binary 在 bin/）
-         pipewire wireplumber
-         xwayland-satellite wl-clipboard)))
+         ;; M2 用户会话包：foot/fuzzel/mako/lxpolkit 是 graphical user
+         ;; namespace（经 Home profile PATH 暴露）；niri/pipewire/
+         ;; wireplumber/xwayland-satellite/dbus/portals 由官方 Home
+         ;; services 自动贡献（home-niri/home-pipewire/home-dbus——
+         ;; package ownership follows service ownership）。
+         foot fuzzel mako lxsession   ; lxpolkit（graphical polkit agent）
+         wl-clipboard)))
