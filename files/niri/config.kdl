@@ -1,3 +1,25 @@
-// niri 配置（阶段 7 填充）。
-// 修改流程：configctl home build → git commit → configctl home switch
-// 见 docs/system.md 第 27 章。
+// niri 配置（M2 最小 substrate；docs/architecture/graphics.md）。
+// GPU-neutral：不写 DRM 节点、不写死 output 名（niri 自动探测；
+// host-specific 显示设置未来通过 host-specific Home overlay 表达）。
+// 会话内长期进程的单一 owner 是 niri session（spawn-at-startup）——
+// 不在 Home Shepherd / 系统 shepherd / wrapper 重复启动。
+
+input {
+    keyboard {
+        xkb {
+            layout "us"
+        }
+    }
+}
+
+// 会话服务（单实例 owner = niri session；退出随 session 结束清理）
+spawn-at-startup "mako"                 // notification daemon
+spawn-at-startup "polkit-gnome-authentication-agent-1"  // graphical polkit agent
+spawn-at-startup "pipewire"             // audio/video
+spawn-at-startup "wireplumber"          // session policy
+
+binds {
+    Mod+Return { spawn "foot"; }        // terminal
+    Mod+D { spawn "fuzzel"; }           // launcher
+    Mod+Shift+E { quit; }               // logout -> greetd
+}

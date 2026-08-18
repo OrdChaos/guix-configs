@@ -12,6 +12,7 @@
                #:use-module (guixcfg boot initrd)          ; ephemeral-root-initrd
                #:use-module (guixcfg boot uki-bootloader)  ; uki-bootloader
                #:use-module (guixcfg system kernel-platform) ; %kernel、microcode-ephemeral-initrd（M1）
+               #:use-module (guixcfg system desktop) ; desktop-services（M2 greetd/niri）
                #:use-module (guixcfg services ephemeral-root)
                #:use-module (guixcfg system common)
                #:use-module (guixcfg system file-systems)
@@ -25,6 +26,7 @@
                #:use-module (guixcfg security secrets)  ; runtime secrets 部署
                #:use-module (gnu services guix)        ; guix-home-service-type
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
+               #:use-module (srfi srfi-1)              ; remove
                #:export (%vm-storage-policy %vm-services %os))
 
 ;; 保留 host 模块原有导出名；实际 policy 放在纯存储模块中，避免早期
@@ -55,13 +57,27 @@
    ;; interactive-session-ready 已过——mingetty 延迟到 barrier 之后；
    ;; PAM gate 是 correctness fallback（新增 frontend 漏加
    ;; requirement 也绕不过 readiness policy）。
-   (modify-services %base-services
-                    (mingetty-service-type config =>
-                                           (mingetty-configuration
-                                            (inherit config)
-                                            (shepherd-requirement
-                                             (append (mingetty-configuration-shepherd-requirement config)
-                                                     '(interactive-session-ready))))))))
+   ;; M2：tty1 归 greetd（desktop-services）；其余 mingetty（tty2-6）
+   ;; 是普通 tty fallback（desktop 故障仍可登录；两者都 gated by
+   ;; interactive-session-ready）。tty1 的 mingetty 从 %base-services
+   ;; 移除（与 greetd 冲突）。
+   (let* ((gated (modify-services %base-services
+                                  (mingetty-service-type config =>
+                                                         (mingetty-configuration
+                                                          (inherit config)
+                                                          (shepherd-requirement
+                                                           (append (mingetty-configuration-shepherd-requirement config)
+                                                                   '(interactive-session-ready)))))))
+          (no-tty1 (remove (lambda (svc)
+                             (and (eq? (service-kind svc) mingetty-service-type)
+                                  (string=? (mingetty-configuration-tty
+                                             (service-value svc))
+                                            "tty1")))
+                           gated)))
+     (append no-tty1
+             ;; M2 Wayland desktop：greetd（tty1，gated）+ niri session
+             ;; （docs/architecture/graphics.md）。
+             desktop-services))))
 
 ;; 完整 user services（不含 account-databases 投影本身）。OS 的全部
 ;; 业务服务都在这一个列表里——用于 (a) 折叠完整 account 列表，

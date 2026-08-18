@@ -94,6 +94,7 @@
                "tests/test-credential-source.scm"
                "tests/test-kernel-platform.scm"
                "tests/test-substitutes.scm"
+               "tests/test-desktop.scm"
                "tests/test-ui-language.scm"
                "tests/test-ssh.scm"
                "tests/test-user-persistence.scm"

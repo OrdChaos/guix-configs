@@ -35,7 +35,14 @@
               `((".gitconfig"
                  ,(plain-file
                    "gitconfig"
-                   "[init]\n\tdefaultBranch = main\n"))))))))
+                   "[init]\n\tdefaultBranch = main\n"))
+                ;; M2：niri 配置（declarative derived state——
+                ;; ~/.config/niri/config.kdl 由 Home 生成，每次 fresh
+                ;; root/Home activation 恢复，不持久化、app 不是第二
+                ;; authority；docs/architecture/graphics.md）。
+                (".config/niri/config.kdl"
+                 ,(local-file "../../../files/niri/config.kdl"
+                              "niri-config.kdl"))))))))
 
 ;; 末尾裸表达式：guix home 的入口文件约定（取最后一个表达式）。
 %guix-home
