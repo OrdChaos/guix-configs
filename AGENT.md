@@ -73,6 +73,11 @@
   runtime identity 则 fail-fast。
 - 安装时 LUKS passphrase 经 `--luks-secret`（age 解密 luks-recovery.age，
   注意 decrypt 命令保留尾换行，cryptsetup 需要去换行）。
+- **无人值守安装必须包含 Secure Boot 固件注册（阶段 9）**：keygen
+  之后、关机之前，构建 keystore + sbkeysync 写固件（db/KEK 先，PK
+  最后——写 PK 才退出 Setup Mode）。漏做则重启后固件仍在 Setup
+  Mode，PCR7 enrollment preflight 失败（已实测一次；enroll 是
+  单向的，VM 重置需重建 OVMF VARS 文件）。
 
 ## 6. Prior-art 强制审计（新增 infrastructure 前）
 
