@@ -40,9 +40,11 @@
   (program-file
    "niri-wayland-session"
    #~(begin
-       (use-modules (ice-9 match))
        ;; 1. session-wide PATH：Home profile 在前（用户程序优先）、
        ;;    system profile 次之、继承 PATH 保留（PAM/安全根）。
+       ;;    纯 Guile core 构造（string-append/string=?）——不做去重
+       ;;    （PATH 重复无害），login-critical bootstrap 不引入 SRFI
+       ;;    runtime 依赖（runtime bindings 与 imports 必须一致）。
        (let* ((home (or (getenv "HOME")
                         (and=> (false-if-exception (getpwuid (getuid)))
                                passwd:dir)))
@@ -50,15 +52,14 @@
               (system-profile "/run/current-system/profile/bin")
               (inherited (or (getenv "PATH") "")))
          (setenv "PATH"
-                 (string-join
-                  (delete-duplicates
-                   (append (list home-profile system-profile)
-                           (if (string-null? inherited)
-                             '()
-                             (string-split inherited #\:))))
-                  ":")))
-       ;; 2. elogind 的 PAM 必须已建立 session runtime 目录。
-       (unless (getenv "XDG_RUNTIME_DIR")
+                 (string-append
+                  home-profile ":" system-profile
+                  (if (string=? inherited "")
+                    ""
+                    (string-append ":" inherited)))))
+       ;; 2. elogind 的 PAM 必须已建立 session runtime 目录（非空）。
+       (unless (and (getenv "XDG_RUNTIME_DIR")
+                    (not (string=? (getenv "XDG_RUNTIME_DIR") "")))
          (error "XDG_RUNTIME_DIR unset: elogind session not established"))
        ;; 3. 单一 user D-Bus session；dbus-daemon 显式 store 引用
        ;;    （bootstrap 依赖，不属于 PATH 命名空间——避免

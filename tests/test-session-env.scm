@@ -33,7 +33,8 @@
              (gnu packages window-management) ; niri
              (gnu packages xorg)       ; xwayland-satellite
              (ice-9 popen)      ; open-pipe*
-             (ice-9 rdelim)
+             (ice-9 rdelim)     ; read-line、read-string
+             (ice-9 textual-ports) ; get-string-all
              (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64))
@@ -181,6 +182,44 @@ gexp-input 包装，先解包。"
                                "test -n \"$DBUS_SESSION_BUS_ADDRESS\"")))
                     (let ((code (status:exit-val (close-pipe pipe))))
                       (zero? code))))
+                (lambda ()
+                  (false-if-exception (delete-file-recursively tmp))))))
+
+;; ── RUNTIME：真实执行 generated launcher（§7/8）────────────
+;; materialize launcher → 无 XDG_RUNTIME_DIR 执行：launcher 在 execl
+;; 前 error（"XDG_RUNTIME_DIR unset"）——generated runtime 的 PATH
+;; 构造（unbound binding 风险所在）被真实 primitive-load 执行。
+;; 若再有 delete-duplicates 类 unbound，这里会先报 "Unbound variable"
+;; 而不是 XDG 消息。
+(test-assert "RUNTIME: launcher primitive-loads; PATH construction has no unbound bindings"
+             (let* ((drv (run-with-store %store
+                           (lower-object niri-wayland-session)))
+                    (script (begin
+                              (build-derivations %store (list drv))
+                              (derivation->output-path drv)))
+                    (shebang (call-with-input-file script
+                                                   (lambda (p) (read-line p))))
+                    (guile (and (string-prefix? "#!" shebang)
+                                (car (string-split (substring shebang 2)
+                                                   #\space))))
+                    (tmp (mkdtemp "/tmp/guixcfg-session-rt-XXXXXX"))
+                    (home (string-append tmp "/home")))
+               (dynamic-wind
+                (lambda () #t)
+                (lambda ()
+                  (mkdir home)
+                  (let* ((pipe (open-pipe*
+                                OPEN_READ "env"
+                                "-u" "XDG_RUNTIME_DIR"
+                                (string-append "HOME=" home)
+                                "sh" "-c"
+                                (string-append guile " --no-auto-compile "
+                                               script " 2>&1")))
+                         (err (get-string-all pipe))
+                         (code (status:exit-val (close-pipe pipe))))
+                    (and (not (zero? code))
+                         (string-contains err "XDG_RUNTIME_DIR unset")
+                         (not (string-contains err "Unbound variable")))))
                 (lambda ()
                   (false-if-exception (delete-file-recursively tmp))))))
 
