@@ -7,6 +7,8 @@
 ;;;   D4 无 autologin（initial-session-user #f）+ 空密码禁用
 ;;;   D5 elogind 仍是唯一 session authority（服务存在）
 ;;;   D6/D7 /run/user 生命周期属 runtime（VM acceptance，见报告）
+;;;   H1-H5 HOME provenance 契约（greetd upstream 从 passwd entry
+;;;       设置 HOME；pam_env 无 HOME 规则；官方 wrapper 只设 XDG_*）
 ;;;   NV1 NVIDIA adapter 默认 disabled/identity
 ;;;   NV2 VM OS 无 proprietary NVIDIA 包
 ;;;   NV3 VM kernel args 无 nouveau blacklist
@@ -28,6 +30,7 @@
              (gnu services desktop) ; elogind-service-type
              (gnu services shepherd) ; shepherd-root-service-type
              (gnu system)          ; operating-system-*
+             (gnu system pam)      ; unix-pam-service、pam-entry-module/arguments
              (guix packages)       ; package-name
              (nongnu packages linux) ; linux（nonguix）
              (ice-9 rdelim)
@@ -55,6 +58,48 @@
   (@ (gnu services base) greetd-terminal-vt))
 (define greetd-terminal-configuration-initial-session-user
   (@ (gnu services base) greetd-initial-session-user))
+(define greetd-default-session-command
+  (@ (gnu services base) greetd-default-session-command))
+(define greetd-default-session-user
+  (@ (gnu services base) greetd-default-session-user))
+(define greetd-agreety-session?
+  (@ (gnu services base) greetd-agreety-session?))
+(define greetd-agreety-session-command
+  (@ (gnu services base) greetd-agreety-session-command))
+(define greetd-user-session?
+  (@ (gnu services base) greetd-user-session?))
+(define greetd-user-session-command-args
+  (@ (gnu services base) greetd-user-session-command-args))
+(define greetd-user-session-xdg-session-type
+  (@ (gnu services base) greetd-user-session-xdg-session-type))
+(define greetd-user-session-xdg-env?
+  (@ (gnu services base) greetd-user-session-xdg-env?))
+
+(define %guix-store-dir
+  ;; store 中 pinned Guix channel 源（channel 内容是内容寻址的：
+  ;; channels.lock.scm 锁定的 commit 对应唯一 store 路径）。注意
+  ;; store 里还有同前缀的 -modules 目录（profile 用），必须选
+  ;; 真正含 gnu/services/base.scm 的 channel checkout。
+  (let* ((lock (eval (call-with-input-file "channels.lock.scm" read)
+                     (current-module)))
+         (commit (channel-commit
+                  (find (lambda (ch) (eq? (channel-name ch) 'guix))
+                        lock)))
+         (short (substring commit 0 7))
+         (hits (scandir "/gnu/store"
+                        (lambda (name)
+                          (string-contains name
+                                           (string-append "-guix-" short)))))
+         (candidates
+          (filter (lambda (d)
+                    (file-exists?
+                     (string-append "/gnu/store/" d
+                                    "/gnu/services/base.scm")))
+                  hits)))
+    (if (pair? candidates)
+      (string-append "/gnu/store/" (car candidates))
+      (error "guix channel source not in store; run time-machine first"
+             commit))))
 
 (define (os-services-of-type type)
   "扫描 %os 的 services 列表（不 fold——mingetty 等多实例类型）。"
@@ -119,6 +164,87 @@
 (test-assert "D5: elogind service present in %os"
              (let ((cfg (os-service elogind-service-type)))
                (and cfg #t)))
+
+;; ── HOME provenance（exact pinned source audit）────────────
+;; 契约（desktop.scm 头注释 + docs/architecture/graphics.md）：
+;;   用户会话 HOME 由 greetd 0.10.3 从认证用户的 passwd entry 设置
+;;   （src/session/worker.rs:162-216：getpwnam → putenv
+;;   USER/LOGNAME/HOME/SHELL → getenvlist → execve(/bin/sh -c
+;;   "exec <session>", envvec)——execve 整体替换环境，greeter 的
+;;   HOME=/var/empty 不可能继承）；agreety 只经 IPC 发 cmd + env='()
+;;   （agreety/src/main.rs:107-110）。
+;;   这里固定我们配置侧可断言的部分（upstream 部分经 pinned source
+;;   注释固定）：
+;;   H1 default-session-command 必须是官方 agreety greeter 模式
+;;      （greetd-agreety-session 包装 greetd-user-session）——
+;;      Guix 手册 guix.texi "greetd-service-type"：default session =
+;;      greeter，默认值 (greetd-agreety-session)。若被改成
+;;      greetd-user-session 直接值，greetd 会把它当 greeter 以
+;;      greeter 用户无认证运行（server.rs greet()→start_greeter，
+;;      authenticate=false）——无登录提示符，HOME=/var/empty。
+;;   H2 greeter 的 user-session = bash -l + wayland + xdg-env。
+;;   H3 greetd PAM 栈里 pam_env.so 无参数（只 honor
+;;      /etc/environment——本机为空；不能设置 HOME）。
+;;   H4 default session 以 greeter 专用账号运行（用户会话的 HOME
+;;      与 greeter 无关，worker.rs 从认证用户 passwd 重取）。
+;;   H5 pinned Guix 官方 wrapper（make-greetd-xdg-user-session-
+;;      command，base.scm:3715-3729）只 setenv XDG_SESSION_TYPE/
+;;      XDG_RUNTIME_DIR（getpwuid），不 setenv HOME/USER/LOGNAME/
+;;      SHELL（wrapper 会 getenv "USER" 读 greetd 设置的用户名来查
+;;      passwd——只读不算 setenv）。
+
+(define (tty1-terminal)
+  "tty1 greetd terminal 配置记录。"
+  (let ((cfg (service-value (os-service greetd-service-type))))
+    (find (lambda (tc) (string=? "1" (greetd-terminal-vt tc)))
+          (greetd-terminals cfg))))
+
+(test-assert "H1: default-session-command is agreety greeter wrapping user-session"
+             (let ((cmd (greetd-default-session-command (tty1-terminal))))
+               (greetd-agreety-session? cmd)))
+
+(test-assert "H2: greeter user-session is bash -l wayland with xdg-env"
+             (let* ((cmd (greetd-default-session-command (tty1-terminal)))
+                    (s (greetd-agreety-session-command cmd)))
+               (and (greetd-agreety-session? cmd)
+                    (greetd-user-session? s)
+                    (equal? (greetd-user-session-command-args s) '("-l"))
+                    (string=? "wayland"
+                              (greetd-user-session-xdg-session-type s))
+                    (greetd-user-session-xdg-env? s))))
+
+(test-assert "H3: greetd PAM pam_env.so has no arguments (cannot set HOME)"
+             (let* ((pam (unix-pam-service "greetd"
+                                           #:login-uid? #t
+                                           #:allow-empty-passwords? #f))
+                    (env-entry (find (lambda (e)
+                                       (string-contains
+                                        (pam-entry-module e) "pam_env"))
+                                     (pam-service-session pam))))
+               (and env-entry
+                    (null? (pam-entry-arguments env-entry)))))
+
+(test-assert "H4: default session runs as the greeter-only user"
+             (string=? "greeter" (greetd-default-session-user (tty1-terminal))))
+
+(test-assert "H5: official xdg wrapper sets only XDG_* (no HOME/USER/LOGNAME/SHELL)"
+             (let* ((s (call-with-input-file
+                        (string-append %guix-store-dir "/gnu/services/base.scm")
+                        (lambda (p) (read-string p))))
+                    (start (string-contains
+                            s "(define (make-greetd-xdg-user-session-command"))
+                    (tail (substring s start))
+                    (end (string-contains
+                          tail
+                          "(define-gexp-compiler (greetd-user-session-compiler"))
+                    (body (substring tail 0 end)))
+               (and body
+                    (string-contains body "(setenv \"XDG_SESSION_TYPE\"")
+                    (string-contains body "(setenv \"XDG_RUNTIME_DIR\"")
+                    (not (string-contains body "(setenv \"HOME\""))
+                    (not (string-contains body "(setenv \"USER\""))
+                    (not (string-contains body "(setenv \"LOGNAME\""))
+                    (not (string-contains body "(setenv \"SHELL\"")))))
 
 ;; ── NV1：NVIDIA adapter 默认 disabled/identity ─────────────
 (test-assert "NV1: NVIDIA adapter disabled by default"

@@ -34,10 +34,26 @@ OFFICIAL；项目 invariant 需要 → THIN ADAPTER / KEEP（custom）。
 
 ## HOME/PATH/D-Bus 语义（§7 根除 HOME=/var/empty）
 
-- HOME 由 **PAM**（unix-pam-service 栈含 pam_env——认证后从 account
-  database 设置）与 **bash login 语义**（greetd-user-session command =
-  bash -l）提供——authenticated account semantics，**不是 custom
-  wrapper 硬编码**。
+- HOME 由 **greetd upstream** 设置（exact pinned audit 2026-08-18）：
+  认证后在 session worker 里 `User::from_name(pam_username)`
+  （getpwnam）→ putenv USER/LOGNAME/HOME/SHELL（passwd entry 的
+  name/dir/shell）→ pam.open_session → getenvlist →
+  execve("/bin/sh","-c","exec <session>", envvec)——execve 整体替换
+  环境，greeter 的 HOME=/var/empty 不可能继承（greetd 0.10.3
+  `src/session/worker.rs:162-216,239-276`；agreety 的 IPC 只传
+  cmd + env='()，`agreety/src/main.rs:107-110`）。**不是** pam_env
+  （unix-pam-service 的 pam_env.so 无参数、只 honor
+  /etc/environment——无 HOME 规则）、**不是** Guix wrapper（官方
+  greetd-xdg-user-session-command 只设置 XDG_SESSION_TYPE /
+  XDG_RUNTIME_DIR，`gnu/services/base.scm:3715-3729`）、**不是**
+  custom wrapper 硬编码。契约测试：tests/test-desktop.scm H1-H5。
+- 认证后的用户会话由官方 **greeter 模式** 启动：
+  default-session-command = `greetd-agreety-session`（agreety
+  提示符 + `-c` 指向 `greetd-user-session`，bash -l——Guix 手册
+  guix.texi "greetd-service-type"；默认值即
+  `(greetd-agreety-session)`）。不可把 greetd-user-session 直接放在
+  default-session-command（greetd 会把它当 greeter 以 greeter 用户
+  无认证运行——server.rs greet()→start_greeter）。
 - PATH 由 **Guix Home**（~/.bash_profile → setup-environment）提供
   Home profile + system profile 命名空间。
 - user session D-Bus 由 **home-dbus-service-type** 提供（唯一 owner）。
