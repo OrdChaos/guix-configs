@@ -95,6 +95,18 @@
 **pinned source 是唯一 API truth**：禁止为了新 API repin Guix/Nonguix/
 channels；禁止照最新 master/博客写代码。
 
+- **命名容易误导的 API 必须先读 exact upstream semantics，不能从
+  字段名猜**：display manager / session manager / greeter 类尤甚。
+  已实测教训（2026-08-18，commit 528fa92）：greetd 的
+  `default_session` 语义是 **greeter**（"The default session, also
+  known as the greeter."——greetd config.toml；server.rs
+  greet()→start_greeter 以 default_session.user 无认证运行，
+  authenticate=false），**不是**"认证后的默认桌面 session"；
+  `initial_session` 只在 first-run 启动。把 greetd-user-session 直接
+  放进 default-session-command = 把 bash -l 当 greeter 以 greeter
+  用户运行——无登录提示符。正确模式：`greetd-agreety-session`
+  包装 `greetd-user-session`（Guix 默认值/手册一致）。
+
 ## 7. Officialization 原则（use official, keep custom only where semantics differ）
 
 - `use official mechanism where semantics match; custom code only owns
