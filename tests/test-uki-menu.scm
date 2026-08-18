@@ -11,7 +11,7 @@
 ;;; 测试的是 limine-config-text（部署脚本实际使用的纯函数）的真实
 ;;; 文本输出，不是源码里的构造器数量。
 
-(use-modules (guixcfg boot uki)   ; limine-config-text
+(use-modules (guixcfg boot limine-menu) ; limine-config-text
              (ice-9 rdelim)
              (srfi srfi-13)
              (srfi srfi-64))

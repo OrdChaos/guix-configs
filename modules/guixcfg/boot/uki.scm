@@ -19,6 +19,7 @@
 
 (define-module (guixcfg boot uki)
                #:use-module (guixcfg boot boot-state)
+               #:use-module (guixcfg boot limine-menu) ; limine-config-text（部署脚本加载）
                #:use-module (rosenthal packages bootloaders)  ; limine、systemd-stub、ukify
                #:use-module (gnu packages efi)   ; sbsigntools
                #:use-module (guix gexp)
@@ -34,8 +35,6 @@
                          ;; 固定位置
                          %secure-boot-keydir
                          %uki-esp-subdir
-                         ;; Limine 配置文本（纯函数，供部署脚本与测试）
-                         limine-config-text
                          ;; 部署脚本生成
                          make-uki-deploy-program))
 
@@ -44,33 +43,6 @@
 
 ;; ESP 上 UKI 的存放子目录。
 (define %uki-esp-subdir "EFI/Guix")
-
-;;; ────────────────────────────────────────────────────────────
-;;; Limine 菜单：公开 boot model 只有两个用户可选启动项——
-;;;   Normal   （GNU Guix，CURRENT.EFI，rootmode 缺省 = normal）
-;;;   Recovery （GNU Guix (Recovery)，RECOVERY.EFI，rootmode=recovery；
-;;;             只有 promote 后（文件就位）才出现在菜单）
-;;; 历史 @root 不作为菜单项（previous:K 菜单与 PREV-K.EFI 已删除）。
-
-(define (limine-config-text target-slot recovery-present?)
-  "生成 Limine 配置文本：Normal（指向 TARGET-SLOT 的 CURRENT.EFI）+
-Recovery（指向稳定路径 RECOVERY.EFI；RECOVERY-PRESENT? 为 #f 时不
-输出）。返回字符串。"
-  (call-with-output-string
-   (lambda (port)
-     (format port "\
-timeout: 3
-
-/GNU Guix
-    protocol: efi_chainload
-    image_path: boot():/EFI/Guix/~a/CURRENT.EFI
-" target-slot)
-     (when recovery-present?
-       (format port "\
-/GNU Guix (Recovery)
-    protocol: efi_chainload
-    image_path: boot():/EFI/Guix/RECOVERY.EFI
-")))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; Boot Plan：一个可启动项的全部输入（框架无关）。
@@ -101,6 +73,7 @@ Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
    (with-imported-modules
     (source-module-closure '((guix build utils)
                              (guix build syscalls)
+                             (guixcfg boot limine-menu)
                              (guixcfg utils atomic-file))
                            #:select? (lambda (name)
                                        (or (guix-module-name? name)
@@ -108,6 +81,7 @@ Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
     #~(begin
        (use-modules ((guix build utils) #:hide (delete))
                     (guix build syscalls)
+                    (guixcfg boot limine-menu)
                     (guixcfg utils atomic-file)
                     (ice-9 rdelim)
                     (ice-9 regex)          ; cmdline-system（gnu.system= 解析）
