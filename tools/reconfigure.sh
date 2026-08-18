@@ -125,7 +125,10 @@ if [ "$ok" -eq 0 ] || [ -e "$pivot" ]; then
 fi
 
 # 4. readiness 复查：各 capability 服务无 failed
-for svc in guixcfg-secrets-deploy guixcfg-password-project \
+# （guixcfg-password-project 是已删除的旧 provision；当前 authoritative
+#  account capability 是 account-state-ready——见 docs/architecture/
+#  upstream-boundaries.md）
+for svc in guixcfg-secrets-deploy account-state-ready \
            persistent-state-ready home-ready session-infra-ready \
            interactive-session-ready; do
   if herd status "$svc" 2>/dev/null | grep -q "Failed to start"; then

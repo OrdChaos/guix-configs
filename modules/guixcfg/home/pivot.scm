@@ -1,3 +1,13 @@
+;;; NARROW UPSTREAM-GAP COMPATIBILITY SHIM（removal condition 见下）。
+;;;
+;;; 上游行为（pinned Guix 的 gnu/home/services/symlink-manager.scm）：
+;;;   (symlink new-home "~/.guix-home.new") → (rename-file pivot
+;;;   "~/.guix-home")——若 rename 失败，pivot symlink 残留，下一次
+;;;   activate 的 symlink 直接 EEXIST 抛错，activation 永久失败；
+;;;   pinned revision 没有任何 stale pivot 处理（A/B 结论：保留）。
+;;; removal condition：上游 symlink-manager 增加 stale pivot 清理后，
+;;;   本模块可删（连同 tools/home-pivot.scm 与相关测试）。
+;;;
 ;;; Guix Home symlink-manager 的 stale pivot 保守判定与清理。
 ;;;
 ;;; 故障模型（实测复现，T6b）：Home activate 的 update-symlinks 最后两步是
