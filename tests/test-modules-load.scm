@@ -26,6 +26,10 @@
 ;; modules/guixcfg 全量扫描 + #:use-module 行拓扑排序生成；冷 ccache
 ;; 下 compile-file 对依赖缺失报 "no code for module"——不要依赖热缓存
 ;; 掩盖顺序错误，也不许手工漏模块）。
+;; 依赖顺序排列：被依赖的模块先编译注册（完整清单，2026-08 由
+;; modules/guixcfg 全量扫描 + #:use-module 行拓扑排序生成；冷 ccache
+;; 下 compile-file 对依赖缺失报 "no code for module"——不要依赖热缓存
+;; 掩盖顺序错误，也不许手工漏模块）。
 (define %all-modules
   '(    (guixcfg apps model)
     (guixcfg apps bash definition)
@@ -40,6 +44,9 @@
     (guixcfg apps less definition)
     (guixcfg apps lxpolkit definition)
     (guixcfg apps mako definition)
+    (guixcfg storage model)
+    (guixcfg system application-persistence)
+    (guixcfg apps mpv definition)
     (guixcfg apps niri definition)
     (guixcfg apps pipewire definition)
     (guixcfg apps ripgrep definition)
@@ -53,7 +60,6 @@
     (guixcfg boot device-resolver)
     (guixcfg utils spawn)
     (guixcfg security tpm2 tpm2-tools)
-    (guixcfg storage model)
     (guixcfg boot tpm-unlock)
     (guixcfg storage root-generation)
     (guixcfg boot initrd)
@@ -65,6 +71,8 @@
     (guixcfg home user)
     (guixcfg storage policies)
     (guixcfg hosts laptop)
+    (guixcfg utils process)
+    (guixcfg security age)
     (guixcfg security secrets)
     (guixcfg utils repository-source)
     (guixcfg hosts vm-secrets)
@@ -81,8 +89,6 @@
     (guixcfg system user-persistence)
     (guixcfg users user)
     (guixcfg hosts vm)
-    (guixcfg utils process)
-    (guixcfg security age)
     (guixcfg security certificates)
     (guixcfg storage validate)
     (guixcfg storage device)
@@ -94,7 +100,7 @@
     (guixcfg security credential-source)
     (guixcfg security tpm2 state)
     (guixcfg storage commit)
-    (guixcfg system application-persistence)
+    (guixcfg system machine-state-persistence)
     (guixcfg system graphics nvidia)))
 
 (define (module-file name)
