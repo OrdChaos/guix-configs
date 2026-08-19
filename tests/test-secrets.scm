@@ -156,6 +156,9 @@
                     (not (string-contains t "/persist/system/keys/age"))
                     (not (string-contains t "/run/guixcfg-secrets"))
                     (not (string-contains t "rename-file"))
-                    (string-contains t "/persist/system/accounts/"))))
+                    ;; 读 persistent verifier 根（%account-credentials-dir
+                    ;; 收敛后字面量拆为 "/persist/system/accounts" + "/"
+                    ;; ——断言语义根即可，不依赖拼写形态）。
+                    (string-contains t "/persist/system/accounts"))))
 
 (test-end "secrets")

@@ -100,6 +100,7 @@
                "tests/test-apps.scm"
                "tests/test-home.scm"
                "tests/test-application-persistence.scm"
+               "tests/test-source-hygiene.scm"
                "tests/test-ui-language.scm"
                "tests/test-ssh.scm"
                "tests/test-user-persistence.scm"

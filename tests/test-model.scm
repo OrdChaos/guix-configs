@@ -54,4 +54,28 @@
                                                 %esp-max-size))
                                 (list %vm-storage-policy %laptop-storage-policy))))
 
+
+;; ── persist-mount-point：/persist/* 语义路径单一 authority ────
+(test-group "persist semantic mount points (single authority)"
+            (test-equal "@persist-system mount"
+                        "/persist/system" (persist-mount-point "@persist-system"))
+            (test-equal "@persist-data-home mount"
+                        "/persist/data-home" (persist-mount-point "@persist-data-home"))
+            (test-equal "@persist-data-app mount"
+                        "/persist/data-app" (persist-mount-point "@persist-data-app"))
+            (test-equal "@persist-data-nobackup mount"
+                        "/persist/data-nobackup" (persist-mount-point "@persist-data-nobackup"))
+            (test-equal "@persist-gnu-store mount"
+                        "/gnu/store" (persist-mount-point "@persist-gnu-store"))
+            (test-assert "unknown persist subvolume rejected"
+                         (catch #t
+                           (lambda () (persist-mount-point "@persist-bogus") #f)
+                           (lambda (k . a) #t)))
+            ;; 与 %persist-subvolumes 记录一致（authority 未漂移）
+            (test-assert "every subvolume resolvable via persist-mount-point"
+                         (every (lambda (s)
+                                  (string=? (subvolume-mount-point s)
+                                            (persist-mount-point (subvolume-name s))))
+                                %persist-subvolumes)))
+
 (test-end)

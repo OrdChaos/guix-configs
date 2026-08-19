@@ -95,7 +95,7 @@
                     (lifecycle 'seed-once)))))
 
 ;; ── bind file-system 生成 ───────────────────────────────────
-(define mounts (application-persistence-file-systems (list rule) "user"))
+(define mounts (application-persistence-file-systems (list rule) "alice"))
 (test-assert "one bind mount per rule"
              (= 1 (length mounts)))
 (define fs (car mounts))
@@ -103,7 +103,7 @@
             "/persist/data-app/synthetic-test/state"
             (file-system-device fs))
 (test-equal "bind target is /home/<user>/<consumer>"
-            "/home/user/.config/synthetic-test"
+            "/home/alice/.config/synthetic-test"
             (file-system-mount-point fs))
 (test-equal "bind type none"
             "none" (file-system-type fs))
@@ -121,12 +121,12 @@
                            (application-persistence-rule
                             (name 'r2) (backing "other")
                             (consumer ".local/state/x")))
-                     "user")))
+                     "alice")))
 
 ;; ── activation 可生成（backing 创建 + consumer parent ownership）─
 (test-assert "activation gexp can be generated"
              (let ((gexp (application-persistence-activation
-                          (list rule) "user")))
+                          (list rule) "alice")))
                (and (gexp? gexp)
                     (pair? (gexp->approximate-sexp gexp)))))
 
@@ -134,7 +134,7 @@
              (let ((s (object->string
                        (gexp->approximate-sexp
                         (application-persistence-activation
-                         (list rule) "user")))))
+                         (list rule) "alice")))))
                (and (string-contains s "/persist/data-app")
                     (string-contains s "synthetic-test")
                     (string-contains s "mkdir-p")
@@ -145,7 +145,7 @@
              (let ((s (object->string
                        (gexp->approximate-sexp
                         (application-persistence-activation
-                         (list rule) "user")))))
+                         (list rule) "alice")))))
                (and (not (string-contains s "copy-file"))
                     (not (string-contains s "copy-recursively"))
                     (not (string-contains s "rsync")))))
@@ -154,7 +154,7 @@
 ;; simple-service 的 kind 是包装类型，其 extension 指向
 ;; activation-service-type。
 (test-assert "persistence service constructed for non-empty rules"
-             (let ((svc (application-persistence-service (list rule) "user")))
+             (let ((svc (application-persistence-service (list rule) "alice")))
                (and svc
                     (service? svc)
                     (any (lambda (ext)
@@ -162,6 +162,6 @@
                                 activation-service-type))
                          (service-type-extensions (service-kind svc))))))
 (test-assert "no service for empty rules"
-             (not (application-persistence-service '() "user")))
+             (not (application-persistence-service '() "alice")))
 
 (test-end "application-persistence")
