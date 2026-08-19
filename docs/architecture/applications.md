@@ -63,6 +63,41 @@ apps/<app>/
 (applications-secrets %applications)
 ```
 
+## Application service rule
+
+Application unit 可以贡献 packages / Home services/extensions /
+system services/extensions / persistence / secrets。但：
+
+> **Applications do not merge Guix service values.**
+
+共享 Home sink（`home-xdg-configuration-files`、`home-files`、
+environment variables 等——多个 app 都可能贡献的 target）必须经
+Guix **native service-extension 机制**贡献：
+
+```scheme
+(simple-service
+ 'mpv-xdg-config
+ home-xdg-configuration-files-service-type
+ `(("mpv/mpv.conf" ,(local-file "mpv.conf"))))
+```
+
+而不是：
+
+```scheme
+(service home-xdg-configuration-files-service-type ...)
+```
+
+原因：canonical target 实例由 `instantiate-missing-services`
+（gnu/services.scm）以 default value 自动生成；多个**完整 target
+实例**会 ambiguous-target-service（fold 只接受每类一个 sink）。
+`service-type-extend` 组合的是 base value + composed extension
+value——**不是 generic same-kind merger**（两个 base value 不是
+合法 extend 输入）。
+
+aggregator（`applications-home-services`）只做 concatenation；
+Guix（不是 guixcfg）拥有服务组合语义。唯一类型的独立 service
+（如 `home-niri-service-type`）保持直接 `(service ...)`。
+
 ## Directory layout
 
 ```text

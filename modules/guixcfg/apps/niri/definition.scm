@@ -22,6 +22,11 @@
    (name 'niri)
    (home-services
     (list (service home-niri-service-type)
-          (service home-xdg-configuration-files-service-type
-                   `(("niri/config.kdl"
-                      ,(local-file "config.kdl" "niri-config.kdl"))))))))
+          ;; 共享 sink（home-xdg-configuration-files）经 Guix native
+          ;; extension 贡献（simple-service → target；canonical target
+          ;; 由 instantiate-missing-services 以 default '() 自动实例化
+          ;; ——见 AGENT.md §15 / docs/architecture/applications.md）。
+          (simple-service 'niri-xdg-config
+                          home-xdg-configuration-files-service-type
+                          `(("niri/config.kdl"
+                             ,(local-file "config.kdl" "niri-config.kdl"))))))))

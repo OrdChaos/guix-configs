@@ -215,6 +215,15 @@ docs/reference/repository-layout.md；本节省略版开发约束：
 - `<application>` 只是一层 contribution record；禁止演化成自制
   NixOS/RDE module framework（无 dependency solver / priority /
   override / fixpoint / 自动发现 / 继承）。
+- **Application aggregators concatenate Guix service contributions;
+  they do not merge same-kind service instances.** 多个 application
+  贡献共享 service type（home-xdg-configuration-files、home-files、
+  env vars 等）时，用 Guix native service-extension 机制
+  （`simple-service` / `service-extension`），不手工调用
+  `service-type-extend`。`service-type-extend` 组合 base service
+  value 与 composed extension value——不是 generic base-value
+  merger（两个 base value 不是合法 extend 输入）；canonical target
+  由 `instantiate-missing-services` 以 default value 自动实例化。
 
 ## 13. 路径与身份（hardcoding audit 长期规则，2026-08）
 

@@ -11,7 +11,7 @@
              (gnu home services desktop) ; home-dbus-service-type
              (gnu home services niri)   ; home-niri-service-type
              (gnu home services sound)  ; home-pipewire-service-type
-             (gnu services)              ; service-kind
+             (gnu services)              ; service-kind、service-type-extensions、service-extension-target
              (gnu services guix)        ; guix-home-service-type
              (guix gexp)                ; local-file-absolute-file-name
              (guix packages)          ; package-name
@@ -56,11 +56,19 @@
 (test-assert "home-bash service present"
              bash-svc)
 
-;; Git config 文件声明（~/.gitconfig）仍存在
+;; Git config 文件声明（~/.gitconfig）仍存在。git 经 native
+;; extension 贡献（simple-service 'git-files → home-files）——
+;; canonical home-files 实例由 instantiate-missing-services 生成
+;; （default '()）；断言找带 .gitconfig 值的 extension 贡献。
 (define files-svc
-  (find (lambda (s) (eq? (service-kind s) home-files-service-type))
+  (find (lambda (s)
+          (and (any (lambda (ext)
+                      (eq? (service-extension-target ext)
+                           home-files-service-type))
+                    (service-type-extensions (service-kind s)))
+               (assoc ".gitconfig" (service-value s))))
         (home-environment-services %guix-home)))
-(test-assert "home-files service present (gitconfig)"
+(test-assert "home-files extension present (gitconfig)"
              (and files-svc
                   (assoc ".gitconfig" (service-value files-svc))))
 
@@ -75,11 +83,18 @@
              (any (lambda (s) (eq? (service-kind s) home-pipewire-service-type))
                   (home-environment-services %guix-home)))
 
-;; niri config 仍由 Home XDG file service 声明，且是 source-relative
-;; local-file（解析到 apps/niri/config.kdl，不依赖 shell CWD——
-;; pinned Guix local-file 宏按出现处 source directory 解析）。
+;; niri config 仍由 Home XDG file service 声明（niri 经 native
+;; extension 贡献 'niri-xdg-config → home-xdg-configuration-files），
+;; 且是 source-relative local-file（解析到 apps/niri/config.kdl，
+;; 不依赖 shell CWD——pinned Guix local-file 宏按出现处 source
+;; directory 解析）。
 (define xdg-svc
-  (find (lambda (s) (eq? (service-kind s) home-xdg-configuration-files-service-type))
+  (find (lambda (s)
+          (and (any (lambda (ext)
+                      (eq? (service-extension-target ext)
+                           home-xdg-configuration-files-service-type))
+                    (service-type-extensions (service-kind s)))
+               (assoc "niri/config.kdl" (service-value s))))
         (home-environment-services %guix-home)))
 (test-assert "niri config declared via home-xdg-configuration-files"
              (and xdg-svc

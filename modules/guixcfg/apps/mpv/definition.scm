@@ -31,9 +31,10 @@
    (name 'mpv)
    (home-packages (list mpv))
    (home-services
-    (list (service home-xdg-configuration-files-service-type
-                   `(("mpv/mpv.conf" ,(local-file "mpv.conf" "mpv-mpv.conf"))
-                     ("mpv/input.conf" ,(local-file "input.conf" "mpv-input.conf"))))))
+    (list (simple-service 'mpv-xdg-config
+                          home-xdg-configuration-files-service-type
+                          `(("mpv/mpv.conf" ,(local-file "mpv.conf" "mpv-mpv.conf"))
+                            ("mpv/input.conf" ,(local-file "input.conf" "mpv-input.conf"))))))
    (persistence
     (list (application-persistence-rule
            (name 'state)

@@ -76,11 +76,14 @@
 
 ;; ── OFF7：niri config 声明式（XDG 官方 mechanism）──────────
 (test-assert "OFF7: niri config is declarative via XDG mechanism"
+             ;; niri 经 native extension（simple-service 'niri-xdg-config
+             ;; → home-xdg-configuration-files）贡献 config.kdl。
              (any (lambda (svc)
-                    (and (eq? (service-kind svc)
-                              home-xdg-configuration-files-service-type)
-                         (let ((files (service-value svc)))
-                           (assoc "niri/config.kdl" files))))
+                    (and (any (lambda (ext)
+                                (eq? (service-extension-target ext)
+                                     home-xdg-configuration-files-service-type))
+                              (service-type-extensions (service-kind svc)))
+                         (assoc "niri/config.kdl" (service-value svc))))
                   (home-environment-services %guix-home)))
 
 ;; ── OFF8：xwayland-satellite 单 provider ───────────────────

@@ -54,9 +54,14 @@
              (not (file-exists? "modules/guixcfg/home/packages.scm")))
 
 ;; ── 3-4：source-relative config files ───────────────────────
+;; mpv 经 native extension 贡献（simple-service 'mpv-xdg-config →
+;; home-xdg-configuration-files-service-type）
 (define xdg-svc
   (find (lambda (s)
-          (eq? (service-kind s) home-xdg-configuration-files-service-type))
+          (any (lambda (ext)
+                 (eq? (service-extension-target ext)
+                      home-xdg-configuration-files-service-type))
+               (service-type-extensions (service-kind s))))
         (application-home-services mpv-app)))
 
 (test-assert "mpv declares both config files via XDG service"

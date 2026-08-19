@@ -60,15 +60,25 @@ apps/foo/
    (name 'foo)
    (home-packages (list foo))
    (home-services
-    (list (service home-xdg-configuration-files-service-type
-                   `(("foo/config.toml"
-                      ,(local-file "config.toml"))))))))
+    (list (simple-service 'foo-xdg-config
+                          home-xdg-configuration-files-service-type
+                          `(("foo/config.toml"
+                             ,(local-file "config.toml"))))))))
 ```
 
 `(local-file "config.toml")` 按 **definition 所在目录**解析（pinned
 Guix 语义）——不需要 `../../../files/...`，不依赖 shell CWD。
 需要 `#:use-module (guix gexp)`（local-file）与
 `#:use-module (gnu home services)`。
+
+**共享 sink 用 extension，不用完整实例**：多个 app 都可能贡献
+`home-xdg-configuration-files` / `home-files` 等 target——每个 app
+用 `simple-service` 贡献 extension value（canonical target 由
+Guix 自动实例化）；**不要** `(service home-xdg-configuration-files-
+service-type ...)` 创建第二个完整实例（ambiguous-target-service）。
+唯一类型的独立 service（如 `home-niri-service-type`）保持直接
+`(service ...)`。aggregator 只 concatenation，不做 same-kind
+merge（`service-type-extend` 不是 base-value merger）。
 
 ## E4. Official Home service
 

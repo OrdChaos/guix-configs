@@ -15,8 +15,9 @@
    (name 'git)
    (home-packages (list git))
    (home-services
-    (list (service home-files-service-type
-                   `((".gitconfig"
-                      ,(plain-file
-                        "gitconfig"
-                        "[init]\n\tdefaultBranch = main\n"))))))))
+    (list (simple-service 'git-files
+                          home-files-service-type
+                          `((".gitconfig"
+                             ,(plain-file
+                               "gitconfig"
+                               "[init]\n\tdefaultBranch = main\n"))))))))

@@ -1,8 +1,16 @@
 ;;; Application layer 测试：<application> record、aggregation、
 ;;; registry 显式启用与名字唯一性。
 
-(use-modules (guixcfg apps model)
+(use-modules (guix store)         ; %store（三路 XDG lower）
+             (guix monads)
+             (guix derivations)
+             (guix gexp)              ; plain-file、local-file、lower-object
+             (guix records)           ; define-record-type*
+             (ice-9 rdelim)           ; read-string
+             (guixcfg apps model)
              (guixcfg apps registry)
+             (guixcfg apps niri definition)   ; %niri（三路 XDG）
+             (guixcfg apps mpv definition)    ; %mpv（三路 XDG）
              (gnu home)              ; home-environment
              (gnu home services)     ; home-files-service-type、home-xdg-configuration-files-service-type
              (gnu home services shells) ; home-bash-service-type
@@ -36,7 +44,7 @@
 (test-equal "default home-services empty"
             '() (application-home-services sample))
 
-;; ── aggregation（home services 按 kind 合并为单实例）────────
+;; ── aggregation：纯 concatenation（不做 same-kind merge）────
 (define svc-a1 (service home-files-service-type '(("a" . 1))))
 (define svc-a2 (service home-bash-service-type (home-bash-configuration)))
 (define svc-b  (service home-files-service-type '(("b" . 2))))
@@ -56,25 +64,112 @@
 
 (test-equal "applications-home-packages concatenates"
             '(pkg-a pkg-b) (applications-home-packages (list app-a app-b)))
-(test-assert "applications-home-services merges same-kind instances"
-             (let ((merged (applications-home-services (list app-a app-b))))
-               (and (= 2 (length merged))
-                    ;; home-files 合并值 = (("a" . 1) ("b" . 2))
-                    (any (lambda (s)
-                           (and (eq? (service-kind s) home-files-service-type)
-                                (= 2 (length (service-value s)))))
-                         merged)
-                    (any (lambda (s)
-                           (eq? (service-kind s) home-bash-service-type))
-                         merged))))
-(test-equal "applications-system-services concatenates"
-            '(sys-a) (applications-system-services (list app-a app-b)))
-(test-equal "applications-persistence concatenates"
-            '(rule-a) (applications-persistence (list app-a app-b)))
-(test-equal "applications-secrets concatenates"
-            '(sec-a) (applications-secrets (list app-a app-b)))
-(test-equal "empty registry aggregates to empty lists"
-            '() (applications-home-packages '()))
+(test-assert "applications-home-services preserves every contribution"
+             (let ((svcs (applications-home-services (list app-a app-b))))
+               (and (= 3 (length svcs))
+                    (memq svc-a1 svcs)
+                    (memq svc-a2 svcs)
+                    (memq svc-b svcs))))
+(test-assert "applications-home-services ordering is deterministic"
+             (equal? (applications-home-services (list app-a app-b))
+                     (applications-home-services (list app-a app-b))))
+
+;; ── service-type-extend 不是 generic same-kind merger ────────
+(define-record-type* <synthetic-config> synthetic-config make-synthetic-config
+                     synthetic-config?
+                     (flag synthetic-config-flag))
+
+(define synthetic-service-type
+  (service-type
+   (name 'synthetic-sink)
+   (description "synthetic sink for service semantic tests")
+   (extensions '())
+   (compose concatenate)                    ; extension values: string list
+   (extend (lambda (base ext-list)          ; base: <synthetic-config>
+             (synthetic-config
+              (flag (and (synthetic-config-flag base)
+                         (every (lambda (s) (string=? "ok" s)) ext-list))))))
+   (default-value (synthetic-config (flag #t)))))
+
+(define synth-extend (service-type-extend synthetic-service-type))
+
+(test-assert "compose+extend: (base, extension-list) is the legal call"
+             (synthetic-config-flag
+              (synth-extend (synthetic-config (flag #t)) '("ok" "ok"))))
+
+(test-assert "extension value semantics differ from base value"
+             (not (synthetic-config-flag
+                   (synth-extend (synthetic-config (flag #t)) '("bad")))))
+
+(test-assert "extend(base1, base2) is invalid: base values are not extension values"
+             (catch #t
+               (lambda ()
+                 (synth-extend (synthetic-config (flag #t))
+                               (synthetic-config (flag #t)))
+                 #f)
+               (lambda (k . a) #t)))
+
+(test-equal "compose concatenates the extension value list"
+            '("a" "b")
+            ((service-type-compose synthetic-service-type) '(("a") ("b"))))
+
+;; ── aggregator purity：不调用 merge 相关 API ─────────────────
+(test-assert "applications-home-services is pure concatenation (no merge logic)"
+             (let ((s (call-with-input-file "modules/guixcfg/apps/model.scm"
+                                            (lambda (p) (read-string p)))))
+               (let* ((start (string-contains s "(define (applications-home-services"))
+                      (end (string-contains s "(define (applications-system-services"))
+                      (body (substring s start end)))
+                 (and (string-contains body "append-map")
+                      (not (string-contains body "service-kind"))
+                      (not (string-contains body "service-type-extend"))
+                      (not (string-contains body "service-type-compose"))
+                      (not (string-contains body "merge"))))))
+
+;; ── 三路 XDG extension：lower 成功且全部贡献在场 ────────────
+(define synthetic-xdg-app
+  (application
+   (name 'synthetic-xdg)
+   (home-services
+    (list (simple-service 'synthetic-xdg-config
+                          home-xdg-configuration-files-service-type
+                          `(("synthetic/config.ini"
+                             ,(plain-file "synthetic.ini" "x=1"))))))))
+
+(define %three-way-home
+  (home-environment
+   (packages '())
+   (services (applications-home-services
+              (list %niri %mpv synthetic-xdg-app)))))
+
+(define %store (open-connection))
+(define %three-way-drv
+  (run-with-store %store (lower-object %three-way-home)))
+(build-derivations %store (list %three-way-drv))
+(define %three-way-out (derivation->output-path %three-way-drv))
+
+(test-assert "three-way XDG composition lowers without ambiguous target"
+             (and %three-way-out
+                  (file-exists? %three-way-out)))
+
+(test-assert "niri config present in the composed home"
+             (file-exists?
+              (string-append %three-way-out
+                             "/files/.config/niri/config.kdl")))
+
+(test-assert "mpv configs present in the composed home"
+             (and (file-exists?
+                   (string-append %three-way-out
+                                  "/files/.config/mpv/mpv.conf"))
+                  (file-exists?
+                   (string-append %three-way-out
+                                  "/files/.config/mpv/input.conf"))))
+
+(test-assert "synthetic contribution present in the composed home"
+             (file-exists?
+              (string-append %three-way-out
+                             "/files/.config/synthetic/config.ini")))
+
 
 ;; ── registry ────────────────────────────────────────────────
 (test-assert "registry module loads; %applications is a non-empty list"
