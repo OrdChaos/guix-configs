@@ -94,8 +94,15 @@ owner        由 primary user / assembler 参数统一提供
 - 不产生 `/persist/data-nobackup` mapping；
 - 不实现 copy/sync/boot-copy/seed-once/自动迁移。
 
-production consumer：mpv（`.local/state/mpv` → `/persist/data-app/mpv/state`，
-见 `apps/mpv/definition.scm`；后续应用按同一契约显式 adopt）。
+production consumers：
+- mpv（`.local/state/mpv` → `/persist/data-app/mpv/state`，
+  watch-later resume；`apps/mpv/definition.scm`）；
+- gnome-keyring（`.local/share/keyrings` →
+  `/persist/data-app/gnome-keyring/keyrings`，login keyring vault——
+  sensitive mutable state；`apps/gnome-keyring/definition.scm`，
+  迁移说明见 `desktop-authentication.md` §5）。
+
+后续应用按同一契约显式 adopt。
 
 ## data-nobackup storage class
 

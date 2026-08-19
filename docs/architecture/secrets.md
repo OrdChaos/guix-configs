@@ -88,6 +88,17 @@ symlink 暴露到应用默认路径（如 `/persist/data-app/flatpak` →
 `file-systems` 声明（bind mount），在用户会话和依赖服务启动前完成；
 不使用 Home 层实现系统级挂载。
 
+### Secret Service secret ≠ declarative secret
+
+`org.freedesktop.secrets`（GNOME Keyring，`apps/gnome-keyring`——
+`desktop-authentication.md`）里的 secret 是 **runtime
+application/user authority**：应用经 libsecret/D-Bus 写入，vault
+持久在 `~/.local/share/keyrings`（bind 到 `/persist/data-app/
+gnome-keyring/keyrings`），**不属于本文件的 declarative secret
+taxonomy**（repo authority、.age 加密、secret-decl →
+`/run/guixcfg-secrets`）。两者不互相转换：未来 Chrome Safe Storage
+材料属于前者；预声明的 deployment API token 属于后者。
+
 ### 仓库提供初始值、应用随后接管
 
 ```text

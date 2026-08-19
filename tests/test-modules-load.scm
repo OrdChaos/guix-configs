@@ -46,6 +46,7 @@
     (guixcfg apps mako definition)
     (guixcfg storage model)
     (guixcfg system application-persistence)
+    (guixcfg apps gnome-keyring definition)
     (guixcfg apps mpv definition)
     (guixcfg apps niri definition)
     (guixcfg apps pipewire definition)

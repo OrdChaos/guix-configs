@@ -280,3 +280,32 @@ docs/architecture/storage.md；本节省略版：
   （machine-state-persistence.scm）；无隐式 migration/copy-sync；
   architecture semantic roots 保持 single-owner constants
   （persist-mount-point）。
+
+## 15. Desktop authentication（polkit / Secret Service，2026-08）
+
+- **polkit authority 是 system infrastructure**：polkitd 属于
+  system（official `polkit-service-type`，D-Bus activation，无
+  shepherd）；graphical authentication agent（lxpolkit）属于
+  **user graphical session**（niri spawn-at-startup 启动一次）。
+  不要把 agent 的 app 定义声明成 polkit 的 owner；不要写自定义
+  `/etc/polkit-1/rules.d` 来“让 GUI 不弹密码”（admin identity 用
+  upstream `polkit-wheel-service` 的 addAdminRule 语义）。
+- **authentication agent state 不持久化**：polkit 临时授权状态、
+  `/run/user/<uid>`、keyring control socket、D-Bus session socket
+  每 session/boot 重建，禁止 persistence。
+- **Secret Service vault 是 application/user-owned mutable state**：
+  `~/.local/share/keyrings` → `/persist/data-app/gnome-keyring/
+  keyrings`（application-persistence rule）；keyring 文件可持久化，
+  runtime sockets 必须 ephemeral。keyring ≠ declarative .age
+  secret（authority 不同，互不转换）。
+- **login keyring 自动解锁依赖登录 PAM 认证流**（greetd PAM auth
+  拿到密码 → session 段 `pam_gnome_keyring.so auto_start`）。改变
+  login authentication method 时需单独设计 keyring unlock；
+  autologin/fingerprint/FIDO-only/TPM-to-keyring 明确 out of scope。
+- **不要手动双启动 Secret Service daemon**：PAM 拥有 login 路径
+  lifecycle（模块 fork 后自行降权到 PAM 用户）；D-Bus activation
+  只是 fallback。niri/Home/shell/session script 里禁止再执行
+  `gnome-keyring-daemon --start`（测试 GK5 断言）。
+- gnome-keyring 的 PAM mapping 只配置本系统实际使用的 service
+  （默认 gdm-password 必须整体替换为 greetd/login/passwd——见
+  apps/gnome-keyring/definition.scm）。

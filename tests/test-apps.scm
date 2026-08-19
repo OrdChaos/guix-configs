@@ -224,4 +224,18 @@
 (test-assert "lxpolkit owns no declarative secrets"
              (null? (application-secrets (app-by-name 'lxpolkit))))
 
+(test-assert "gnome-keyring app registered"
+             (and=> (app-by-name 'gnome-keyring) application?))
+
+(test-assert "gnome-keyring owns no declarative .age secrets"
+             (null? (application-secrets (app-by-name 'gnome-keyring))))
+
+(test-assert "gnome-keyring home contribution is the package only
+(no daemon startup in Home services)"
+             (let ((gk (app-by-name 'gnome-keyring)))
+               (and (null? (application-home-services gk))
+                    (equal? (list "gnome-keyring")
+                            (map package-name
+                                 (application-home-packages gk))))))
+
 (test-end "apps")

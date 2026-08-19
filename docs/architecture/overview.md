@@ -126,4 +126,6 @@ readiness 命名 capability；provision 前必须验证最终可观察状态
 3. `architecture/persistence.md` — canonical backing 不变量
 4. `architecture/accounts-sessions.md` — 账户/登录/会话
 5. `architecture/home.md` — Guix Home 与用户数据
-6. `architecture/secrets.md` — 秘密管理与威胁模型
+6. `architecture/desktop-authentication.md` — polkit authority 与
+   Secret Service（PAM 登录 keyring）
+7. `architecture/secrets.md` — 秘密管理与威胁模型

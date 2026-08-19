@@ -57,6 +57,10 @@
    ;; 基础 session infrastructure（elogind：/run/user、XDG_RUNTIME_DIR、
    ;; PAM session——system/common 拥有）。
    %common-services
+   ;; applications 的 system services（官方 service 实例，如
+   ;; gnome-keyring-service-type 的 PAM 扩展）——host assembly 是
+   ;; system contributions 的 composition root（同 persistence/secrets）。
+   (applications-system-services %applications)
    ;; TTY login prompt 的强语义（Section 57）：login: 出现 =
    ;; interactive-session-ready 已过——mingetty 延迟到 barrier 之后；
    ;; PAM gate 是 correctness fallback（新增 frontend 漏加

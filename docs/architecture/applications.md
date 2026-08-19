@@ -98,6 +98,12 @@ aggregator（`applications-home-services`）只做 concatenation；
 Guix（不是 guixcfg）拥有服务组合语义。唯一类型的独立 service
 （如 `home-niri-service-type`）保持直接 `(service ...)`。
 
+system services 同理：官方单例 service 直接
+`(service gnome-keyring-service-type ...)` 放进 application 的
+`system-services`（host assembly 经 `applications-system-services`
+消费；PAM 扩展、authority、daemon lifecycle 的边界见
+`architecture/desktop-authentication.md`）。
+
 ## Directory layout
 
 ```text
