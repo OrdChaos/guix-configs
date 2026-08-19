@@ -95,9 +95,23 @@ symlink 暴露到应用默认路径（如 `/persist/data-app/flatpak` →
 application/user authority**：应用经 libsecret/D-Bus 写入，vault
 持久在 `~/.local/share/keyrings`（bind 到 `/persist/data-app/
 gnome-keyring/keyrings`），**不属于本文件的 declarative secret
-taxonomy**（repo authority、.age 加密、secret-decl →
-`/run/guixcfg-secrets`）。两者不互相转换：未来 Chrome Safe Storage
-材料属于前者；预声明的 deployment API token 属于后者。
+taxonomy**。两者不互相转换：未来 Chrome Safe Storage 材料属于前者；
+预声明的 deployment API token 属于后者。
+
+### Keyring master credential 是 declarative secret（新模型）
+
+GNOME Keyring 的 **master credential 本身**是 repository-owned
+declarative secret：`apps/gnome-keyring/secrets/master.age`（单一
+app owner——ciphertext colocate 到 app 目录，AGENT.md §Application
+layer）。runtime 经 ordinary publisher 解密到
+`/run/guixcfg-secrets-ordinary/users/<user>/gnome-keyring-master`
+（owner=user，mode 0400；plaintext 仅存在于 /run，用户明确接受）。
+domain = **ordinary**——解密失败绝不阻塞 greetd login（login-critical
+vs ordinary 两个独立 publisher；本 secret 走 ordinary 侧）。
+
+master credential 是 **stable credential**：normal reconfigure 不
+轮换；rollback 不回滚 mutable vault；rotation 是显式维护操作
+（先 rekey vault 再切换 runtime secret）。
 
 ### 仓库提供初始值、应用随后接管
 

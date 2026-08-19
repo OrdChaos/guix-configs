@@ -16,24 +16,24 @@ POLKIT（system authority）
 ```
 
 ```text
-SECRET SERVICE（login keyring，两阶段 lifecycle）
-    greetd PAM auth（service "greetd"）
-      ↓ 用户登录密码（同一 PAM transaction）
-    pam_gnome_keyring.so（auth：保存 token）
+SECRET SERVICE（repository-owned master credential model）
+    apps/gnome-keyring/secrets/master.age（encrypted，repo owner）
+      ↓ existing guixcfg secret publisher（ordinary domain）
+    /run/guixcfg-secrets-ordinary/users/<user>/gnome-keyring-master
+      （owner=<user>，mode 0400；明文仅存在于 /run——用户明确接受）
       ↓
-    pam_gnome_keyring.so auto_start（session）——Phase 1：--login
-      ↓ 以用户身份启动 gnome-keyring-daemon --daemonize --login
-    （stub：只解锁/创建 login keyring，不完成初始化；
-      120 秒无 --start 接管自动退出——gkd-main.c LOGIN_TIMEOUT）
-      ↓
-    niri spawn-at-startup（session）——Phase 2：--start
-      ↓ gnome-keyring-daemon --start --components=secrets
-    接管同一 daemon、完成初始化、自身退出（上游语义）
-      ↓
-    gnome-keyring-daemon / org.freedesktop.secrets
+    Home Shepherd session service（gnome-keyring-session）
+      requirement: session D-Bus
+      ↓ wrapper：stdin 文件重定向注入密码（无 argv/env）
+    gnome-keyring-daemon --foreground --unlock --components=secrets
+      ↓ 单一 daemon、启动即解锁/创建 login keyring
+    org.freedesktop.secrets
       ↓
     ~/.local/share/keyrings  ←bind─ /persist/data-app/gnome-keyring/keyrings
 ```
+
+login authentication（greetd/PAM）与 keyring unlocking（本服务）完全
+分离——不共享 password lifecycle；`passwd` 不再同步 keyring 密码。
 
 ## 1. Polkit：system authority
 
@@ -60,119 +60,112 @@ SECRET SERVICE（login keyring，两阶段 lifecycle）
   加入 session PATH。不拥有 polkitd / rules / system D-Bus；无
   persistence、无 declarative secrets。
 
-## 2. Secret Service：PAM 登录链
+## 2. Secret Service：repository-owned master credential
 
-### 2.1 官方 service（pinned `gnu/services/desktop.scm:2004`）
+### 2.1 Authority model（2026-08 正式切换）
 
-`gnome-keyring-service-type` 只扩展 `pam-root-service-type`。
-`<gnome-keyring-configuration>` 的 `pam-services` 是 alist：
-
-- `("<pam-service>" . login)` → 该 service 的 auth 追加
-  `pam_gnome_keyring.so`（optional，保存密码 token）；session 追加
-  `pam_gnome_keyring.so auto_start`（optional，解锁 + 启动 daemon）；
-- `("<pam-service>" . passwd)` → password 段追加
-  `pam_gnome_keyring.so`（passwd 改密码时同步 keyring 密码）。
-
-pinned 默认是 `gdm-password`——本系统不用 gdm，**整体替换**为实际
-使用的 service（apps/gnome-keyring/definition.scm）：
-
-```scheme
-(pam-services '(("greetd" . login)
-                ("login" . login)
-                ("passwd" . passwd)))
-```
-
-- `"greetd"`：greetd 会话 PAM service（pinned `base.scm:4385`
-  `unix-pam-service "greetd"`；greetd 运行时 PAM service 名即
-  `"greetd"`——`config/mod.rs` `GENERAL_SERVICE`）。用户会话的
-  登录 keyring 解锁 + daemon 启动都在这里；
-- **greeter 会话必须走专用 `greetd-greeter` PAM service**（pinned
-  greetd 0.10.3 `server.rs:209-228` + `config/mod.rs`
-  `GREETER_SERVICE`）：`/etc/pam.d/greetd-greeter` 存在时 greeter
-  会话用它，否则**回退到 general service "greetd"**——guix 默认只
-  生成 `greetd`，因此 greeter 会话会跑带 `pam_gnome_keyring
-  auto_start` 的同一栈，每次 greeter 启动都 spawn 一个 `--login`
-  stub（实测：SSH-only 轮次出现 `gnome-keyring-daemon --daemonize
-  --login` 进程）。本仓库显式提供
-  `(unix-pam-service "greetd-greeter")`（无 keyring 模块）堵住回退；
-- `"login"`：mingetty tty2-6 console fallback（同一解锁路径）；
-- `"passwd"`：密码修改同步 keyring 密码。
-
-### 2.2 Daemon lifecycle：两阶段（PAM `--login` + session `--start`）
-
-**pinned 审计（gnome-keyring-48.0 源码，`gkd-main.c` 注释明示）：**
+旧模型（pam_gnome_keyring login-password handoff）**彻底退出**：
 
 ```text
-Phase 1（PAM，--login）：
-  pam_gnome_keyring.so auto_start 以用户身份启动
-  gnome-keyring-daemon --daemonize --login
-  ——只解锁/创建 login keyring 的 stub，不完成初始化；
-  ——LOGIN_TIMEOUT 120 秒：无 --start 接管则自动退出
-    （gkd-main.c:106-110, 825, 1114）；
-  ——即使 session 阶段以 root 运行（greetd worker 在 fork+setuid
-    之前 pam_open_session——worker.rs:222,245），模块 fork 的子进程
-    会 seteuid(getuid()) → setgid/setuid(pw_uid) 降权到 PAM 用户
-    再 execve daemon（pam/gkr-pam-module.c）——daemon、keyring 文件、
-    control socket 全部归用户。
-
-Phase 2（session，--start）：
-  session startup 必须再执行 gnome-keyring-daemon --start：
-  通过 control socket 接管 Phase 1 的 stub、把它接入会话环境、
-  完成初始化——"This second daemon usually exits"（gkd-main.c）。
+Unix login password → PAM_AUTHTOK → pam_gnome_keyring → --login stub
+→ --start handoff → Secret Service        （已删除）
 ```
 
-本仓库的 Phase 2 由 **niri spawn-at-startup** 提供
-（`apps/niri/config.kdl`：`spawn-at-startup "gnome-keyring-daemon"
-"--start" "--components=secrets"`）。这是 **architectural
-compromise**：Secret Service 本质是 user-session infrastructure，
-理想 owner 是 Home Shepherd/session manager；但当前架构（M2）唯一
-的 graphical-session startup 是 niri（greetd → bash -l → Home
-Shepherd → niri），niri 启动时 session D-Bus 已就绪（home-niri
-requirement home-dbus），spawn 落在 120 秒接管窗口内。若未来引入
-通用 XDG autostart runner 或 session manager，Phase 2 应迁移到该层
-（AGENT.md §15）。
+新模型：
 
-**D-Bus activation 不是完整 session startup 的等价替代**：两个
-D-Bus service file（org.freedesktop.secrets / org.gnome.keyring）
-都是 `--start --foreground --components=secrets`——同样是 --start
-语义。stub 存活窗口（120 秒）内，D-Bus activation 能接管它；stub
-超时退出后，activation 启动的是**全新 daemon——login keyring 未
-解锁**（会弹 keyring 密码提示）。因此 PAM-only 部署的后果是：登录
-后 120 秒内 Secret Service 是未初始化的 stub，120 秒后 daemon 消失
-（`pgrep -a gnome-keyring-daemon` 无输出——实测现象），再次访问时
-由 D-Bus activation 拉起的 daemon 处于 locked 状态。
+```text
+apps/gnome-keyring/secrets/master.age（encrypted，app-owned）
+    ↓ guixcfg ordinary secret publisher（boot 时 root 解密）
+/run/guixcfg-secrets-ordinary/users/<user>/gnome-keyring-master
+    （owner=<user>，mode 0400——plaintext 仅存在于 /run，用户明确接受）
+    ↓ Home Shepherd session service
+gnome-keyring-daemon --foreground --unlock --components=secrets
+    ↓ 单一 daemon；stdin 注入密码；启动即解锁/创建 login keyring
+org.freedesktop.secrets
+```
 
-**单实例**：daemon `--start` 先 `discover_other_daemon`
-（`gkd-main.c`）——PAM stub、--start initializer、D-Bus activation
-最终都指向同一 logical daemon；重复启动是 no-op。
+核心 separation：
 
-**禁止**：shell / session script / Home Shepherd 手动再启动
-`gnome-keyring-daemon`（测试 GK5 断言——唯一 invocation 是 niri
-config 的 spawn）。
+```text
+login authentication（greetd/PAM）≠ keyring unlocking（session service）
+```
 
-### 2.3 Keyring storage
+- greetd/PAM 决定"能否登录"；本服务决定"会话能否解锁其 vault"；
+- 两者不共享 password lifecycle；`passwd` 只改 Unix 密码，**不再
+  同步 keyring 密码**（设计目标，不是 regression）；
+- keyring master credential 是 **stable credential**：normal
+  reconfigure 不轮换；rollback 不回滚 mutable vault；rotation 是
+  显式维护操作（先 rekey vault，再切换 runtime secret）。
+
+### 2.2 PAM 完全退出
+
+`/etc/pam.d/greetd`、`/etc/pam.d/login`、`/etc/pam.d/passwd` 均无
+`pam_gnome_keyring.so`（测试 GK2 断言）。`gnome-keyring-service-type`
+不再实例化；greetd-greeter 专用 PAM service 已删除（其唯一存在理由
+——防止 greeter 会话回退到带 keyring 的 "greetd" 栈——随 PAM
+keyring 退出而消失；greeter 会话现在走无 keyring 的 "greetd" 栈，
+不会产生任何 daemon）。
+
+### 2.3 Daemon invocation（pinned gnome-keyring-48.0 审计，Model 1）
+
+```text
+gnome-keyring-daemon --foreground --unlock --components=secrets
+    < /run/guixcfg-secrets-ordinary/users/<user>/gnome-keyring-master
+```
+
+pinned 语义（`gkd-main.c`）：
+
+- `--unlock`：从 stdin 全量读取密码（含换行都算密码——加密时无尾
+  换行）；`--unlock` + `--foreground` 组合合法（仅 `--start`+`--unlock`
+  互斥）；
+- 不带 `--login`：daemon **正常完整初始化**（不是 stub）——login
+  keyring 解锁/创建在 initialization 块无条件执行
+  （`gkd-main.c:763` `gkd_login_unlock(login_password)`），与
+  `--components` 无关；`--components=secrets` 只控制 Secret Service
+  注册；
+- `--foreground`：不 daemonize——Shepherd 直接追踪 PID；SIGTERM →
+  `gkd_main_quit` 干净退出；
+- 失败语义：密码错误 → "failed to unlock login keyring on startup"
+  （daemon 继续运行但 locked）；secret 文件缺失 → 重定向失败 →
+  服务失败（shepherd 状态可见，登录不受影响——ordinary domain）。
+
+### 2.4 会话服务（单一 lifecycle owner）
+
+`apps/gnome-keyring` 的 home-services：
+
+- Home Shepherd 服务 `gnome-keyring-session`（requirement `dbus`，
+  one-shot——daemon 退出 = 会话结束，不 respawn）；
+- wrapper（program-file）：检查 control socket（同一用户已有 daemon
+  则 no-op 退出——每用户单 daemon）→ 密码经 stdin 文件重定向 →
+  exec foreground daemon；
+- 密码不出现于 argv/env/日志；日志只有 daemon stderr。
+
+D-Bus activation（org.freedesktop.secrets.service 的
+`--start --foreground`）仍是 fallback：本服务在会话启动早期占有
+bus name，activation 不会触发；服务失败时客户端访问才可能激活
+（locked 状态）。不存在 split-brain（单 daemon 设计）。
+
+### 2.5 Keyring storage
 
 daemon 默认 vault：`g_get_user_data_dir()/keyrings` =
-`~/.local/share/keyrings`（pinned 源码 `daemon/dbus/gkd-secret-service.c:171`）。
+`~/.local/share/keyrings`（pinned `daemon/dbus/gkd-secret-service.c:171`）。
 
 ```text
-/ persist/data-app/gnome-keyring/keyrings
+/persist/data-app/gnome-keyring/keyrings
         ↓ bind-directory（application-persistence）
 ~/.local/share/keyrings
 ```
 
-这是 **application/user-owned sensitive mutable state**——不是
-machine-state、不是 declarative .age secret、不是 data-home。
+application-owned sensitive mutable state——不是 machine-state、不是
+declarative .age secret、不是 data-home。
 
-### 2.4 不持久化 runtime
+### 2.6 不持久化 runtime
 
 以下每 session/boot 重建，禁止 persistence：
 
 ```text
-/run/user/<uid>/...
-/run/user/<uid>/keyring（control socket）
+/run/user/<uid>/...（含 keyring control socket）
 XDG_RUNTIME_DIR、D-Bus session socket
-polkit 临时授权状态
 ```
 
 ## 3. Declarative secrets vs Secret Service secrets
@@ -197,22 +190,17 @@ deployment API token 属于前者。
   TPM-to-keyring / LUKS password forwarding 明确 out of scope；
   未来改变登录认证方式时，需单独设计 keyring unlock。
 
-## 5. 迁移（no implicit migration）
+## 5. Vault 状态与迁移
 
-`~/.local/share/keyrings` 若在首次启用 persistence 前已有非空数据
-（例如旧会话直接写在 ephemeral home 里），**不会自动迁移**——bind
-mount 会覆盖旧目录，ephemeral root 重建后旧数据消失。人工迁移步骤：
-
-```text
-1. 备份旧目录：cp -a ~/.local/share/keyrings /tmp/keyrings.bak
-   （在启用 rule 前的旧 generation 会话内，mount 尚未覆盖时）
-2. 启用 rule、reconfigure、登录一次（mount 就位）
-3. 停掉 gnome-keyring（logout）
-4. root：把备份内容复制到 backing：
-   cp -a /tmp/keyrings.bak/. /persist/data-app/gnome-keyring/keyrings/
-   chown -R user:users /persist/data-app/gnome-keyring/keyrings
-5. 重新登录验证 secret-tool lookup
-```
+- 基础设施**绝不自动 destructive-reset vault**（不删除/覆盖/重建
+  keyring 文件）；
+- 若现存 vault 的密码与配置的 master credential 不一致：解锁失败
+  （daemon 运行但 locked）——需**人工 rekey** 现有 vault 到配置的
+  master credential（显式维护操作），或（仅测试 VM、确认无真实数据
+  时）人工删除重建一次；
+- `~/.local/share/keyrings` 若在启用 persistence 前已有非空数据：
+  **不自动迁移**（no-implicit-migration 不变量）——人工迁移步骤见
+  旧文档记录；secret vault 不允许"尽力迁移"。
 
 ## 6. Pinned source map（94a84f9）
 
@@ -225,40 +213,31 @@ mount 会覆盖旧目录，ephemeral root 重建后旧数据消失。人工迁�
 | greetd PAM service（"greetd"） | `gnu/services/base.scm:4385-4410` |
 | greetd 运行时 PAM service 名 | greetd `config/mod.rs` `GENERAL_SERVICE` |
 | greetd session 阶段先于 setuid（worker） | greetd `session/worker.rs:222,245` |
-| pam 模块降权 + exec daemon | gnome-keyring `pam/gkr-pam-module.c` |
-| 两阶段 lifecycle（--login stub → --start 接管） | gnome-keyring `daemon/gkd-main.c`（注释明示） |
-| --login stub 120 秒超时退出 | gnome-keyring `gkd-main.c` `LOGIN_TIMEOUT` |
-| D-Bus activation = --start --foreground | gnome-keyring `daemon/*.service.in` |
-| daemon 单实例（--start discover） | gnome-keyring `daemon/gkd-main.c` |
-| daemon 延迟接管 session bus | gnome-keyring `daemon/gkd-util.c` |
+| --unlock 从 stdin 全量读密码（含换行） | gnome-keyring `daemon/gkd-main.c` `read_login_password` |
+| --unlock 合法组合（--foreground；--start 互斥） | gnome-keyring `gkd-main.c` parse_arguments |
+| login keyring 解锁无条件（initialization 块） | gnome-keyring `gkd-main.c:763` `gkd_login_unlock` |
+| --foreground 不 daemonize；SIGTERM 干净退出 | gnome-keyring `gkd-main.c` `on_signal_term` |
+| D-Bus activation = --start --foreground（fallback only） | gnome-keyring `daemon/*.service.in` |
+| daemon 单实例（discover_other_daemon） | gnome-keyring `daemon/gkd-main.c` |
+| 每用户单 daemon（control socket 独占） | gnome-keyring `daemon/control/gkd-control-server.c` |
 | vault 路径 XDG_DATA_HOME/keyrings | gnome-keyring `daemon/dbus/gkd-secret-service.c:171` |
 | session bus 默认扫描 XDG service dirs | dbus `session.conf` `<standard_session_servicedirs/>` |
 
 ## 7. Runtime acceptance（VM manual）
 
-1. greetd 输入用户密码登录：session 成功、elogind session active、
-   无额外 keyring 密码弹窗；
-2. 登录后（不用等）：`pgrep -a gnome-keyring-daemon`——daemon 存在
-   且**持续存在**（Home Shepherd initializer 完成 --start 接管，
-   不再有 120 秒超时退出）；`ps -o user,pid,ppid,cmd -p <pid>`
-   确认 user 所有、单进程；
-3. `busctl --user list | grep secrets` 或
-   `guix shell libsecret -- secret-tool search --all ''` 可访问
-   `org.freedesktop.secrets`；
-4. store：`guix shell libsecret -- secret-tool store --label=guixcfg-secret-service-test guixcfg=test <sentinel>`
-   （synthetic sentinel，非真实密码）；
-5. lookup 立即成功（无 keyring 密码提示）；
-6. 等 3 分钟再 `pgrep`：daemon 仍在（验证 LOGIN_TIMEOUT 已被
-   initializer 消除）；
-7. reboot → 同一登录密码登录 → lookup 成功且不再要求 keyring 密码
-   （证明 PAM unlock + --start 接管 + data-app persistence +
-   runtime 重建）；
-8. logout → login 再测一次；
-9. `/run/user/<uid>/...` 在 session 间重建，不来自 /persist；
-10. polkit：图形会话内 `pkexec id` → 提示来自 polkit-gnome（图形）而非
-    textual fallback；认证成功；cancel 正常；无两个 agent 抢同一
-    prompt。
-
-决定性实验（修复前确认根因，可选）：登录后（stub 存活窗口内）手动
-`gnome-keyring-daemon --start` → `secret-tool lookup` 立即成功 →
-证明缺的是 session 初始化阶段（PAM --login 本身正常）。
+1. greetd 输入用户密码登录：session 成功、elogind session active；
+2. `pgrep -a gnome-keyring-daemon -f`：**恰好一个**
+   `--foreground --unlock --components=secrets`（无 `--login`、
+   无 `--start`、无第二个 daemon）；
+3. `ls -la /run/user/<uid>/keyring/`：control socket 稳定存在；
+4. `busctl --user list | grep secrets`：org.freedesktop.secrets →
+   该 daemon PID；
+5. store：`guix shell libsecret -- secret-tool store --label=guixcfg-keyring-test guixcfg keyring-test <synthetic>`
+   ——无 keyring 密码提示；
+6. lookup 立即返回；`sleep 180 && pgrep`：daemon 仍在（无 120s
+   超时问题——本模型无 stub）；
+7. reboot ×3 + logout/login：每次登录后 lookup 直接成功，无需额外
+   keyring 密码；
+8. failure path：临时使 master secret 不可用（不破坏 ciphertext）→
+   greetd login 与 niri 会话正常，keyring 服务 failed/unavailable，
+   登录不受影响。

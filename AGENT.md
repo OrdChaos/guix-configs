@@ -306,33 +306,26 @@ docs/architecture/storage.md；本节省略版：
   keyrings`（application-persistence rule）；keyring 文件可持久化，
   runtime sockets 必须 ephemeral。keyring ≠ declarative .age
   secret（authority 不同，互不转换）。
-- **login keyring 自动解锁依赖登录 PAM 认证流**（greetd PAM auth
-  拿到密码 → session 段 `pam_gnome_keyring.so auto_start`）。改变
-  login authentication method 时需单独设计 keyring unlock；
-  autologin/fingerprint/FIDO-only/TPM-to-keyring 明确 out of scope。
-- **greetd 的 greeter 会话与用户会话共用 PAM service 名是陷阱**：
-  greetd 0.10.3 的 `[default_session] service` 默认
-  `greetd-greeter`，但 `server.rs` 在 `/etc/pam.d/greetd-greeter`
-  缺失时**回退到 general service "greetd"**——greeter 会话会跑
-  带 `pam_gnome_keyring` 的同一栈并 spawn 无谓的 `--login` stub。
-  必须显式提供 `(unix-pam-service "greetd-greeter")`（无 keyring）
-  堵住回退（实测一次；GK3 回归测试）。
-- **Secret Service 是两阶段 lifecycle，`auto_start` 只是第一半**：
-  PAM 的 `--login` 只启动"解锁 login keyring 的 stub"（gkd-main.c
-  注释明示；LOGIN_TIMEOUT 120 秒无接管自动退出）；session 侧必须
-  再跑 `gnome-keyring-daemon --start` 完成初始化（本仓库 = niri
-  config.kdl 的 spawn-at-startup——architectural compromise：当前
-  架构唯一的 graphical-session startup 是 niri；未来有通用 XDG
-  autostart/session manager 时 Phase 2 应迁移到该层）。
-  **不要把 "PAM 配置存在 ⇒ Secret Service 可用" 当成立**（实机否定
-  过一次）；D-Bus activation 是 --start 语义的 fallback，但不是
-  完整 session startup 的等价替代（stub 超时后激活的是 locked 的
-  全新 daemon）。
-- **不要手动双启动 Secret Service daemon**：PAM 拥有 login 路径
-  unlock；`--start` initializer（niri spawn）与 D-Bus activation
-  都走单实例 discover——shell/session script/Home Shepherd 里禁止
-  再执行 `gnome-keyring-daemon`（测试 GK5/GK7 断言：唯一 invocation
-  是 niri config 的 spawn）。
+- **GNOME Keyring master credential = repository-owned encrypted
+  application secret**（apps/gnome-keyring/secrets/master.age →
+  ordinary publisher → /run plaintext，owner=user 0400）；**不是**
+  login password handoff。login authentication 与 keyring unlocking
+  完全分离：PAM 里禁止出现 pam_gnome_keyring（greetd/login/passwd
+  都不许有）；`passwd` 不同步 keyring 密码（设计目标）。
+- **Secret Service daemon 的单一 lifecycle owner 是 user-session
+  service**（apps/gnome-keyring 的 Home Shepherd
+  `gnome-keyring-session`）：wrapper 从 /run master 文件经 stdin
+  注入密码（禁止 argv/env/日志出现密码）→
+  `gnome-keyring-daemon --foreground --unlock --components=secrets`
+  （pinned Model 1）。禁止：PAM --login、niri/Home 旧 --start
+  glue、shell spawn、重复 daemon（每用户单 daemon：control socket
+  已存在则 no-op）。
+- **keyring master secret 是 ordinary/application domain**：解密
+  失败绝不阻塞 greetd login（keyring 不可用即可）。不要把它改成
+  login-critical。
+- **master credential 是 stable credential**：normal reconfigure 不
+  轮换；rollback 不回滚 mutable vault；rotation 是显式维护操作
+  （先 rekey vault 再切换 runtime secret）。
 - gnome-keyring 的 PAM mapping 只配置本系统实际使用的 service
   （默认 gdm-password 必须整体替换为 greetd/login/passwd——见
   apps/gnome-keyring/definition.scm）。
