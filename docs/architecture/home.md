@@ -10,10 +10,40 @@ Guix Home 与用户数据边界。
 - **Guix Home owns**：user packages、shell rc/config、aliases、
   environment、Git config、dotfiles、user services。
 - **Persistent data layer owns**：user-created persistent data、SSH
-  host private keys、later application state / private secrets。
+  host private keys、application state / private secrets。
 
 Home 不挂载 /persist、不管理 sshd、不创建 private keys；System 不
 重建用户数据。
+
+## Application layer（纵向配置单元）
+
+用户态/application-level 组件以**应用为纵向单元**组织（AGENT.md
+§Application layer）：
+
+```text
+modules/guixcfg/apps/
+├── model.scm                <application> record（contribution container）
+├── registry.scm             显式启用列表（%applications；目录存在 != 启用）
+└── <app>/
+    ├── definition.scm       声明入口（(guixcfg apps <app> definition)）
+    ├── 公开配置 colocate    如 config.kdl
+    └── secrets/*.age        单一 app owner 的加密密文
+```
+
+`<application>` 只声明 contributions（home-packages / home-services /
+system-services / persistence / secrets）；部署由各自的 generic
+single-owner mechanism 执行：
+
+- home packages/services → Guix Home（applications-home-* 聚合进
+  `%guix-home`）；
+- persistence rules → `(guixcfg system application-persistence)`
+  （/persist/data-app bind，见 persistence.md）；
+- secrets → `(guixcfg security secrets)` publisher（ciphertext
+  file-like 由 app definition 解析；见 secrets.md）。
+
+不实现 NixOS/RDE module framework（无 solver/priority/override/
+自动发现）。新增应用：`cp -r templates/application
+modules/guixcfg/apps/foo` → 填 definition → registry 加一行。
 
 ## Ephemeral /home + bind-mounted 用户目录
 
@@ -26,7 +56,9 @@ guix-configs / Projects / Documents / Downloads / Pictures
 
 显式 ephemeral（本轮不持久化）：`~/.cache`、`~/.config`、
 `~/.local`、`~/.mozilla`、`~/.steam`、整个 HOME。本轮不声称完整
-用户状态持久化。
+用户状态持久化。**应用级 mutable state**（如未来 Firefox profile）
+走 `/persist/data-app` bind（application-persistence 规则，不整目录
+持久化；见 persistence.md）。
 
 ## Guix Home 是 derived state
 
@@ -42,6 +74,9 @@ state**，由仓库 + 当前 system generation 重新生成——不持久化：
   `(service guix-home-service-type ...)` 挂入 operating system，
   在 `guix system reconfigure` 时构建，成为 **system generation
   closure** 的一部分；
+- `%guix-home` 是薄 assembly：packages/services 全部来自
+  `%applications`（registry）的 aggregation，本文件不知道具体
+  应用配置；
 - boot 时 one-shot shepherd 服务 `guix-home-user`（requirement
   `(user-processes)`）以 user 身份运行 closure 的 activate 脚本；
   symlink manager 原子重建 `~/.guix-home`（symlink + rename）与

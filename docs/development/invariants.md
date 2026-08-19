@@ -76,9 +76,15 @@ VM 假设不得泄漏进 common 模块。
 ## 11. New persistent state must define its full contract
 
 新增任何 persistent state 必须明确：canonical backing、consumer
-path、exposure method（bind/symlink/direct/projection）、owner、backup
-class、lifecycle。应用 persistence（`/persist/data-app`）当前是骨架，
-新增 rule 必须补全这些字段。
+path、exposure method（bind/symlink/direct/projection）、owner、
+lifecycle。**backup 是未来独立 concern**——contract 不要求 backup
+class，当前不制造 backup taxonomy。
+
+应用 persistence（`/persist/data-app`）：generic engine 已实现
+（`system/application-persistence.scm`，bind-only、严格 path
+validation、activation 恢复 consumer parent ownership）；新增
+production rule 必须走 `<application-persistence-rule>` 并满足
+persistence contract 全部字段。
 
 ## 12. Composite runtime DBs may be projections
 
@@ -112,9 +118,12 @@ subprocess capture helper、第二个 persistence deployment mechanism、
 8. 公开配置进入 `/gnu/store`。
 9. age 密文进入 Git 和 store，明文只进入 `/run`。
 10. 机器 identity 位于 `/persist/system`。
-11. 可变应用状态位于 `/persist/data-app`。
+11. 可变应用状态位于 `/persist/data-app`（bind projection；禁止整
+    `.config`/`.local`/`.local/share`/`.cache` 持久化）。
 12. 普通用户数据位于 `/persist/data-home`。
-13. 不备份的大型状态位于 `/persist/data-nobackup`。
+13. `/persist/data-nobackup` 是 persistent bulk/reacquirable、
+    显式寻址的 storage class（direct access，不参加 app persistence
+    bind registry）；当前无 backup subsystem。
 14. 不把配置仓库直接软链接到应用运行路径。
 15. 不在开机时复制一份仓库配置到持久目录。
 16. 正式部署只消费已提交 Git commit 的只读快照。

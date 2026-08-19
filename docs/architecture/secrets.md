@@ -10,7 +10,7 @@ runtime secrets、威胁模型。操作命令在 `operations/installation.md`。
 ### 公开、只读、声明式配置
 
 ```text
-~/guix-configs/files/...
+modules/guixcfg/apps/<app>/...（公开配置与 definition colocate）
         ↓ system/home build
 /gnu/store/<hash>-...
         ↓ symlink
@@ -22,7 +22,7 @@ runtime secrets、威胁模型。操作命令在 `operations/installation.md`。
 ### age 加密整文件
 
 ```text
-~/guix-configs/secrets/.../*.age
+secrets/.../*.age 或 apps/<app>/secrets/*.age
         ↓ build（ciphertext 允许进 store）
 /gnu/store/<hash>-secret.age
         +
@@ -32,6 +32,25 @@ runtime secrets、威胁模型。操作命令在 `operations/installation.md`。
 ```
 
 使用 age 整文件加密，不使用 SOPS 字段级加密。
+
+**Secret ownership 分布（mechanism centralized）**：
+
+```text
+单一 app owner       → apps/<app>/secrets/*.age（由该 app 的
+                       definition.scm 声明）
+多消费者 / 共享      → secrets/shared/
+system / machine     → secrets/system/、secrets/hosts/
+install / bootstrap  → secrets/install/、secrets/bootstrap/
+recipients           → secrets/recipients/
+```
+
+generic publisher（`(guixcfg security secrets)`）不知道任何具体
+inventory；`secret-decl-source` 是 **file-like**（ciphertext 由
+caller 解析——app-local 用 source-relative `local-file`，top-level
+集中 secrets 用唯一 resolver `(guixcfg utils repository-source)`）。
+host-owned inventory 放在 host 模块附近（如
+`(guixcfg hosts vm-secrets)` 的 `%vm-secrets`），不混入 generic
+security mechanism。
 
 ### 可变应用状态
 

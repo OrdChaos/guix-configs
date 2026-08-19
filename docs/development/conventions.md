@@ -6,14 +6,19 @@
 ## Module layout
 
 - `modules/guixcfg/<area>/<name>.scm`，area 按职责：
-  `storage`（磁盘/子卷/generation 纯模型与安装器）、`boot`（initrd/
-  UKI/TPM 解锁）、`system`（OS 组装、readiness、accounts、ssh、
-  user-persistence）、`security`（age/secrets/证书）、`services`
-  （用户态 one-shot 服务）、`home`（Guix Home）、`users`（用户结构
-  事实）、`utils`（跨领域原语）。
+  `apps`（Application layer：`<application>` 纵向配置单元——model、
+  registry、每个应用一个 `<app>/definition.scm` 目录）、`storage`
+  （磁盘/子卷/generation 纯模型与安装器）、`boot`（initrd/UKI/TPM
+  解锁）、`system`（OS 组装、readiness、accounts、ssh、
+  user-persistence、application-persistence）、`security`
+  （age/secrets/证书）、`services`（用户态 one-shot 服务）、`home`
+  （Guix Home 薄入口）、`users`（用户结构事实）、`utils`（跨领域
+  原语，含 repository-source 唯一 resolver）。
 - 一个模块一句清晰职责描述（文件头注释）。
 - pure model（storage/root-generation、boot/boot-state 的读写分离）
   与 executor/service/tool 分开；model 不 mount/delete/spawn。
+- host-owned inventory（如 `%vm-secrets`）放 host 模块附近，不混入
+  generic mechanism。
 
 ## Exports
 

@@ -169,3 +169,40 @@ channels；禁止照最新 master/博客写代码。
   ASCII（无中文、Unicode 箭头、box-drawing、emoji）。注释/docstring/
   docs 可用中文。外部程序输出（Guix/cryptsetup/tpm2-tools 等）不翻译。
 - test-ui-language.scm 静态+动态回归此规则。
+
+## 12. Application layer（用户态纵向配置单元）
+
+详细架构见 docs/architecture/home.md（Application layer 一节）与
+docs/reference/repository-layout.md；本节省略版开发约束：
+
+- **用户态 application/component 以 `modules/guixcfg/apps/<name>/`
+  为纵向 ownership unit**；`definition.scm` 是该应用的唯一声明入口
+  （公开配置、app-private secrets colocate 同目录）。
+- app definition 只声明 contributions（home-packages / home-services /
+  system-services / persistence / secrets）；Home deployment、
+  persistence mount、secret publication 必须由 generic single-owner
+  mechanism 执行（Guix Home、file-systems、secrets publisher）——
+  禁止在 app 里实现第二套部署逻辑。
+- **repository 是 evaluation/deployment input，绝不是 runtime
+  dependency**；公开配置进 store 后再投影；禁止 boot/runtime 读
+  Git checkout。
+- app-local static source 用 source-relative `local-file`
+  （`(local-file "config.kdl")` 按所在文件目录解析）；禁止重新散布
+  跨层 `../../../files/...`。top-level secrets 引用只能走
+  `(guixcfg utils repository-source)` 的唯一 resolver。
+- mutable application state 的 canonical backing 位于
+  `/persist/data-app`（bind projection）；禁止持久化整个
+  `.config/.local/.local/share/.cache`。
+- persistence 不得自动迁移/覆盖/删除已有 consumer data。
+- app-private encrypted secrets colocate（apps/<app>/secrets/）；
+  system/shared/install/bootstrap secrets 集中（top-level
+  secrets/）；generic security mechanism 不知道具体 application
+  inventory。
+- `/persist/data-nobackup` 是 direct-access bulk/reacquirable
+  storage，不参加 app persistence bind registry；当前不建立 backup
+  framework（backup 是未来独立 concern）。
+- application enablement 必须经过显式 registry
+  （apps/registry.scm）——不自动扫描目录；目录存在 != 应用启用。
+- `<application>` 只是一层 contribution record；禁止演化成自制
+  NixOS/RDE module framework（无 dependency solver / priority /
+  override / fixpoint / 自动发现 / 继承）。

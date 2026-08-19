@@ -85,9 +85,10 @@ readiness 命名 capability；provision 前必须验证最终可观察状态
 - **系统级 Guix 软件**：`modules/guixcfg/system/packages.scm`
   （configctl、flatpak、文件系统/恢复/硬件工具、所有用户需要的基础
   工具）。服务自己依赖的软件尽量由 service 直接引用。
-- **用户级 Guix 软件**：`modules/guixcfg/home/packages.scm` 或由
-  Home profiles 组合（普通 CLI、桌面应用、编辑器、媒体工具、日常
-  开发辅助）。
+- **用户级 Guix 软件**：`modules/guixcfg/apps/<name>/definition.scm`
+  （application layer——纵向配置单元；home packages/services 经
+  `apps/registry.scm` 聚合进 `%guix-home`）。见 `architecture/home.md`
+  的 Application layer 一节。
 - **项目专属工具链**：项目自身（manifest、channels.lock.scm），
   不放进全局用户软件列表。
 

@@ -27,10 +27,25 @@ root 被标 Last Good）。未来应与正确的 interactive readiness/health
 
 ### login-critical vs ordinary secrets
 
-`interactive-secrets-ready` 当前由全部 `%vm-secrets`（含 test/普通
-应用 secret）共同 provision——普通非关键 secret 失败会阻塞 interactive
-login。未来将 secrets 分为 login-critical 与 ordinary application
-两类，`interactive-secrets-ready` 只代表前者。
+`interactive-secrets-ready` 当前由全部 secrets（含 test/普通应用
+secret）共同 provision——普通非关键 secret 失败会阻塞 interactive
+login。**架构已落好**（app-secret ownership 分布、file-like
+source、host-owned inventory），但运行时仍是单一事务性发布者
+（一个 /run/guixcfg-secrets generation publication、fail-closed
+全量事务）——区分 login-critical 与 ordinary 需要两个独立发布者/
+两个 generation 根，属 secrets subsystem 重构，刻意未做（避免
+扩大范围与破坏现有 fail-closed 事务；2026-08 app-layer 重构报告）。
+未来：`interactive-secrets-ready` 只代表 login-critical 类。
+
+### Application persistence（/persist/data-app）
+
+generic engine 已实现（`system/application-persistence.scm`：
+bind-only directory bind、严格 path validation、activation 恢复
+consumer parent ownership、三路径安全审计）。**当前无真实 production
+application persistence rule**——状态：mechanism ready, production
+rules pending explicit application adoption。每新增 rule 必须满足
+persistence contract（canonical backing / consumer / exposure /
+owner / lifecycle）；backup 是未来独立 concern，不制造 taxonomy。
 
 ### stable identity offline-attack boundary
 
@@ -60,7 +75,6 @@ lifecycle。
   E2E harness，当前零代码引用（有文档引用）。保留历史价值，命名
   整理待定。
 - `tools/format-scheme.mjs`：零引用，疑似死代码。
-- `files/niri/config.kdl`：零引用（桌面阶段内容），疑似死代码。
 
 ## Future features
 
