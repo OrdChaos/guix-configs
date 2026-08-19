@@ -178,12 +178,45 @@ tpm2-enroll enroll|replace --luks-secret → recovery passphrase 验证与 keysl
 
 ## Runtime secrets
 
+三个正交维度：
+
+```text
+owner            = 为什么存在、哪个配置单元负责它（app / host / shared / system）
+deployment target = 解密后给谁、放哪里（scope：system / user）
+readiness domain  = 失败影响范围（login-critical / ordinary）
+```
+
+`<secret-decl>` 的 `domain` 字段（显式必填）声明 readiness domain：
+- **login-critical**：失败 → `interactive-secrets-ready` 不成立 → login
+  gate 保持关闭；
+- **ordinary**：失败 → `ordinary-secrets-ready` 不成立、shepherd 明确
+  报告失败——**绝不阻止 interactive login**。
+
+两个 domain 拥有**完全独立**的 publication transaction（staging /
+generation / current root / Shepherd service / capability）：
+
+```text
+login-critical   /run/guixcfg-secrets.d/<N>  → /run/guixcfg-secrets
+                 （provision interactive-secrets-ready；login gate 依赖）
+ordinary         /run/guixcfg-secrets-ordinary.d/<N>
+                 → /run/guixcfg-secrets-ordinary
+                 （provision ordinary-secrets-ready；不 gate login）
+```
+
+- domain 内 atomic/fail-closed：任一 secret 解密失败 → 本 domain 不
+  发布新 generation（旧代保留）；
+- domain 间 failure-isolated：ordinary 失败不影响 login-critical
+  发布；login-critical 失败不能被 ordinary 成功掩盖；
+- 不 catch-and-ignore 解密错误；
+- composition root 在 host/system assembly（`applications-secrets`
+  聚合 + host-owned inventory → 按 domain 分区 → generic publisher
+  实例）——security/secrets.scm 只做 mechanism。
 - scope 语义：install（仅安装/恢复消费，不 runtime 部署）、system
-  （→ /run/guixcfg-secrets/system/）、user（→
-  /run/guixcfg-secrets/users/<user>/，owner=user 0600）。
-- boot 时由 secrets-deploy 服务用 installed stable S 一次性解密到
-  /run/guixcfg-secrets（tmpfs），generation publication（原子
-  symlink 切换），consumer 永远看到完整旧代或完整新代。
+  （→ <domain-root>/system/）、user（→ <domain-root>/users/<user>/，
+  owner=user 0600）。
+- boot 时由对应 domain 的 deploy 服务用 installed stable S 一次性
+  解密到 domain root（tmpfs），generation publication（原子 symlink
+  切换），consumer 永远看到完整旧代或完整新代。
 - 缺 identity 或解密失败：服务明确 failed（不询问 master password、
   不打断 boot——消费方因缺 secret 而失败）。
 - 明文 secret 只存在于 /run（tmpfs）与内存。

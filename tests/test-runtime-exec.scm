@@ -46,6 +46,7 @@
              (ice-9 ftw)                ; scandir
              (ice-9 regex)              ; string-match
              (srfi srfi-1)
+             ((rnrs base) #:select (let-values))  ; 只取 let-values（R6RS error 会覆盖 Guile 原生 error）
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -385,6 +386,7 @@ $6$salt$faketesthash:!:20682::::::\n"
     (list (secret-decl
            (name 'runtime-test)
            (scope 'system)
+           (domain 'login-critical)
            ;; file-like contract（secret-decl-source = caller 解析的
            ;; ciphertext source；ciphertext 随 closure 进 store）
            (source (local-file %test-cipher "runtime-test.age"))
@@ -476,5 +478,167 @@ $6$salt$faketesthash:!:20682::::::\n"
     (close-pipe pipe)
     (test-assert "deploy without identity fails with clear error"
                  (string-contains all "identity missing"))))
+
+
+;; ── readiness domain failure isolation（login-critical / ordinary）──
+;; 两个 domain 各自独立 staging/generation/current root：
+;;   domain 内 fail-closed（任一失败 → 本 domain 不发布新代）
+;;   domain 间 failure-isolated（ordinary 失败绝不影响 login-critical）
+;; 覆盖 A7 的 1-7 场景（8-10 在 test-secrets/test-apps）。
+(define (fake-root-with-identity)
+  "带 age identity 与 /run 的 fake root（deploy 需要：identity 在
+/persist/system/keys/age/identity、/run 可写）。"
+  (let* ((root (make-fake-root
+                "root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:u:/home/user:/bin/bash\n"
+                #f))
+         (age-dir (string-append root "/persist/system/keys/age")))
+    (mkdir-p age-dir)
+    (call-with-output-file (string-append age-dir "/identity")
+                           (lambda (p)
+                             (call-with-input-file %test-key
+                                                   (lambda (in)
+                                                     (display (get-string-all in) p)))))
+    (chmod (string-append age-dir "/identity") #o600)
+    (let ((run-dir (string-append root "/run")))
+      (mkdir run-dir)
+      (chmod run-dir #o755))
+    root))
+
+(define (run-deploy-script root script)
+  "在 fake root 里执行 deploy SCRIPT；返回 (values output exit-status)。
+exit-status 来自 chroot 内 guile 的退出码（deploy 失败 = throw →
+非零；成功 = 0），经 echo 捕获。"
+  (let* ((cmd (string-append
+               "unshare --user --map-root-user --map-users=auto "
+               "--map-groups=auto --mount --pid --fork sh -c '"
+               "mount --bind /gnu/store " root "/gnu/store; "
+               "chroot " root " " %guile " --no-auto-compile " script
+               "; echo EXIT=$? 2>&1'"))
+         (pipe (open-input-pipe cmd))
+         (all (get-string-all pipe)))
+    (close-pipe pipe)
+    (let ((m (string-match "EXIT=([0-9]+)" all)))
+      (values all (if m (string->number (match:substring m 1)) #f)))))
+
+(define (current-link-valid? root link-path)
+  "fake root 内 LINK-PATH symlink 存在且解析目标（chroot 内绝对路径）
+真实存在。注意不能用 file-exists? 直接检查链接本身（它跟随目标；
+host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析。"
+  (let ((p (string-append root link-path)))
+    (let ((link (false-if-exception (readlink p))))
+      (and (string? link)
+           (let ((rel (if (string-prefix? "/" link)
+                        (substring link 1)
+                        link)))
+             (file-exists? (string-append root "/" rel)))))))
+
+(define (numeric-generations root store-dir)
+  "fake root 内 STORE-DIR 下的数字 generation 目录列表。"
+  (let ((d (string-append root store-dir)))
+    (if (file-exists? d)
+      (filter (lambda (e) (string-match "^[0-9]+$" e))
+              (scandir d))
+      '())))
+
+(define (good-decl name domain)
+  (secret-decl (name name) (scope 'system) (domain domain)
+               (source (local-file %test-cipher (string-append (symbol->string name) ".age")))
+               (target-name (symbol->string name)) (owner-user "root") (mode #o400)))
+
+(define %corrupt-cipher
+  (let ((p (string-append "/tmp/guixcfg-corrupt-" (number->string (getpid)) ".age")))
+    (call-with-output-file p (lambda (port) (display "corrupt-not-an-age-ciphertext" port)))
+    p))
+
+(define (bad-decl name domain)
+  (secret-decl (name name) (scope 'system) (domain domain)
+               (source (local-file %corrupt-cipher (string-append (symbol->string name) ".age")))
+               (target-name (symbol->string name)) (owner-user "root") (mode #o400)))
+
+(define %iso-critical-good
+  (build-thing (secrets-deploy-program (list (good-decl 'iso-crit 'login-critical)) "user")))
+(define %iso-critical-bad
+  (build-thing (secrets-deploy-program (list (bad-decl 'iso-crit 'login-critical)) "user")))
+(define %iso-ordinary-good
+  (build-thing (secrets-ordinary-deploy-program (list (good-decl 'iso-ord 'ordinary)) "user")))
+(define %iso-ordinary-bad
+  (build-thing (secrets-ordinary-deploy-program (list (bad-decl 'iso-ord 'ordinary)) "user")))
+
+(let ((root (fake-root-with-identity)))
+  (let-values (((out st) (run-deploy-script root %iso-critical-good)))
+    (test-assert "ISOL-1: critical all-success exits 0"
+                 (and st (zero? st)))
+    (test-assert "ISOL-1: critical generation published"
+                 (pair? (numeric-generations root "/run/guixcfg-secrets.d")))
+    (test-assert "ISOL-1: critical current symlink present"
+                 (current-link-valid? root "/run/guixcfg-secrets"))))
+
+(let ((root (fake-root-with-identity)))
+  (let-values (((out st) (run-deploy-script root %iso-critical-bad)))
+    (test-assert "ISOL-2: critical one-fails exits non-zero"
+                 (and st (not (zero? st))))
+    (test-assert "ISOL-2: critical generation NOT published"
+                 (null? (numeric-generations root "/run/guixcfg-secrets.d")))
+    (test-assert "ISOL-2: critical current symlink absent"
+                 (not (file-exists? (string-append root "/run/guixcfg-secrets"))))))
+
+(let ((root (fake-root-with-identity)))
+  (let-values (((out st) (run-deploy-script root %iso-ordinary-good)))
+    (test-assert "ISOL-3: ordinary all-success exits 0"
+                 (and st (zero? st)))
+    (test-assert "ISOL-3: ordinary generation published at its own root"
+                 (pair? (numeric-generations root "/run/guixcfg-secrets-ordinary.d")))
+    (test-assert "ISOL-3: ordinary current symlink present"
+                 (current-link-valid? root "/run/guixcfg-secrets-ordinary"))))
+
+(let ((root (fake-root-with-identity)))
+  (let-values (((out st) (run-deploy-script root %iso-ordinary-bad)))
+    (test-assert "ISOL-4: ordinary one-fails exits non-zero"
+                 (and st (not (zero? st))))
+    (test-assert "ISOL-4: ordinary generation NOT published"
+                 (null? (numeric-generations root "/run/guixcfg-secrets-ordinary.d")))
+    (test-assert "ISOL-4: ordinary current symlink absent"
+                 (not (file-exists? (string-append root "/run/guixcfg-secrets-ordinary"))))))
+
+;; ISOL-5：critical 失败不能被 ordinary 成功掩盖
+(let ((root (fake-root-with-identity)))
+  (let-values (((out1 st1) (run-deploy-script root %iso-critical-bad)))
+    (let-values (((out2 st2) (run-deploy-script root %iso-ordinary-good)))
+      (test-assert "ISOL-5: critical fails while ordinary succeeds"
+                   (and st1 (not (zero? st1)) st2 (zero? st2)))
+      (test-assert "ISOL-5: critical generation still absent"
+                   (null? (numeric-generations root "/run/guixcfg-secrets.d")))
+      (test-assert "ISOL-5: critical symlink still absent"
+                   (not (file-exists? (string-append root "/run/guixcfg-secrets"))))
+      (test-assert "ISOL-5: ordinary generation present"
+                   (pair? (numeric-generations root "/run/guixcfg-secrets-ordinary.d"))))))
+
+;; ISOL-6：ordinary 失败保留上一个已发布 generation（preserve-last-good）
+(let ((root (fake-root-with-identity)))
+  (let-values (((out1 st1) (run-deploy-script root %iso-ordinary-good)))
+    (let-values (((out2 st2) (run-deploy-script root %iso-ordinary-bad)))
+      (test-assert "ISOL-6: first ordinary generation published, second fails"
+                   (and st1 (zero? st1) st2 (not (zero? st2))))
+      (test-assert "ISOL-6: exactly one ordinary generation retained"
+                   (= 1 (length (numeric-generations root "/run/guixcfg-secrets-ordinary.d"))))
+      (test-assert "ISOL-6: current symlink still points at the good generation"
+                   (let ((link (readlink (string-append root "/run/guixcfg-secrets-ordinary"))))
+                     (and (string-contains link "/run/guixcfg-secrets-ordinary.d/")
+                          (file-exists? (string-append root "/" (if (string-prefix? "/" link)
+                                                                  (substring link 1)
+                                                                  link)))))))))
+
+;; ISOL-7：两 domain 同时发布，roots/symlinks 互不冲突
+(let ((root (fake-root-with-identity)))
+  (let-values (((out1 st1) (run-deploy-script root %iso-critical-good)))
+    (let-values (((out2 st2) (run-deploy-script root %iso-ordinary-good)))
+      (test-assert "ISOL-7: both domains publish successfully"
+                   (and st1 (zero? st1) st2 (zero? st2)))
+      (let ((crit (readlink (string-append root "/run/guixcfg-secrets")))
+            (ord (readlink (string-append root "/run/guixcfg-secrets-ordinary"))))
+        (test-assert "ISOL-7: each domain symlink points into its own store root"
+                     (and (string-contains crit "/run/guixcfg-secrets.d/")
+                          (string-contains ord "/run/guixcfg-secrets-ordinary.d/")
+                          (not (string=? crit ord))))))))
 
 (test-end "runtime-exec")

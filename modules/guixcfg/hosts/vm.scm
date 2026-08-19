@@ -24,6 +24,8 @@
                #:use-module (guixcfg users user)       ; %primary-user（结构事实权威源）
                #:use-module (guixcfg home user)        ; %guix-home（挂入 system）
                #:use-module (guixcfg security secrets)  ; runtime secrets 部署机制
+               #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
+               #:use-module (guixcfg apps model)      ; applications-secrets
                #:use-module (guixcfg hosts vm-secrets)  ; VM secret inventory（host-owned）
                #:use-module (gnu services guix)        ; guix-home-service-type
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
@@ -89,10 +91,20 @@
          (ssh-host-key-service)
          (user-persistence-service
           (user-profile-name %primary-user))
-         ;; 声明式 runtime secrets（boot 时 root 解密到
-         ;; /run/guixcfg-secrets；docs/architecture/secrets.md）
+         ;; 声明式 runtime secrets（boot 时 root 解密；docs/
+         ;; architecture/secrets.md）。composition root = host assembly：
+         ;;   applications-secrets（registry 聚合） + host-owned
+         ;;   %vm-secrets → 按 readiness domain 分区 → 两个 generic
+         ;;   publisher 实例（login-critical / ordinary 独立 transaction
+         ;;   与 capability；ordinary 不 gate login）。
          (secrets-deploy-service
-          %vm-secrets (user-profile-name %primary-user))
+          (login-critical-secrets
+           (append %vm-secrets (applications-secrets %applications)))
+          (user-profile-name %primary-user))
+         (secrets-ordinary-deploy-service
+          (ordinary-secrets
+           (append %vm-secrets (applications-secrets %applications)))
+          (user-profile-name %primary-user))
          ;; account databases 投影（唯一 writer，含 persistent credential
          ;; 内联注入）之后的只读验证：account-state-ready 的 provision 端。
          (account-databases-verify-service

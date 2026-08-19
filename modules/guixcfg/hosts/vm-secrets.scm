@@ -17,9 +17,14 @@
                #:export (%vm-secrets))
 
 (define %vm-secrets
+  ;; VM host-owned test fixtures（无真实凭据）。domain 显式标注：
+  ;; 两者都是 login-critical（保持 interactive login 语义覆盖）；
+  ;; ordinary domain 由 synthetic tests 覆盖（test-runtime-exec /
+  ;; test-secrets），不创建伪装成 production 的测试 secret。
   (list (secret-decl
          (name 'test-system)
          (scope 'system)
+         (domain 'login-critical)
          (source (repository-file "secrets/hosts/vm/test-system.age"))
          (target-name "test-system")
          (owner-user "root")
@@ -27,6 +32,7 @@
         (secret-decl
          (name 'test-user)
          (scope 'user)
+         (domain 'login-critical)
          (source (repository-file "secrets/hosts/vm/test-user.age"))
          (target-name "test-user")
          (owner-user "user")

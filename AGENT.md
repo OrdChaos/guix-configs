@@ -232,6 +232,14 @@ docs/architecture/storage.md；本节省略版：
 
 ## 14. Secret ownership 与 machine state（2026-08）
 
+- **ownership ≠ deployment target ≠ readiness domain**（三个正交
+  维度）：`<secret-decl>` 的 `domain` 字段（'login-critical /
+  'ordinary，显式必填）声明失败影响范围。**ordinary application
+  secret failure MUST NOT block login**——两个 domain 各自独立
+  publication transaction（staging/generation/current root/
+  capability）；domain 内 fail-closed、domain 间 failure-isolated；
+  不 catch-and-ignore 解密错误。composition 在 host assembly 按
+  domain 分区，generic publisher 只做 mechanism。
 - **`user/system` deployment target 不等于 repository ownership**：
   单一 app owner 的 ciphertext colocate 到 `apps/<app>/secrets/`；
   host/shared/system/bootstrap/install/recipient 按真实

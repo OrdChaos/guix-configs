@@ -30,7 +30,9 @@ secrets/              age 密文（明文永不入库；repository ownership
                       hosts/<host>/ shared/ system/——app-private 在
                       apps/<app>/secrets/；无 secrets/user 类别；
                       machine-generated state 不在此，在
-                      /persist/system/state）
+                      /persist/system/state；readiness domain
+                      （login-critical/ordinary）是 secret-decl 属性，
+                      不改变 repository 布局）
 tests/                测试（run-tests.scm 入口 + 各主题 test-*.scm）
 docs/                 文档（本目录；application layer 见
                       architecture/applications.md +

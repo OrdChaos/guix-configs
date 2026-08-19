@@ -14,6 +14,8 @@
              (guixcfg apps model)          ; applications-secrets（聚合，无 system consumer）
              (guixcfg apps registry)       ; %applications
              (guixcfg system accounts)
+             (guixcfg system readiness)   ; %interactive-session-requirements
+             (ice-9 rdelim)               ; read-string
              (srfi srfi-1)
              (srfi srfi-13)               ; string-suffix?
              (srfi srfi-64))
@@ -81,6 +83,90 @@
 (test-assert "no application secrets wired into the login-critical publisher"
              (null? (applications-secrets %applications)))
 
+;; ── Readiness domain（login-critical / ordinary；显式必填）────
+(test-equal "vm system fixture is login-critical"
+            'login-critical (secret-decl-domain sys-secret))
+(test-equal "vm user fixture is login-critical"
+            'login-critical (secret-decl-domain usr-secret))
+(test-assert "unknown domain is rejected by partition helpers"
+             (catch #t
+               (lambda ()
+                 (login-critical-secrets
+                  (list (secret-decl
+                         (name 'bad) (scope 'system) (domain 'bogus)
+                         (source (local-file "x.age")) (target-name "x"))))
+                 #f)
+               (lambda (k . a) #t)))
+(test-equal "login-critical-secrets partitions"
+            '(crit)
+            (map secret-decl-name
+                 (login-critical-secrets
+                  (list (secret-decl
+                         (name 'crit) (scope 'system) (domain 'login-critical)
+                         (source (local-file "x.age")) (target-name "x"))
+                        (secret-decl
+                         (name 'ord) (scope 'user) (domain 'ordinary)
+                         (source (local-file "y.age")) (target-name "y"))))))
+(test-equal "ordinary-secrets partitions"
+            '(ord)
+            (map secret-decl-name
+                 (ordinary-secrets
+                  (list (secret-decl
+                         (name 'crit) (scope 'system) (domain 'login-critical)
+                         (source (local-file "x.age")) (target-name "x"))
+                        (secret-decl
+                         (name 'ord) (scope 'user) (domain 'ordinary)
+                         (source (local-file "y.age")) (target-name "y"))))))
+;; domain 决定 runtime root：ordinary 走独立 atomic root
+(test-equal "ordinary secret targets the ordinary root"
+            "/run/guixcfg-secrets-ordinary/users/user/ord"
+            (runtime-secret-target
+             (secret-decl (name 'ord) (scope 'user) (domain 'ordinary)
+                          (source (local-file "y.age")) (target-name "ord"))
+             "user"))
+(test-equal "critical secret keeps the historical root"
+            "/run/guixcfg-secrets/system/crit"
+            (runtime-secret-target
+             (secret-decl (name 'crit) (scope 'system) (domain 'login-critical)
+                          (source (local-file "x.age")) (target-name "crit"))
+             "user"))
+;; 两个 domain 的 atomic publication roots 互不冲突
+(test-assert "critical and ordinary roots are distinct"
+             (and (not (string=? %secrets-runtime-root
+                                 %secrets-ordinary-runtime-root))
+                  (not (string=? %secrets-store-root
+                                 %secrets-ordinary-store-root))))
+
+;; ── host assembly / wiring（A7-8/9/10）─────────────────────
+(test-assert "host assembly consumes applications-secrets (partitioned by domain)"
+             (let ((s (call-with-input-file "modules/guixcfg/hosts/vm.scm"
+                                            (lambda (p) (read-string p)))))
+               (and (string-contains s "applications-secrets %applications")
+                    (string-contains s "login-critical-secrets")
+                    (string-contains s "ordinary-secrets"))))
+
+(test-assert "ordinary deploy service with empty app-secret set is legal"
+             (let ((svcs (service-value
+                          (secrets-ordinary-deploy-service
+                           (ordinary-secrets
+                            (append %vm-secrets
+                                    (applications-secrets %applications)))
+                           "user"))))
+               (and (pair? svcs)
+                    (shepherd-service-one-shot? (car svcs))
+                    (member 'ordinary-secrets-ready
+                            (shepherd-service-provision (car svcs))))))
+
+(test-assert "login gate does not depend on ordinary-secrets-ready"
+             (not (memq 'ordinary-secrets-ready
+                        %interactive-session-requirements)))
+
+(test-assert "generic secrets mechanism ignores app/VM inventory"
+             (let ((s (call-with-input-file "modules/guixcfg/security/secrets.scm"
+                                            (lambda (p) (read-string p)))))
+               (and (not (string-contains s "guixcfg apps"))
+                    (not (string-contains s "hosts/vm")))))
+
 (test-assert "repository-file rejects unsafe relative paths"
              (every (lambda (p)
                       (catch #t
@@ -106,6 +192,7 @@
                (lambda ()
                  (runtime-secret-target
                   (secret-decl (name 'x) (scope 'install)
+                               (domain 'login-critical)
                                (source (local-file "secrets/install/x.age"))
                                (target-name "x"))
                   "user")

@@ -93,9 +93,12 @@ boot 按 capability DAG 推进：
 
 ```text
 file-systems → persistent-state-ready
-  → {account-state-ready（account DB 投影 + 只读验证）∥ interactive-secrets-ready}
+  → {account-state-ready（account DB 投影 + 只读验证）∥ interactive-secrets-ready
+     （login-critical secrets publisher；独立事务）}
   → {home-ready ∥ session-infra-ready（elogind）}
   → interactive-session-ready → 打开 login gate → login
+ordinary-secrets-ready（ordinary publisher；独立事务）不 gate login——
+  ordinary secret 失败绝不影响 interactive login
 ```
 
 readiness 命名 capability；provision 前必须验证最终可观察状态
