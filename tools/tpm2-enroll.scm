@@ -47,7 +47,7 @@
              (guixcfg storage model)     ; %system-partlabel
              (guixcfg utils process)
              (guixcfg utils spawn)       ; wait-exit（unseal 管道回收）
-             (guix build utils)         ; mkdir-p、invoke、file-writable?
+             ((guix build utils) #:select (mkdir-p invoke delete-file-recursively)) ; #:select：不整体导入，避免 guile-user 下 delete 覆盖警告
              (ice-9 format)
              (ice-9 match)
              (ice-9 ftw)                ; scandir

@@ -11,7 +11,7 @@
 ;; guix repl 不提供 -L，这里显式把 modules/ 加入 load path（从仓库根目录运行）。
 (add-to-load-path (string-append (getcwd) "/modules"))
 
-(use-modules (guix build utils)           ; mkdir-p、copy-file、chmod
+(use-modules ((guix build utils) #:select (mkdir-p))  ; #:select：不整体导入，避免 guile-user 下 delete 覆盖警告
              (guixcfg security credential-source) ; resolve-luks-passphrase-source
              (guixcfg storage model)
              (guixcfg storage policies)
