@@ -7,8 +7,11 @@
 ;;;     implementation 一律改为调用本模块）；
 ;;;   - 来源互斥：'interactive / 'luks-secret / reader thunk 三选一，
 ;;;     由 CLI 解析层保证，本模块对未知来源 fail closed；
-;;;   - 'luks-secret 在 runtime identity 缺失时立即失败——绝不静默
-;;;     回退到交互输入；解密失败同样在调用处抛错（TPM mutation 之前）；
+;;;   - 'luks-secret 在 runtime 与 installed identity 都缺失时立即失败
+;;;     ——绝不静默回退到交互输入；解密失败同样在调用处抛错（TPM
+;;;     mutation 之前）。两个 identity 任一个可用即可：livecd 安装期
+;;;     用 runtime（需先 secrets unlock）；已装系统用 installed
+;;;     （/persist/system/keys/age/identity，无需 unlock）；
 ;;;   - plaintext passphrase 只存在于进程内存与 /run 0600 中转文件，
 ;;;     不进 argv/environment/log/store（docs/architecture/secrets.md）。
 
@@ -37,9 +40,12 @@
   不进 argv/env/log/store。"
   (cond
     ((eq? source 'luks-secret)
-     ;; fail-closed：identity 缺失时在进入任何 TPM/LUKS mutation 前失败。
-     (unless (runtime-identity-present?)
-       (error "no unlocked stable identity; run 'secrets unlock' first"))
+     ;; fail-closed：两个 identity 都缺失时在进入任何 TPM/LUKS
+     ;; mutation 前失败。livecd（安装/替换）→ runtime S（secrets
+     ;; unlock）；已装系统 → installed S（/persist，日常可用）。
+     (unless (or (runtime-identity-present?)
+                 (file-exists? (%installed-identity-path)))
+       (error "no stable identity (runtime or installed); run 'secrets unlock' first (livecd) or verify /persist/system/keys/age/identity"))
      (make-age-secret-reader (%luks-recovery-secret-rel)))
     ((eq? source 'interactive)
      read-luks-passphrase!)

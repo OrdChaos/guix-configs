@@ -217,6 +217,11 @@ guix repl tools/tpm2-enroll.scm -- enroll --noninteractive      # stdin 直读
 - 来源解析统一走 `(guixcfg security credential-source)`（与
   disk-install 共享同一 resolver；测试见 tests/test-credential-source.scm、
   tests/test-tpm2-enroll.scm 的 T7-T14）。
+- **已装系统上 `--luks-secret` 不需要 unlock**：livecd 安装期用
+  runtime identity（`/run/guixcfg-age/stable-identity`，需先
+  `secrets unlock`）；已装系统自动改用 installed identity
+  （`/persist/system/keys/age/identity`，日常可用）。两个 identity
+  都缺失才中止（tests/test-credential-source.scm T1/T7）。
 
 ## 失败/重试边界
 

@@ -95,22 +95,31 @@
    (lambda ()
      (parameterize ((%runtime-identity-dir no-identity-dir)
                     (%runtime-identity-path
-                     (string-append no-identity-dir "/stable-identity")))
-                   ;; T7：默认（无 flag）→ interactive reader
+                     (string-append no-identity-dir "/stable-identity"))
+                    (%installed-identity-path
+                     (string-append no-identity-dir "/installed-identity")))
+                   ;; T7：默认（无 flag）→ interactive reader（0 参 thunk，
+                   ;; 调用时提示并从 stdin 读取——不能是裸 read-passphrase!，
+                   ;; 后者需要 prompt 参数，当 thunk 调会
+                   ;; wrong-number-of-arguments（实测 bug））
                    (test-assert "T7: enroll defaults to interactive source"
                                 (call-with-values
                                  (lambda () (parse-command '("prog" "enroll")))
                                  (lambda (cmd source)
                                    (and (eq? cmd 'enroll)
-                                        (eq? source read-passphrase!)))))
-                   ;; T8：--luks-secret 无 runtime identity → fail-closed 报错
+                                        (string=? "pw"
+                                                  (with-input-from-string
+                                                   "pw\n"
+                                                   source))))))
+                   ;; T8：--luks-secret 无 identity（runtime 与 installed
+                   ;; 都没有）→ fail-closed 报错
                    (test-assert "T8: enroll --luks-secret without identity fails closed"
                                 (catch #t
                                   (lambda () (parse-command '("prog" "enroll" "--luks-secret")) #f)
                                   (lambda (k . a)
                                     (and (eq? k 'misc-error)
                                          (string-contains (car (caddr a))
-                                                          "no unlocked stable identity")))))
+                                                          "no stable identity")))))
                    ;; T9：--noninteractive → stdin 直读
                    (test-assert "T9: enroll --noninteractive reads one stdin line"
                                 (call-with-values
@@ -139,7 +148,7 @@
                                   (lambda (k . a)
                                     (and (eq? k 'misc-error)
                                          (string-contains (car (caddr a))
-                                                          "no unlocked stable identity")))))
+                                                          "no stable identity")))))
                    ;; T12：status 拒绝 credential flag
                    (test-assert "T12: status rejects credential source flags"
                                 (catch #t

@@ -9,8 +9,11 @@
 ;;;
 ;;; LUKS recovery passphrase 来源（互斥三选一；绝不静默回退）：
 ;;;   默认      交互读取（tty 关闭回显；stdin 非 tty 时直读）
-;;;   --luks-secret      从 age-encrypted luks-recovery.age 解密（需先
-;;;                      secrets unlock；identity 缺失/解密失败立即中止）
+;;;   --luks-secret      从 age-encrypted luks-recovery.age 解密
+;;;                      （livecd：需先 secrets unlock 用 runtime S；
+;;;                       已装系统：自动用 installed S
+;;;                       /persist/system/keys/age/identity——无需
+;;;                       unlock；两个 identity 都缺失才中止）
 ;;;   --noninteractive   从 stdin 直读一行（脚本/自动化注入）
 ;;; status/preflight 不接受任何 credential 来源 flag。
 ;;; 来源解析统一走 (guixcfg security credential-source)（与
@@ -440,7 +443,9 @@ PASSPHRASE-SOURCE 为 reader thunk（互斥来源之一；#f 时交互读取）�
       (unless (luks-passphrase-valid? passphrase)
         (error "recovery passphrase cannot unlock LUKS; aborting"))
       ;; do-enroll 复用同一密码；成功后删除旧 TPM keyslot（绝不先删后建）。
-      (do-enroll #:replace? #t #:passphrase passphrase)
+      ;; 密码以 reader thunk 传入（do-enroll 的 #:passphrase-source 契约；
+      ;; 传裸字符串会 wrong-keyword / 按 thunk 调用字符串）。
+      (do-enroll #:replace? #t #:passphrase-source (lambda () passphrase))
       (catch #t
         (lambda ()
           (invoke-with-stdin passphrase %cryptsetup
@@ -491,7 +496,11 @@ thunk。三个来源互斥：'() → 交互读取；--luks-secret → age 解密
 缺失在解析时立即失败，绝不回退交互）；--noninteractive → stdin 直读一行。
 互斥违规/未知 flag 抛错。"
   (match flags
-         (() read-passphrase!)
+         (()
+          ;; reader thunk：调用时提示并读取（read-passphrase! 需要
+          ;; prompt 参数——不能把裸 procedure 当 0 参 thunk 返回，
+          ;; 否则 do-enroll 调用时 wrong-number-of-arguments）。
+          (lambda () (read-passphrase! "Enter recovery LUKS passphrase: ")))
          (("--luks-secret")
           (resolve-luks-passphrase-source 'luks-secret))
          (("--noninteractive")
