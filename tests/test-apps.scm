@@ -20,6 +20,7 @@
              (gnu services)
              (guix gexp)             ; local-file-absolute-file-name
              (gnu packages base)     ; hello（sample record 用）
+             (gnu packages gnome)    ; gnome-keyring（认证边界断言）
              (guix packages)         ; package-name
              (srfi srfi-1)
              (srfi srfi-64))
@@ -205,5 +206,22 @@
                                      '("niri" "pipewire" "wireplumber"
                                        "xwayland-satellite" "dbus"))))
                       all)))
+
+;; ── 认证边界（docs/architecture/desktop-authentication.md）──
+;; lxpolkit 只是 graphical session agent；polkitd 属于 system。
+(define (app-by-name name)
+  (find (lambda (a) (eq? name (application-name a))) %applications))
+
+(test-assert "lxpolkit app registered"
+             (and=> (app-by-name 'lxpolkit) application?))
+
+(test-assert "lxpolkit owns no persistence"
+             (null? (application-persistence (app-by-name 'lxpolkit))))
+
+(test-assert "lxpolkit owns no system services (polkitd is system infra)"
+             (null? (application-system-services (app-by-name 'lxpolkit))))
+
+(test-assert "lxpolkit owns no declarative secrets"
+             (null? (application-secrets (app-by-name 'lxpolkit))))
 
 (test-end "apps")

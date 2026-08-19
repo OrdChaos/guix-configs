@@ -23,12 +23,14 @@
 
 (use-modules (guixcfg hosts vm)
              (guixcfg system desktop)
+             (guixcfg system common) ; %common-services（PK1）
              (guixcfg system graphics nvidia)
              (guixcfg system kernel-platform)
              (gnu services)
              (gnu services base)   ; greetd-service-type、mingetty-service-type
              (gnu services desktop) ; elogind-service-type
              (gnu services shepherd) ; shepherd-root-service-type
+             (gnu services dbus)    ; polkit-service-type（PK：polkit authority）
              (gnu system)          ; operating-system-*
              (gnu system file-systems)  ; file-system-device、file-system-mount-point
              (gnu system pam)      ; unix-pam-service、pam-entry-module/arguments
@@ -37,6 +39,7 @@
              (guix channels)          ; channel-name、channel-commit（解析 lock）
              (ice-9 rdelim)
              (ice-9 ftw)               ; scandir
+             (guix build utils)       ; find-files（PK2 rules.d 扫描）
              (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64))
@@ -346,5 +349,68 @@
                (not (text-contains-any? s
                                         '("PRIME" "WLR_DRM_DEVICES"
                                           "GBM_BACKEND" "__GLX_VENDOR")))))
+
+;; ── PK：polkit system authority（Phase A；docs/architecture/
+;; desktop-authentication.md）───────────────────────────────
+;; polkitd 属于 system（经 system D-Bus activation 启动，无 shepherd
+;; 服务）；elogind 的 service extension 已经隐式物化 polkit
+;; （instantiate-missing-services），assembly 再显式声明 authority；
+;; lxpolkit 只是 graphical session agent（apps/lxpolkit，
+;; niri spawn-at-startup）——不拥有 polkit。
+(test-assert "PK1: exactly one polkit authority in %os"
+             (= 1 (length (os-services-of-type polkit-service-type))))
+
+(test-assert "PK1: polkit service is explicitly declared in common services"
+             (let* ((common (map (compose service-type-name service-kind)
+                                 %common-services)))
+               (member 'polkit common)))
+
+;; polkit 内部 accessor 未导出；经顶层 define 绑定（编译环境内联
+;; module-ref 应用会拿到 syntax-transformer——实测）。
+(define %polkit-configuration-actions
+  (module-ref (resolve-module '(gnu services dbus))
+              'polkit-configuration-actions))
+
+(test-assert "PK2: polkit action/rules contributions come only from elogind
++ upstream wheel admin rule (no custom rules)"
+             (let* ((folded (fold-services (operating-system-services %os)
+                                           #:target-type polkit-service-type))
+                    (actions (%polkit-configuration-actions
+                              (service-value folded))))
+               (= 2 (length actions))))
+
+(test-assert "PK2: upstream polkit-wheel admin identity is used"
+             (any (lambda (svc)
+                    (eq? 'polkit-wheel (service-type-name (service-kind svc))))
+                  (operating-system-services %os)))
+
+;; polkit 内部 accessor 未导出；经顶层 define 绑定（编译环境内联
+;; module-ref 应用会拿到 syntax-transformer——实测）。
+(define %polkit-configuration-actions
+  (module-ref (resolve-module '(gnu services dbus))
+              'polkit-configuration-actions))
+
+(test-assert "PK2: repo modules declare no custom /etc/polkit-1 rules"
+             (let ((s (string-join
+                       (map (lambda (f)
+                              (call-with-input-file f
+                                                    (lambda (p) (read-string p))))
+                            (find-files "modules/guixcfg" "\\.scm$"))
+                       "\n")))
+               (not (string-contains s "rules.d"))))
+
+(test-assert "PK3: lxpolkit starts once, from the graphical session only"
+             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
+                                            (lambda (p) (read-string p)))))
+               (= 1 (length (filter (lambda (line)
+                                      (string-contains line
+                                                       "spawn-at-startup \"lxpolkit\""))
+                                    (string-split s #\newline))))))
+
+(test-assert "PK3: lxpolkit is not started by any boot shepherd service"
+             (let* ((folded (fold-services (operating-system-services %os)
+                                           #:target-type shepherd-root-service-type))
+                    (text (object->string (service-value folded))))
+               (not (string-contains text "lxpolkit"))))
 
 (test-end "desktop")

@@ -3,7 +3,8 @@
 
 (define-module (guixcfg system common)
                #:use-module (gnu services)         ; service
-               #:use-module (gnu services desktop) ; elogind-service-type
+               #:use-module (gnu services desktop) ; elogind-service-type、polkit-wheel-service
+               #:use-module (gnu services dbus)    ; polkit-service-type（polkitd 的 authority）
                #:use-module (guixcfg system substitutes) ; nonguix-substitute-service
                #:export (%common-timezone
                          %common-locale
@@ -26,6 +27,16 @@
 ;; integration））：guix-daemon 的 additive extension——官方 Guix
 ;; substitutes 保留，追加 official Nonguix substitute URL + signing
 ;; key。所有 host 共享同一 policy（不 per-host 重复）。
+;; 桌面认证基础设施（docs/architecture/desktop-authentication.md）：
+;; polkit 是 system authority（polkitd 经 system D-Bus activation 启动，
+;; 无 shepherd 服务）。elogind 已经经其 service extension 隐式物化
+;; polkit（instantiate-missing-services），这里在 authority 层显式
+;; 声明，并加上 upstream admin identity（polkit-wheel-service =
+;; addAdminRule unix-group:wheel——admin 身份声明，不是 blanket
+;; allow）。graphical authentication agent（lxpolkit）属于用户会话
+;; （apps/lxpolkit，niri spawn-at-startup）——不在这里。
 (define %common-services
   (list (service elogind-service-type)
+        (service polkit-service-type)
+        polkit-wheel-service
         nonguix-substitute-service))
