@@ -100,6 +100,6 @@
   ;; M2 Wayland desktop 系统层服务（greetd + niri session）。
   ;; 用户会话内的服务（PipeWire、notification、polkit agent 等）由
   ;; niri config 的 spawn-at-startup 以用户身份启动（单一 owner =
-  ;; niri session，见 files/niri/config.kdl 与
+  ;; niri session，见 modules/guixcfg/apps/niri/config.kdl 与
   ;; docs/architecture/graphics.md）。
   (list (greetd-login-service)))
