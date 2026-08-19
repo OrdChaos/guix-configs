@@ -24,9 +24,12 @@
 ;;;     session startup 必须再跑一次 gnome-keyring-daemon --start，
 ;;;     通过 control socket 接管 stub、完成初始化、随后退出
 ;;;     （"This second daemon usually exits"）。
-;;;   本模块的 home-services 提供 Phase 2：Home Shepherd one-shot
-;;;   服务（session 基础设施，requirement dbus）——不是 niri spawn、
-;;;   不是 shell、不是系统 shepherd。
+;;;   Phase 2 的 owner = niri spawn-at-startup（apps/niri/config.kdl
+;;;   的 spawn-at-startup "gnome-keyring-daemon" "--start"
+;;;   "--components=secrets"）——architectural compromise：Secret
+;;;   Service 本是 user-session infrastructure，但当前架构唯一的
+;;;   graphical-session startup 是 niri（desktop-authentication.md
+;;;   §2.2 记录）。
 ;;;
 ;;; D-Bus activation（org.freedesktop.secrets.service 的
 ;;; --start --foreground）同样是 --start 语义：stub 存活窗口内可接管
@@ -46,9 +49,6 @@
                #:use-module (gnu packages gnome)    ; gnome-keyring
                #:use-module (gnu services)          ; service
                #:use-module (gnu services desktop)  ; gnome-keyring-service-type、gnome-keyring-configuration
-               #:use-module (gnu services shepherd) ; shepherd-service
-               #:use-module (gnu home services shepherd) ; home-shepherd-service-type
-               #:use-module (guix gexp)             ; file-append
                #:use-module (guix records)
                #:use-module (guixcfg apps model)
                #:use-module (guixcfg system application-persistence)
@@ -58,30 +58,6 @@
   (application
    (name 'gnome-keyring)
    (home-packages (list gnome-keyring))
-   (home-services
-    ;; Phase 2：session --start initializer（两阶段 lifecycle 的
-    ;; 第二半；Phase 1 = PAM auto_start）。one-shot：--start 接管
-    ;; PAM stub 后自身退出（上游语义），不做成常驻 daemon。
-    (list (simple-service
-           'gnome-keyring-session-initializer
-           home-shepherd-service-type
-           (list (shepherd-service
-                  (documentation
-                   "Complete GNOME Keyring Secret Service session \
-initialization: hook the PAM-created --login daemon via --start.")
-                  (provision '(gnome-keyring-initializer))
-                  (requirement '(dbus))   ; session D-Bus 就绪后接管
-                  (one-shot? #t)
-                  (auto-start? #t)
-                  (modules '((shepherd support))) ; %user-log-dir
-                  (start #~(make-forkexec-constructor
-                            (list #$(file-append gnome-keyring
-                                                 "/bin/gnome-keyring-daemon")
-                                  "--start")
-                            #:log-file
-                            (string-append %user-log-dir
-                                           "/gnome-keyring-start.log")))
-                  (stop #~(make-kill-destructor)))))))
    (system-services
     (list (service gnome-keyring-service-type
                    (gnome-keyring-configuration

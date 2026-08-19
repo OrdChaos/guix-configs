@@ -26,8 +26,8 @@ SECRET SERVICE（login keyring，两阶段 lifecycle）
     （stub：只解锁/创建 login keyring，不完成初始化；
       120 秒无 --start 接管自动退出——gkd-main.c LOGIN_TIMEOUT）
       ↓
-    Home Shepherd（session）——Phase 2：--start initializer
-      ↓ gnome-keyring-daemon --start（requirement: session dbus）
+    niri spawn-at-startup（session）——Phase 2：--start
+      ↓ gnome-keyring-daemon --start --components=secrets
     接管同一 daemon、完成初始化、自身退出（上游语义）
       ↓
     gnome-keyring-daemon / org.freedesktop.secrets
@@ -109,11 +109,16 @@ Phase 2（session，--start）：
   完成初始化——"This second daemon usually exits"（gkd-main.c）。
 ```
 
-本仓库的 Phase 2 由 **Home Shepherd one-shot 服务**提供
-（`apps/gnome-keyring` 的 home-services：
-`gnome-keyring-initializer`，requirement `dbus`，执行 pinned
-`gnome-keyring-daemon --start`）——session 基础设施，不绑定 niri、
-不绑定 shell、不进系统 shepherd。
+本仓库的 Phase 2 由 **niri spawn-at-startup** 提供
+（`apps/niri/config.kdl`：`spawn-at-startup "gnome-keyring-daemon"
+"--start" "--components=secrets"`）。这是 **architectural
+compromise**：Secret Service 本质是 user-session infrastructure，
+理想 owner 是 Home Shepherd/session manager；但当前架构（M2）唯一
+的 graphical-session startup 是 niri（greetd → bash -l → Home
+Shepherd → niri），niri 启动时 session D-Bus 已就绪（home-niri
+requirement home-dbus），spawn 落在 120 秒接管窗口内。若未来引入
+通用 XDG autostart runner 或 session manager，Phase 2 应迁移到该层
+（AGENT.md §15）。
 
 **D-Bus activation 不是完整 session startup 的等价替代**：两个
 D-Bus service file（org.freedesktop.secrets / org.gnome.keyring）
@@ -129,8 +134,9 @@ D-Bus service file（org.freedesktop.secrets / org.gnome.keyring）
 （`gkd-main.c`）——PAM stub、--start initializer、D-Bus activation
 最终都指向同一 logical daemon；重复启动是 no-op。
 
-**禁止**：niri / shell / session script 手动 `gnome-keyring-daemon
---start`（测试 GK5 断言——唯一 invocation 是 app 的 initializer）。
+**禁止**：shell / session script / Home Shepherd 手动再启动
+`gnome-keyring-daemon`（测试 GK5 断言——唯一 invocation 是 niri
+config 的 spawn）。
 
 ### 2.3 Keyring storage
 

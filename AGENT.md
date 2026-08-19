@@ -312,17 +312,19 @@ docs/architecture/storage.md；本节省略版：
 - **Secret Service 是两阶段 lifecycle，`auto_start` 只是第一半**：
   PAM 的 `--login` 只启动"解锁 login keyring 的 stub"（gkd-main.c
   注释明示；LOGIN_TIMEOUT 120 秒无接管自动退出）；session 侧必须
-  再跑 `gnome-keyring-daemon --start` 完成初始化（本仓库 = app 的
-  Home Shepherd one-shot initializer，requirement session dbus）。
+  再跑 `gnome-keyring-daemon --start` 完成初始化（本仓库 = niri
+  config.kdl 的 spawn-at-startup——architectural compromise：当前
+  架构唯一的 graphical-session startup 是 niri；未来有通用 XDG
+  autostart/session manager 时 Phase 2 应迁移到该层）。
   **不要把 "PAM 配置存在 ⇒ Secret Service 可用" 当成立**（实机否定
   过一次）；D-Bus activation 是 --start 语义的 fallback，但不是
   完整 session startup 的等价替代（stub 超时后激活的是 locked 的
   全新 daemon）。
 - **不要手动双启动 Secret Service daemon**：PAM 拥有 login 路径
-  unlock；`--start` initializer 与 D-Bus activation 都走单实例
-  discover——niri/Home/shell/session script 里禁止再执行
-  `gnome-keyring-daemon`（测试 GK5/GK7 断言：唯一 invocation 是
-  app 的 initializer）。
+  unlock；`--start` initializer（niri spawn）与 D-Bus activation
+  都走单实例 discover——shell/session script/Home Shepherd 里禁止
+  再执行 `gnome-keyring-daemon`（测试 GK5/GK7 断言：唯一 invocation
+  是 niri config 的 spawn）。
 - gnome-keyring 的 PAM mapping 只配置本系统实际使用的 service
   （默认 gdm-password 必须整体替换为 greetd/login/passwd——见
   apps/gnome-keyring/definition.scm）。

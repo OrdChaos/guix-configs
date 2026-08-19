@@ -174,10 +174,13 @@ auto_start）。"
                        (operating-system-services %os))))
 
 ;; ── GK5：daemon 无双启动 ──────────────────────────────────
-(test-assert "GK5: no gnome-keyring daemon start in niri config"
+(test-assert "GK5: niri config starts the --start initializer exactly once"
              (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
                                             (lambda (p) (read-string p)))))
-               (not (string-contains s "gnome-keyring"))))
+               (= 1 (length (filter (lambda (line)
+                                      (string-contains line
+                                                       "gnome-keyring-daemon"))
+                                    (string-split s #\newline))))))
 
 (test-assert "GK5: no OTHER app definition starts the daemon"
              (let ((s (string-join
@@ -191,8 +194,8 @@ auto_start）。"
                        "\n")))
                (not (string-contains s "gnome-keyring-daemon"))))
 
-(test-assert "GK5: exactly one gnome-keyring-daemon invocation in modules
-(the session --start initializer)"
+(test-assert "GK5: no gnome-keyring-daemon invocation in modules
+(the Phase 2 initializer lives in niri config, not scheme code)"
              (let ((s (string-join
                        (map (lambda (f)
                               (call-with-input-file f
@@ -201,10 +204,7 @@ auto_start）。"
                        "\n")))
                ;; 只数 invocation 形态（带引号的 bin 路径）；注释里的
                ;; 裸名说明文档不算。
-               (= 1 (length (filter (lambda (m)
-                                      (string-contains m
-                                                       "\"/bin/gnome-keyring-daemon\""))
-                                    (string-split s #\newline))))))
+               (not (string-contains s "\"/bin/gnome-keyring-daemon\""))))
 
 (test-assert "GK5: PAM auto_start is the single logical unlock owner
 (no module passes the auto_start argument itself)"
@@ -219,50 +219,47 @@ auto_start）。"
                ;; （注释里裸写 auto_start 说明文档不算）。
                (not (string-contains s "\"auto_start\""))))
 
-;; ── GK7：session --start initializer（两阶段 lifecycle Phase 2）──
+;; ── GK7：Phase 2 由 niri 启动（--start 语义，单一 owner）──
 ;; 上游 lifecycle（pinned gnome-keyring-48.0，gkd-main.c）：
 ;;   PAM --login stub（解锁 login keyring，不完成初始化，120 秒
 ;;   超时）→ session --start 接管 stub、完成初始化、自身退出。
-;; 本测试验证 initializer 的 shepherd 契约与 --start 语义。
-(define %gk-initializer
-  (car (service-value
-        (car (application-home-services %gnome-keyring-app)))))
+;; 本仓库的 Phase 2 owner = niri spawn-at-startup（architectural
+;; compromise，desktop-authentication.md §2.2）。
+(test-assert "GK7: niri spawn uses the exact --start --components=secrets"
+             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
+                                            (lambda (p) (read-string p)))))
+               (string-contains s
+                                "spawn-at-startup \"gnome-keyring-daemon\" \"--start\" \"--components=secrets\"")))
 
-(test-assert "GK7: initializer is a one-shot session service after D-Bus"
-             (let ((svc %gk-initializer))
-               (and (eq? 'gnome-keyring-initializer
-                         (car (shepherd-service-provision svc)))
-                    (equal? '(dbus) (shepherd-service-requirement svc))
-                    (shepherd-service-one-shot? svc)
-                    (shepherd-service-auto-start? svc))))
+(test-assert "GK7: the initializer is the only gnome-keyring spawn in niri"
+             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
+                                            (lambda (p) (read-string p)))))
+               (= 1 (length (filter (lambda (line)
+                                      (string-contains line "spawn-at-startup"))
+                                    (filter (lambda (line)
+                                              (string-contains line
+                                                               "gnome-keyring-daemon"))
+                                            (string-split s #\newline)))))))
 
-(test-assert "GK7: initializer runs the pinned gnome-keyring --start binary"
-             (let ((s (object->string (shepherd-service-start %gk-initializer))))
-               (and (string-contains s "gnome-keyring-daemon")
-                    (string-contains s "\"--start\"")
-                    (not (string-contains s "--replace"))
-                    (not (string-contains s "--login"))
-                    (not (string-contains s "--daemonize"))
-                    (not (string-contains s "--foreground")))))
+(test-assert "GK7: --start hook semantics (no --replace/--login/--daemonize/
+--foreground in the spawn)"
+             (let* ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
+                                            (lambda (p) (read-string p))))
+                    ;; 只检查 spawn 行本身（config 注释会提到 --login 等
+                    ;; lifecycle 词汇）。
+                    (spawn-line
+                     (find (lambda (line)
+                             (string-contains line "gnome-keyring-daemon"))
+                           (string-split s #\newline))))
+               (and spawn-line
+                    (not (string-contains spawn-line "--replace"))
+                    (not (string-contains spawn-line "--login"))
+                    (not (string-contains spawn-line "--daemonize"))
+                    (not (string-contains spawn-line "--foreground")))))
 
-(test-assert "GK7: initializer is session infrastructure (home shepherd),
-not system/boot/niri"
-             (let ((gk %gnome-keyring-app))
-               (and (pair? (application-home-services gk))
-                    (null? (filter (lambda (svc)
-                                     (eq? 'shepherd-root
-                                          (service-type-name
-                                           (service-kind svc))))
-                                   (application-system-services gk))))))
-
-(test-assert "GK7: initializer does not become a second vault authority
-(single --start hook; PAM remains the only unlock path)"
-             (let ((s (object->string (shepherd-service-start %gk-initializer))))
-               (and (= 1 (length (filter (lambda (m)
-                                           (string-contains m
-                                                            "gnome-keyring-daemon"))
-                                         (string-split s #\newline))))
-                    (string-contains s "--start"))))
+(test-assert "GK7: gnome-keyring app has no daemon-starting home services
+(PAM + niri are the only owners)"
+             (null? (application-home-services %gnome-keyring-app)))
 
 ;; ── GK6：polkit authority 恰好一个（与 Phase A 同源）──────
 (test-assert "GK6: exactly one polkit authority in %os"
