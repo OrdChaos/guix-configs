@@ -24,6 +24,9 @@
 ;;;   A4/A5/A6 verifier 缺失/非法/用户缺失 → fail closed；
 ;;;   A7 最终 shadow 缺 user → verify 不 provision；
 ;;;   A8 仓库只有一个 production shadow writer（静态断言）。
+;;; AP1 覆盖 application-persistence activation 的 consumer parent 全
+;;;   层级 ownership（boot 回归：activation 只 chown 直接 parent 会留下
+;;;   root-owned 的 ~/.local，Home activation mkdir ~/.local/share EACCES）。
 
 (add-to-load-path (string-append (getcwd) "/modules"))
 
@@ -38,6 +41,7 @@
              (gnu services shepherd)
              (guixcfg security secrets)
              (guixcfg system accounts)    ; account-databases-activation/verify
+             (guixcfg system application-persistence) ; AP1 activation ownership
              (gnu system accounts)     ; user-account、user-group
              (guixcfg system readiness)
              (ice-9 rdelim)
@@ -640,5 +644,62 @@ host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析�
                      (and (string-contains crit "/run/guixcfg-secrets.d/")
                           (string-contains ord "/run/guixcfg-secrets-ordinary.d/")
                           (not (string=? crit ord))))))))
+
+;; ── AP1：application-persistence activation 的 consumer parent 全
+;; 层级 ownership（boot 回归）────────────────────────────────
+;; 890060e 首次 wire production rule（mpv，consumer .local/state/mpv）
+;; 后 reboot 实测：activation 的 mkdir-p 以 root 建出整条 parent 路径，
+;; 却只 chown 直接 parent（.local/state）——中间层 ~/.local 遗留
+;; root:root。官方 guix-home-user（requirement user-processes，在
+;; file-systems 全部就位后运行 he/activate）以 USER 身份执行
+;; mkdir-p $XDG_DATA_HOME（~/.local/share）→ EACCES → 整个 Home
+;; activation 失败：~/.guix-home 缺失、dotfiles 不在、niri/mpv 不在
+;; PATH。这里真实执行 production activation gexp（fake root 内 uid
+;; 1000 与 boot 同构），断言中间层与直接 parent 都归 USER。
+(define %app-persist-rule
+  (application-persistence-rule
+   (name 'synthetic-test)
+   (backing "synthetic-test/state")
+   (consumer ".local/state/mpv")       ; 与 mpv production rule 同深度
+   (exposure 'bind-directory)
+   (lifecycle 'application-owned)))
+
+(define %app-persist-program
+  (build-thing
+   (program-file
+    "app-persistence-activation-test"
+    (with-imported-modules (source-module-closure '((guix build utils)))
+                           #~(begin
+                              (use-modules (guix build utils))
+                              #$(application-persistence-activation
+                                 (list %app-persist-rule) "user")
+                              ;; 输出三层 uid：中间层 .local、直接
+                              ;; parent .local/state、backing。
+                              (format #t "~a ~a ~a~%"
+                                      (stat:uid (stat "/home/user/.local"))
+                                      (stat:uid (stat "/home/user/.local/state"))
+                                      (stat:uid (stat "/persist/data-app/synthetic-test/state"))))))))
+
+(let* ((root (make-fake-root "" #f))
+       (script (string-append
+                "unshare --user --map-root-user --map-users=auto "
+                "--map-groups=auto --mount --pid --fork sh -c '"
+                "mount --bind /gnu/store " root "/gnu/store; "
+                "chroot " root " " %guile " --no-auto-compile "
+                %app-persist-program " 2>&1'"))
+       (pipe (open-input-pipe script))
+       (all (get-string-all pipe)))
+  (close-pipe pipe)
+  (false-if-exception (delete-file-recursively root))
+  (test-assert "AP1 activation runs without unbound-variable"
+               (not (string-contains all "Unbound variable")))
+  (test-assert "AP1 consumer parent intermediates are user-owned"
+               (let* ((lines (filter (lambda (l) (not (string-null? l)))
+                                     (string-split all #\newline)))
+                      (uids (and (pair? lines)
+                                 (string-split (car (reverse lines)) #\space))))
+                 (and uids
+                      (= 3 (length uids))
+                      (every (lambda (u) (string=? "1000" u)) uids)))))
 
 (test-end "runtime-exec")

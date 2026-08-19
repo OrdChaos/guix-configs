@@ -193,6 +193,12 @@ docs/reference/repository-layout.md；本节省略版开发约束：
 - mutable application state 的 canonical backing 位于
   `/persist/data-app`（bind projection）；禁止持久化整个
   `.config/.local/.local/share/.cache`。
+- **HOME 侧 consumer parent 层级 ownership 必须由 activation 全部
+  归还 USER（含中间层，如 `~/.local`）**：activation 的 mkdir-p 以
+  root 建整条路径，只 chown 直接 parent 会留下 root-owned 中间层——
+  USER 身份运行的 Guix Home activation（guix-home-user →
+  he/activate → `mkdir-p $XDG_DATA_HOME`）会 EACCES，Home 整体缺失
+  （boot 回归：test-runtime-exec.scm AP1）。
 - **directory membership 不等于 common authority**：authority 按
   最小独立路径判断（`.config/fish` 可同时含 repo-owned
   config.fish 与 app-owned fish_variables——mixed persistent

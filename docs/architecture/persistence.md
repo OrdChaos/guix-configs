@@ -81,18 +81,21 @@ owner        由 primary user / assembler 参数统一提供
 
 - bind mount 声明走 `file-systems`（`create-mount-point? #t`）——
   `/persist/data-app/<backing>` → `/home/<user>/<consumer>`；
-- backing 目录与 consumer parent ownership 由系统 activation 创建
+- backing 目录与 consumer parent 层级 ownership 由系统 activation 创建
   （boot：activation 先于 shepherd file-systems 服务；system init /
-  reconfigure 同样运行 activation）——`create-mount-point?` 以 root
-  建挂载点，activation 恢复 intermediate parent 为用户所有，不留
-  root-owned HOME hierarchy；
+  reconfigure 同样运行 activation）——`create-mount-point?` 与 activation
+  的 `mkdir-p` 都以 root 建路径，activation 必须把【每一层】intermediate
+  parent 都 chown 回用户所有（只 chown 直接 parent 会留下 root-owned
+  `~/.local`：Guix Home activation 以用户身份 `mkdir ~/.local/share`
+  时 EACCES，Home 整体失败——boot 实测 2026-08-19，回归测试
+  `test-runtime-exec.scm` AP1）；
 - 严格 validation：无 `..`、无绝对路径、非空、consumer 不得是
   `.config` / `.local` / `.local/share` / `.cache` 整体或前缀；
 - 不产生 `/persist/data-nobackup` mapping；
 - 不实现 copy/sync/boot-copy/seed-once/自动迁移。
 
-当前没有真实 production application persistence rule（mechanism
-ready, production rules pending explicit application adoption）。
+production consumer：mpv（`.local/state/mpv` → `/persist/data-app/mpv/state`，
+见 `apps/mpv/definition.scm`；后续应用按同一契约显式 adopt）。
 
 ## data-nobackup storage class
 

@@ -18,8 +18,10 @@
 ;;;   4. 不产生 /persist/data-nobackup mapping（backing 永远相对
 ;;;      /persist/data-app）；
 ;;;   5. intermediate consumer parent ownership 由 activation 恢复
-;;;      （create-mount-point? 以 root 建挂载点，不能留下 root-owned
-;;;      HOME hierarchy）；
+;;;      （create-mount-point? 与 activation 的 mkdir-p 都以 root 建
+;;;      HOME 层级——【每一层】都必须归还 USER；只 chown 直接 parent
+;;;      会留下 root-owned 的 ~/.local，USER 后续 mkdir ~/.local/share
+;;;      等 EACCES，Home activation 整体失败）；
 ;;;   6. 挂载属 file-systems topology——不新增 readiness capability。
 ;;;
 ;;; 三路径安全性（pinned Guix 行为审计）：backing 目录创建走系统
@@ -140,8 +142,13 @@ activation 恢复。"
 
 (define (application-persistence-activation rules user)
   "activation gexp：创建 backing 目录（owner=USER）并恢复 consumer
-parent 目录 ownership——create-mount-point? 以 root 建挂载点，不能
-留下 root-owned 的 HOME 层级（~/.config 等父目录必须归 USER）。
+parent 层级 ownership——create-mount-point? 以 root 建挂载点，本
+activation 的 mkdir-p 也以 root 建出整条 parent 路径，必须把【所有
+中间层】都归还 USER。只 chown 直接 parent 会留下 root-owned 的
+~/.local：后续以 USER 身份运行的 Guix Home activation
+（guix-home-user → he/activate → mkdir-p $XDG_DATA_HOME）会在
+root-owned 目录下 mkdir 时 EACCES，整个 Home activation 失败
+（boot 实测 2026-08-19；回归测试 test-runtime-exec.scm AP1）。
 只补缺失目录、不重建已有数据（persistence 不自动迁移/覆盖/删除
 consumer data）。"
   (with-imported-modules (source-module-closure '((guix build utils)))
@@ -159,11 +166,17 @@ consumer data）。"
                                               "/" backing)))
                                    (mkdir-p src)
                                    (chown src uid gid)
-                                   (let ((parent (dirname
-                                                  (string-append home "/"
-                                                                 consumer))))
-                                     (mkdir-p parent)
-                                     (chown parent uid gid))))
+                                   ;; consumer parent 全层级归还 USER：
+                                   ;; 从最深 parent 逐级向上直到 home
+                                   ;; （/home/USER 本身由 user-persistence
+                                   ;; activation 负责）。
+                                   (let loop ((dir (dirname
+                                                    (string-append home "/"
+                                                                   consumer))))
+                                     (unless (string=? dir home)
+                                       (mkdir-p dir)
+                                       (chown dir uid gid)
+                                       (loop (dirname dir))))))
                                (quote
                                 (#$@(map (lambda (rule)
                                            (list (application-persistence-rule-backing
