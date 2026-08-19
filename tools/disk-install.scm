@@ -13,6 +13,7 @@
 
 (use-modules ((guix build utils) #:select (mkdir-p))  ; #:select：不整体导入，避免 guile-user 下 delete 覆盖警告
              (guixcfg security credential-source) ; resolve-luks-passphrase-source
+             (guixcfg security age)         ; %runtime-identity-path、%installed-identity-path（单一 authority）
              (guixcfg storage model)
              (guixcfg storage policies)
              (guixcfg storage plan)
@@ -82,13 +83,13 @@ stable S，安装过程复用 /run 中的临时 S）；否则交互读取。来�
     (run-install (load-policy host) device
                  #:passphrase-reader reader)))
 
-(define* (ensure-installed-identity! target #:optional (runtime "/run/guixcfg-age/stable-identity"))
+(define* (ensure-installed-identity! target #:optional (runtime (%runtime-identity-path)))
   "安装收尾（阶段 6 兜底）：/persist/system/keys/age/identity 必须就位——
 首次 boot 的 secrets-deploy 用它解密（boot 后无 runtime identity），缺失
 会导致 interactive-secrets-ready 失败、login barrier 卡死。缺失时从
 RUNTIME（同一安装会话 unlock 的 identity）自动安装；无 runtime identity
 则 fail fast（提示先 secrets unlock）。"
-  (let ((installed (string-append target "/persist/system/keys/age/identity")))
+  (let ((installed (string-append target (%installed-identity-path))))
     (unless (file-exists? installed)
       (if (file-exists? runtime)
         (begin

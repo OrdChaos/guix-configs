@@ -29,6 +29,7 @@
                #:use-module (gnu system accounts)       ; user-account、user-group、sexp->*
                #:use-module (guix gexp)
                #:use-module (guix modules)              ; source-module-closure
+               #:use-module (guixcfg security age)   ; %account-credentials-dir（单一 authority）
                #:use-module (srfi srfi-1)
                #:export (account-databases-activation
                          account-databases-service
@@ -57,8 +58,10 @@
        #$(user-account-system? account)))
 
 ;;; credential verifier 路径（persistent canonical backing，root 0600）。
+;;; 单一 authority：(guixcfg security age) 的 %account-credentials-dir
+;;; （本身派生自 (guixcfg storage model) 的 persist-mount-point）。
 (define (user-credential-path user)
-  (string-append "/persist/system/accounts/" user "/password.hash"))
+  (string-append (%account-credentials-dir) "/" user "/password.hash"))
 
 ;; 合法 crypt hash 形态：$id$salt$hash（id 数字/字母，salt/hash 不含
 ;; 冒号与换行）。拒绝空、拒绝 "!"（locked placeholder）。
@@ -256,8 +259,8 @@ account-state-ready 不 provision（fail-closed）。"
                                           (ice-9 regex))
                              (define user #$user)
                              (define hash-path
-                               (string-append "/persist/system/accounts/" user
-                                              "/password.hash"))
+                               (string-append #$(%account-credentials-dir)
+                                              "/" user "/password.hash"))
                              (define (valid-hash? s)
                                (and (string-match "^\\$[0-9a-z]+\\$[^:$]+\\$[^: \n]+$" s)
                                     #t))

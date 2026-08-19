@@ -31,6 +31,7 @@
                #:use-module (guix modules)              ; source-module-closure
                #:use-module (guix records)
                #:use-module (ice-9 match)
+               #:use-module (guixcfg security age)   ; %installed-identity-path（单一 authority）
                #:export (%secrets-runtime-root
                          secret-decl
                          secret-decl?
@@ -100,7 +101,7 @@ docs/architecture/secrets.md（Runtime secrets））：
                              ;; age 用 closure 内的绝对路径——不依赖服务进程的 PATH
                              ;; （shepherd 服务继承 boot 时的环境，PATH 里可能无 age）。
                              (define age-bin #$(file-append age "/bin/age"))
-                             (define identity "/persist/system/keys/age/identity")
+                             (define identity #$(%installed-identity-path))
                              (define store-dir "/run/guixcfg-secrets.d")
                              (define current-link #$%secrets-runtime-root)
                              ;; 预检：identity 缺失（如 fresh install 漏装阶段 6）

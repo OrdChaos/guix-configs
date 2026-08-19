@@ -7,6 +7,7 @@
 
 (define-module (guixcfg storage model)
                #:use-module (guix records)  ; define-record-type*
+               #:use-module (srfi srfi-1)   ; find
                #:use-module (srfi srfi-13)  ; 字符串工具（string-prefix? 等）
                #:export (;; 单位换算
                          mib gib
@@ -32,6 +33,7 @@
                          subvolume-mount-at-install?
                          %persist-subvolumes
                          persist-subvolume-name?
+                         persist-mount-point
                          ;; root generation
                          %root-installing-name %root-template-name
                          %swap-subvolume-name
@@ -137,6 +139,17 @@
 (define (persist-subvolume-name? name)
   "NAME 是否符合持久子卷命名规则（docs/architecture/storage.md）。"
   (string-prefix? "@persist-" name))
+
+(define (persist-mount-point name)
+  "持久子卷 NAME 的固定挂载点。这是 /persist/* 语义路径的
+单一 authority（%persist-subvolumes）——system/services/security 等
+各层都从这里取挂载点，禁止各自重复拼写 literal（AGENT.md §13；
+docs/architecture/storage.md）。注意参数名避开 accessor
+subvolume-name（遮蔽会 wrong-type-to-apply）。"
+  (subvolume-mount-point
+   (or (find (lambda (s) (string=? (subvolume-name s) name))
+             %persist-subvolumes)
+       (error "unknown persist subvolume" name))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; Root generation 命名（docs/architecture/storage.md）。

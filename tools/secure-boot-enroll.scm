@@ -21,7 +21,8 @@
 ;; guix repl 不提供 -L，这里显式把 modules/ 加入 load path（从仓库根目录运行）。
 (add-to-load-path (string-append (getcwd) "/modules"))
 
-(use-modules (guixcfg security certificates)
+(use-modules (guixcfg storage model)     ; persist-mount-point（/persist 语义路径 authority）
+             (guixcfg security certificates)
              (guix store)
              (guix monads)
              (guix gexp)
@@ -33,7 +34,8 @@
              (srfi srfi-1)
              (srfi srfi-13))
 
-(define %default-keydir "/persist/system/keys/secure-boot")
+(define %default-keydir
+  (string-append (persist-mount-point "@persist-system") "/keys/secure-boot"))
 (define %ms-owner-guid "77fa9abd-0359-4d32-bd60-28f4e78f784b")  ; Microsoft
 
 ;; keygen 必须完整产出这六个文件；缺任何一个都不能构建 keystore。

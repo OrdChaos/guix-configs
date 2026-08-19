@@ -13,6 +13,7 @@
 (define-module (guixcfg system user-persistence)
                #:use-module (gnu services)            ; simple-service
                #:use-module (gnu system file-systems) ; file-system
+               #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
                #:use-module (guix gexp)
                #:use-module (guix modules)            ; source-module-closure
                #:export (%persistent-user-dirs
@@ -32,7 +33,7 @@
   "SELECTED 用户目录的 bind mount 声明（/persist/data-home/USER/<d>
 → /home/USER/<d>）。依赖 @persist-data-home 子卷挂载（/persist
 先就位），挂载点在 login 前由 file-systems 阶段创建。"
-  (let ((persist-root (string-append "/persist/data-home/" user)))
+  (let ((persist-root (string-append (persist-mount-point "@persist-data-home") "/" user)))
     (map (lambda (d)
            (file-system
             (device (string-append persist-root "/" d))

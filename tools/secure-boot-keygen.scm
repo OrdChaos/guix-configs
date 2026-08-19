@@ -12,10 +12,12 @@
 ;;; 已存在任何密钥材料时拒绝覆盖；如需重建，手动删除整个密钥目录。
 
 (use-modules (ice-9 format)
+             (guixcfg storage model)     ; persist-mount-point（/persist 语义路径 authority）
              (ice-9 match)
              (srfi srfi-1))
 
-(define %default-dir "/persist/system/keys/secure-boot")
+(define %default-dir
+  (string-append (persist-mount-point "@persist-system") "/keys/secure-boot"))
 (define %key-names '("PK" "KEK" "db"))
 
 (define (mkdir-p dir)

@@ -32,8 +32,9 @@
                #:use-module (guix modules)                 ; source-module-closure
                #:export (ephemeral-root-shepherd-services))
 
-;; 运行系统上 @persist-system 的挂载点（见 (guixcfg storage model)）。
-(define %persist-system-mount "/persist/system")
+;; 运行系统上 @persist-system 的挂载点（单一 authority：
+;; (guixcfg storage model) 的 persist-mount-point——禁止重复 literal）。
+(define %persist-system-mount (persist-mount-point "@persist-system"))
 
 ;; 清理时临时挂载 Btrfs 顶层的位置。
 (define %btrfs-top-mount "/run/guixcfg-btrfs-top")

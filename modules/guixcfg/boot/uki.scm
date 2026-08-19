@@ -23,6 +23,7 @@
                #:use-module (rosenthal packages bootloaders)  ; limine、systemd-stub、ukify
                #:use-module (gnu packages efi)   ; sbsigntools
                #:use-module (guix gexp)
+               #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
                #:use-module (guix modules)       ; source-module-closure
                #:use-module (guix records)       ; define-record-type*
                #:use-module (ice-9 regex)        ; string-match（cmdline-system）
@@ -39,7 +40,8 @@
                          make-uki-deploy-program))
 
 ;; Secure Boot 密钥的固定语义路径（docs/architecture/boot.md（Secure Boot））。
-(define %secure-boot-keydir "/persist/system/keys/secure-boot")
+(define %secure-boot-keydir
+  (string-append (persist-mount-point "@persist-system") "/keys/secure-boot"))
 
 ;; ESP 上 UKI 的存放子目录。
 (define %uki-esp-subdir "EFI/Guix")

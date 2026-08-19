@@ -16,7 +16,8 @@
 
 (define-module (guixcfg system readiness)
                #:use-module (gnu services)              ; simple-service
-               #:use-module (gnu services shepherd)     ; shepherd-service、user-processes-service-type
+               #:use-module (gnu services shepherd)   ; shepherd-service、user-processes-service-type
+               #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
                #:use-module (gnu system pam)           ; pam-extension、pam-entry、pam-service
                #:use-module (gnu services base)        ; mingetty-service-type
                #:use-module (guix gexp)
@@ -50,10 +51,10 @@
 ;; 构造 fake root——杜绝两套等价逻辑/字符串漂移。展开后 runtime
 ;; 只是纯 core `and`/`file-exists?`，无模块依赖。
 (define %persistent-state-paths
-  '("/persist/system"
-    "/persist/data-home"
-    "/var/guix"
-    "/gnu/store"))
+  (list (persist-mount-point "@persist-system")
+        (persist-mount-point "@persist-data-home")
+        "/var/guix"
+        "/gnu/store"))
 
 (define (persistent-state-ready-service)
   "确认 boot-critical persistent filesystem 已挂载的 one-shot 服务

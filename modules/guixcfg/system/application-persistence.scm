@@ -30,6 +30,7 @@
 (define-module (guixcfg system application-persistence)
                #:use-module (gnu services)            ; simple-service
                #:use-module (gnu system file-systems) ; file-system
+               #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
                #:use-module (guix gexp)
                #:use-module (guix modules)            ; source-module-closure
                #:use-module (guix records)
@@ -51,7 +52,7 @@
                          application-persistence-service))
 
 ;; /persist/data-app（@persist-data-app 子卷；storage/model.scm）。
-(define %application-persistence-root "/persist/data-app")
+(define %application-persistence-root (persist-mount-point "@persist-data-app"))
 
 ;; 禁止作为整体 consumer 的全局目录（精确或前缀都拒绝）。
 (define %forbidden-consumers

@@ -14,6 +14,7 @@
                #:use-module (guix build utils)          ; mkdir-p
                #:use-module (guixcfg utils process)      ; invoke-*（stdin 注入）
                #:use-module (guixcfg utils atomic-file)  ; 原子写
+               #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
                #:use-module (ice-9 regex)
                #:use-module (ice-9 rdelim)
                #:use-module (srfi srfi-13)
@@ -48,7 +49,8 @@
   (make-parameter (string-append (%runtime-identity-dir)
                                  "/stable-identity")))
 (define %installed-identity-dir
-  (make-parameter "/persist/system/keys/age"))
+  (make-parameter
+   (string-append (persist-mount-point "@persist-system") "/keys/age")))
 (define %installed-identity-path
   (make-parameter (string-append (%installed-identity-dir) "/identity")))
 
@@ -314,7 +316,8 @@ already-unlocked（复用）或 unlocked（新解密）。"
 (define %account-credentials-dir
   ;; 安装期（LiveCD）写 /mnt/persist/...：GUIXCFG_ACCOUNTS_DIR 覆盖。
   (make-parameter (or (getenv "GUIXCFG_ACCOUNTS_DIR")
-                      "/persist/system/accounts")))
+                      (string-append (persist-mount-point "@persist-system")
+                                     "/accounts"))))
 
 (define (password-hash-format? s)
   "S 是否是 shadow 兼容的 crypt hash（$id$salt$hash，非空、无换行/

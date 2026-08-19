@@ -228,7 +228,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
     (check "ESP mounted (/efi/EFI/Guix exists)"
            (file-exists? "/efi/EFI/Guix"))
     (check "/persist writable"
-           (dir-writable? "/persist/system")))
+           (dir-writable? (persist-mount-point "@persist-system"))))
    (executable-checks)))
 
 (define (preflight)
