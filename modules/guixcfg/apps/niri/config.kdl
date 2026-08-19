@@ -20,7 +20,7 @@ spawn-at-startup "mako"                 // notification daemon
 spawn-at-startup "lxpolkit"             // graphical polkit agent (lxsession)
 
 binds {
-    Mod+Return { spawn "foot"; }        // terminal
+    Mod+T { spawn "foot"; }        // terminal
     Mod+D { spawn "fuzzel"; }           // launcher
     Mod+Shift+E { quit; }               // logout -> greetd
 }
