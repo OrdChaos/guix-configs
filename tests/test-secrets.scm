@@ -58,6 +58,12 @@
                         (lambda () (repository-file p) #f)
                         (lambda (k . a) #t)))
                     '("" "/abs" "a/../b" ".." "a/..")))
+(test-assert "repository-file tolerates ./ prefix (normalized)"
+             (let ((lf (repository-file "./secrets/system/test-system.age")))
+               (and (local-file? lf)
+                    (string-suffix? "/secrets/system/test-system.age"
+                                    (local-file-absolute-file-name lf))
+                    (file-exists? (local-file-absolute-file-name lf)))))
 
 ;; scope → runtime 路径映射
 (test-equal "system secret target"
