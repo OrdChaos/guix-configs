@@ -26,10 +26,14 @@
 
 ;; 本模块所在目录（modules/guixcfg/utils/）。%load-path 必须含
 ;; modules/（guix repl -L modules / tests 的 add-to-load-path）。
+;; canonicalize-path 把结果锚定为绝对路径：search-path 对相对
+;; %load-path 条目会返回相对路径（sudo/环境重置场景，VM 实测
+;; root 解析错位到模块目录），锚定后 marker 上溯才稳定。
 (define %helper-dir
   (let ((f (search-path %load-path "guixcfg/utils/repository-source.scm")))
-    (if f (dirname f)
-        (error "repository-source: cannot locate module on %load-path (run with -L modules)"))))
+    (if f
+      (canonicalize-path (dirname f))
+      (error "repository-source: cannot locate module on %load-path (run with -L modules)"))))
 
 (define (repository-root)
   "仓库根绝对路径：从本模块目录向上找含 channels.lock.scm 的目录
@@ -44,7 +48,9 @@
 (define (repository-file relative-path)
   "把仓库根相对路径 RELATIVE-PATH 解析为 local-file（file-like，
 可进 gexp/store）。RELATIVE-PATH 必须是非空、非绝对、无 .. 逃逸的
-相对路径；容忍 \"./\" 前缀（归一化）。"
+相对路径；容忍 \"./\" 前缀（归一化）。解析结果不存在时抛错并打印
+完整现场（root/rel/helper-dir）——不让 local-file 的
+canonicalize-path 报裸路径。"
   (let ((rel (if (string-prefix? "./" relative-path)
                (substring relative-path 2)
                relative-path)))
@@ -53,5 +59,8 @@
                  (not (string-prefix? "/" rel))
                  (not (string-contains rel "..")))
             (error "repository-file: unsafe relative path" relative-path))
-    (local-file (assume-source-relative-file-name
-                 (string-append (repository-root) "/" rel)))))
+    (let ((path (string-append (repository-root) "/" rel)))
+      (unless (file-exists? path)
+        (error "repository-file: resolved file does not exist"
+               path (repository-root) relative-path %helper-dir))
+      (local-file (assume-source-relative-file-name path)))))
