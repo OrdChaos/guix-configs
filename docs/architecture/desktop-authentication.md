@@ -86,6 +86,15 @@ pinned 默认是 `gdm-password`——本系统不用 gdm，**整体替换**为�
   `unix-pam-service "greetd"`；greetd 运行时 PAM service 名即
   `"greetd"`——`config/mod.rs` `GENERAL_SERVICE`）。用户会话的
   登录 keyring 解锁 + daemon 启动都在这里；
+- **greeter 会话必须走专用 `greetd-greeter` PAM service**（pinned
+  greetd 0.10.3 `server.rs:209-228` + `config/mod.rs`
+  `GREETER_SERVICE`）：`/etc/pam.d/greetd-greeter` 存在时 greeter
+  会话用它，否则**回退到 general service "greetd"**——guix 默认只
+  生成 `greetd`，因此 greeter 会话会跑带 `pam_gnome_keyring
+  auto_start` 的同一栈，每次 greeter 启动都 spawn 一个 `--login`
+  stub（实测：SSH-only 轮次出现 `gnome-keyring-daemon --daemonize
+  --login` 进程）。本仓库显式提供
+  `(unix-pam-service "greetd-greeter")`（无 keyring 模块）堵住回退；
 - `"login"`：mingetty tty2-6 console fallback（同一解锁路径）；
 - `"passwd"`：密码修改同步 keyring 密码。
 

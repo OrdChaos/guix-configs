@@ -129,6 +129,20 @@ auto_start）。"
                     (not (any (lambda (e) (pam-keyring-entry? e #t))
                               (pam-service-session sshd))))))
 
+(test-assert "GK3: greeter PAM service (greetd-greeter) exists WITHOUT keyring
+(greetd server.rs falls back to 'greetd' when /etc/pam.d/greetd-greeter
+is missing - which would run pam_gnome_keyring in every greeter session
+and spawn a --login stub per greeter start; regression: SSH-only round
+showed exactly such a stray daemon)"
+             (let ((greeter (final-pam-service "greetd-greeter")))
+               (and greeter
+                    (not (any (lambda (e) (pam-keyring-entry? e #f))
+                              (pam-service-auth greeter)))
+                    (not (any (lambda (e) (pam-keyring-entry? e #t))
+                              (pam-service-session greeter)))
+                    ;; 与 greetd 同一 unix-pam-service 基底（会话可用）
+                    (pair? (pam-service-session greeter)))))
+
 ;; ── GK4：persistence 边界 ─────────────────────────────────
 (test-assert "GK4: persistence is exactly the keyrings vault rule"
              (let ((rules (application-persistence %gnome-keyring-app)))

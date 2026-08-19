@@ -310,6 +310,13 @@ docs/architecture/storage.md；本节省略版：
   拿到密码 → session 段 `pam_gnome_keyring.so auto_start`）。改变
   login authentication method 时需单独设计 keyring unlock；
   autologin/fingerprint/FIDO-only/TPM-to-keyring 明确 out of scope。
+- **greetd 的 greeter 会话与用户会话共用 PAM service 名是陷阱**：
+  greetd 0.10.3 的 `[default_session] service` 默认
+  `greetd-greeter`，但 `server.rs` 在 `/etc/pam.d/greetd-greeter`
+  缺失时**回退到 general service "greetd"**——greeter 会话会跑
+  带 `pam_gnome_keyring` 的同一栈并 spawn 无谓的 `--login` stub。
+  必须显式提供 `(unix-pam-service "greetd-greeter")`（无 keyring）
+  堵住回退（实测一次；GK3 回归测试）。
 - **Secret Service 是两阶段 lifecycle，`auto_start` 只是第一半**：
   PAM 的 `--login` 只启动"解锁 login keyring 的 stub"（gkd-main.c
   注释明示；LOGIN_TIMEOUT 120 秒无接管自动退出）；session 侧必须
