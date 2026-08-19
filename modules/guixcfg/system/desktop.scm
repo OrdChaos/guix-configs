@@ -48,7 +48,6 @@
 (define-module (guixcfg system desktop)
                #:use-module (gnu services)            ; service
                #:use-module (gnu services base)       ; greetd-service-type、greetd-configuration、greetd-terminal-configuration
-               #:use-module (gnu system pam)          ; pam-root-service-type、unix-pam-service
                #:use-module (gnu packages bash)      ; bash（greetd-user-session command）
                #:use-module (guix gexp)               ; file-append
                #:export (desktop-services))
@@ -103,13 +102,4 @@
   ;; niri config 的 spawn-at-startup 以用户身份启动（单一 owner =
   ;; niri session，见 modules/guixcfg/apps/niri/config.kdl 与
   ;; docs/architecture/graphics.md）。
-  (list (greetd-login-service)
-        ;; greeter 会话专用 PAM service（pinned greetd 0.10.3
-        ;; server.rs:209-228：/etc/pam.d/greetd-greeter 存在时 greeter
-        ;; 会话用它，否则回退到 general service "greetd"）。guix 只
-        ;; 生成 "greetd"——若不加这个文件，greeter 会话会走带
-        ;; pam_gnome_keyring 的 "greetd" 栈，每次 greeter 启动都
-        ;; spawn 一个 --login stub（实测：SSH-only 轮次出现
-        ;; gnome-keyring-daemon --daemonize --login 进程）。
-        (simple-service 'greetd-greeter-pam pam-root-service-type
-                        (list (unix-pam-service "greetd-greeter")))))
+  (list (greetd-login-service)))

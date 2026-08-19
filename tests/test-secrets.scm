@@ -80,8 +80,9 @@
                             "/secrets/user/")))
                     %vm-secrets))
 
-(test-assert "no application secrets wired into the login-critical publisher"
-             (null? (applications-secrets %applications)))
+(test-assert "application secrets are all ordinary (never login-critical)"
+             (every (lambda (d) (eq? 'ordinary (secret-decl-domain d)))
+                    (applications-secrets %applications)))
 
 ;; ── Readiness domain（login-critical / ordinary；显式必填）────
 (test-equal "vm system fixture is login-critical"

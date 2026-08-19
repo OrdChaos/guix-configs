@@ -45,6 +45,8 @@
     (guixcfg apps mako definition)
     (guixcfg storage model)
     (guixcfg system application-persistence)
+    (guixcfg security secrets)     ; gnome-keyring definition 的依赖（topological）
+    (guixcfg users user)           ; gnome-keyring definition 的依赖（topological）
     (guixcfg apps gnome-keyring definition)
     (guixcfg apps mpv definition)
     (guixcfg apps niri definition)
@@ -74,7 +76,6 @@
     (guixcfg hosts laptop)
     (guixcfg utils process)
     (guixcfg security age)
-    (guixcfg security secrets)
     (guixcfg utils repository-source)
     (guixcfg hosts vm-secrets)
     (guixcfg services ephemeral-root)
@@ -88,7 +89,6 @@
     (guixcfg system readiness)
     (guixcfg system ssh)
     (guixcfg system user-persistence)
-    (guixcfg users user)
     (guixcfg hosts vm)
     (guixcfg security certificates)
     (guixcfg storage validate)

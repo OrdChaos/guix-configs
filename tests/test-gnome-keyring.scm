@@ -1,30 +1,37 @@
-;;; GNOME Keyring / Secret Service 测试（Phase B，
-;;; docs/architecture/desktop-authentication.md）。
+;;; GNOME Keyring / Secret Service 测试（repository-owned master
+;;; credential model，docs/architecture/desktop-authentication.md）。
 ;;;
-;;; 覆盖（任务 B15 static list）：
-;;;   GK1  app 启用（registry）+ 官方 service 被使用、无 custom
-;;;        daemon implementation；
-;;;   GK2  PAM mapping 只覆盖本系统实际使用的 service（greetd/login/
-;;;        passwd；无 gdm-password 残留）；
-;;;   GK3  PAM lowering：greetd/login 的 auth+session 真实包含
-;;;        pam_gnome_keyring（session 带 auto_start）、passwd 的
-;;;        password 段包含同步模块、sshd 不受影响；
-;;;   GK4  persistence 恰好一条：keyrings vault → data-app backing；
-;;;        无整体 .local/share、无 /run/user、无 machine-state；
-;;;   GK5  daemon 无双启动：niri/Home/shell 都不启动 daemon，模块内
-;;;        无 gnome-keyring-daemon 手动 exec；
-;;;   GK6  polkit authority 恰好一个（与 Phase A 同源断言）。
+;;; 覆盖：
+;;;   GK1  app 启用；无 system-services（PAM 完全退出）；无 custom
+;;;        service type；
+;;;   GK2  /etc/pam.d/greetd/login/passwd 均无 pam_gnome_keyring
+;;;        （login authentication 与 keyring unlocking 分离）；
+;;;   GK3  greetd-greeter 专用 PAM 已删除（其存在理由已消失）；
+;;;   GK4  persistence 恰好一条：keyrings vault；无整体 .local/share、
+;;;        无 /run/user、无 machine-state；
+;;;   GK5  daemon 单一 owner：niri 无 keyring spawn、modules 无
+;;;        --login/--start、唯一 invocation = 会话 wrapper；
+;;;   GK7  会话服务契约：Home Shepherd、requirement dbus、one-shot、
+;;;        wrapper 用 --foreground --unlock --components=secrets、
+;;;        密码不出现于 argv（无密码字面量参数）；
+;;;   GK8  master credential secret 声明：恰好一条、scope user、
+;;;        domain ordinary（不阻塞登录）、target/mode/owner 正确、
+;;;        source 是加密 master.age；
+;;;   GK6  polkit authority 恰好一个。
 
 (use-modules (guixcfg hosts vm)
              (guixcfg apps model)
              (guixcfg apps registry)
              (guixcfg system application-persistence) ; rule accessors（GK4）
+             (guixcfg security secrets) ; secret-decl accessors、runtime-secret-target（GK8）
+             (guixcfg users user)     ; %primary-user（GK8）
              (gnu services)
-             (gnu services desktop) ; gnome-keyring-service-type
-             (gnu services shepherd) ; shepherd-service-*（GK7 initializer）
+             (gnu services desktop) ; gnome-keyring-service-type（GK1 否定）
+             (gnu services shepherd) ; shepherd-service-*（GK7）
              (gnu system)
              (gnu system file-systems) ; file-system-device/mount-point（GK4）
              (gnu system pam)       ; pam-service-name、pam-service-auth/session/password
+             (guix gexp)            ; gexp?、local-file（GK8 source）
              (guix build utils)     ; find-files（GK5 扫描）
              (ice-9 rdelim)         ; read-string
              (ice-9 ftw)            ; scandir
@@ -38,9 +45,6 @@
 
 ;; 未导出 accessor 经顶层 define 绑定（编译环境内联 module-ref 应用
 ;; 会拿到 syntax-transformer——实测；与 test-desktop PK 同模式）。
-(define gnome-keyring-pam-services
-  (module-ref (resolve-module '(gnu services desktop))
-              'gnome-keyring-pam-services))
 (define pam-configuration-services
   (module-ref (resolve-module '(gnu system pam)) 'pam-configuration-services))
 (define pam-configuration-transformers
@@ -51,15 +55,12 @@
 
 (define %gnome-keyring-app (app-by-name 'gnome-keyring))
 
-;; ── GK1：official service、无 custom daemon ────────────────
+;; ── GK1：official service 退出 PAM、无 custom 实现 ────────
 (test-assert "GK1: gnome-keyring app enabled in registry"
              (and %gnome-keyring-app (application? %gnome-keyring-app)))
 
-(test-assert "GK1: official gnome-keyring-service-type used (exactly one)"
-             (let ((svcs (application-system-services %gnome-keyring-app)))
-               (and (= 1 (length svcs))
-                    (eq? gnome-keyring-service-type
-                         (service-kind (car svcs))))))
+(test-assert "GK1: app declares NO system services (PAM fully out)"
+             (null? (application-system-services %gnome-keyring-app)))
 
 (test-assert "GK1: app definition contains no custom service type"
              (let ((s (call-with-input-file
@@ -67,20 +68,7 @@
                        (lambda (p) (read-string p)))))
                (not (string-contains s "define-service-type"))))
 
-;; ── GK2：PAM mapping 精确覆盖 greetd/login/passwd ─────────
-(test-assert "GK2: PAM mapping covers exactly greetd/login/passwd (no gdm-password)"
-             (let ((mapping (gnome-keyring-pam-services
-                             (service-value
-                              (car (application-system-services
-                                    %gnome-keyring-app))))))
-               ;; alist key 是字符串（pinned transformer 用
-               ;; pam-service-name 的字符串匹配）。
-               (and (equal? '(("greetd" . login) ("login" . login)
-                              ("passwd" . passwd))
-                            mapping)
-                    (not (assoc "gdm-password" mapping)))))
-
-;; ── GK3：PAM lowering（与 /etc/pam.d 生成相同的折叠结果）───
+;; ── GK2：PAM 完全无 keyring ───────────────────────────────
 (define %pam-cfg
   (service-value
    (fold-services (operating-system-services %os)
@@ -95,53 +83,44 @@
          ((apply compose identity (pam-configuration-transformers %pam-cfg))
           svc))))
 
-(define (pam-keyring-entry? entry auto-start?)
-  "ENTRY 是否是 pam_gnome_keyring.so（可选参数 AUTO-START? 时带
-auto_start）。"
+(define (pam-keyring-entry? entry)
+  "ENTRY 是否引用 pam_gnome_keyring.so。"
   (let ((m (object->string (pam-entry-module entry))))
-    (and (string-contains m "pam_gnome_keyring.so")
-         (equal? (if auto-start? '("auto_start") '())
-                 (pam-entry-arguments entry)))))
+    (string-contains m "pam_gnome_keyring.so")))
 
-(test-assert "GK3: greetd PAM auth captures the login password"
-             (any (lambda (e) (pam-keyring-entry? e #f))
-                  (pam-service-auth (final-pam-service "greetd"))))
+(test-assert "GK2: greetd PAM has NO pam_gnome_keyring in auth/session"
+             (let ((greetd (final-pam-service "greetd")))
+               (and greetd
+                    (not (any pam-keyring-entry?
+                              (pam-service-auth greetd)))
+                    (not (any pam-keyring-entry?
+                              (pam-service-session greetd))))))
 
-(test-assert "GK3: greetd PAM session unlocks keyring and starts daemon"
-             (any (lambda (e) (pam-keyring-entry? e #t))
-                  (pam-service-session (final-pam-service "greetd"))))
-
-(test-assert "GK3: console login PAM service unlocks keyring too"
+(test-assert "GK2: login (console) PAM has NO pam_gnome_keyring"
              (let ((login (final-pam-service "login")))
-               (and (any (lambda (e) (pam-keyring-entry? e #f))
-                         (pam-service-auth login))
-                    (any (lambda (e) (pam-keyring-entry? e #t))
-                         (pam-service-session login)))))
+               (and login
+                    (not (any pam-keyring-entry?
+                              (pam-service-auth login)))
+                    (not (any pam-keyring-entry?
+                              (pam-service-session login))))))
 
-(test-assert "GK3: passwd PAM service syncs keyring password"
-             (any (lambda (e) (pam-keyring-entry? e #f))
-                  (pam-service-password (final-pam-service "passwd"))))
+(test-assert "GK2: passwd PAM has NO pam_gnome_keyring (no password sync)"
+             (let ((passwd (final-pam-service "passwd")))
+               (and passwd
+                    (not (any pam-keyring-entry?
+                              (pam-service-password passwd))))))
 
-(test-assert "GK3: sshd PAM service is NOT touched by the keyring"
-             (let ((sshd (final-pam-service "sshd")))
-               (and (not (any (lambda (e) (pam-keyring-entry? e #f))
-                              (pam-service-auth sshd)))
-                    (not (any (lambda (e) (pam-keyring-entry? e #t))
-                              (pam-service-session sshd))))))
+(test-assert "GK2: no gnome-keyring-service-type in the OS graph"
+             (not (any (lambda (svc)
+                         (eq? 'gnome-keyring
+                              (service-type-name (service-kind svc))))
+                       (operating-system-services %os))))
 
-(test-assert "GK3: greeter PAM service (greetd-greeter) exists WITHOUT keyring
-(greetd server.rs falls back to 'greetd' when /etc/pam.d/greetd-greeter
-is missing - which would run pam_gnome_keyring in every greeter session
-and spawn a --login stub per greeter start; regression: SSH-only round
-showed exactly such a stray daemon)"
-             (let ((greeter (final-pam-service "greetd-greeter")))
-               (and greeter
-                    (not (any (lambda (e) (pam-keyring-entry? e #f))
-                              (pam-service-auth greeter)))
-                    (not (any (lambda (e) (pam-keyring-entry? e #t))
-                              (pam-service-session greeter)))
-                    ;; 与 greetd 同一 unix-pam-service 基底（会话可用）
-                    (pair? (pam-service-session greeter)))))
+;; ── GK3：greetd-greeter 专用 PAM 已删除 ───────────────────
+(test-assert "GK3: greetd-greeter PAM service removed (reason gone)"
+             (not (find (lambda (s)
+                          (string=? "greetd-greeter" (pam-service-name s)))
+                        (pam-configuration-services %pam-cfg))))
 
 ;; ── GK4：persistence 边界 ─────────────────────────────────
 (test-assert "GK4: persistence is exactly the keyrings vault rule"
@@ -187,14 +166,22 @@ showed exactly such a stray daemon)"
                               (service-type-name (service-kind svc))))
                        (operating-system-services %os))))
 
-;; ── GK5：daemon 无双启动 ──────────────────────────────────
-(test-assert "GK5: niri config starts the --start initializer exactly once"
+;; ── GK5：daemon 单一 owner、无旧 lifecycle ────────────────
+(test-assert "GK5: niri config has no gnome-keyring spawn"
              (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
                                             (lambda (p) (read-string p)))))
-               (= 1 (length (filter (lambda (line)
-                                      (string-contains line
-                                                       "gnome-keyring-daemon"))
-                                    (string-split s #\newline))))))
+               (not (string-contains s "gnome-keyring"))))
+
+(test-assert "GK5: no --login / --start anywhere in modules
+(PAM --login stub and niri/Home --start glue fully removed)"
+             (let ((s (string-join
+                       (map (lambda (f)
+                              (call-with-input-file f
+                                                    (lambda (p) (read-string p))))
+                            (find-files "modules/guixcfg" "\\.scm$"))
+                       "\n")))
+               (and (not (string-contains s "\"--login\""))
+                    (not (string-contains s "\"--start\"")))))
 
 (test-assert "GK5: no OTHER app definition starts the daemon"
              (let ((s (string-join
@@ -208,8 +195,8 @@ showed exactly such a stray daemon)"
                        "\n")))
                (not (string-contains s "gnome-keyring-daemon"))))
 
-(test-assert "GK5: no gnome-keyring-daemon invocation in modules
-(the Phase 2 initializer lives in niri config, not scheme code)"
+(test-assert "GK5: exactly one gnome-keyring-daemon invocation in modules
+(the session wrapper)"
              (let ((s (string-join
                        (map (lambda (f)
                               (call-with-input-file f
@@ -218,62 +205,76 @@ showed exactly such a stray daemon)"
                        "\n")))
                ;; 只数 invocation 形态（带引号的 bin 路径）；注释里的
                ;; 裸名说明文档不算。
-               (not (string-contains s "\"/bin/gnome-keyring-daemon\""))))
+               (= 1 (length (filter (lambda (m)
+                                      (string-contains m
+                                                       "\"/bin/gnome-keyring-daemon\""))
+                                    (string-split s #\newline))))))
 
-(test-assert "GK5: PAM auto_start is the single logical unlock owner
-(no module passes the auto_start argument itself)"
-             (let ((s (string-join
-                       (map (lambda (f)
-                              (call-with-input-file f
-                                                    (lambda (p) (read-string p))))
-                            (find-files "modules/guixcfg" "\\.scm$"))
-                       "\n")))
-               ;; auto_start 只允许由 official gnome-keyring service 生成；
-               ;; 仓库模块里带引号的 "auto_start" 参数形态必须不存在
-               ;; （注释里裸写 auto_start 说明文档不算）。
-               (not (string-contains s "\"auto_start\""))))
+;; ── GK7：会话服务契约（单一 lifecycle owner）──────────────
+(define %gk-session-svc
+  (car (service-value
+        (car (application-home-services %gnome-keyring-app)))))
 
-;; ── GK7：Phase 2 由 niri 启动（--start 语义，单一 owner）──
-;; 上游 lifecycle（pinned gnome-keyring-48.0，gkd-main.c）：
-;;   PAM --login stub（解锁 login keyring，不完成初始化，120 秒
-;;   超时）→ session --start 接管 stub、完成初始化、自身退出。
-;; 本仓库的 Phase 2 owner = niri spawn-at-startup（architectural
-;; compromise，desktop-authentication.md §2.2）。
-(test-assert "GK7: niri spawn uses the exact --start --components=secrets"
-             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
-                                            (lambda (p) (read-string p)))))
-               (string-contains s
-                                "spawn-at-startup \"gnome-keyring-daemon\" \"--start\" \"--components=secrets\"")))
+(test-assert "GK7: session service is Home Shepherd, after D-Bus, one-shot"
+             (let ((svc %gk-session-svc))
+               (and (eq? 'gnome-keyring-session
+                         (car (shepherd-service-provision svc)))
+                    (equal? '(dbus) (shepherd-service-requirement svc))
+                    (shepherd-service-one-shot? svc))))
 
-(test-assert "GK7: the initializer is the only gnome-keyring spawn in niri"
-             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
-                                            (lambda (p) (read-string p)))))
-               (= 1 (length (filter (lambda (line)
-                                      (string-contains line "spawn-at-startup"))
-                                    (filter (lambda (line)
-                                              (string-contains line
-                                                               "gnome-keyring-daemon"))
-                                            (string-split s #\newline)))))))
+(test-assert "GK7: wrapper invokes --foreground --unlock --components=secrets
+(pinned Model 1; password via stdin, never argv)"
+             (let ((s (object->string (shepherd-service-start %gk-session-svc))))
+               (and (string-contains s "gnome-keyring-daemon")
+                    (string-contains s "--foreground")
+                    (string-contains s "--unlock")
+                    (string-contains s "--components=secrets")
+                    (not (string-contains s "--login"))
+                    (not (string-contains s "--start"))
+                    (not (string-contains s "--daemonize")))))
 
-(test-assert "GK7: --start hook semantics (no --replace/--login/--daemonize/
---foreground in the spawn)"
-             (let* ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
-                                            (lambda (p) (read-string p))))
-                    ;; 只检查 spawn 行本身（config 注释会提到 --login 等
-                    ;; lifecycle 词汇）。
-                    (spawn-line
-                     (find (lambda (line)
-                             (string-contains line "gnome-keyring-daemon"))
-                           (string-split s #\newline))))
-               (and spawn-line
-                    (not (string-contains spawn-line "--replace"))
-                    (not (string-contains spawn-line "--login"))
-                    (not (string-contains spawn-line "--daemonize"))
-                    (not (string-contains spawn-line "--foreground")))))
+(test-assert "GK7: secret is delivered via stdin redirection from the /run
+target (no password in argv/env of the wrapper)"
+             (let* ((target (runtime-secret-target
+                             (car (application-secrets %gnome-keyring-app))
+                             (user-profile-name %primary-user)))
+                    (s (object->string (shepherd-service-start %gk-session-svc))))
+               (string-contains s target)))
 
-(test-assert "GK7: gnome-keyring app has no daemon-starting home services
-(PAM + niri are the only owners)"
-             (null? (application-home-services %gnome-keyring-app)))
+(test-assert "GK7: service is session infrastructure (home shepherd),
+not system/boot/niri"
+             (and (pair? (application-home-services %gnome-keyring-app))
+                  (null? (application-system-services %gnome-keyring-app))))
+
+;; ── GK8：master credential secret 声明 ────────────────────
+(test-assert "GK8: app owns exactly one secret declaration"
+             (let ((secrets (application-secrets %gnome-keyring-app)))
+               (and (= 1 (length secrets))
+                    (eq? 'gnome-keyring-master
+                         (secret-decl-name (car secrets))))))
+
+(test-assert "GK8: secret is user-scoped and ORDINARY (never blocks login)"
+             (let ((d (car (application-secrets %gnome-keyring-app))))
+               (and (eq? 'user (secret-decl-scope d))
+                    (eq? 'ordinary (secret-decl-domain d)))))
+
+(test-assert "GK8: source is the encrypted master.age (no plaintext source)"
+             (let* ((d (car (application-secrets %gnome-keyring-app)))
+                    (src (secret-decl-source d)))
+               (and (local-file? src)
+                    (string-suffix? "master.age" (local-file-file src)))))
+
+(test-assert "GK8: runtime target is the canonical ordinary user path
+with strict permissions"
+             (let* ((d (car (application-secrets %gnome-keyring-app)))
+                    (user (user-profile-name %primary-user))
+                    (target (runtime-secret-target d user)))
+               (and (string=? (string-append
+                               "/run/guixcfg-secrets-ordinary/users/"
+                               user "/gnome-keyring-master")
+                              target)
+                    (string=? user (secret-decl-owner-user d))
+                    (eq? #o400 (secret-decl-mode d)))))
 
 ;; ── GK6：polkit authority 恰好一个（与 Phase A 同源）──────
 (test-assert "GK6: exactly one polkit authority in %os"

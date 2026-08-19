@@ -237,15 +237,18 @@
 (test-assert "gnome-keyring app registered"
              (and=> (app-by-name 'gnome-keyring) application?))
 
-(test-assert "gnome-keyring owns no declarative .age secrets"
-             (null? (application-secrets (app-by-name 'gnome-keyring))))
+(test-assert "gnome-keyring owns exactly one declarative .age secret
+(the repository-owned master credential)"
+             (= 1 (length (application-secrets
+                           (app-by-name 'gnome-keyring)))))
 
-(test-assert "gnome-keyring home contribution is the package only
-(Phase 2 --start initializer lives in niri config, not Home services)"
+(test-assert "gnome-keyring home contribution is package + one session
+service (single daemon owner; no system services)"
              (let ((gk (app-by-name 'gnome-keyring)))
-               (and (null? (application-home-services gk))
-                    (equal? (list "gnome-keyring")
+               (and (equal? (list "gnome-keyring")
                             (map package-name
-                                 (application-home-packages gk))))))
+                                 (application-home-packages gk)))
+                    (= 1 (length (application-home-services gk)))
+                    (null? (application-system-services gk)))))
 
 (test-end "apps")

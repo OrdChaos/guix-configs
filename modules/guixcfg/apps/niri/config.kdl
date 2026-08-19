@@ -21,12 +21,6 @@ spawn-at-startup "mako"                 // notification daemon
 // ~/.local/bin wrapper 指向 libexec 二进制——PATH 稳定名，无 store
 // 字面量；polkitd 属于 system，agent 属于 graphical session）。
 spawn-at-startup "polkit-gnome-authentication-agent-1"
-// Secret Service 两阶段 lifecycle 的 Phase 2（desktop-authentication.md
-// §2.2）：PAM auto_start 只启动 --login stub（120s 无接管自动退出）；
-// 这里 --start 接管同一 daemon 并完成初始化。architectural
-// compromise：Phase 2 owner = niri 会话（当前架构唯一的
-// graphical-session startup）。
-spawn-at-startup "gnome-keyring-daemon" "--start" "--components=secrets"
 
 binds {
     Mod+T { spawn "foot"; }        // terminal

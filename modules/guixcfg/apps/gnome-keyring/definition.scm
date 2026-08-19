@@ -1,73 +1,121 @@
 ;;; gnome-keyring application unit：Secret Service / login keyring。
 ;;; （docs/architecture/desktop-authentication.md）
 ;;;
-;;; 能力边界：
-;;;   - system contribution：官方 gnome-keyring-service-type（唯一
-;;;     PAM 扩展——pinned 审计：该 service 只扩展 pam-root，daemon
-;;;     lifecycle 由 PAM 模块拥有）；
-;;;   - home packages：daemon 二进制 + session D-Bus 的
-;;;     org.freedesktop.secrets service file（D-Bus activation 只作
-;;;     fallback——login 路径的 unlock 由 PAM auto_start 完成）；
-;;;   - persistence：keyring vault（XDG_DATA_HOME/keyrings——
-;;;     gkd-secret-service.c: g_get_user_data_dir()/keyrings；
-;;;     application-owned sensitive mutable state）；
-;;;   - 不拥有：polkit（system authority）、declarative .age secrets、
-;;;     runtime sockets（/run/user/... 每 session 重建，不持久化）。
+;;; 架构（2026-08 正式切换，告别 PAM login-password handoff）：
+;;;   GNOME Keyring master credential = repository-owned encrypted
+;;;   application secret（secrets/master.age）；
+;;;   runtime 经现有 guixcfg secret publisher 解密到 /run（ordinary
+;;;   domain——解密失败绝不阻塞登录）；
+;;;   一个 user-session service（Home Shepherd）独占 daemon 的
+;;;   启动/解锁/运行/退出生命周期（pinned 审计：Model 1——
+;;;   --foreground --unlock --components=secrets，密码经 stdin；
+;;;   gkd-main.c read_login_password 全量读取 stdin，解锁在
+;;;   initialization 块无条件执行）。
 ;;;
-;;; 两阶段 lifecycle（pinned gnome-keyring-48.0 源码审计，gkd-main.c
-;;; 注释明示 + LOGIN_TIMEOUT 120 秒超时）：
-;;;   Phase 1（PAM，--login）：
-;;;     pam_gnome_keyring.so auto_start 以用户身份启动
-;;;     gnome-keyring-daemon --daemonize --login——只解锁/创建 login
-;;;     keyring 的 stub，不完成初始化；120 秒内无人接管会自动退出。
-;;;   Phase 2（session，--start）：
-;;;     session startup 必须再跑一次 gnome-keyring-daemon --start，
-;;;     通过 control socket 接管 stub、完成初始化、随后退出
-;;;     （"This second daemon usually exits"）。
-;;;   Phase 2 的 owner = niri spawn-at-startup（apps/niri/config.kdl
-;;;   的 spawn-at-startup "gnome-keyring-daemon" "--start"
-;;;   "--components=secrets"）——architectural compromise：Secret
-;;;   Service 本是 user-session infrastructure，但当前架构唯一的
-;;;   graphical-session startup 是 niri（desktop-authentication.md
-;;;   §2.2 记录）。
+;;; 核心 separation：login authentication（greetd/PAM 决定能否登录）
+;;; ≠ keyring unlocking（本服务决定能否解锁 vault）。两者不共享
+;;; password lifecycle；passwd 不再同步 keyring 密码（设计目标）。
 ;;;
-;;; D-Bus activation（org.freedesktop.secrets.service 的
-;;; --start --foreground）同样是 --start 语义：stub 存活窗口内可接管
-;;; 它；stub 超时退出后激活的是全新 daemon——login keyring 未解锁。
-;;; 因此 D-Bus activation 不是完整 session startup 的等价替代。
-;;;
-;;; PAM mapping 只配置本系统实际使用的 service（pinned 默认是
-;;; gdm-password——本系统用 greetd，必须整体替换）：
-;;;   greetd → login（用户会话：auth 保存密码 token；session
-;;;            auto_start 解锁 login keyring 并以用户启动 daemon——
-;;;            模块自身 fork 后 setuid 到 PAM 用户，greetd worker 的
-;;;            session 阶段以 root 运行也不影响）
-;;;   login  → login（mingetty tty2-6 console fallback 同样解锁）
-;;;   passwd → passwd（passwd 改密码时同步 keyring 密码）
+;;; 不变量：
+;;;   - exactly one daemon owner（本服务）；无 PAM、无 niri、无 shell
+;;;     启动（测试 GK5/GK7 断言）；
+;;;   - 密码绝不进 argv/env/日志/repo/store（runtime 仅 /run 明文，
+;;;     用户明确接受）；
+;;;   - D-Bus activation 只是 fallback（本服务先占有
+;;;     org.freedesktop.secrets）；
+;;;   - vault（~/.local/share/keyrings ⇄ data-app backing）是
+;;;     application-owned mutable state；runtime sockets
+;;;     （/run/user/<uid>/keyring）每 session 重建；
+;;;   - 同一用户已有 daemon（control socket 存在，如其他会话先启动）
+;;;     时本服务 no-op 退出——每用户单 daemon。
 
 (define-module (guixcfg apps gnome-keyring definition)
                #:use-module (gnu packages gnome)    ; gnome-keyring
-               #:use-module (gnu services)          ; service
-               #:use-module (gnu services desktop)  ; gnome-keyring-service-type、gnome-keyring-configuration
+               #:use-module (gnu home services shepherd) ; home-shepherd-service-type
+               #:use-module (gnu services)          ; service、simple-service
+               #:use-module (gnu services shepherd) ; shepherd-service
+               #:use-module (guix gexp)             ; program-file、file-append、local-file
                #:use-module (guix records)
                #:use-module (guixcfg apps model)
                #:use-module (guixcfg system application-persistence)
+               #:use-module (guixcfg security secrets) ; secret-decl、runtime-secret-target
+               #:use-module (guixcfg users user)    ; %primary-user
                #:export (%gnome-keyring))
+
+;; keyring master credential（stable credential，非 generation 配置）：
+;; plaintext 绝不进入 repo/store/argv/env/log——runtime 只以 /run
+;; 明文存在（用户明确接受）。normal reconfigure 不轮换；显式维护
+;; 操作才允许（须先 rekey 现有 vault）。
+(define %gnome-keyring-master-secret
+  (secret-decl
+   (name 'gnome-keyring-master)
+   (scope 'user)                    ; deployment target：user runtime
+   (domain 'ordinary)               ; 失败绝不阻塞 greetd login
+   (source (local-file "secrets/master.age" "gnome-keyring-master.age"))
+   (target-name "gnome-keyring-master")
+   (owner-user (user-profile-name %primary-user))
+   (mode #o400)))
+
+;; runtime plaintext 目标（canonical convention 推导）：
+;; /run/guixcfg-secrets-ordinary/users/<user>/gnome-keyring-master
+;; （owner=<user>，mode 0400——ordinary publisher 语义）。
+(define %gnome-keyring-master-target
+  (runtime-secret-target %gnome-keyring-master-secret
+                         (user-profile-name %primary-user)))
+
+;; 会话 wrapper：检查单 daemon 不变量 → 密码经 stdin 文件重定向注入
+;; （不出现于 argv/env）→ exec foreground daemon（shepherd 追踪 PID）。
+;; secret 文件缺失 → 重定向失败 → 服务失败（keyring 不可用，登录
+;; 不受影响——ordinary domain）。
+(define %gnome-keyring-session-wrapper
+  (program-file
+   "gnome-keyring-session"
+   #~(begin
+       (use-modules (guix build utils))
+       (let ((control (string-append (or (getenv "XDG_RUNTIME_DIR") "")
+                                     "/keyring/control")))
+         ;; 每用户单 daemon：control socket 已存在 = 其他会话已启动
+         ;; daemon（本用户由它服务）→ no-op。
+         (when (and (not (string-null? control))
+                    (file-exists? control))
+           (exit 0)))
+       (execl "/bin/sh" "sh" "-c"
+              (string-append
+               "exec " #$(file-append gnome-keyring
+                                      "/bin/gnome-keyring-daemon")
+               " --foreground --unlock --components=secrets < "
+               #$%gnome-keyring-master-target)))))
 
 (define %gnome-keyring
   (application
    (name 'gnome-keyring)
    (home-packages (list gnome-keyring))
-   (system-services
-    (list (service gnome-keyring-service-type
-                   (gnome-keyring-configuration
-                    (pam-services '(("greetd" . login)
-                                    ("login" . login)
-                                    ("passwd" . passwd)))))))
+   (home-services
+    (list (simple-service
+           'gnome-keyring-session
+           home-shepherd-service-type
+           (list (shepherd-service
+                  (documentation
+                   "GNOME Keyring Secret Service session daemon: start \
+exactly one daemon and unlock the login keyring with the \
+repository-owned master credential (runtime plaintext under /run).")
+                  (provision '(gnome-keyring-session))
+                  (requirement '(dbus)) ; session D-Bus 就绪后启动
+                  (one-shot? #t)        ; daemon 退出 = 会话结束，不 respawn
+                  (modules '((shepherd support))) ; %user-log-dir
+                  (start #~(make-forkexec-constructor
+                            (list #$%gnome-keyring-session-wrapper)
+                            #:log-file
+                            (string-append %user-log-dir
+                                           "/gnome-keyring-session.log")))
+                  (stop #~(make-kill-destructor)))))))
+   ;; 无 system-services：PAM 不再参与 keyring（/etc/pam.d/greetd
+   ;; 无 pam_gnome_keyring——测试 GK2/GK3 断言）。
    (persistence
     (list (application-persistence-rule
            (name 'keyrings)
            (backing "gnome-keyring/keyrings") ; backing root 相对（persistence.md）
            (consumer ".local/share/keyrings") ; HOME 相对（XDG_DATA_HOME/keyrings）
            (exposure 'bind-directory)
-           (lifecycle 'application-owned))))))
+           (lifecycle 'application-owned))))
+   (secrets (list %gnome-keyring-master-secret))))
