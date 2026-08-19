@@ -128,6 +128,31 @@ fsync→rename 原子替换会破坏单文件 bind/symlink）；mixed container
 与应用不得同时写同一文件——选择 repo-owned 或 app-owned，不
 merge，无 conflict-resolution framework）。
 
+## Production example：MPV（第一个真实 consumer）
+
+`modules/guixcfg/apps/mpv/`（pinned mpv 0.41.0）：
+
+- declarative config 与 mutable state **天然分离**（decision tree 的
+  Preferred 1）：
+  - `~/.config/mpv/{mpv.conf,input.conf}` — repo/Home authority
+    （source-relative local-file colocate）；
+  - `~/.local/state/mpv/`（XDG_STATE_HOME；watch-later 默认
+    `~/.local/state/mpv/watch_later`）— application authority；
+- persistence rule：`backing "mpv/state"` →
+  `consumer ".local/state/mpv"`（只持久化最小 app-private state
+  目录；不持久化 `.config/mpv`、不持久化整个 `.local/state`）；
+- `save-position-on-quit=yes` 启用 resume（watch-later）。
+
+对比：**Fish**（未来 mixed-authority example）——declarative
+（config.fish）与 mutable（fish_variables）共享一个 app-private
+目录 → 需要 mixed persistent container（本任务不加入 Fish）。
+
+MPV 验收步骤（docs 外，report B9）：reconfigure → `mpv --version` →
+检查 `~/.config/mpv/*` 来自 Home generation → `findmnt` 确认
+`~/.local/state/mpv` 是 `/persist/data-app/...` 的 bind → 播放到
+明显时间点退出 → watch_later 文件出现 → reboot → 重新打开同一文件
+resume 生效 → 未持久化的普通 HOME 临时文件 reboot 后消失。
+
 需要 `#:use-module (guixcfg system application-persistence)`。
 
 ## E6. App-private secret

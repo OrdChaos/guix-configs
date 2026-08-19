@@ -36,12 +36,15 @@
 (test-equal "default home-services empty"
             '() (application-home-services sample))
 
-;; ── aggregation ─────────────────────────────────────────────
+;; ── aggregation（home services 按 kind 合并为单实例）────────
+(define svc-a1 (service home-files-service-type '(("a" . 1))))
+(define svc-a2 (service home-bash-service-type (home-bash-configuration)))
+(define svc-b  (service home-files-service-type '(("b" . 2))))
 (define app-a
   (application
    (name 'a)
    (home-packages '(pkg-a))
-   (home-services '(svc-a1 svc-a2))
+   (home-services (list svc-a1 svc-a2))
    (system-services '(sys-a))
    (persistence '(rule-a))
    (secrets '(sec-a))))
@@ -49,13 +52,21 @@
   (application
    (name 'b)
    (home-packages '(pkg-b))
-   (home-services '(svc-b))))
+   (home-services (list svc-b))))
 
 (test-equal "applications-home-packages concatenates"
             '(pkg-a pkg-b) (applications-home-packages (list app-a app-b)))
-(test-equal "applications-home-services concatenates"
-            '(svc-a1 svc-a2 svc-b)
-            (applications-home-services (list app-a app-b)))
+(test-assert "applications-home-services merges same-kind instances"
+             (let ((merged (applications-home-services (list app-a app-b))))
+               (and (= 2 (length merged))
+                    ;; home-files 合并值 = (("a" . 1) ("b" . 2))
+                    (any (lambda (s)
+                           (and (eq? (service-kind s) home-files-service-type)
+                                (= 2 (length (service-value s)))))
+                         merged)
+                    (any (lambda (s)
+                           (eq? (service-kind s) home-bash-service-type))
+                         merged))))
 (test-equal "applications-system-services concatenates"
             '(sys-a) (applications-system-services (list app-a app-b)))
 (test-equal "applications-persistence concatenates"

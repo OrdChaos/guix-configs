@@ -103,6 +103,7 @@
                "tests/test-source-hygiene.scm"
                "tests/test-machine-state-persistence.scm"
                "tests/test-mixed-authority.scm"
+               "tests/test-mpv.scm"
                "tests/test-ui-language.scm"
                "tests/test-ssh.scm"
                "tests/test-user-persistence.scm"

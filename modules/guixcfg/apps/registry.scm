@@ -29,6 +29,7 @@
                #:use-module (guixcfg apps zip definition)
                #:use-module (guixcfg apps less definition)
                #:use-module (guixcfg apps file definition)
+               #:use-module (guixcfg apps mpv definition)
                #:export (%applications))
 
 (define %applications
@@ -38,7 +39,9 @@
         ;; graphical user namespace（niri config spawn 的 consumer）
         %foot %fuzzel %mako %wl-clipboard %lxpolkit
         ;; 独立选择的 CLI tools
-        %ripgrep %fd %tree %jq %curl %wget %zip %less %file))
+        %ripgrep %fd %tree %jq %curl %wget %zip %less %file
+        ;; 第一个真实 application-persistence production consumer
+        %mpv))
 
 ;; 完整性检查：启用集合的名字必须唯一（fail fast，加载即报错）。
 (define %application-names (map application-name %applications))

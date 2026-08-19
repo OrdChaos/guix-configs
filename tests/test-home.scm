@@ -11,6 +11,7 @@
              (gnu home services desktop) ; home-dbus-service-type
              (gnu home services niri)   ; home-niri-service-type
              (gnu home services sound)  ; home-pipewire-service-type
+             (gnu services)              ; service-kind
              (gnu services guix)        ; guix-home-service-type
              (guix gexp)                ; local-file-absolute-file-name
              (guix packages)          ; package-name
