@@ -104,6 +104,30 @@ double authority 是架构违规（AGENT.md §12）。官方 service 自动贡�
 - 挂载/目录创建由 `(guixcfg system application-persistence)` 执行，
   app 只声明。
 
+**State 决策树**（mutable state 的持久化选择；架构详见
+`docs/architecture/persistence.md`（Mixed-authority state container））：
+
+```text
+Does the application have mutable state?
+    no  → Home config only（无需 persistence rule）
+    yes
+Can state live in separate state/data directory?
+    yes → persist only that directory（最优先；如
+          .config/foo repo + .local/state/foo app → 只持久化后者）
+    no
+Is there a mutable subdirectory?
+    yes → persist subdirectory only（如 .config/foo/state）
+    no
+Same directory contains declarative + mutable files
+    → mixed persistent container + declarative Home occupants
+```
+
+规则：**single-file persistence 不是首选方案**（应用 write-temp→
+fsync→rename 原子替换会破坏单文件 bind/symlink）；mixed container
+只允许 app-private namespace；**dual authority 是错误**（repo/Home
+与应用不得同时写同一文件——选择 repo-owned 或 app-owned，不
+merge，无 conflict-resolution framework）。
+
 需要 `#:use-module (guixcfg system application-persistence)`。
 
 ## E6. App-private secret

@@ -139,3 +139,50 @@ ciphertext）；`/persist/system/state` 是 machine authority（本机
 
 当前无真实 production rule（NetworkManager 只作 canonical example，
 未启用——见 machine-state.md）。
+
+## Mixed-authority state container（Phase A，2026-08）
+
+> **Directory membership does not imply common authority.** authority
+> 按可独立管理的 path/node 判断，不是按目录整体。
+
+决策优先级（docs/development/applications.md 有完整决策树）：
+
+1. **Preferred 1 — separate state directory**：app 已有独立
+   XDG/data/state namespace（`.config/foo` repo + `.local/state/foo`
+   app）→ 只持久化后者；
+2. **Preferred 2 — mutable subdirectory**：`.config/foo/state/` →
+   `/persist/data-app/foo/state` → bind；
+3. **Fallback — mixed persistent container**：declarative + app-written
+   文件不可避免同处一个 app-private 目录时：
+
+   ```text
+   /persist/data-app/fish/config
+           ↓ bind
+   ~/.config/fish
+           ├── config.fish      → /gnu/store  repo authority
+           └── fish_variables                app authority
+   ```
+
+物理 backing 属于 persistence substrate；逻辑 authority 仍 per-path。
+
+硬约束：
+
+- mixed container 只允许 app-private namespace（`.config/<app>`、
+  `.local/share/<app>`）；公共 XDG root（`.config`、`.local`、
+  `.local/share`、`.cache`、`~`）禁止整体交给 persistence rule；
+- **single-file bind 不是标准机制**（第一版仍 directory bind only）：
+  应用普遍用 write-temp→fsync→rename 原子替换，单文件 mountpoint/
+  symlink target 会破坏 rename、被应用替换 symlink、触发 EXDEV/
+  EBUSY、破坏应用自身 crash-safety；
+- **dual authority 是错误**：repo/Home 管理 config.toml 同时应用也
+  改写它 = 非法；必须选择 repo-owned（应用禁用 auto-write）或
+  app-owned（Home 停止声明），**不做自动 merge / conflict
+  resolution**；
+- generation 语义：declarative occupants 随 System/Home generation
+  （rollback 也跟随）；mutable occupants 随 machine runtime
+  history（**不随 generation rollback**）——预期行为；
+- stale declarative occupants：pinned Guix Home symlink-manager 在
+  generation 切换时清理旧代声明的 store symlinks（仅删 store
+  symlink；非 store symlink 跳过；非空/挂载目录跳过）——**无需
+  custom occupant inventory**（pinned 行为实测，tests/
+  test-mixed-authority.scm）。

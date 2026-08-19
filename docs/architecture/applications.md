@@ -133,6 +133,24 @@ pinned Guix 事实（94a84f9 `guix/gexp.scm`）：`local-file` 是宏，
 （其下应用子目录如 `.config/foo`、`.local/share/foo` 是合法精确
 consumer——见 `docs/architecture/persistence.md`。）
 
+**State 决策树**（mutable state 持久化选择）：
+
+```text
+Does the application have mutable state?
+    no  → Home config only
+    yes
+Can state live in separate state/data directory?
+    yes → persist only that directory（最优先）
+    no
+Is there a mutable subdirectory?
+    yes → persist subdirectory only
+    no
+Same directory contains declarative + mutable files
+    → mixed persistent container + declarative Home occupants
+    （仅 app-private namespace；dual authority 非法；single-file
+      bind 不是标准机制——详见 persistence.md（Mixed-authority））
+```
+
 ## Secret ownership
 
 ```text

@@ -193,6 +193,15 @@ docs/reference/repository-layout.md；本节省略版开发约束：
 - mutable application state 的 canonical backing 位于
   `/persist/data-app`（bind projection）；禁止持久化整个
   `.config/.local/.local/share/.cache`。
+- **directory membership 不等于 common authority**：authority 按
+  最小独立路径判断（`.config/fish` 可同时含 repo-owned
+  config.fish 与 app-owned fish_variables——mixed persistent
+  container 只允许 app-private namespace）。选择顺序：独立
+  state 目录 > mutable 子目录 > mixed container。**single-file
+  bind 不是标准机制**；**dual authority（repo 与应用写同一文件）
+  是错误**——不 merge、无 conflict-resolution。stale declarative
+  occupants 由 pinned Guix Home symlink-manager 清理，不建 custom
+  inventory。
 - persistence 不得自动迁移/覆盖/删除已有 consumer data。
 - app-private encrypted secrets colocate（apps/<app>/secrets/）；
   system/shared/install/bootstrap secrets 集中（top-level
