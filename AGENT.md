@@ -78,6 +78,13 @@
   最后——写 PK 才退出 Setup Mode）。漏做则重启后固件仍在 Setup
   Mode，PCR7 enrollment preflight 失败（已实测一次；enroll 是
   单向的，VM 重置需重建 OVMF VARS 文件）。
+- **仓库放进 persistent user data 后必须以正确 owner 收尾**：无人
+  值守安装/后续以 root clone 或 pull 到 bind backing 后，必须
+  `chown -R user:users <backing>/guix-configs`（user-persistence
+  activation 只 chown 顶层目录、绝不递归——每次 boot 递归 chown
+  用户数据会覆盖用户自己的所有权选择）。root 克隆的内容会一直
+  root:root：读没问题，用户侧 `git pull` 报
+  "cannot open '.git/FETCH_HEAD': Permission denied"（已实测一次）。
 
 ## 6. Prior-art 强制审计（新增 infrastructure 前）
 

@@ -179,6 +179,12 @@ chown -R 1000:998 /mnt/persist/data-home/user
 
 验证 channels.lock.scm/modules/tools/docs/manifests 存在、无 vms 泄漏。
 
+> 变体（无人值守安装/后续在已启动系统上以 root clone 或 pull）：同样
+> 必须以 `chown -R user:users <backing>/guix-configs` 收尾。
+> user-persistence activation 只 chown 顶层目录、不递归——root 克隆
+> 的内容会一直 root:root，用户侧 `git pull` 报
+> "cannot open '.git/FETCH_HEAD': Permission denied"（已实测一次）。
+
 ## 收尾
 
 ```bash
