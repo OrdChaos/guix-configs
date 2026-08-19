@@ -23,7 +23,8 @@
                #:use-module (guixcfg system accounts)  ; 纯 Scheme account 数据库投影
                #:use-module (guixcfg users user)       ; %primary-user（结构事实权威源）
                #:use-module (guixcfg home user)        ; %guix-home（挂入 system）
-               #:use-module (guixcfg security secrets)  ; runtime secrets 部署
+               #:use-module (guixcfg security secrets)  ; runtime secrets 部署机制
+               #:use-module (guixcfg hosts vm-secrets)  ; VM secret inventory（host-owned）
                #:use-module (gnu services guix)        ; guix-home-service-type
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:use-module (srfi srfi-1)              ; remove

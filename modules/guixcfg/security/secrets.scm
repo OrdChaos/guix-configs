@@ -32,7 +32,6 @@
                #:use-module (guix records)
                #:use-module (ice-9 match)
                #:export (%secrets-runtime-root
-                         %secrets-store-subdir
                          secret-decl
                          secret-decl?
                          secret-decl-name
@@ -43,20 +42,17 @@
                          secret-decl-mode
                          runtime-secret-target
                          secrets-deploy-program
-                         secrets-deploy-service
-                         %vm-secrets))
+                         secrets-deploy-service))
 
 ;; runtime root（tmpfs，root 0700）。
 (define %secrets-runtime-root "/run/guixcfg-secrets")
-
-;; 仓库内 ciphertext 相对根（随 system closure 进 store）。
-(define %secrets-store-subdir "secrets")
 
 (define-record-type* <secret-decl> secret-decl make-secret-decl
                      secret-decl?
                      (name       secret-decl-name)          ; symbol（逻辑名）
                      (scope      secret-decl-scope)         ; 'install | 'system | 'user
-                     (source     secret-decl-source)        ; string：仓库内相对路径（.age）
+                     (source     secret-decl-source)        ; file-like：ciphertext（caller 解析；
+                                                            ; generic 机制不知 repository layout）
                      (target-name secret-decl-target-name)  ; string：runtime 文件名
                      (owner-user secret-decl-owner-user     ; string：owner 用户名
                                  (default "root"))
@@ -172,8 +168,7 @@ stage 6)"))
                                    ;; 2. 解密全部 secret（含 owner/mode）
                                    #$@(map
                                        (lambda (decl)
-                                         (let* ((source (secret-decl-source decl))
-                                                (scope (secret-decl-scope decl))
+                                         (let* ((scope (secret-decl-scope decl))
                                                 (owner (secret-decl-owner-user decl))
                                                 (mode (secret-decl-mode decl))
                                                 (rel-target
@@ -199,7 +194,7 @@ stage 6)"))
                                                   (chown parent uid gid)
                                                   (chmod parent #o700))
                                                 (decrypt-into
-                                                 #$(local-file (assume-valid-file-name source))
+                                                 #$(secret-decl-source decl)
                                                  (string-append tmp-dir "/" #$rel-target)
                                                  uid gid #$mode)))))
                                        (filter (lambda (d)
@@ -248,20 +243,8 @@ installed stable age identity into /run/guixcfg-secrets (tmpfs).")
                          (stop #~(const #f))))))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; VM 当前声明的 runtime secrets（测试用 sentinel，无真实凭据）。
-
-(define %vm-secrets
-  (list (secret-decl
-         (name 'test-system)
-         (scope 'system)
-         (source "secrets/system/test-system.age")
-         (target-name "test-system")
-         (owner-user "root")
-         (mode #o400))
-        (secret-decl
-         (name 'test-user)
-         (scope 'user)
-         (source "secrets/user/test-user.age")
-         (target-name "test-user")
-         (owner-user "user")
-         (mode #o600))))
+;;; 本模块不包含具体机器/应用 secret inventory（ownership 分布：
+;;; docs/architecture/secrets.md、AGENT.md §Application layer）。
+;;; VM 的 inventory 在 (guixcfg hosts vm-secrets)；未来单一 app
+;;; owner 的密文 colocate 到 apps/<app>/secrets/ 并由该 app 的
+;;; definition.scm 声明。
