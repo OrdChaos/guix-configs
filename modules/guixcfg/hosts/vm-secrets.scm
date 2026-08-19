@@ -20,14 +20,14 @@
   (list (secret-decl
          (name 'test-system)
          (scope 'system)
-         (source (repository-file "secrets/system/test-system.age"))
+         (source (repository-file "secrets/hosts/vm/test-system.age"))
          (target-name "test-system")
          (owner-user "root")
          (mode #o400))
         (secret-decl
          (name 'test-user)
          (scope 'user)
-         (source (repository-file "secrets/user/test-user.age"))
+         (source (repository-file "secrets/hosts/vm/test-user.age"))
          (target-name "test-user")
          (owner-user "user")
          (mode #o600))))

@@ -11,6 +11,8 @@
              (guixcfg security secrets)
              (guixcfg hosts vm-secrets)   ; %vm-secrets（host-owned inventory）
              (guixcfg utils repository-source) ; 仓库根唯一 resolver
+             (guixcfg apps model)          ; applications-secrets（聚合，无 system consumer）
+             (guixcfg apps registry)       ; %applications
              (guixcfg system accounts)
              (srfi srfi-1)
              (srfi srfi-13)               ; string-suffix?
@@ -47,11 +49,38 @@
 ;; repository-source 唯一 resolver（AGENT.md：top-level secrets 引用
 ;; 只能走它；source-relative，不依赖 shell CWD）
 (test-assert "repository-file resolves to repo-root ciphertext"
-             (let ((lf (repository-file "secrets/system/test-system.age")))
+             (let ((lf (repository-file "secrets/hosts/vm/test-system.age")))
                (and (local-file? lf)
-                    (string-suffix? "/secrets/system/test-system.age"
+                    (string-suffix? "/secrets/hosts/vm/test-system.age"
                                     (local-file-absolute-file-name lf))
                     (file-exists? (local-file-absolute-file-name lf)))))
+;; ── Secret ownership（repository ownership ≠ deployment target）──
+;; VM test secrets：owner = VM host（secrets/hosts/vm/），尽管
+;; test-user 的 deployment target 是 user（scope 'user）。
+(test-assert "vm test secrets live under secrets/hosts/vm/"
+             (every (lambda (d)
+                      (string-contains
+                       (local-file-absolute-file-name (secret-decl-source d))
+                       "/secrets/hosts/vm/"))
+                    %vm-secrets))
+
+(test-assert "user-target secret is host-owned in repository"
+             (let ((lf (secret-decl-source usr-secret)))
+               (and (eq? 'user (secret-decl-scope usr-secret))
+                    (string-contains
+                     (local-file-absolute-file-name lf)
+                     "/secrets/hosts/vm/"))))
+
+(test-assert "no repository ownership contract under secrets/user"
+             (every (lambda (d)
+                      (not (string-contains
+                            (local-file-absolute-file-name (secret-decl-source d))
+                            "/secrets/user/")))
+                    %vm-secrets))
+
+(test-assert "no application secrets wired into the login-critical publisher"
+             (null? (applications-secrets %applications)))
+
 (test-assert "repository-file rejects unsafe relative paths"
              (every (lambda (p)
                       (catch #t
@@ -59,9 +88,9 @@
                         (lambda (k . a) #t)))
                     '("" "/abs" "a/../b" ".." "a/..")))
 (test-assert "repository-file tolerates ./ prefix (normalized)"
-             (let ((lf (repository-file "./secrets/system/test-system.age")))
+             (let ((lf (repository-file "./secrets/hosts/vm/test-system.age")))
                (and (local-file? lf)
-                    (string-suffix? "/secrets/system/test-system.age"
+                    (string-suffix? "/secrets/hosts/vm/test-system.age"
                                     (local-file-absolute-file-name lf))
                     (file-exists? (local-file-absolute-file-name lf)))))
 

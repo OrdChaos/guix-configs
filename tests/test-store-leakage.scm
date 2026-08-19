@@ -85,6 +85,6 @@
 ;; 4. ciphertext 本身允许进 store——但密文形态不含明文标记
 ;;    （反面验证：ciphertext 在 closure 中是被允许的）。
 (test-assert "ciphertext may enter store (armored age, no plaintext)"
-             (no-leak? (file-text "secrets/system/test-system.age")))
+             (no-leak? (file-text "secrets/hosts/vm/test-system.age")))
 
 (test-end "store-leakage")
