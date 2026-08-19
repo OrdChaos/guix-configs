@@ -25,7 +25,8 @@
                #:use-module (guixcfg home user)        ; %guix-home（挂入 system）
                #:use-module (guixcfg security secrets)  ; runtime secrets 部署机制
                #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
-               #:use-module (guixcfg apps model)      ; applications-secrets
+               #:use-module (guixcfg apps model)      ; applications-secrets、applications-persistence
+               #:use-module (guixcfg system application-persistence) ; application persistence generic executor
                #:use-module (guixcfg hosts vm-secrets)  ; VM secret inventory（host-owned）
                #:use-module (gnu services guix)        ; guix-home-service-type
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
@@ -91,6 +92,11 @@
          (ssh-host-key-service)
          (user-persistence-service
           (user-profile-name %primary-user))
+         ;; application persistence（generic executor；backing 创建 +
+         ;; consumer parent ownership；bind mounts 见 file-systems）
+         (application-persistence-service
+          (applications-persistence %applications)
+          (user-profile-name %primary-user))
          ;; 声明式 runtime secrets（boot 时 root 解密；docs/
          ;; architecture/secrets.md）。composition root = host assembly：
          ;;   applications-secrets（registry 聚合） + host-owned
@@ -155,6 +161,11 @@
    (file-systems (append (system-file-systems %ephemeral-root-file-system)
                          ;; selected user persistence（bind mounts，login 前就位）
                          (user-persistence-file-systems
+                          (user-profile-name %primary-user))
+                         ;; application persistence（/persist/data-app →
+                         ;; HOME consumer bind；backing 由 activation 创建）
+                         (application-persistence-file-systems
+                          (applications-persistence %applications)
                           (user-profile-name %primary-user))
                          %base-file-systems))
    

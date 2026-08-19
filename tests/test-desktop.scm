@@ -30,10 +30,13 @@
              (gnu services desktop) ; elogind-service-type
              (gnu services shepherd) ; shepherd-root-service-type
              (gnu system)          ; operating-system-*
+             (gnu system file-systems)  ; file-system-device、file-system-mount-point
              (gnu system pam)      ; unix-pam-service、pam-entry-module/arguments
              (guix packages)       ; package-name
              (nongnu packages linux) ; linux（nonguix）
+             (guix channels)          ; channel-name、channel-commit（解析 lock）
              (ice-9 rdelim)
+             (ice-9 ftw)               ; scandir
              (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64))
@@ -245,6 +248,22 @@
                     (not (string-contains body "(setenv \"USER\""))
                     (not (string-contains body "(setenv \"LOGNAME\""))
                     (not (string-contains body "(setenv \"SHELL\"")))))
+
+;; ── D8：application persistence production wiring（mpv 第一个
+;;     真实 rule：host assembly 消费 applications-persistence）──
+(test-assert "D8: mpv state bind mount declared in %os"
+             (any (lambda (fs)
+                    (and (string=? "/home/user/.local/state/mpv"
+                                   (file-system-mount-point fs))
+                         (string=? "/persist/data-app/mpv/state"
+                                   (file-system-device fs))))
+                  (operating-system-file-systems %os)))
+
+(test-assert "D8: application-persistence activation service present in %os"
+             (any (lambda (svc)
+                    (eq? 'application-persistence
+                         (service-type-name (service-kind svc))))
+                  (operating-system-services %os)))
 
 ;; ── NV1：NVIDIA adapter 默认 disabled/identity ─────────────
 (test-assert "NV1: NVIDIA adapter disabled by default"
