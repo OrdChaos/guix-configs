@@ -12,12 +12,15 @@ input {
     }
 }
 
-// 会话服务（graphical owner = niri session）：mako/lxpolkit 是
+// 会话服务（graphical owner = niri session）：mako/polkit-gnome 是
 // 纯图形会话组件；PipeWire/WirePlumber 由官方 Home service 接管
 // （home-pipewire-service-type，Home Shepherd owner——
 // docs/architecture/upstream-boundaries.md）。
 spawn-at-startup "mako"                 // notification daemon
-spawn-at-startup "lxpolkit"             // graphical polkit agent (lxsession)
+// polkit graphical authentication agent（apps/polkit-gnome：
+// ~/.local/bin wrapper 指向 libexec 二进制——PATH 稳定名，无 store
+// 字面量；polkitd 属于 system，agent 属于 graphical session）。
+spawn-at-startup "polkit-gnome-authentication-agent-1"
 // Secret Service 两阶段 lifecycle 的 Phase 2（desktop-authentication.md
 // §2.2）：PAM auto_start 只启动 --login stub（120s 无接管自动退出）；
 // 这里 --start 接管同一 daemon 并完成初始化。architectural

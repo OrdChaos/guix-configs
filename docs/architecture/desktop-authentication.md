@@ -9,10 +9,10 @@ POLKIT（system authority）
       ↑  system D-Bus
       ↓
     user graphical session
-      lxpolkit（apps/lxpolkit）      ← niri spawn-at-startup（会话唯一 owner）
+      polkit-gnome（apps/polkit-gnome）← niri spawn-at-startup（会话唯一 owner）
       register AuthenticationAgent
       ↓
-    polkitd → 授权检查 → lxpolkit 图形密码提示
+    polkitd → 授权检查 → polkit-gnome 图形密码提示
 ```
 
 ```text
@@ -52,10 +52,13 @@ SECRET SERVICE（login keyring，两阶段 lifecycle）
   blanket allow。wheel 是既有 account 语义（`users/user.scm`）。
 - **本仓库不写自定义 `/etc/polkit-1/rules.d`**（测试断言唯一
   rules/actions 贡献 = elogind + polkit-wheel）。
-- `lxpolkit`（apps/lxpolkit，binary 来自 lxsession 包）是 **graphical
-  session agent**：niri `spawn-at-startup` 启动一次、会话结束自然
-  结束；不拥有 polkitd / rules / system D-Bus；无 persistence、
-  无 declarative secrets。
+- `polkit-gnome`（apps/polkit-gnome）是 **graphical session agent**：
+  niri `spawn-at-startup "polkit-gnome-authentication-agent-1"` 启动
+  一次、会话结束自然结束。agent 二进制在 libexec（不在 PATH，无 FHS
+  路径）——app 经 home-files 提供 `~/.local/bin` wrapper（store 路径
+  由 guix 构建期注入，仓库无 store 字面量）并把 `~/.local/bin`
+  加入 session PATH。不拥有 polkitd / rules / system D-Bus；无
+  persistence、无 declarative secrets。
 
 ## 2. Secret Service：PAM 登录链
 
@@ -243,7 +246,7 @@ mount 会覆盖旧目录，ephemeral root 重建后旧数据消失。人工迁�
    runtime 重建）；
 8. logout → login 再测一次；
 9. `/run/user/<uid>/...` 在 session 间重建，不来自 /persist；
-10. polkit：图形会话内 `pkexec id` → 提示来自 lxpolkit（图形）而非
+10. polkit：图形会话内 `pkexec id` → 提示来自 polkit-gnome（图形）而非
     textual fallback；认证成功；cancel 正常；无两个 agent 抢同一
     prompt。
 

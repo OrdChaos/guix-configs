@@ -30,7 +30,7 @@ OFFICIAL；项目 invariant 需要 → THIN ADAPTER / KEEP（custom）。
 | atomic-file helper | guixcfg custom（KEEP） | Guix 官方 helper 无 parent-dir fsync | `utils/atomic-file.scm` | crash-durable 语义（fsync file + parent） |
 | Home pivot cleanup | guixcfg shim（NARROW） | 上游 symlink-manager 无 stale pivot 处理（pinned 实测） | `home/pivot.scm`（保守判定 + unlink） | removal condition：上游修复后删 |
 | NVIDIA proprietary | guixcfg adapter（disabled） | — | `system/graphics/nvidia.scm` | 未来 seam；kernel module/KMS/blacklist/PRIME/nvda/Secure Boot signing 边界 |
-| Graphical session services（mako/lxpolkit） | niri config spawn | — | `modules/guixcfg/apps/niri/config.kdl` | graphical-only lifecycle（polkit agent libexec 路径问题已换 lxpolkit） |
+| Graphical session services（mako/polkit-gnome） | niri config spawn | — | `modules/guixcfg/apps/niri/config.kdl` | graphical-only lifecycle（polkit agent libexec 不在 PATH：apps/polkit-gnome 经 ~/.local/bin wrapper 暴露后恢复使用） |
 
 ## HOME/PATH/D-Bus 语义（§7 根除 HOME=/var/empty）
 

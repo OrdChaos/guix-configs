@@ -33,8 +33,9 @@
 ;; polkit（instantiate-missing-services），这里在 authority 层显式
 ;; 声明，并加上 upstream admin identity（polkit-wheel-service =
 ;; addAdminRule unix-group:wheel——admin 身份声明，不是 blanket
-;; allow）。graphical authentication agent（lxpolkit）属于用户会话
-;; （apps/lxpolkit，niri spawn-at-startup）——不在这里。
+;; allow）。graphical authentication agent（polkit-gnome）属于用户会话
+;; （apps/polkit-gnome，niri spawn-at-startup + ~/.local/bin wrapper）
+;; ——不在这里。
 (define %common-services
   (list (service elogind-service-type)
         (service polkit-service-type)

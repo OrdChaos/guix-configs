@@ -208,21 +208,31 @@
                       all)))
 
 ;; ── 认证边界（docs/architecture/desktop-authentication.md）──
-;; lxpolkit 只是 graphical session agent；polkitd 属于 system。
+;; polkit-gnome 只是 graphical session agent；polkitd 属于 system。
 (define (app-by-name name)
   (find (lambda (a) (eq? name (application-name a))) %applications))
 
-(test-assert "lxpolkit app registered"
-             (and=> (app-by-name 'lxpolkit) application?))
+(test-assert "polkit-gnome app registered"
+             (and=> (app-by-name 'polkit-gnome) application?))
 
-(test-assert "lxpolkit owns no persistence"
-             (null? (application-persistence (app-by-name 'lxpolkit))))
+(test-assert "polkit-gnome owns no persistence"
+             (null? (application-persistence (app-by-name 'polkit-gnome))))
 
-(test-assert "lxpolkit owns no system services (polkitd is system infra)"
-             (null? (application-system-services (app-by-name 'lxpolkit))))
+(test-assert "polkit-gnome owns no system services (polkitd is system infra)"
+             (null? (application-system-services (app-by-name 'polkit-gnome))))
 
-(test-assert "lxpolkit owns no declarative secrets"
-             (null? (application-secrets (app-by-name 'lxpolkit))))
+(test-assert "polkit-gnome owns no declarative secrets"
+             (null? (application-secrets (app-by-name 'polkit-gnome))))
+
+(test-assert "polkit-gnome provides the session wrapper + PATH
+(libexec binary is not on PATH; no store literal in the repo)"
+             (let ((pg (app-by-name 'polkit-gnome))
+                   (s (call-with-input-file
+                       "modules/guixcfg/apps/polkit-gnome/definition.scm"
+                       (lambda (p) (read-string p)))))
+               (and (pair? (application-home-services pg))
+                    (string-contains s "libexec/polkit-gnome-authentication-agent-1")
+                    (not (string-contains s "/gnu/store/")))))
 
 (test-assert "gnome-keyring app registered"
              (and=> (app-by-name 'gnome-keyring) application?))

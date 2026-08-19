@@ -29,7 +29,7 @@ interactive-session-ready（core readiness join barrier）
      │                │    "exec niri --session"）
      │                ├─ pipewire + wireplumber
      │                │    （home-pipewire-service-type）
-     │                └─ niri config spawn：mako、lxpolkit
+     │                └─ niri config spawn：mako、polkit-gnome
      └─ mingetty（tty2-6，同样 gated by interactive-session-ready——
          desktop 故障时 fallback tty 仍可登录）
 ```

@@ -292,11 +292,12 @@ docs/architecture/storage.md；本节省略版：
 
 - **polkit authority 是 system infrastructure**：polkitd 属于
   system（official `polkit-service-type`，D-Bus activation，无
-  shepherd）；graphical authentication agent（lxpolkit）属于
-  **user graphical session**（niri spawn-at-startup 启动一次）。
-  不要把 agent 的 app 定义声明成 polkit 的 owner；不要写自定义
-  `/etc/polkit-1/rules.d` 来“让 GUI 不弹密码”（admin identity 用
-  upstream `polkit-wheel-service` 的 addAdminRule 语义）。
+  shepherd）；graphical authentication agent（polkit-gnome）属于
+  **user graphical session**（niri spawn-at-startup 启动一次；
+  libexec 二进制经 ~/.local/bin wrapper 暴露，仓库无 store
+  字面量）。不要把 agent 的 app 定义声明成 polkit 的 owner；不要写
+  自定义 `/etc/polkit-1/rules.d` 来“让 GUI 不弹密码”（admin identity
+  用 upstream `polkit-wheel-service` 的 addAdminRule 语义）。
 - **authentication agent state 不持久化**：polkit 临时授权状态、
   `/run/user/<uid>`、keyring control socket、D-Bus session socket
   每 session/boot 重建，禁止 persistence。

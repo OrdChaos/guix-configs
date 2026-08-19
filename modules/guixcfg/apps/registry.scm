@@ -19,7 +19,7 @@
                #:use-module (guixcfg apps fuzzel definition)
                #:use-module (guixcfg apps mako definition)
                #:use-module (guixcfg apps wl-clipboard definition)
-               #:use-module (guixcfg apps lxpolkit definition)
+               #:use-module (guixcfg apps polkit-gnome definition)
                #:use-module (guixcfg apps ripgrep definition)
                #:use-module (guixcfg apps fd definition)
                #:use-module (guixcfg apps tree definition)
@@ -38,7 +38,7 @@
   ;; 不要重复声明 package）。
   (list %bash %git %dbus %niri %pipewire
         ;; graphical user namespace（niri config spawn 的 consumer）
-        %foot %fuzzel %mako %wl-clipboard %lxpolkit
+        %foot %fuzzel %mako %wl-clipboard %polkit-gnome
         ;; 独立选择的 CLI tools
         %ripgrep %fd %tree %jq %curl %wget %zip %less %file
         ;; 第一个真实 application-persistence production consumer

@@ -355,8 +355,8 @@
 ;; polkitd 属于 system（经 system D-Bus activation 启动，无 shepherd
 ;; 服务）；elogind 的 service extension 已经隐式物化 polkit
 ;; （instantiate-missing-services），assembly 再显式声明 authority；
-;; lxpolkit 只是 graphical session agent（apps/lxpolkit，
-;; niri spawn-at-startup）——不拥有 polkit。
+;; polkit-gnome 只是 graphical session agent（apps/polkit-gnome，
+;; niri spawn-at-startup + ~/.local/bin wrapper）——不拥有 polkit。
 (test-assert "PK1: exactly one polkit authority in %os"
              (= 1 (length (os-services-of-type polkit-service-type))))
 
@@ -399,18 +399,27 @@
                        "\n")))
                (not (string-contains s "rules.d"))))
 
-(test-assert "PK3: lxpolkit starts once, from the graphical session only"
+(test-assert "PK3: polkit-gnome starts once, from the graphical session only"
              (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
                                             (lambda (p) (read-string p)))))
                (= 1 (length (filter (lambda (line)
                                       (string-contains line
-                                                       "spawn-at-startup \"lxpolkit\""))
+                                                       "spawn-at-startup \"polkit-gnome-authentication-agent-1\""))
                                     (string-split s #\newline))))))
 
-(test-assert "PK3: lxpolkit is not started by any boot shepherd service"
+(test-assert "PK3: no boot shepherd service provisions the polkit agent"
+             ;; 不用文本扫描：guix-home-user 服务里嵌着整个
+             ;; <home-environment> record（包名/wrapper 文件名都会
+             ;; 出现）；正确断言是 provision 名——agent 不是系统
+             ;; daemon，boot shepherd 图里没有任何 polkit-gnome 服务。
              (let* ((folded (fold-services (operating-system-services %os)
                                            #:target-type shepherd-root-service-type))
-                    (text (object->string (service-value folded))))
-               (not (string-contains text "lxpolkit"))))
+                    (cfg (service-value folded)))
+               (not (any (lambda (svc)
+                           (any (lambda (p)
+                                  (string-contains (symbol->string p)
+                                                   "polkit-gnome"))
+                                (shepherd-service-provision svc)))
+                         (shepherd-configuration-services cfg)))))
 
 (test-end "desktop")
