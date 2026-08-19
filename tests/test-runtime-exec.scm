@@ -385,7 +385,9 @@ $6$salt$faketesthash:!:20682::::::\n"
     (list (secret-decl
            (name 'runtime-test)
            (scope 'system)
-           (source %test-cipher)
+           ;; file-like contract（secret-decl-source = caller 解析的
+           ;; ciphertext source；ciphertext 随 closure 进 store）
+           (source (local-file %test-cipher "runtime-test.age"))
            (target-name "runtime-test")
            (owner-user "root")
            (mode #o400)))

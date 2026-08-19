@@ -287,7 +287,7 @@
                (not (text-contains-any? s %vendor-words))))
 
 (test-assert "NV4: niri config has no DRM node / output name"
-             (let ((s (call-with-input-file "files/niri/config.kdl"
+             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
                                             (lambda (p) (read-string p)))))
                (not (text-contains-any? s
                                         (append %vendor-words
@@ -314,7 +314,7 @@
 
 ;; ── NV8：无全局 PRIME/DRM 环境变量 ─────────────────────────
 (test-assert "NV8: niri config has no global PRIME/DRM env vars"
-             (let ((s (call-with-input-file "files/niri/config.kdl"
+             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
                                             (lambda (p) (read-string p)))))
                (not (text-contains-any? s
                                         '("PRIME" "WLR_DRM_DEVICES"

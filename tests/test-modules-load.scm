@@ -4,7 +4,10 @@
 ;;; 注意：primitive-load / resolve-module 走的是快速求值路径，不产生
 ;;; 未绑定变量警告；compile-file 做完整分析，必须用它。由于显式编译，
 ;;; 本测试也不受 auto-compile 的 .go 缓存影响。
-;;; 由 tests/run-tests.scm 加载运行（从仓库根目录）。
+;;; 由 tests/run-tests.scm 加载运行（从仓库根目录）；单独运行也要
+;;; 可用，这里自备 load path（模块顶层求值依赖 %load-path，如
+;;; repository-source 的 search-path 定位）。
+(add-to-load-path (string-append (getcwd) "/modules"))
 
 (use-modules (system base compile)  ; compile-file
              (srfi srfi-1)
@@ -12,35 +15,87 @@
              (srfi srfi-64))
 
 ;; 依赖顺序排列：被依赖的模块先编译注册。
+;; 注意：依赖缺失时 compile-file 报 "no code for module"（冷 ccache
+;; 下必现——不要依赖热缓存掩盖顺序错误；实测基线把 utils/process
+;; 排在 storage/filesystem 之后是潜在 bug）。
+;; 依赖顺序排列：被依赖的模块先编译注册（完整清单，2026-08 由
+;; modules/guixcfg 全量扫描 + guixcfg import 拓扑排序生成；冷 ccache
+;; 下 compile-file 对依赖缺失报 "no code for module"——不要依赖热缓存
+;; 掩盖顺序错误，也不许手工漏模块）。
+;; 依赖顺序排列：被依赖的模块先编译注册（完整清单，2026-08 由
+;; modules/guixcfg 全量扫描 + #:use-module 行拓扑排序生成；冷 ccache
+;; 下 compile-file 对依赖缺失报 "no code for module"——不要依赖热缓存
+;; 掩盖顺序错误，也不许手工漏模块）。
 (define %all-modules
-  '((guixcfg utils atomic-file)
+  '(    (guixcfg apps model)
+    (guixcfg apps bash definition)
+    (guixcfg apps curl definition)
+    (guixcfg apps dbus definition)
+    (guixcfg apps fd definition)
+    (guixcfg apps file definition)
+    (guixcfg apps foot definition)
+    (guixcfg apps fuzzel definition)
+    (guixcfg apps git definition)
+    (guixcfg apps jq definition)
+    (guixcfg apps less definition)
+    (guixcfg apps lxpolkit definition)
+    (guixcfg apps mako definition)
+    (guixcfg apps niri definition)
+    (guixcfg apps pipewire definition)
+    (guixcfg apps ripgrep definition)
+    (guixcfg apps tree definition)
+    (guixcfg apps wget definition)
+    (guixcfg apps wl-clipboard definition)
+    (guixcfg apps zip definition)
+    (guixcfg apps registry)
+    (guixcfg utils atomic-file)
+    (guixcfg boot boot-state)
+    (guixcfg boot device-resolver)
+    (guixcfg utils spawn)
+    (guixcfg security tpm2 tpm2-tools)
     (guixcfg storage model)
+    (guixcfg boot tpm-unlock)
+    (guixcfg storage root-generation)
+    (guixcfg boot initrd)
+    (guixcfg boot limine-menu)
+    (guixcfg boot recovery)
+    (guixcfg boot uki)
+    (guixcfg boot uki-bootloader)
+    (guixcfg home pivot)
+    (guixcfg home user)
     (guixcfg storage policies)
-    (guixcfg storage plan)
+    (guixcfg hosts laptop)
+    (guixcfg security secrets)
+    (guixcfg utils repository-source)
+    (guixcfg hosts vm-secrets)
+    (guixcfg services ephemeral-root)
+    (guixcfg system accounts)
+    (guixcfg system substitutes)
+    (guixcfg system common)
+    (guixcfg system desktop)
+    (guixcfg system file-systems)
+    (guixcfg system kernel-platform)
+    (guixcfg system packages)
+    (guixcfg system readiness)
+    (guixcfg system ssh)
+    (guixcfg system user-persistence)
+    (guixcfg users user)
+    (guixcfg hosts vm)
+    (guixcfg utils process)
+    (guixcfg security age)
+    (guixcfg security certificates)
     (guixcfg storage validate)
     (guixcfg storage device)
     (guixcfg storage partition)
     (guixcfg storage filesystem)
+    (guixcfg storage plan)
     (guixcfg storage subvolume)
-    (guixcfg storage root-generation)
     (guixcfg storage install)
-    (guixcfg storage commit)
-    (guixcfg utils process)
-    (guixcfg security tpm2 tpm2-tools)
+    (guixcfg security credential-source)
     (guixcfg security tpm2 state)
-    (guixcfg boot tpm-unlock)
-    (guixcfg boot initrd)
-    (guixcfg boot boot-state)
-    (guixcfg security certificates)
-    (guixcfg boot uki)
-    (guixcfg boot uki-bootloader)
-    (guixcfg services ephemeral-root)
-    (guixcfg system common)
-    (guixcfg system packages)
-    (guixcfg system file-systems)
-    (guixcfg system kernel-platform)  ; M1：nonguix linux/firmware/microcode
-    (guixcfg hosts vm)
-    (guixcfg hosts laptop)))
+    (guixcfg storage commit)
+    (guixcfg system application-persistence)
+    (guixcfg system graphics nvidia)))
 
 (define (module-file name)
   (string-append "modules/"

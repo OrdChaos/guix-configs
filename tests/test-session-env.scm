@@ -23,7 +23,7 @@
 
 (use-modules (guixcfg hosts vm)
              (guixcfg home user)
-             (guixcfg home packages)
+             (guixcfg apps model)       ; applications-home-packages（旧 (guixcfg home packages) 已删）
              (gnu home)
              (gnu home services)
              (gnu home services desktop) ; home-dbus-service-type
@@ -85,12 +85,14 @@
 
 ;; ── OFF8：xwayland-satellite 单 provider ───────────────────
 (test-assert "OFF8: xwayland-satellite not duplicated in Home packages"
-             (not (memq xwayland-satellite %home-packages)))
+             (not (memq xwayland-satellite
+                        (home-environment-packages %guix-home))))
 
 ;; ── OFF9：PipeWire 单 owner（niri config 不再 spawn）───────
 (test-assert "OFF9: niri config does not spawn pipewire/wireplumber"
-             (let ((s (call-with-input-file "files/niri/config.kdl"
-                                            (lambda (p) (read-string p)))))
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/apps/niri/config.kdl"
+                       (lambda (p) (read-string p)))))
                (and (not (string-contains s "spawn-at-startup \"pipewire\""))
                     (not (string-contains s
                                           "spawn-at-startup \"wireplumber\"")))))

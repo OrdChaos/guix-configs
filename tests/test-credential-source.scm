@@ -89,6 +89,15 @@
 
 (test-begin "credential-source")
 
+;; Guile error 异常形态随模块执行方式变化（解释 vs 编译 thunk，
+;; 实测 2026-08）：(#f "~A" (MSG) #f) 或 (#f MSG () #f)——
+;; 断言必须两者兼容（同 test-tpm2-enroll 的 misc-error-message）。
+(define (misc-error-message a)
+  (let ((irritants (caddr a)))
+    (if (and (pair? irritants) (string? (car irritants)))
+      (car irritants)
+      (cadr a))))
+
 ;; ── T1：'luks-secret 无任何 identity → fail-closed ─────────
 (with-resolver-paths
  (lambda (root)
@@ -97,7 +106,7 @@
                   (lambda () (resolve-luks-passphrase-source 'luks-secret) #f)
                   (lambda (k . a)
                     (and (eq? k 'misc-error)
-                         (string-contains (car (caddr a))
+                         (string-contains (misc-error-message a)
                                           "no stable identity")))))))
 
 ;; ── T2：'interactive → read-luks-passphrase! ────────────────

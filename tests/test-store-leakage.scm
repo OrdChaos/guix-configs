@@ -16,6 +16,7 @@
              (guix derivations)
              (guix gexp)
              (guixcfg security secrets)
+             (guixcfg hosts vm-secrets)   ; %vm-secrets（host-owned inventory）
              (guixcfg system accounts)
              (ice-9 rdelim)
              (srfi srfi-13)

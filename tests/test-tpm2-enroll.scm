@@ -86,6 +86,16 @@
      (false-if-exception (delete-file "/tmp/guixcfg-enroll-nomain.scm"))
      (delete-file-recursively mock))))
 
+(define (misc-error-message a)
+  "从 catch 的 misc-error args A 提取用户消息。Guile `error` 抛出的
+形态随模块执行方式（解释 load vs compile-file 编译 thunk，实测
+2026-08）有两种：(#f \"~A\" (MSG) #f) 与 (#f MSG () #f)——断言
+必须两者兼容，不能只认 (car (caddr a))。"
+  (let ((irritants (caddr a)))
+    (if (and (pair? irritants) (string? (car irritants)))
+      (car irritants)
+      (cadr a))))
+
 ;; ── T7-T14：CLI credential 来源解析 ────────────────────────
 ;; parse-command/parse-credential-flag 是纯函数（不 exit、不改环境）；
 ;; --luks-secret 的 fail-closed 前置在解析时发生（任何 TPM mutation 前）。
@@ -118,7 +128,7 @@
                                   (lambda () (parse-command '("prog" "enroll" "--luks-secret")) #f)
                                   (lambda (k . a)
                                     (and (eq? k 'misc-error)
-                                         (string-contains (car (caddr a))
+                                         (string-contains (misc-error-message a)
                                                           "no stable identity")))))
                    ;; T9：--noninteractive → stdin 直读
                    (test-assert "T9: enroll --noninteractive reads one stdin line"
@@ -147,7 +157,7 @@
                                   (lambda () (parse-command '("prog" "replace" "--luks-secret")) #f)
                                   (lambda (k . a)
                                     (and (eq? k 'misc-error)
-                                         (string-contains (car (caddr a))
+                                         (string-contains (misc-error-message a)
                                                           "no stable identity")))))
                    ;; T12：status 拒绝 credential flag
                    (test-assert "T12: status rejects credential source flags"
