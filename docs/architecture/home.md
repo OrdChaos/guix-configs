@@ -45,6 +45,11 @@ single-owner mechanism 执行：
 自动发现）。新增应用：`cp -r templates/application
 modules/guixcfg/apps/foo` → 填 definition → registry 加一行。
 
+**完整契约与教程**：`docs/architecture/applications.md`（架构参考：
+contract、layout、local-file 语义、ownership 决策表、secret/
+数据归属、runtime 不变量）与 `docs/development/applications.md`
+（逐步新增应用教程 E1-E9）。
+
 ## Ephemeral /home + bind-mounted 用户目录
 
 `/home/user` 本身是 ephemeral（无状态 root）。初始持久目录由系统

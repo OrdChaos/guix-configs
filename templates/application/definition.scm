@@ -1,6 +1,7 @@
 ;;; Application definition 模板（新应用的正式入口）。
 ;;;
-;;; 标准流程（docs/architecture/home.md §Application layer）：
+;;; 标准流程（docs/development/applications.md 教程 E1-E9；架构见
+;;; docs/architecture/applications.md）：
 ;;;   cp -r templates/application modules/guixcfg/apps/foo
 ;;;   1. 修改模块名 (guixcfg apps foo definition)；
 ;;;   2. 修改 %APP → %foo；

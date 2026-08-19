@@ -206,3 +206,26 @@ docs/reference/repository-layout.md；本节省略版开发约束：
 - `<application>` 只是一层 contribution record；禁止演化成自制
   NixOS/RDE module framework（无 dependency solver / priority /
   override / fixpoint / 自动发现 / 继承）。
+
+## 13. 路径与身份（hardcoding audit 长期规则，2026-08）
+
+详细 authority 图见 docs/architecture/applications.md 与
+docs/architecture/storage.md；本节省略版：
+
+- **generic code 必须从 authoritative user/account input 推导
+  HOME**：用户名来自 `(guixcfg users user)` 的 `%primary-user`
+  （结构事实唯一来源）或函数参数；**禁止硬编码 `/home/<name>`**。
+  测试用 fixture 名（alice/test-user），不用真实项目用户名。
+- **architecture semantic path 可以固定，但 ownership 必须集中并
+  文档化**：`/persist/*` 挂载点唯一 authority 是
+  `(guixcfg storage model)` 的 `persist-mount-point`
+  （%persist-subvolumes）——各层禁止重复拼写 literal；age
+  identity/accounts 路径经 `(guixcfg security age)` 的参数取。
+  不要因为“是绝对路径”就机械消除；也不要为消灭 literal 制造
+  环境变量（declarative facts > 参数 > 常量 > runtime lookup >
+  环境变量）。
+- **repository 是 evaluation/deployment input，绝不是 runtime
+  dependency**：modules/ 禁止 getcwd/current-filename 依赖加载；
+  app definition 必须可移植（无 checkout 路径、无 /home/ 绝对
+  路径、无用户名）。tools/ 的 `(getcwd)` add-to-load-path 是仓库内
+  CLI 的标准模式，允许。

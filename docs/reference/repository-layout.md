@@ -29,6 +29,8 @@ secrets/              age 密文（明文永不入库；system/shared/install/
                       bootstrap/hosts 集中域；app-private 在
                       apps/<app>/secrets/）
 tests/                测试（run-tests.scm 入口 + 各主题 test-*.scm）
-docs/                 文档（本目录）
+docs/                 文档（本目录；application layer 见
+                      architecture/applications.md +
+                      development/applications.md）
 vms/                  测试 VM 产物（qcow2、OVMF VARS、swtpm state；gitignore）
 ```
