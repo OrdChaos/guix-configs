@@ -108,3 +108,34 @@ downloadable models、VM images 等大体积且原则上可重新取得的数据
 bind mount；System 只负责整个子卷固定挂载；application 主动知道
 路径；`nobackup` 名称只表示 storage intent——当前无 backup
 subsystem。
+
+## Machine-owned mutable system state（/persist/system/state）
+
+第四种 persistence ownership（详细见 `docs/architecture/machine-state.md`）：
+
+```text
+/persist/data-home       user-owned data
+/persist/data-app        application-owned mutable user state → HOME bind
+/persist/data-nobackup   bulk/reacquirable direct-access data
+/persist/system          machine-owned identity/state
+                            ├── identity/keys
+                            ├── provisioning state
+                            └── mutable daemon/system state
+                                （/persist/system/state → /etc、/var/lib 等
+                                  absolute system consumer 的 bind projection）
+```
+
+generic mechanism：`modules/guixcfg/system/machine-state-persistence.scm`
+（`<machine-state-persistence-rule>`：name/backing/consumer/exposure/
+lifecycle；root = `persist-mount-point "@persist-system"` + `/state`；
+bind-directory only；machine-owned only；root ownership）。
+
+与 application persistence 的区别：后者是 `/persist/data-app` →
+HOME-relative consumer；machine state 是 `/persist/system/state` →
+**absolute system consumer**。与 host secret 的区别：
+`secrets/hosts/<host>` 是 repository authority（declarative
+ciphertext）；`/persist/system/state` 是 machine authority（本机
+产生的 mutable state，独立于 repository）。
+
+当前无真实 production rule（NetworkManager 只作 canonical example，
+未启用——见 machine-state.md）。

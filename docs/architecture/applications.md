@@ -104,7 +104,8 @@ pinned Guix 事实（94a84f9 `guix/gexp.scm`）：`local-file` 是宏，
 ```
 
 `(guixcfg utils repository-source)` 的 `repository-file` 只用于
-**top-level repository/global resources**（如 `secrets/system/...`），
+**top-level repository/global resources**（如 `secrets/hosts/...`、
+`secrets/shared/...`——taxonomy 见 secrets.md），
 不替代 ordinary app-local `local-file`。
 
 ## Data ownership 决策表
@@ -137,7 +138,8 @@ consumer——见 `docs/architecture/persistence.md`。）
 ```text
 single app owner      → apps/<app>/secrets/*.age（definition 声明）
 multiple consumers    → top-level secrets/shared/
-machine/system        → top-level secrets/system/、secrets/hosts/ 或 /persist/system
+machine/system        → top-level secrets/system/、secrets/hosts/<host>/；
+                          machine identity/state → /persist/system（machine-state）
 install/bootstrap     → top-level secrets/install/、secrets/bootstrap/
 ```
 

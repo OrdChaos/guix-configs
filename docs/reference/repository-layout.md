@@ -25,9 +25,12 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
 tools/                 命令行工具（disk-install、secrets、secure-boot、reconfigure、
                        tpm2-enroll、历史 E2E harness）
 templates/            新组件模板（application/definition.scm）
-secrets/              age 密文（明文永不入库；system/shared/install/
-                      bootstrap/hosts 集中域；app-private 在
-                      apps/<app>/secrets/）
+secrets/              age 密文（明文永不入库；repository ownership
+                      taxonomy：bootstrap/ install/ recipients/
+                      hosts/<host>/ shared/ system/——app-private 在
+                      apps/<app>/secrets/；无 secrets/user 类别；
+                      machine-generated state 不在此，在
+                      /persist/system/state）
 tests/                测试（run-tests.scm 入口 + 各主题 test-*.scm）
 docs/                 文档（本目录；application layer 见
                       architecture/applications.md +

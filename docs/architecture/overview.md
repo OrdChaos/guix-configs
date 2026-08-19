@@ -63,6 +63,30 @@ runtime 路径通过 bind/symlink/direct reference 访问它。详见
 明文 runtime secrets。已解锁本机的 root 明确在防御范围之外。
 详见 `architecture/secrets.md`。
 
+### Data ownership guide
+
+```text
+Can repo deterministically rebuild it?
+    yes
+        public config
+            → Guix Home/System
+
+        encrypted declarative runtime secret
+            single app owner      → apps/<app>/secrets
+            host owner            → secrets/hosts/<host>
+            shared                → secrets/shared
+            true system owner     → secrets/system
+
+    no
+        user-owned data           → /persist/data-home
+        user application state    → /persist/data-app
+        bulk/reacquirable data    → /persist/data-nobackup
+        machine mutable system    → /persist/system/state
+        machine identity/state    → /persist/system/...
+```
+
+bootstrap/install/recipients → provisioning/tooling plane。
+
 ### Service readiness model
 
 boot 按 capability DAG 推进：

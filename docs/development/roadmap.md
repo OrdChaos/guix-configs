@@ -37,6 +37,22 @@ source、host-owned inventory），但运行时仍是单一事务性发布者
 扩大范围与破坏现有 fail-closed 事务；2026-08 app-layer 重构报告）。
 未来：`interactive-secrets-ready` 只代表 login-critical 类。
 
+**收口要求（2026-08）**：在启用第一个 production application
+secret 之前，runtime secret publication 必须按 failure/readiness
+domain 拆分：
+
+```text
+runtime secret publisher mechanism
+    ├── login-critical transaction/domain → interactive-secrets-ready
+    └── ordinary application transaction/domain → 不阻塞 login
+```
+
+composition 发生在 host/system assembly（classification/grouping），
+不是 registry、不是 generic publisher。若未来需要 classification，
+优先属于具体 `secret-decl` 的 deployment/readiness contract，而
+不是整个 `<application>` 的属性。当前 `applications-secrets` 聚合
+已实现但**无 system consumer**（刻意保留——见 secrets.md）。
+
 ### Application persistence（/persist/data-app）
 
 generic engine 已实现（`system/application-persistence.scm`：

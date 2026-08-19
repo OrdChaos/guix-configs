@@ -229,3 +229,22 @@ docs/architecture/storage.md；本节省略版：
   app definition 必须可移植（无 checkout 路径、无 /home/ 绝对
   路径、无用户名）。tools/ 的 `(getcwd)` add-to-load-path 是仓库内
   CLI 的标准模式，允许。
+
+## 14. Secret ownership 与 machine state（2026-08）
+
+- **`user/system` deployment target 不等于 repository ownership**：
+  单一 app owner 的 ciphertext colocate 到 `apps/<app>/secrets/`；
+  host/shared/system/bootstrap/install/recipient 按真实
+  owner/lifecycle 分类到 top-level `secrets/` 对应子目录（不存在
+  `secrets/user` 类别——user 只是 target）；generic secrets
+  mechanism 不理解 inventory。
+- **本机运行期产生的 daemon/system mutable state**（必须跨
+  ephemeral-root 保留的）属于 `/persist/system`（machine-state
+  persistence mechanism，`/persist/system/state`），**不属于**
+  `/persist/data-app`、也不属于 repository ciphertext。machine
+  state 与 host secret 的边界：repository 是 authority（declarative
+  ciphertext）vs machine 是 authority（本地 mutable state）。
+- machine-state projections 使用专用 generic mechanism
+  （machine-state-persistence.scm）；无隐式 migration/copy-sync；
+  architecture semantic roots 保持 single-owner constants
+  （persist-mount-point）。
