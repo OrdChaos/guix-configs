@@ -126,8 +126,10 @@ pinned 语义（`gkd-main.c`）：
 - `--foreground`：不 daemonize——Shepherd 直接追踪 PID；SIGTERM →
   `gkd_main_quit` 干净退出；
 - 失败语义：密码错误 → "failed to unlock login keyring on startup"
-  （daemon 继续运行但 locked）；secret 文件缺失 → 重定向失败 →
-  服务失败（shepherd 状态可见，登录不受影响——ordinary domain）。
+  （daemon 继续运行但 locked）；secret 文件缺失 → wrapper 有界等待
+  （60s，reconfigure 升级期旧 generation 的 deploy 可能滞后）后
+  失败 → 服务失败（shepherd 状态可见，登录不受影响——ordinary
+  domain）。
 
 ### 2.4 会话服务（单一 lifecycle owner）
 

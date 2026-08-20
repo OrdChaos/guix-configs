@@ -65,26 +65,37 @@
 
 ;; 会话 wrapper：检查单 daemon 不变量 → 密码经 stdin 文件重定向注入
 ;; （不出现于 argv/env）→ exec foreground daemon（shepherd 追踪 PID）。
-;; secret 文件缺失 → 重定向失败 → 服务失败（keyring 不可用，登录
-;; 不受影响——ordinary domain）。
+;; secret 文件缺失 → 有界等待后重定向失败 → 服务失败（keyring
+;; 不可用，登录不受影响——ordinary domain）。
 (define %gnome-keyring-session-wrapper
   (program-file
    "gnome-keyring-session"
    #~(begin
        (use-modules (guix build utils))
        (let ((control (string-append (or (getenv "XDG_RUNTIME_DIR") "")
-                                     "/keyring/control")))
+                                     "/keyring/control"))
+             (secret #$%gnome-keyring-master-target))
          ;; 每用户单 daemon：control socket 已存在 = 其他会话已启动
          ;; daemon（本用户由它服务）→ no-op。
          (when (and (not (string-null? control))
                     (file-exists? control))
-           (exit 0)))
-       (execl "/bin/sh" "sh" "-c"
-              (string-append
-               "exec " #$(file-append gnome-keyring
-                                      "/bin/gnome-keyring-daemon")
-               " --foreground --unlock --components=secrets < "
-               #$%gnome-keyring-master-target)))))
+           (exit 0))
+         ;; master 明文文件依赖：boot 时 ordinary publisher 部署；
+         ;; reconfigure 升级期间可能滞后（旧 generation 的 deploy 不含
+         ;; 新 secret）——有界等待最多 60 秒自愈，避免启动即失败触发
+         ;; shepherd 终止处理的边缘路径。正常登录时文件早已存在，
+         ;; 第一次检查即通过（零延迟）。
+         (let loop ((tries 60))
+           (unless (file-exists? secret)
+             (if (zero? tries)
+                 (exit 1)             ; fail closed：keyring 不可用
+                 (begin (sleep 1) (loop (- tries 1))))))
+         (execl "/bin/sh" "sh" "-c"
+                (string-append
+                 "exec " #$(file-append gnome-keyring
+                                        "/bin/gnome-keyring-daemon")
+                 " --foreground --unlock --components=secrets < "
+                 secret))))))
 
 (define %gnome-keyring
   (application
