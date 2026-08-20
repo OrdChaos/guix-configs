@@ -25,6 +25,8 @@
 # 启动前检测（-device help），缺失则明确报错，不静默降级——降级会
 # 掩盖 3D 能力问题。无图形环境（无 DISPLAY/WAYLAND_DISPLAY）退回
 # -nographic + -vga virtio（无 display 后端就没有 GL 上下文）。
+# 声卡：Intel HDA（ich9，q35）+ hda-duplex，宿主音频后端按可用性
+# 选择 pa → pipewire → none（guest 始终看得到声卡）。
 #
 # 数据盘是 virtio（/dev/vda）。注意两点（已查证）：
 # - by-id/virtio-* 链接要求磁盘有非空 serial，所以下面用 -device virtio-blk-pci
@@ -144,6 +146,22 @@ else
     DISPLAY_ARGS=(-nographic)
 fi
 
+# ── 声卡：Intel HDA（ich9，匹配 q35）+ hda-duplex codec ─────
+# 宿主音频后端按可用性选择：PulseAudio（含 PipeWire 的 pulse 兼容
+# 层）→ QEMU 原生 PipeWire（无 pulse socket 但有 pipewire-0）→
+# none（guest 仍看到声卡，snd-hda-intel 正常加载，只是静音）。
+# 与图形后端同一原则：不静默降级主机能力。
+AUDIO_ARGS=()
+if [ -n "${PULSE_SERVER:-}" ] || \
+   [ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pulse/native" ]; then
+    AUDIO_ARGS=(-audiodev pa,id=snd0)
+elif [ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pipewire-0" ]; then
+    AUDIO_ARGS=(-audiodev pipewire,id=snd0)
+else
+    AUDIO_ARGS=(-audiodev none,id=snd0)
+fi
+AUDIO_ARGS+=(-device ich9-intel-hda -device hda-duplex,audiodev=snd0)
+
 # LiveCD 的 root 是内存盘，重启即消失，所以每次进 VM 都要重新挂载共享目录。
 # 启动前把这行打印出来，方便直接复制粘贴到 VM 里：
 cat <<'EOF'
@@ -182,6 +200,7 @@ exec qemu-system-x86_64 \
     "${PFLASH_SECURE[@]}" \
     "${FIRMWARE[@]}" \
     "${TPM[@]}" \
+    "${AUDIO_ARGS[@]}" \
     -drive file="$IMG",if=none,id=hd0,format=qcow2 \
     -device virtio-blk-pci,drive=hd0,serial=guix-test-disk \
     "${BOOT[@]}" \
