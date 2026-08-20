@@ -12,7 +12,7 @@
 ;;; 7ae28dc）：
 ;;;   MiSans            lang zh-cn/zh-sg（简体主字体，无 ja/ko/zh-tw）
 ;;;   MiSans L3         lang 空（扩展平面汉字补充，须补 lang 才可选中）
-;;;   Sarasa Term SC Nerd  lang zh-cn/zh-hk/zh-mo/zh-sg（monospace 主）
+;;;   Maple Mono NL NF CN  lang zh-cn/zh-hk/zh-mo/zh-sg（monospace 主）
 ;;;   Noto Sans / Noto Serif / Noto Sans Mono /
 ;;;   Noto Sans Symbols / Noto Sans Symbols 2
 ;;;   Noto Color Emoji  lang und-zsye
@@ -24,7 +24,7 @@
 ;;;
 ;;; CJK 策略：
 ;;;   - 无 lang（默认）：显式列表顺序 SC → TC → JP → KR（sans/serif
-;;;     相同；monospace 由 Sarasa 先行），不依赖 locale 排序；
+;;;     相同；monospace 由 Maple Mono 先行），不依赖 locale 排序；
 ;;;   - lang=zh-cn/zh-sg：MiSans 优先（简体中文由 MiSans 处理，
 ;;;     §6.3）；
 ;;;   - lang=ja / zh-tw / zh-hk / zh-mo / ko：prepend 对应 variant
@@ -53,7 +53,7 @@
                #:use-module (gnu packages fonts)          ; font-google-noto-*
                #:use-module (gnu packages fontutils)      ; fontconfig
                #:use-module (gnu services)                ; service
-               #:use-module (virelith packages fonts)     ; mi-sans-global、sarasa-term-sc-nerd
+               #:use-module (virelith packages fonts)     ; 自定义字体
                #:use-module (srfi srfi-1)                 ; append-map
                #:export (%fonts
                          %fontconfig-snippets
@@ -61,12 +61,12 @@
 
 ;; ── 字体集合（profile 层：决定“有哪些字体”）─────────────────
 ;; 自有 channel：MiSans Global（简体主字体 + script 变体）、
-;; Sarasa Term SC Nerd（等宽）；guix 官方：Noto 全 script、
+;; Maple Mono NL NF CN（等宽）；guix 官方：Noto 全 script、
 ;; CJK sans/serif、emoji、Symbols、Unifont last resort、fontconfig
 ;; （fc-* 工具 + 缓存再生）。
 (define %fonts
   (list mi-sans-global
-        sarasa-term-sc-nerd
+        maple-mono-normal-nl-nf-cn
         font-google-noto
         font-google-noto-emoji
         font-google-noto-sans-cjk
@@ -97,9 +97,9 @@
     "Noto Color Emoji" "Unifont"))
 
 (define %monospace-families
-  ;; Sarasa Term SC Nerd 主 → Noto Sans Mono → CJK SC→TC→JP→KR
+  ;; Maple Mono NL NF CN 主 → Noto Sans Mono → CJK SC→TC→JP→KR
   ;; （§9；复杂 script 缺字时正确显示优先于等宽）
-  '("Sarasa Term SC Nerd" "Noto Sans Mono"
+  '("Maple Mono NL NF CN" "Noto Sans Mono"
     "Noto Sans CJK SC" "Noto Sans CJK TC" "Noto Sans CJK JP"
     "Noto Sans CJK KR"
     "Noto Sans Symbols" "Noto Sans Symbols 2"

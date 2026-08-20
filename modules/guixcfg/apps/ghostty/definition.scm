@@ -8,7 +8,6 @@
 ;;; home-xdg-configuration-files-service-type 生成
 ;;; ~/.config/ghostty/config.ghostty（ghostty 官方读取路径），
 ;;; source-relative local-file colocate 本目录；字体族引用既有字体
-;;; 集合（(guixcfg home fonts)：Sarasa Term SC Nerd 等宽主字体）。
 
 (define-module (guixcfg apps ghostty definition)
                #:use-module (gnu home services)      ; home-xdg-configuration-files-service-type
