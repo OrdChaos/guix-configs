@@ -26,7 +26,6 @@
              (guixcfg security secrets) ; secret-decl accessors、runtime-secret-target（GK8）
              (guixcfg users user)     ; %primary-user（GK8）
              (gnu services)
-             (gnu services desktop) ; gnome-keyring-service-type（GK1 否定）
              (gnu services shepherd) ; shepherd-service-*（GK7）
              (gnu system)
              (gnu system file-systems) ; file-system-device/mount-point（GK4）

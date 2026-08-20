@@ -201,8 +201,11 @@ deployment API token 属于前者。
   master credential（显式维护操作），或（仅测试 VM、确认无真实数据
   时）人工删除重建一次；
 - `~/.local/share/keyrings` 若在启用 persistence 前已有非空数据：
-  **不自动迁移**（no-implicit-migration 不变量）——人工迁移步骤见
-  旧文档记录；secret vault 不允许"尽力迁移"。
+  **不自动迁移**（no-implicit-migration 不变量）。人工迁移步骤：
+  旧会话（mount 未覆盖前）备份 `~/.local/share/keyrings` → 启用
+  rule 并 reconfigure → 登录一次（mount 就位）→ logout → root 把
+  备份复制进 backing 并 chown → 重新登录验证。secret vault 不允许
+  "尽力迁移"。
 
 ## 6. Pinned source map（94a84f9）
 

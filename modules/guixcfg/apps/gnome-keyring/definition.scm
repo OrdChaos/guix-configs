@@ -71,7 +71,6 @@
   (program-file
    "gnome-keyring-session"
    #~(begin
-       (use-modules (guix build utils))
        (let ((control (string-append (or (getenv "XDG_RUNTIME_DIR") "")
                                      "/keyring/control"))
              (secret #$%gnome-keyring-master-target))
@@ -90,12 +89,16 @@
              (if (zero? tries)
                  (exit 1)             ; fail closed：keyring 不可用
                  (begin (sleep 1) (loop (- tries 1))))))
-         (execl "/bin/sh" "sh" "-c"
-                (string-append
-                 "exec " #$(file-append gnome-keyring
-                                        "/bin/gnome-keyring-daemon")
-                 " --foreground --unlock --components=secrets < "
-                 secret))))))
+         ;; 密码经 stdin（fd 0 ← master 文件）注入；不出现于 argv/env
+         ;; （纯 guile fd 重定向，无 /bin/sh 依赖；open-fdes/dup2/
+         ;; close-fdes/execl 均为 guile core）。
+         (let ((fd (open-fdes secret O_RDONLY)))
+           (dup2 fd 0)
+           (close-fdes fd))
+         (execl #$(file-append gnome-keyring
+                               "/bin/gnome-keyring-daemon")
+                "gnome-keyring-daemon" "--foreground" "--unlock"
+                "--components=secrets")))))
 
 (define %gnome-keyring
   (application
