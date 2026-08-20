@@ -2,7 +2,7 @@ keybind = performable:ctrl+c=copy_to_clipboard
 selection-clear-on-copy = true
 
 font-family = ""
-font-family = Sarasa Term SC Nerd
+font-family = Maple Mono NL NF CN
 font-family = Noto Color Emoji
 
 adjust-cell-height = 5%
