@@ -105,6 +105,7 @@
                "tests/test-mixed-authority.scm"
                "tests/test-mpv.scm"
                "tests/test-google-chrome.scm"
+               "tests/test-xdg.scm"
                "tests/test-gnome-keyring.scm"
                "tests/test-ui-language.scm"
                "tests/test-ssh.scm"

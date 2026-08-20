@@ -31,13 +31,28 @@
 ;;; share/applications 进 XDG_DATA_DIRS（fuzzel 自动发现）；Wayland
 ;;; 原生，X11 fallback 走 xwayland-satellite（会话已有）；字体由包
 ;;; 自带 + font-liberation input。默认参数运行，不加 Chromium flags。
+;;;
+;;; 职责边界（AGENT.md §Application layer）：本模块只描述“Chrome
+;;; 是什么”——package、User Data 持久化、desktop entry 纯数据常量
+;;; （%chrome-desktop-entry）。“Chrome 是否被选作默认浏览器”是
+;;; 用户级策略，属于统一 XDG/default-apps 模块 (guixcfg home xdg)：
+;;; 它消费 %chrome-desktop-entry 生成 $XDG_CONFIG_HOME/mimeapps.list
+;;; （derived state，不持久化）。依赖方向 policy → app metadata，
+;;; 本模块不反向依赖 xdg。
 
 (define-module (guixcfg apps google-chrome-stable definition)
                #:use-module (nongnu packages chrome)   ; google-chrome-stable
                #:use-module (guix records)
                #:use-module (guixcfg apps model)       ; application
                #:use-module (guixcfg system application-persistence) ; rule
-               #:export (%google-chrome-stable))
+               #:export (%google-chrome-stable
+                         %chrome-desktop-entry))
+
+;; Chrome stable 的 XDG desktop entry（store 内实际构建产物
+;; share/applications/ 核实；nonguix patch-assets 阶段会重写其 Exec
+;; 指向 wrapper）。纯数据常量：供统一 XDG 策略模块引用，不在此决定
+;; 默认应用。
+(define %chrome-desktop-entry "google-chrome.desktop")
 
 (define %google-chrome-stable
   (application

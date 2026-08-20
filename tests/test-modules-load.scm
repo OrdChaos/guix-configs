@@ -71,6 +71,7 @@
     (guixcfg boot recovery)
     (guixcfg boot uki)
     (guixcfg boot uki-bootloader)
+    (guixcfg home xdg)
     (guixcfg home pivot)
     (guixcfg home user)
     (guixcfg storage policies)

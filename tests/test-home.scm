@@ -11,6 +11,7 @@
              (gnu home services desktop) ; home-dbus-service-type
              (gnu home services niri)   ; home-niri-service-type
              (gnu home services sound)  ; home-pipewire-service-type
+             (gnu home services xdg)    ; home-xdg-mime-applications-service-type
              (gnu services)              ; service-kind、service-type-extensions、service-extension-target
              (gnu services guix)        ; guix-home-service-type
              (guix gexp)                ; local-file-absolute-file-name
@@ -48,6 +49,16 @@
                              (eq? (service-kind h) (service-kind s)))
                            (home-environment-services %guix-home)))
                     (applications-home-services %applications)))
+
+;; 组合层级：统一 XDG/default-apps 策略服务（guixcfg home xdg）也
+;; 在 %guix-home 中（应用模块不再各自声明默认应用）
+(test-assert "xdg-default-apps policy service composed into %guix-home"
+             (any (lambda (s)
+                    (any (lambda (ext)
+                           (eq? (service-extension-target ext)
+                                home-xdg-mime-applications-service-type))
+                         (service-type-extensions (service-kind s))))
+                  (home-environment-services %guix-home)))
 
 ;; bash 环境变量声明（EDITOR/VISUAL/PAGER）仍存在
 (define bash-svc

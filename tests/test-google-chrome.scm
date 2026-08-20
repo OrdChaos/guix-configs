@@ -11,19 +11,23 @@
 ;;;   6.  不持久化 .cache/google-chrome（无任何 .cache rule）；
 ;;;   7.  backing 位于 /persist/data-app/google-chrome-stable/...；
 ;;;   8.  rule 通过 generic validation；
-;;;   9.  无 secrets / 无 system services / 无 home services；
-;;;   10. generic application-persistence 不知道 chrome；
-;;;   11. 不复制 nonguix package 定义（无 source URL literal）；
-;;;   12. 无 keyring hack（无 --password-store=basic）；
-;;;   13. 无 CWD/checkout 依赖。
+;;;   9.  职责边界：无 home services（默认应用策略已迁到统一 XDG
+;;;       模块 (guixcfg home xdg)——test-xdg.scm）；只导出纯数据常量
+;;;       %chrome-desktop-entry；definition 源码无任何 MIME/default-apps
+;;;       策略字面；mimeapps.list 不在 persistence；
+;;;   10. 无 secrets / 无 system services；
+;;;   11. generic application-persistence 不知道 chrome；
+;;;   12. 不复制 nonguix package 定义（无 source URL literal）；
+;;;   13. 无 keyring hack（无 --password-store）；
+;;;   14. 无 CWD/checkout 依赖。
 
 (use-modules (guixcfg apps model)
              (guixcfg apps registry)
              (guixcfg apps google-chrome-stable definition)
              (guixcfg system application-persistence)
-             (gnu system file-systems)  ; file-system-device
-             (guix packages)            ; package-name、package-version
-             (ice-9 rdelim)             ; read-string
+             (gnu system file-systems)   ; file-system-device
+             (guix packages)             ; package-name、package-version
+             (ice-9 rdelim)              ; read-string
              (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64))
@@ -84,15 +88,44 @@
                                            (application-persistence-rule-consumer r))))
                     rules))
 
-;; ── 9：无 secrets / 无 system / 无 home services ────────────
+(test-assert "mimeapps.list is not persisted (declarative derived state)"
+             (every (lambda (r)
+                      (not (string-contains
+                            (application-persistence-rule-consumer r)
+                            "mimeapps")))
+                    rules))
+
+;; ── 9：职责边界——Chrome 模块不再拥有默认应用策略 ───────────
+(test-assert "chrome declares no home services (default-apps policy moved
+to the unified XDG module)"
+             (null? (application-home-services chrome-app)))
+
+(test-assert "%chrome-desktop-entry is the verified pure-data constant"
+             (string=? %chrome-desktop-entry "google-chrome.desktop"))
+
+(test-assert "definition exports the desktop entry constant"
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/apps/google-chrome-stable/definition.scm"
+                       (lambda (p) (read-string p)))))
+               (string-contains s "%chrome-desktop-entry")))
+
+(test-assert "definition contains no default-apps policy literals
+(no home-xdg-mime-applications / no MIME associations)"
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/apps/google-chrome-stable/definition.scm"
+                       (lambda (p) (read-string p)))))
+               (and (not (string-contains s "home-xdg-mime-applications"))
+                    (not (string-contains s "text/html"))
+                    (not (string-contains s "application/xhtml+xml"))
+                    (not (string-contains s "x-scheme-handler")))))
+
+;; ── 10：无 secrets / 无 system services ─────────────────────
 (test-assert "chrome declares no secrets"
              (null? (application-secrets chrome-app)))
 (test-assert "chrome declares no system services"
              (null? (application-system-services chrome-app)))
-(test-assert "chrome declares no home services (package + persistence only)"
-             (null? (application-home-services chrome-app)))
 
-;; ── 10-11：generic executor 无知 + 不复制 nonguix 定义 ──────
+;; ── 11-12：generic executor 无知 + 不复制 nonguix 定义 ──────
 (test-assert "generic application-persistence knows no chrome"
              (let ((s (call-with-input-file
                        "modules/guixcfg/system/application-persistence.scm"
@@ -106,14 +139,14 @@
                (and (not (string-contains s "dl.google.com"))
                     (not (string-contains s "define-public")))))
 
-;; ── 12：keyring 集成不 hack ─────────────────────────────────
+;; ── 13：keyring 集成不 hack ─────────────────────────────────
 (test-assert "no --password-store flag (uses existing Secret Service)"
              (let ((s (call-with-input-file
                        "modules/guixcfg/apps/google-chrome-stable/definition.scm"
                        (lambda (p) (read-string p)))))
                (not (string-contains s "--password-store"))))
 
-;; ── 13：无 CWD/checkout 依赖 ────────────────────────────────
+;; ── 14：无 CWD/checkout 依赖 ────────────────────────────────
 (test-assert "chrome definition has no CWD/checkout dependence"
              (let ((s (call-with-input-file
                        "modules/guixcfg/apps/google-chrome-stable/definition.scm"
