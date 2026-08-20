@@ -66,6 +66,7 @@
 ;; （fc-* 工具 + 缓存再生）。
 (define %fonts
   (list mi-sans-global
+        maple-mono-default-nf-cn
         maple-mono-normal-nl-nf-cn
         font-google-noto
         font-google-noto-emoji
@@ -83,10 +84,10 @@
   ;; MiSans 主（简体优先）→ L3（扩展字符补充）→ Noto Sans → CJK
   ;; SC→TC→JP→KR → Symbols → Emoji → Unifont（last resort）
   '("MiSans" "MiSans L3" "Noto Sans"
-    "Noto Sans CJK SC" "Noto Sans CJK TC" "Noto Sans CJK JP"
-    "Noto Sans CJK KR"
-    "Noto Sans Symbols" "Noto Sans Symbols 2"
-    "Noto Color Emoji" "Unifont"))
+             "Noto Sans CJK SC" "Noto Sans CJK TC" "Noto Sans CJK JP"
+             "Noto Sans CJK KR"
+             "Noto Sans Symbols" "Noto Sans Symbols 2"
+             "Noto Color Emoji" "Unifont"))
 
 (define %serif-families
   ;; Noto Serif → Noto Serif CJK SC→TC→JP→KR → Emoji → Unifont。
@@ -100,10 +101,10 @@
   ;; Maple Mono NL NF CN 主 → Noto Sans Mono → CJK SC→TC→JP→KR
   ;; （§9；复杂 script 缺字时正确显示优先于等宽）
   '("Maple Mono NL NF CN" "Noto Sans Mono"
-    "Noto Sans CJK SC" "Noto Sans CJK TC" "Noto Sans CJK JP"
-    "Noto Sans CJK KR"
-    "Noto Sans Symbols" "Noto Sans Symbols 2"
-    "Noto Color Emoji" "Unifont"))
+                          "Noto Sans CJK SC" "Noto Sans CJK TC" "Noto Sans CJK JP"
+                          "Noto Sans CJK KR"
+                          "Noto Sans Symbols" "Noto Sans Symbols 2"
+                          "Noto Color Emoji" "Unifont"))
 
 (define (alias-sxml generic families)
   "SXML：generic family 的 alias 主链。"
@@ -118,11 +119,11 @@ CHAIN 替换为 VARIANT 置首的版本（mode=assign_replace——实测
 列表尾部的 generic 残留会让变体落不到首位；assign_replace 删除
 全部 family 值后重建，变体稳定在首位）。"
   `(match (@ (target "pattern"))
-     (test (@ (name "family") (compare "eq")) (string ,generic))
-     (test (@ (name "lang") (compare "contains")) (string ,lang))
-     (edit (@ (name "family") (mode "assign_replace") (binding "strong"))
-           ,@(map (lambda (f) (list 'string f))
-                  (cons variant (delete variant chain))))))
+          (test (@ (name "family") (compare "eq")) (string ,generic))
+          (test (@ (name "lang") (compare "contains")) (string ,lang))
+          (edit (@ (name "family") (mode "assign_replace") (binding "strong"))
+                ,@(map (lambda (f) (list 'string f))
+                       (cons variant (delete variant chain))))))
 
 ;; lang-aware CJK edits：所有 Noto CJK variant 的 lang 覆盖同构
 ;; （fc-scan 实测 ja/ko/zh-cn/zh-hk/zh-mo/zh-sg/zh-tw 全同），原生
@@ -185,11 +186,11 @@ CHAIN 替换为 VARIANT 置首的版本（mode=assign_replace——实测
   ;; langset 子元素必须是 <string>（fcxml.c FcParseLangSet 只接受
   ;; FcVStackString；<lang> 是未知元素——2.16.0 实机警告验证）。
   '(match (@ (target "font"))
-     (test (@ (name "family") (compare "eq")) (string "MiSans L3"))
-     (edit (@ (name "lang") (mode "assign"))
-           (langset (string "zh-cn") (string "zh-sg") (string "zh-tw")
-                    (string "zh-hk") (string "zh-mo") (string "ja")
-                    (string "ko")))))
+          (test (@ (name "family") (compare "eq")) (string "MiSans L3"))
+          (edit (@ (name "lang") (mode "assign"))
+                (langset (string "zh-cn") (string "zh-sg") (string "zh-tw")
+                         (string "zh-hk") (string "zh-mo") (string "ja")
+                         (string "ko")))))
 
 ;; generic family alias snippets（由 family 链数据生成）+ 固定别名
 (define %generic-alias-snippets
