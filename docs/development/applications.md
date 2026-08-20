@@ -218,21 +218,12 @@ registry 加载时校验名字唯一（重复直接报错）。
 
 ## E9. Validation
 
-新增/修改 app 后，按 AGENT.md 流程：
+应用层没有 per-app 测试（配置内容/应用列表不做断言——加应用不应
+要求改测试）。框架级测试（application model、module compile、
+assembly）自动覆盖新增 app：
 
 ```bash
-# targeted：app layer + Home（若动 home-services/packages）
-guix time-machine -C channels.lock.scm -- repl tests/test-apps.scm
-guix time-machine -C channels.lock.scm -- repl tests/test-home.scm
-
-# 涉及 persistence / secrets 时
-guix time-machine -C channels.lock.scm -- repl tests/test-application-persistence.scm
-guix time-machine -C channels.lock.scm -- repl tests/test-secrets.scm
-
-# 涉及源码可移植性（路径/用户名）
-guix time-machine -C channels.lock.scm -- repl tests/test-source-hygiene.scm
-
-# 全量
+# 全量（模块清单自动发现 + 拓扑排序，无需登记）
 guix time-machine -C channels.lock.scm -- repl tests/run-tests.scm
 ```
 

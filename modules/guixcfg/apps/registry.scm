@@ -11,6 +11,7 @@
                #:use-module (srfi srfi-1)             ; delete-duplicates
                #:use-module (guixcfg apps model)
                #:use-module (guixcfg apps bash definition)
+               #:use-module (guixcfg apps fastfetch definition)
                #:use-module (guixcfg apps git definition)
                #:use-module (guixcfg apps dbus definition)
                #:use-module (guixcfg apps niri definition)
@@ -37,22 +38,32 @@
 (define %applications
   ;; 桌面/会话生命周期（官方 Home services 贡献其 profile 包，
   ;; 不要重复声明 package）。
-  (list %bash %git %dbus %niri %pipewire
-        ;; graphical user namespace（niri config spawn 的 consumer）
-        %ghostty %fuzzel %mako %wl-clipboard %polkit-gnome
-        ;; 独立选择的 CLI tools
-        %ripgrep %fd %tree %jq %curl %wget %zip %less %file
-        ;; 第一个真实 application-persistence production consumer
+  (list %bash
+        %git
+        %dbus
+        %niri
+        %pipewire
+        %ghostty
+        %fuzzel
+        %mako
+        %wl-clipboard
+        %polkit-gnome
+        %ripgrep
+        %fd
+        %tree
+        %jq
+        %curl
+        %wget
+        %zip
+        %less
+        %file
+        %fastfetch
         %mpv
-        ;; browser：官方 Chrome stable（nonguix）+ 整体 User Data
-        ;; 持久化；cache 无状态；复用既有 Secret Service
         %google-chrome-stable
-        ;; Secret Service / login keyring（official gnome-keyring
-        ;; service + keyrings vault persistence）
         %gnome-keyring))
 
 ;; 完整性检查：启用集合的名字必须唯一（fail fast，加载即报错）。
 (define %application-names (map application-name %applications))
 (unless (= (length %application-names)
            (length (delete-duplicates %application-names)))
-        (error "duplicate application name in registry" %application-names))
+  (error "duplicate application name in registry" %application-names))

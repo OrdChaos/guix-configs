@@ -13,9 +13,14 @@
 ;; 时区与区域设置：两台机器相同。
 (define %common-timezone "Asia/Shanghai")
 
-;; VM 阶段先用 en_US.utf8（locale 数据小、验证简单）；
-;; 桌面阶段（阶段 7）再按需要加 zh_CN.utf8 等 locale 定义。
-(define %common-locale "en_US.utf8")
+;; 中文 locale（桌面阶段）：zh_CN.utf8 已在 pinned guix
+;; %default-locale-definitions 内（gnu/system/locale.scm 的
+;; utf8-locales 列表含 "zh_CN"），且 (locale ...) 字段指定的 locale
+;; 会自动加入 locale-directory 构建——零额外依赖。
+;; 会话 LANG=zh_CN.utf8 → Fontconfig 默认 lang=zh-cn（fcdefault.c
+;; FcGetDefaultLangs：FC_LANG > LC_ALL > LC_CTYPE > LANG），强化
+;; 字体配置的 SC-first 语义（(guixcfg home fonts) 已核实，无破坏）。
+(define %common-locale "zh_CN.utf8")
 
 ;; 基础 session infrastructure（docs/architecture/accounts-sessions.md J6）：
 ;; elogind 提供 login/session tracking、/run/user/<uid> 生命周期与

@@ -14,98 +14,104 @@
              (srfi srfi-13)
              (srfi srfi-64))
 
-;; 依赖顺序排列：被依赖的模块先编译注册。
-;; 注意：依赖缺失时 compile-file 报 "no code for module"（冷 ccache
-;; 下必现——不要依赖热缓存掩盖顺序错误；实测基线把 utils/process
-;; 排在 storage/filesystem 之后是潜在 bug）。
-;; 依赖顺序排列：被依赖的模块先编译注册（完整清单，2026-08 由
-;; modules/guixcfg 全量扫描 + guixcfg import 拓扑排序生成；冷 ccache
-;; 下 compile-file 对依赖缺失报 "no code for module"——不要依赖热缓存
-;; 掩盖顺序错误，也不许手工漏模块）。
-;; 依赖顺序排列：被依赖的模块先编译注册（完整清单，2026-08 由
-;; modules/guixcfg 全量扫描 + #:use-module 行拓扑排序生成；冷 ccache
-;; 下 compile-file 对依赖缺失报 "no code for module"——不要依赖热缓存
-;; 掩盖顺序错误，也不许手工漏模块）。
-;; 依赖顺序排列：被依赖的模块先编译注册（完整清单，2026-08 由
-;; modules/guixcfg 全量扫描 + #:use-module 行拓扑排序生成；冷 ccache
-;; 下 compile-file 对依赖缺失报 "no code for module"——不要依赖热缓存
-;; 掩盖顺序错误，也不许手工漏模块）。
+;; 依赖顺序排列：被依赖的模块先编译注册。清单不再手工维护——
+;; 自动扫描 modules/guixcfg 全部 .scm，按 #:use-module 行对 guixcfg
+;; 内部依赖做拓扑排序（冷 ccache 下 compile-file 对依赖缺失报
+;; "no code for module"；漏清单会让模块以旧 record 类型残留，导致
+;; accessor wrong-type-arg——fastfetch 2026-08 实测）。新增应用/模块
+;; 无需改本文件。
+
+(use-modules (ice-9 ftw)     ; scandir
+             (ice-9 regex)   ; regexp-exec、make-regexp
+             (ice-9 rdelim)) ; read-line
+
+(define (scheme-files-under dir)
+  "DIR 下全部 .scm 文件（递归）。"
+  (let loop ((dir dir))
+    (append-map (lambda (e)
+                  (let ((p (string-append dir "/" e)))
+                    (cond ((string-suffix? ".scm" e) (list p))
+                          ((and (not (string-prefix? "." e))
+                                (eq? 'directory (stat:type (stat p))))
+                           (loop p))
+                          (else '()))))
+                (or (false-if-exception (scandir dir)) '()))))
+
+(define (module-name-of file)
+  "从 FILE 的 define-module 行提取模块名（符号列表）。"
+  (let ((rx (make-regexp "\\(define-module \\(([a-z0-9-]+( [a-z0-9-]+)*)")))
+    (let ((m (regexp-exec rx
+                          (call-with-input-file file
+                            (lambda (p) (read-string p))))))
+      (if m
+        (map string->symbol (string-split (match:substring m 1) #\space))
+        (error "no define-module in" file)))))
+
+(define (guixcfg-use-modules file)
+  "FILE 中 #:use-module 引用的 guixcfg 模块名列表（跳过注释行）。"
+  (let ((rx (make-regexp "#:use-module[ \t]+\\(\\(?guixcfg(( [a-z0-9-]+)*)")))
+    (let loop ((lines (call-with-input-file file
+                        (lambda (p)
+                          (let loop ((acc '()))
+                            (let ((l (read-line p)))
+                              (if (eof-object? l) (reverse acc)
+                                  (loop (cons l acc))))))))
+               (acc '()))
+      (if (null? lines)
+        (reverse acc)
+        (let ((line (car lines)))
+          (if (or (string-prefix? ";;" line)
+                  (not (string-contains line "#:use-module")))
+            (loop (cdr lines) acc)
+            (let ((m (regexp-exec rx line)))
+              (loop (cdr lines)
+                    (if m
+                      (cons (cons 'guixcfg
+                                  (map string->symbol
+                                       (filter (lambda (s) (> (string-length s) 0))
+                                               (string-split (match:substring m 1)
+                                                             #\space))))
+                            acc)
+                      acc)))))))))
+
+(define (topo-sort nodes edges)
+  "NODES 按 EDGES（alist: node -> 依赖列表）拓扑排序；有环报错。"
+  (let loop ((remaining (map (lambda (n)
+                               (cons n (or (assoc-ref edges n) '())))
+                             nodes))
+             (ready (filter (lambda (n)
+                              (null? (or (assoc-ref edges n) '())))
+                            nodes))
+             (acc '()))
+    (if (null? ready)
+      (if (= (length acc) (length nodes))
+        (reverse acc)
+        (error "module dependency cycle" nodes edges))
+      (let ((n (car ready)))
+        (let* ((remaining* (map (lambda (e)
+                                  (cons (car e)
+                                        (filter (lambda (d) (not (equal? d n)))
+                                                (cdr e))))
+                                remaining))
+               (dependents (map car (filter (lambda (e)
+                                              (member n (cdr e)))
+                                            edges)))
+               (ready* (append (cdr ready)
+                               (filter (lambda (m)
+                                         (and (not (member m acc))
+                                              (not (member m ready))
+                                              (null? (or (assoc-ref remaining* m)
+                                                         '()))))
+                                       dependents))))
+          (loop remaining* ready* (cons n acc)))))))
+
 (define %all-modules
-  '(    (guixcfg apps model)
-    (guixcfg apps bash definition)
-    (guixcfg apps curl definition)
-    (guixcfg apps dbus definition)
-    (guixcfg apps fd definition)
-    (guixcfg apps file definition)
-    (guixcfg apps ghostty definition)
-    (guixcfg apps fuzzel definition)
-    (guixcfg apps git definition)
-    (guixcfg apps jq definition)
-    (guixcfg apps less definition)
-    (guixcfg apps mako definition)
-    (guixcfg storage model)
-    (guixcfg system application-persistence)
-    (guixcfg security secrets)     ; gnome-keyring definition 的依赖（topological）
-    (guixcfg users user)           ; gnome-keyring definition 的依赖（topological）
-    (guixcfg apps gnome-keyring definition)
-    (guixcfg apps google-chrome-stable definition)
-    (guixcfg apps mpv definition)
-    (guixcfg apps niri definition)
-    (guixcfg apps pipewire definition)
-    (guixcfg apps polkit-gnome definition)
-    (guixcfg apps ripgrep definition)
-    (guixcfg apps tree definition)
-    (guixcfg apps wget definition)
-    (guixcfg apps wl-clipboard definition)
-    (guixcfg apps zip definition)
-    (guixcfg apps registry)
-    (guixcfg utils atomic-file)
-    (guixcfg boot boot-state)
-    (guixcfg boot device-resolver)
-    (guixcfg utils spawn)
-    (guixcfg security tpm2 tpm2-tools)
-    (guixcfg boot tpm-unlock)
-    (guixcfg storage root-generation)
-    (guixcfg boot initrd)
-    (guixcfg boot limine-menu)
-    (guixcfg boot recovery)
-    (guixcfg boot uki)
-    (guixcfg boot uki-bootloader)
-    (guixcfg home fonts)
-    (guixcfg home xdg)
-    (guixcfg home pivot)
-    (guixcfg home user)
-    (guixcfg storage policies)
-    (guixcfg hosts laptop)
-    (guixcfg utils process)
-    (guixcfg security age)
-    (guixcfg utils repository-source)
-    (guixcfg hosts vm-secrets)
-    (guixcfg services ephemeral-root)
-    (guixcfg system accounts)
-    (guixcfg system substitutes)
-    (guixcfg system common)
-    (guixcfg system desktop)
-    (guixcfg system file-systems)
-    (guixcfg system kernel-platform)
-    (guixcfg system packages)
-    (guixcfg system readiness)
-    (guixcfg system ssh)
-    (guixcfg system user-persistence)
-    (guixcfg hosts vm)
-    (guixcfg security certificates)
-    (guixcfg storage validate)
-    (guixcfg storage device)
-    (guixcfg storage partition)
-    (guixcfg storage filesystem)
-    (guixcfg storage plan)
-    (guixcfg storage subvolume)
-    (guixcfg storage install)
-    (guixcfg security credential-source)
-    (guixcfg security tpm2 state)
-    (guixcfg storage commit)
-    (guixcfg system machine-state-persistence)
-    (guixcfg system graphics nvidia)))
+  (let* ((files (scheme-files-under "modules/guixcfg"))
+         (nodes (map module-name-of files))
+         (edges (map (lambda (f)
+                       (cons (module-name-of f) (guixcfg-use-modules f)))
+                     files)))
+    (topo-sort nodes edges)))
 
 (define (module-file name)
   (string-append "modules/"

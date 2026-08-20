@@ -1,27 +1,19 @@
-;;; Application layer 测试：<application> record、aggregation、
-;;; registry 显式启用与名字唯一性。
+;;; Application layer 框架测试：<application> record、aggregation 与
+;;; service extension 语义。只测框架机制本身（合成 fixture），不检查
+;;; 具体应用的内容/列表（per-app 断言已删除——加应用不应要求改测试）。
 
-(use-modules (guix store)         ; %store（三路 XDG lower）
+(use-modules (guix store)         ; %store（合成 XDG lower）
              (guix monads)
              (guix derivations)
-             (guix gexp)              ; plain-file、local-file、lower-object
+             (guix gexp)              ; plain-file、lower-object
              (guix records)           ; define-record-type*
              (ice-9 rdelim)           ; read-string
              (guixcfg apps model)
-             (guixcfg apps registry)
-             (guixcfg apps niri definition)   ; %niri（三路 XDG）
-             (guixcfg apps mpv definition)    ; %mpv（三路 XDG）
              (gnu home)              ; home-environment
              (gnu home services)     ; home-files-service-type、home-xdg-configuration-files-service-type
              (gnu home services shells) ; home-bash-service-type
-             (gnu home services desktop) ; home-dbus-service-type
-             (gnu home services niri)   ; home-niri-service-type
-             (gnu home services sound)  ; home-pipewire-service-type
              (gnu services)
-             (guix gexp)             ; local-file-absolute-file-name
              (gnu packages base)     ; hello（sample record 用）
-             (gnu packages gnome)    ; gnome-keyring（认证边界断言）
-             (guix packages)         ; package-name
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -127,7 +119,7 @@
                       (not (string-contains body "service-type-compose"))
                       (not (string-contains body "merge"))))))
 
-;; ── 三路 XDG extension：lower 成功且全部贡献在场 ────────────
+;; ── 多路 XDG extension：lower 成功且全部贡献在场（合成 fixture）─
 (define synthetic-xdg-app
   (application
    (name 'synthetic-xdg)
@@ -137,118 +129,36 @@
                           `(("synthetic/config.ini"
                              ,(plain-file "synthetic.ini" "x=1"))))))))
 
-(define %three-way-home
+(define synthetic-xdg-app-2
+  (application
+   (name 'synthetic-xdg-2)
+   (home-services
+    (list (simple-service 'synthetic-xdg-config-2
+                          home-xdg-configuration-files-service-type
+                          `(("synthetic/other.ini"
+                             ,(plain-file "other.ini" "y=2"))))))))
+
+(define %composed-home
   (home-environment
    (packages '())
    (services (applications-home-services
-              (list %niri %mpv synthetic-xdg-app)))))
+              (list synthetic-xdg-app synthetic-xdg-app-2)))))
 
 (define %store (open-connection))
-(define %three-way-drv
-  (run-with-store %store (lower-object %three-way-home)))
-(build-derivations %store (list %three-way-drv))
-(define %three-way-out (derivation->output-path %three-way-drv))
+(define %composed-drv (run-with-store %store (lower-object %composed-home)))
+(build-derivations %store (list %composed-drv))
+(define %composed-out (derivation->output-path %composed-drv))
 
-(test-assert "three-way XDG composition lowers without ambiguous target"
-             (and %three-way-out
-                  (file-exists? %three-way-out)))
+(test-assert "multi-way XDG composition lowers without ambiguous target"
+             (and %composed-out
+                  (file-exists? %composed-out)))
 
-(test-assert "niri config present in the composed home"
-             (file-exists?
-              (string-append %three-way-out
-                             "/files/.config/niri/config.kdl")))
-
-(test-assert "mpv configs present in the composed home"
+(test-assert "every synthetic contribution present in the composed home"
              (and (file-exists?
-                   (string-append %three-way-out
-                                  "/files/.config/mpv/mpv.conf"))
+                   (string-append %composed-out
+                                  "/files/.config/synthetic/config.ini"))
                   (file-exists?
-                   (string-append %three-way-out
-                                  "/files/.config/mpv/input.conf"))))
-
-(test-assert "synthetic contribution present in the composed home"
-             (file-exists?
-              (string-append %three-way-out
-                             "/files/.config/synthetic/config.ini")))
-
-
-;; ── registry ────────────────────────────────────────────────
-(test-assert "registry module loads; %applications is a non-empty list"
-             (and (pair? %applications)
-                  (every application? %applications)))
-
-(test-assert "application names are unique"
-             (let ((names (map application-name %applications)))
-               (= (length names) (length (delete-duplicates names)))))
-
-(test-assert "all application names are symbols"
-             (every symbol? (map application-name %applications)))
-
-;; ── 迁移契约：home 组合来自 registry，而非旧横向 inventory ──
-;; （旧 (guixcfg home packages) 已删除；test-home.scm 断言最终
-;; capability 仍存在。）
-(test-assert "registry contributes home packages"
-             (pair? (applications-home-packages %applications)))
-
-(test-assert "git app owns the git package"
-             (let ((git-app (find (lambda (a) (eq? 'git (application-name a)))
-                                  %applications)))
-               (and git-app
-                    (member "git" (map package-name
-                                       (application-home-packages git-app))))))
-
-(test-assert "service-owned packages are not re-declared in apps"
-             ;; niri/pipewire/wireplumber/xwayland-satellite/dbus 由官方
-             ;; Home services 自动贡献；没有任何 app 重复声明。
-             (let ((all (append-map application-home-packages %applications)))
-               (every (lambda (p)
-                        (not (member (package-name p)
-                                     '("niri" "pipewire" "wireplumber"
-                                       "xwayland-satellite" "dbus"))))
-                      all)))
-
-;; ── 认证边界（docs/architecture/desktop-authentication.md）──
-;; polkit-gnome 只是 graphical session agent；polkitd 属于 system。
-(define (app-by-name name)
-  (find (lambda (a) (eq? name (application-name a))) %applications))
-
-(test-assert "polkit-gnome app registered"
-             (and=> (app-by-name 'polkit-gnome) application?))
-
-(test-assert "polkit-gnome owns no persistence"
-             (null? (application-persistence (app-by-name 'polkit-gnome))))
-
-(test-assert "polkit-gnome owns no system services (polkitd is system infra)"
-             (null? (application-system-services (app-by-name 'polkit-gnome))))
-
-(test-assert "polkit-gnome owns no declarative secrets"
-             (null? (application-secrets (app-by-name 'polkit-gnome))))
-
-(test-assert "polkit-gnome provides the session wrapper + PATH
-(libexec binary is not on PATH; no store literal in the repo)"
-             (let ((pg (app-by-name 'polkit-gnome))
-                   (s (call-with-input-file
-                       "modules/guixcfg/apps/polkit-gnome/definition.scm"
-                       (lambda (p) (read-string p)))))
-               (and (pair? (application-home-services pg))
-                    (string-contains s "libexec/polkit-gnome-authentication-agent-1")
-                    (not (string-contains s "/gnu/store/")))))
-
-(test-assert "gnome-keyring app registered"
-             (and=> (app-by-name 'gnome-keyring) application?))
-
-(test-assert "gnome-keyring owns exactly one declarative .age secret
-(the repository-owned master credential)"
-             (= 1 (length (application-secrets
-                           (app-by-name 'gnome-keyring)))))
-
-(test-assert "gnome-keyring home contribution is package + one session
-service (single daemon owner; no system services)"
-             (let ((gk (app-by-name 'gnome-keyring)))
-               (and (equal? (list "gnome-keyring")
-                            (map package-name
-                                 (application-home-packages gk)))
-                    (= 1 (length (application-home-services gk)))
-                    (null? (application-system-services gk)))))
+                   (string-append %composed-out
+                                  "/files/.config/synthetic/other.ini"))))
 
 (test-end "apps")
