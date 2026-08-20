@@ -2,7 +2,7 @@
        (name 'guix)
        (url "https://codeberg.org/guix/guix.git")
        (branch "master")
-       (commit "94a84f939605eaad796d67b9820ca74c4ba97895")
+       (commit "8a2afa6e142bb3b31b837538ad3942e5e1381f52")
        (introduction
         (make-channel-introduction
          "9edb3f66fd807b096b48283debdcddccfea34bad"
@@ -12,7 +12,7 @@
        (name 'nonguix)
        (url "https://gitlab.com/nonguix/nonguix")
        (branch "master")
-       (commit "653504e6551198c9b2b998c143d7cf2675b22547")
+       (commit "7ae28dce7ffc13987b1b0eeef238e185699611db")
        (introduction
         (make-channel-introduction
          "897c1a470da759236cc11798f4e0a5f7d4d59fbc"
@@ -32,7 +32,7 @@
        (name 'virelith)
        (url "https://github.com/ordchaos/virelith.git")
        (branch "master")
-       (commit "cae11b77a64f281cc9ab45e20567e59efc37e96b")
+       (commit "cf5a6a0b7727fd02c0b7915ddfd573635b9f73de")
        (introduction
         (make-channel-introduction
          "cae11b77a64f281cc9ab45e20567e59efc37e96b"
