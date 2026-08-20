@@ -46,4 +46,13 @@
         (make-channel-introduction
          "cae11b77a64f281cc9ab45e20567e59efc37e96b"
          (openpgp-fingerprint
-          "FF0F 1FE0 A176 071F 0E39  A94D FF93 E1DA E089 7EDE")))))
+          "FF0F 1FE0 A176 071F 0E39  A94D FF93 E1DA E089 7EDE"))))
+      (channel
+       (name 'saayix)
+       (branch "main")
+       (url "https://codeberg.org/look/saayix")
+       (introduction
+        (make-channel-introduction
+         "12540f593092e9a177eb8a974a57bb4892327752"
+         (openpgp-fingerprint
+          "3FFA 7335 973E 0A49 47FC  0A8C 38D5 96BE 07D3 34AB")))))

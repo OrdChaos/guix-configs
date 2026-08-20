@@ -1,0 +1,10 @@
+keybind = performable:ctrl+c=copy_to_clipboard
+selection-clear-on-copy = true
+
+font-family = ""
+font-family = Sarasa Term SC Nerd
+font-family = Noto Color Emoji
+
+adjust-cell-height = 5%
+window-padding-x = 4
+window-padding-y = 4

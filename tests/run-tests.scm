@@ -38,9 +38,11 @@
 
 (define %nonguix-store-dir (channel-store-dir 'nonguix))
 (define %virelith-store-dir (channel-store-dir 'virelith))
+(define %saayix-store-dir (channel-store-dir 'saayix))
 
 (add-to-load-path %nonguix-store-dir)
 (add-to-load-path %virelith-store-dir)
+(add-to-load-path %saayix-store-dir)
 
 ;; 必须先设置 runner，再加载测试文件：
 ;; SRFI-64 的计数器都记录在“当前 runner”上。
@@ -112,6 +114,7 @@
                "tests/test-google-chrome.scm"
                "tests/test-xdg.scm"
                "tests/test-fonts.scm"
+               "tests/test-ghostty.scm"
                "tests/test-gnome-keyring.scm"
                "tests/test-ui-language.scm"
                "tests/test-ssh.scm"

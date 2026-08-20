@@ -37,7 +37,7 @@
     (guixcfg apps dbus definition)
     (guixcfg apps fd definition)
     (guixcfg apps file definition)
-    (guixcfg apps foot definition)
+    (guixcfg apps ghostty definition)
     (guixcfg apps fuzzel definition)
     (guixcfg apps git definition)
     (guixcfg apps jq definition)

@@ -15,7 +15,7 @@
                #:use-module (guixcfg apps dbus definition)
                #:use-module (guixcfg apps niri definition)
                #:use-module (guixcfg apps pipewire definition)
-               #:use-module (guixcfg apps foot definition)
+               #:use-module (guixcfg apps ghostty definition)
                #:use-module (guixcfg apps fuzzel definition)
                #:use-module (guixcfg apps mako definition)
                #:use-module (guixcfg apps wl-clipboard definition)
@@ -39,7 +39,7 @@
   ;; 不要重复声明 package）。
   (list %bash %git %dbus %niri %pipewire
         ;; graphical user namespace（niri config spawn 的 consumer）
-        %foot %fuzzel %mako %wl-clipboard %polkit-gnome
+        %ghostty %fuzzel %mako %wl-clipboard %polkit-gnome
         ;; 独立选择的 CLI tools
         %ripgrep %fd %tree %jq %curl %wget %zip %less %file
         ;; 第一个真实 application-persistence production consumer

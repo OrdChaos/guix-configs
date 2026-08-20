@@ -23,7 +23,7 @@ spawn-at-startup "mako"                 // notification daemon
 spawn-at-startup "polkit-gnome-authentication-agent-1"
 
 binds {
-    Mod+T { spawn "foot"; }        // terminal
+    Mod+T { spawn "ghostty"; }      // terminal
     Mod+D { spawn "fuzzel"; }           // launcher
     Mod+Shift+E { quit; }               // logout -> greetd
 }

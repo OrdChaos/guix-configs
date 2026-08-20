@@ -2,7 +2,7 @@
        (name 'guix)
        (url "https://codeberg.org/guix/guix.git")
        (branch "master")
-       (commit "8a2afa6e142bb3b31b837538ad3942e5e1381f52")
+       (commit "180528f5412231b6786a5c9e897787c3a80e7ae1")
        (introduction
         (make-channel-introduction
          "9edb3f66fd807b096b48283debdcddccfea34bad"
@@ -37,4 +37,14 @@
         (make-channel-introduction
          "cae11b77a64f281cc9ab45e20567e59efc37e96b"
          (openpgp-fingerprint
-          "FF0F 1FE0 A176 071F 0E39  A94D FF93 E1DA E089 7EDE")))))
+          "FF0F 1FE0 A176 071F 0E39  A94D FF93 E1DA E089 7EDE"))))
+      (channel
+       (name 'saayix)
+       (url "https://codeberg.org/look/saayix")
+       (branch "main")
+       (commit "c732c8101657bfa06d5407109fe90d1746c7cd01")
+       (introduction
+        (make-channel-introduction
+         "12540f593092e9a177eb8a974a57bb4892327752"
+         (openpgp-fingerprint
+          "3FFA 7335 973E 0A49 47FC  0A8C 38D5 96BE 07D3 34AB")))))
