@@ -12,7 +12,7 @@
 ;;; 7ae28dc）：
 ;;;   MiSans            lang zh-cn/zh-sg（简体主字体，无 ja/ko/zh-tw）
 ;;;   MiSans L3         lang 空（扩展平面汉字补充，须补 lang 才可选中）
-;;;   Maple Mono NL NF CN  lang zh-cn/zh-hk/zh-mo/zh-sg（monospace 主）
+;;;   Maple Mono Normal NL NF CN  lang zh-cn/zh-hk/zh-mo/zh-sg（monospace 主）
 ;;;   Noto Sans / Noto Serif / Noto Sans Mono /
 ;;;   Noto Sans Symbols / Noto Sans Symbols 2
 ;;;   Noto Color Emoji  lang und-zsye
@@ -61,7 +61,7 @@
 
 ;; ── 字体集合（profile 层：决定“有哪些字体”）─────────────────
 ;; 自有 channel：MiSans Global（简体主字体 + script 变体）、
-;; Maple Mono NL NF CN（等宽）；guix 官方：Noto 全 script、
+;; Maple Mono Normal NL NF CN（等宽）；guix 官方：Noto 全 script、
 ;; CJK sans/serif、emoji、Symbols、Unifont last resort、fontconfig
 ;; （fc-* 工具 + 缓存再生）。
 (define %fonts
@@ -98,9 +98,9 @@
     "Noto Color Emoji" "Unifont"))
 
 (define %monospace-families
-  ;; Maple Mono NL NF CN 主 → Noto Sans Mono → CJK SC→TC→JP→KR
+  ;; Maple Mono Normal NL NF CN 主 → Noto Sans Mono → CJK SC→TC→JP→KR
   ;; （§9；复杂 script 缺字时正确显示优先于等宽）
-  '("Maple Mono NL NF CN" "Noto Sans Mono"
+  '("Maple Mono Normal NL NF CN" "Noto Sans Mono"
                           "Noto Sans CJK SC" "Noto Sans CJK TC" "Noto Sans CJK JP"
                           "Noto Sans CJK KR"
                           "Noto Sans Symbols" "Noto Sans Symbols 2"
