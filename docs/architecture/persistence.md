@@ -100,7 +100,12 @@ production consumers：
 - gnome-keyring（`.local/share/keyrings` →
   `/persist/data-app/gnome-keyring/keyrings`，login keyring vault——
   sensitive mutable state；`apps/gnome-keyring/definition.scm`，
-  迁移说明见 `desktop-authentication.md` §5）。
+  迁移说明见 `desktop-authentication.md` §5）；
+- google-chrome-stable（`.config/google-chrome` →
+  `/persist/data-app/google-chrome-stable/user-data`，Chromium 官方
+  User Data Directory 整体——不做 profile 内部细分；`~/.cache/
+  google-chrome` 保持 ephemeral；`apps/google-chrome-stable/
+  definition.scm`）。
 
 后续应用按同一契约显式 adopt。
 

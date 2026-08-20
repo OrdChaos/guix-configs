@@ -48,6 +48,7 @@
     (guixcfg security secrets)     ; gnome-keyring definition 的依赖（topological）
     (guixcfg users user)           ; gnome-keyring definition 的依赖（topological）
     (guixcfg apps gnome-keyring definition)
+    (guixcfg apps google-chrome-stable definition)
     (guixcfg apps mpv definition)
     (guixcfg apps niri definition)
     (guixcfg apps pipewire definition)

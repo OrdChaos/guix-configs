@@ -31,6 +31,7 @@
                #:use-module (guixcfg apps file definition)
                #:use-module (guixcfg apps gnome-keyring definition)
                #:use-module (guixcfg apps mpv definition)
+               #:use-module (guixcfg apps google-chrome-stable definition)
                #:export (%applications))
 
 (define %applications
@@ -43,6 +44,9 @@
         %ripgrep %fd %tree %jq %curl %wget %zip %less %file
         ;; 第一个真实 application-persistence production consumer
         %mpv
+        ;; browser：官方 Chrome stable（nonguix）+ 整体 User Data
+        ;; 持久化；cache 无状态；复用既有 Secret Service
+        %google-chrome-stable
         ;; Secret Service / login keyring（official gnome-keyring
         ;; service + keyrings vault persistence）
         %gnome-keyring))
