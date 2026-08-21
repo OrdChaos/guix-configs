@@ -26,6 +26,7 @@
              (guixcfg system common) ; %common-services（PK1）
              (guixcfg system graphics nvidia)
              (guixcfg system kernel-platform)
+             (guixcfg users user)    ; %primary-user（mount point 推导）
              (gnu services)
              (gnu services base)   ; greetd-service-type、mingetty-service-type
              (gnu services desktop) ; elogind-service-type
@@ -256,8 +257,11 @@
 ;;     真实 rule：host assembly 消费 applications-persistence）──
 (test-assert "D8: mpv state bind mount declared in %os"
              (any (lambda (fs)
-                    (and (string=? "/home/user/.local/state/mpv"
-                                   (file-system-mount-point fs))
+                    (and (string=?
+                          (string-append (user-profile-home-directory
+                                          %primary-user)
+                                         "/.local/state/mpv")
+                          (file-system-mount-point fs))
                          (string=? "/persist/data-app/mpv/state"
                                    (file-system-device fs))))
                   (operating-system-file-systems %os)))

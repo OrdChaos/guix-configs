@@ -21,6 +21,7 @@
              (guix gexp)
              (guixcfg system accounts)
              (guixcfg hosts vm)
+             (guixcfg users user)    ; %primary-user（主用户名权威）
              (ice-9 receive)
              (ice-9 rdelim)
              (srfi srfi-1)
@@ -41,6 +42,10 @@
 ;; sshd、dhcpcd、messagebus、polkitd）——与 store 内
 ;; activate-users+groups 序列化的账号集合一致。
 (define %vm-accounts+groups (account-list %os))
+;; 主用户名从 %primary-user 推导（AGENT.md §13：唯一权威来源，
+;; 测试不硬编码具体用户名）。
+(define %account-test-user (user-profile-name %primary-user))
+
 (define acct-names
   (map user-account-name (filter user-account? %vm-accounts+groups)))
 (define group-names
@@ -49,7 +54,7 @@
 (test-assert "folded accounts include root"
              (member "root" acct-names))
 (test-assert "folded accounts include primary user"
-             (member "user" acct-names))
+             (member %account-test-user acct-names))
 (test-assert "folded accounts include guix builders"
              (member "guixbuilder01" acct-names))
 (test-assert "folded accounts include sshd"
@@ -67,7 +72,8 @@
 (test-equal "primary user keeps uid 1000"
             1000
             (user-account-uid
-             (find (lambda (a) (string=? "user" (user-account-name a)))
+             (find (lambda (a) (string=? %account-test-user
+                                         (user-account-name a)))
                    (filter user-account? %vm-accounts+groups))))
 
 ;; ── B. 服务接线 ─────────────────────────────────────────────────
@@ -167,7 +173,8 @@
                         (and root (= 0 (password-entry-uid root)))))
          (test-assert "passwd has user entry with uid 1000"
                       (let ((user-e (find (lambda (e)
-                                            (string=? "user" (password-entry-name e)))
+                                            (string=? %account-test-user
+                                                      (password-entry-name e)))
                                           passwd)))
                         (and user-e (= 1000 (password-entry-uid user-e)))))
          (test-assert "shadow has entries for all users"
@@ -176,6 +183,7 @@
                       (let ((wheel (find (lambda (e)
                                            (string=? "wheel" (group-entry-name e)))
                                          groups)))
-                        (and wheel (member "user" (group-entry-members wheel))))))
+                        (and wheel (member %account-test-user
+                                           (group-entry-members wheel))))))
 
 (test-end "accounts")

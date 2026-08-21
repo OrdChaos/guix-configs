@@ -5,9 +5,9 @@
                #:use-module (guix gexp)                ; local-file
                #:use-module (guix records)
                #:use-module (guixcfg apps model)       ; application
-               #:export (%app))
+               #:export (%noctalia-git))
 
-(define %app
+(define %noctalia-git
   (application
    (name 'app)                       ; symbol：registry 里唯一
    (home-packages (list noctalia-git))     ; 用户 profile 包（service 自动贡献的不要重复）

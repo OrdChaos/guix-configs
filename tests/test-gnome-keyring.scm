@@ -153,8 +153,11 @@
 
 (test-assert "GK4: keyrings bind mount declared in %os"
              (any (lambda (fs)
-                    (and (string=? "/home/user/.local/share/keyrings"
-                                   (file-system-mount-point fs))
+                    (and (string=?
+                          (string-append (user-profile-home-directory
+                                          %primary-user)
+                                         "/.local/share/keyrings")
+                          (file-system-mount-point fs))
                          (string=? "/persist/data-app/gnome-keyring/keyrings"
                                    (file-system-device fs))))
                   (operating-system-file-systems %os)))

@@ -12,21 +12,29 @@
 
 (test-begin "users")
 
-;; U2：结构事实唯一来源
-(test-equal "primary user name" "user" (user-profile-name %primary-user))
+;; U2：结构事实唯一来源。用户名是部署事实（%primary-user 权威），
+;; 测试不硬编码具体值——断言形态与推导一致性，改用户名不应要求
+;; 改测试（AGENT.md §13）。
+(test-assert "primary user name is a non-empty string"
+             (and (string? (user-profile-name %primary-user))
+                  (not (string-null? (user-profile-name %primary-user)))))
 (test-equal "primary user uid" 1000 (user-profile-uid %primary-user))
 (test-equal "primary user group" "users" (user-profile-group %primary-user))
 (test-equal "primary user supplementary groups"
             '("wheel" "netdev")
             (user-profile-supplementary-groups %primary-user))
-(test-equal "primary user home" "/home/user"
-            (user-profile-home-directory %primary-user))
+(test-assert "primary user home derives from the user name"
+             (string=? (string-append "/home/"
+                                      (user-profile-name %primary-user))
+                       (user-profile-home-directory %primary-user)))
 (test-equal "password secret is a logical reference"
             'primary-user-password (user-profile-password-secret %primary-user))
 
 ;; 生成的 user-account：password 恒为 #f（hash 不进 evaluator/store）
 (define acct (primary-user-account))
-(test-equal "account name from profile" "user" (user-account-name acct))
+(test-equal "account name from profile"
+            (user-profile-name %primary-user)
+            (user-account-name acct))
 (test-equal "account uid from profile" 1000 (user-account-uid acct))
 (test-assert "account password is #f (no hash in evaluation)"
              (not (user-account-password acct)))

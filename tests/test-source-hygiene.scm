@@ -79,18 +79,22 @@
 ;; ── 3. generic modules 无开发机身份 ─────────────────────────
 ;; 仓库代码不得出现开发者用户名 / 具体机器 checkout 绝对路径。
 ;; （"user"/"vm"/"laptop" 等是项目 inventory 值，不在此列。）
+;; 例外：modules/guixcfg/users/ 是用户名结构事实的权威来源
+;; （%primary-user，AGENT.md §13）——真实用户名必然出现在那里，
+;; 检查范围排除该目录；generic 模块仍必须无泄漏。
+(define %generic-modules
+  (filter (lambda (p)
+            (not (string-prefix? "modules/guixcfg/users/" p)))
+          (scheme-files-under "modules")))
+
 (test-assert "modules/ contain no developer username"
-             (let ((s (string-join
-                       (map read-file (scheme-files-under "modules"))
-                       "\n")))
+             (let ((s (string-join (map read-file %generic-modules) "\n")))
                (not (string-contains s "ordchaos"))))
 
 (test-assert "generic modules contain no getcwd-dependent loading"
              ;; tools/ 的 add-to-load-path (getcwd) 是仓库内 CLI 的
              ;; 标准模式（运行于 checkout 内）；modules/ 禁止。
-             (let ((s (string-join
-                       (map read-file (scheme-files-under "modules"))
-                       "\n")))
+             (let ((s (string-join (map read-file %generic-modules) "\n")))
                (not (string-contains s "getcwd"))))
 
 ;; ── 4. 用户名作为路径出现在 generic 代码中 ──────────────────

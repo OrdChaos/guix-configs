@@ -127,8 +127,14 @@
                      ,%guix-home))))
    (append %vm-services
            ;; boot readiness DAG（capability 链；login gate 的开启端在
-           ;; interactive-session-ready）
-           (readiness-services 'guix-home-user)
+           ;; interactive-session-ready）。guix-home-service-type 的
+           ;; shepherd provision 是 guix-home-<user>（pinned
+           ;; gnu/services/guix.scm）——从 %primary-user 派生，不
+           ;; 硬编码用户名。
+           (readiness-services
+            (string->symbol
+             (string-append "guix-home-"
+                            (user-profile-name %primary-user))))
            ;; login gate：activation 关闭 + PAM gate（login/sshd account
            ;; 段 pam_nologin）
            (login-gate-services))))
