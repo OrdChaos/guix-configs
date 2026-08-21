@@ -29,14 +29,33 @@
 #      删 gate）恢复。
 #
 # 用法（root）：tools/reconfigure.sh [host]   # host 默认 vm
-# 环境变量：HOME_USER 指定 Home 绑定用户（默认 user）。
+# 环境变量：HOME_USER 指定 Home 绑定用户；缺省从 %primary-user
+# （modules/guixcfg/users/user.scm，唯一权威）动态推导，不硬编码。
 
 set -eu
 
 HOST="${1:-vm}"
-HOME_USER="${HOME_USER:-user}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
+# Home 绑定用户：显式 HOME_USER 优先；否则从 %primary-user 推导。
+# 推导失败（模块缺失/guix repl 异常）显式报错退出——绝不静默回退
+# 到猜测的默认值（曾硬编码 "user"，与真实主用户不符导致操作
+# /home/user 失败、gate 保持关闭）。
+HOME_USER="${HOME_USER:-}"
+if [ -z "$HOME_USER" ]; then
+  HOME_USER="$(guix repl -L "$ROOT/modules" /dev/stdin 2>/dev/null \
+    <<'EOF' | tail -n 1
+(use-modules (guixcfg users user))
+(display (user-profile-name %primary-user))
+(newline)
+EOF
+)"
+fi
+if [ -z "$HOME_USER" ]; then
+  echo "reconfigure: cannot derive Home user from %primary-user;" >&2
+  echo "  set HOME_USER explicitly." >&2
+  exit 2
+fi
 GATE="/run/guixcfg/session-not-ready"
 cd "$ROOT"
 

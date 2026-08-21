@@ -10,6 +10,7 @@
              (guix gexp)
              (guixcfg security secrets)
              (guixcfg hosts vm-secrets)   ; %vm-secrets（host-owned inventory）
+             (guixcfg users user)         ; %primary-user（owner 权威来源）
              (guixcfg utils repository-source) ; 仓库根唯一 resolver
              (guixcfg apps model)          ; applications-secrets（聚合，无 system consumer）
              (guixcfg apps registry)       ; %applications
@@ -35,7 +36,9 @@
 (test-equal "user secret scope" 'user (secret-decl-scope usr-secret))
 (test-equal "system secret mode" #o400 (secret-decl-mode sys-secret))
 (test-equal "user secret mode" #o600 (secret-decl-mode usr-secret))
-(test-equal "user secret owner" "user" (secret-decl-owner-user usr-secret))
+(test-equal "user secret owner derives from %primary-user"
+            (user-profile-name %primary-user)
+            (secret-decl-owner-user usr-secret))
 
 ;; secret-decl-source 是 file-like（caller 解析；generic 不知 repository
 ;; layout）且解析到仓库中的 ciphertext

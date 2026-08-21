@@ -13,6 +13,7 @@
 (define-module (guixcfg hosts vm-secrets)
                #:use-module (guix records)
                #:use-module (guixcfg security secrets)     ; secret-decl
+               #:use-module (guixcfg users user)           ; %primary-user（owner 权威来源）
                #:use-module (guixcfg utils repository-source) ; repository-file
                #:export (%vm-secrets))
 
@@ -35,5 +36,9 @@
          (domain 'login-critical)
          (source (repository-file "secrets/hosts/vm/test-user.age"))
          (target-name "test-user")
-         (owner-user "user")
+         ;; owner 从 %primary-user 推导（与 gnome-keyring 同一消费
+         ;; 模式）——user-scope secret 的 runtime 路径含 owner，
+         ;; 硬编码 "user" 会在部署时 getpw 失败（账户不存在）卡死
+         ;; login barrier（2026-08 审计确认）。
+         (owner-user (user-profile-name %primary-user))
          (mode #o600))))
