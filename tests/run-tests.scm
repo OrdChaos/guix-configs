@@ -105,6 +105,8 @@
                "tests/test-desktop.scm"
                "tests/test-session-env.scm"
                "tests/test-apps.scm"
+               "tests/test-extra-config.scm"
+               "tests/test-niri-config.scm"
                "tests/test-home.scm"
                "tests/test-application-persistence.scm"
                "tests/test-source-hygiene.scm"

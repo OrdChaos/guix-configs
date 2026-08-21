@@ -80,6 +80,31 @@ provisioning source → atomically update installed persistent hash →
 trigger/revalidate account projection → preserve fail-closed。不能长期
 依赖运行期 `passwd user`（只改 ephemeral shadow，reboot 丢失）。
 
+### 图形会话组件应用单元（niri spawn 引用，未入仓库）
+
+niri common.kdl 的 spawn-at-startup / binds 引用以下二进制，对应
+application 单元（registry 条目 + 包）尚未入仓库——包进入 session
+PATH 前，无包机器（VM）上这些启动/按键会运行期失败（仅通知，不
+影响配置合法性）：
+
+- `xsettingsd`（GTK XSettings，X11 兼容）
+- `fcitx5`（输入法；会话环境变量 XMODIFIERS=@im=fcitx 已在
+  `(guixcfg home environment)` 声明，惰性无害）
+- `clash-verge`（proxy GUI）
+- `noctalia`（panel/wallpaper 套件；同时是 `~/.config/niri/
+  noctalia.kdl` 的运行时 owner）
+- binds 引用的 `nautilus` / `missioncenter` / `playerctl` / `orca`
+  （Guix 官方包名核对后入 registry）
+
+### Fluent-dark-cursors 主题包
+
+niri common.kdl 声明 `cursor { xcursor-theme "Fluent-dark-cursors"
+xcursor-size 24 }`，但主题包未入仓库（Home profile 无此主题；
+Guix Home setup-environment 已把 profile 的 share/icons 前置进
+XCURSOR_PATH——主题包入 profile 后即生效）。原主机配置的
+XCURSOR_PATH 硬编码（HOME + /usr/share FHS 路径）已按规则删除，
+不迁移。
+
 ### Application persistence（/persist/data-app）
 
 当前是骨架/规划。每增加一个 app persistence rule 必须指定 canonical

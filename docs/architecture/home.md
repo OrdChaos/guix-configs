@@ -41,6 +41,14 @@ single-owner mechanism 执行：
 - secrets → `(guixcfg security secrets)` publisher（ciphertext
   file-like 由 app definition 解析；见 secrets.md）。
 
+**Host 额外配置**：host/profile 层可经 generic
+`extra-configuration-files` 机制（`(guixcfg apps extra-config)`）向
+`~/.config` 贡献原生配置文件（如 laptop 的 niri/host.kdl）。
+`guix-home` 接受 `#:extra-configuration-files` 参数；默认
+`%guix-home`（无 host 贡献）供 VM 等组装点直接使用。
+依赖方向 application ← host（application 不读取 host；详见
+applications.md（Host-agnostic boundary））。
+
 不实现 NixOS/RDE module framework（无 solver/priority/override/
 自动发现）。新增应用：`cp -r templates/application
 modules/guixcfg/apps/foo` → 填 definition → registry 加一行。

@@ -216,7 +216,43 @@ apps/foo/secrets/token.age
 
 registry 加载时校验名字唯一（重复直接报错）。
 
-## E9. Validation
+## E9. Host 向应用贡献额外配置文件（extra-configuration-files）
+
+应用层不知道"当前是哪台主机"（applications.md（Host-agnostic
+boundary））。host/profile 层要往某个应用（如 niri）的配置位置
+放原生配置文件时，用 generic 机制（不新建应用专属 API）——机制
+本身只表达 extra configuration contribution，host 只是第一个
+消费者：
+
+```scheme
+;; modules/guixcfg/hosts/<host>.scm（host-owned 源文件 colocate）
+(define %host-extra-configuration-files
+  (list (extra-configuration-file
+         (application 'niri)       ; owner：registry 中的应用名
+         (path "niri/host.kdl")    ; 完整的 ~/.config 相对目标路径
+         (source (local-file "laptop/niri-host.kdl")))))
+```
+
+host 组装 home 时传入：
+
+```scheme
+(guix-home #:extra-configuration-files %host-extra-configuration-files)
+```
+
+机制语义（`(guixcfg apps extra-config)`）：
+
+- `path` 原样作为目标路径经
+  `home-xdg-configuration-files-service-type` 安装到
+  `~/.config/<path>`；与 application name 无耦合（不假设"应用名 =
+  配置目录名"）；
+- 文件保持原生格式（KDL/TOML/...），Scheme 不解析内容；
+- application（owner）必须已启用（registry 校验，fail fast）；
+- 同一最终 target path 只能有一个 owner——重复立即报错（
+  跨贡献方冲突由 Guix Home lower 时兜底）；
+- 无 host 贡献的机器（VM）用默认 `%guix-home`——应用侧配置把
+  可选文件做成 optional include（niri 26.04 支持 `optional=true`）。
+
+## E10. Validation
 
 应用层没有 per-app 测试（配置内容/应用列表不做断言——加应用不应
 要求改测试）。框架级测试（application model、module compile、

@@ -166,10 +166,18 @@
                        (operating-system-services %os))))
 
 ;; ── GK5：daemon 单一 owner、无旧 lifecycle ────────────────
-(test-assert "GK5: niri config has no gnome-keyring spawn"
-             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
-                                            (lambda (p) (read-string p)))))
-               (not (string-contains s "gnome-keyring"))))
+(test-assert "GK5: niri configs have no gnome-keyring spawn"
+             ;; 拆分后扫描全部 niri kdl（config.kdl 入口 / common.kdl
+             ;; 通用配置 / host.kdl host 贡献）。检查 spawn 形态——
+             ;; 头注释中"已移除"的文档记录不算。
+             (let ((s (string-join
+                       (map (lambda (f)
+                              (call-with-input-file f
+                                                    (lambda (p) (read-string p))))
+                            (find-files "modules/guixcfg/apps/niri" "\\.kdl$"))
+                       "\n")))
+               (not (string-contains s
+                                     "spawn-at-startup \"gnome-keyring"))))
 
 (test-assert "GK5: no --login / --start anywhere in modules
 (PAM --login stub and niri/Home --start glue fully removed)"

@@ -8,12 +8,18 @@ channels.lock.scm     频道锁（实际使用的 commit）
 manifests/            开发 / 安装 / secrets / Secure Boot 工具链 manifest
 modules/guixcfg/      全部配置模块（-L modules 加入 load path）
   apps/                Application layer：model.scm + registry.scm +
-                       <app>/definition.scm（纵向配置单元；公开配置与
-                       app-private secrets colocate）
+                       extra-config.scm（generic 额外配置文件机制，
+                       host 贡献接入点）+ <app>/definition.scm（纵向
+                       配置单元；公开配置与 app-private secrets
+                       colocate）
   boot/                initrd、UKI、TPM 解锁、boot-state、Recovery
-  home/                Guix Home 入口（薄 assembly，聚合 apps registry）
+  home/                Guix Home 入口（薄 assembly，聚合 apps
+                       registry；guix-home 接受 host 的
+                       extra-configuration-files 贡献）+ 会话环境变量
+                       （environment.scm）
   hosts/               host 组装点（vm / laptop）+ host-owned inventory
-                       （vm-secrets.scm）
+                       （vm-secrets.scm）+ host-owned 原生配置文件
+                       （laptop/niri-host.kdl，经 extra-config 贡献）
   security/            age、secrets、TPM2、证书
   services/            用户态 one-shot 服务（ephemeral-root）
   storage/             磁盘/子卷/generation 纯模型 + 安装器

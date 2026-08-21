@@ -50,9 +50,21 @@ interactive-session-ready（core readiness join barrier）
 - **PATH**：Guix Home（bash_profile → setup-environment）提供。
 - **user session D-Bus**：home-dbus-service-type 唯一 owner（不再有
   custom dbus-run-session）。
-- **niri config**：`~/.config/niri/config.kdl` 由 Home 声明式生成
+- **niri config**：`~/.config/niri/` 由 Home 声明式生成
   （home-xdg-configuration-files-service-type）——derived state，不
-  持久化、app 不是第二 authority。
+  持久化、app 不是第二 authority。配置树（apps/niri/）：
+  - `config.kdl`（app-owned，薄入口）：`include "common.kdl"` +
+    `include "host.kdl" optional=true` + `include "noctalia.kdl"
+    optional=true`（include 语义按 pinned niri 26.04 核实：相对路径
+    基准 = 包含文件所在目录；optional 缺失仅警告——VM 无 host.kdl/
+    noctalia.kdl 时配置仍合法）；
+  - `common.kdl`（app-owned）：全部机器无关行为（input/layout/
+    rules/animations/binds/cursor/spawn）；
+  - `host.kdl`（host-owned）：机器事实（DRM 设备、固定输出），经
+    generic extra-configuration-files 机制由 host 层贡献（laptop →
+    hosts/laptop/niri-host.kdl）；VM 不贡献（optional include）；
+  - `noctalia.kdl`：Noctalia 运行时生成（唯一 owner = Noctalia，
+    Guix Home 不安装；entrypoint 只 include 不声明）。
 
 ## NVIDIA adapter contract（当前 disabled/identity）
 

@@ -1,29 +1,21 @@
-// niri 配置（M2 最小 substrate；docs/architecture/graphics.md）。
-// GPU-neutral：不写 DRM 节点、不写死 output 名（niri 自动探测；
-// host-specific 显示设置未来通过 host-specific Home overlay 表达）。
-// 会话内长期进程的单一 owner 是 niri session（spawn-at-startup）——
-// 不在 Home Shepherd / 系统 shepherd / wrapper 重复启动。
-
-input {
-    keyboard {
-        xkb {
-            layout "us"
-        }
-    }
-}
-
-// 会话服务（graphical owner = niri session）：mako/polkit-gnome 是
-// 纯图形会话组件；PipeWire/WirePlumber 由官方 Home service 接管
-// （home-pipewire-service-type，Home Shepherd owner——
-// docs/architecture/upstream-boundaries.md）。
-spawn-at-startup "mako"                 // notification daemon
-// polkit graphical authentication agent（apps/polkit-gnome：
-// ~/.local/bin wrapper 指向 libexec 二进制——PATH 稳定名，无 store
-// 字面量；polkitd 属于 system，agent 属于 graphical session）。
-spawn-at-startup "polkit-gnome-authentication-agent-1"
-
-binds {
-    Mod+T { spawn "ghostty"; }      // terminal
-    Mod+D { spawn "fuzzel"; }           // launcher
-    Mod+Shift+E { quit; }               // logout -> greetd
-}
+// niri 配置入口（application-owned，host-agnostic，薄 assembly）。
+//
+// include 语义（pinned niri 26.04，niri-config/src/lib.rs 核实）：
+//   - 相对路径以【包含该 include 的文件所在目录】为基准（顶层
+//     BasePath = config.kdl 所在目录 = ~/.config/niri/）；
+//   - 允许多个 include；按出现顺序处理——后 include 的 binds 覆盖
+//     先 include 的同键 binds（其余单节 merge、多节 append）；
+//   - optional=true：文件缺失时仅警告（"optional include not
+//     found"），非 optional 缺失是硬错误；
+//   - 不支持 glob/directory include（路径按字面读取）。
+//
+// 职责：
+//   - common.kdl：application 拥有的通用配置（机器无关）；
+//   - host.kdl：host/profile 层经 generic extra-configuration-files
+//     机制贡献的机器事实（本文件 optional——无 host 贡献的机器上
+//     不存在，如 VM）；
+//   - noctalia.kdl：Noctalia 运行时生成（唯一 owner = Noctalia，
+//     Guix Home 不安装；本文件只 include 不声明）。
+include "common.kdl"
+include "host.kdl" optional=true
+include "noctalia.kdl" optional=true

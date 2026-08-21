@@ -1,0 +1,24 @@
+// niri 机器相关配置（laptop host-owned；application 层不拥有本
+// 文件——经 generic extra-configuration-files 机制以 host.kdl 安装
+// 到 ~/.config/niri/，config.kdl include）。
+//
+// 内容：本机硬件事实（DRM 设备选择、固定内屏输出）。无
+// application-generic 行为（input/layout/binds 等在 common.kdl）。
+// KDL 保持原生格式，不由 Scheme 重新建模（docs/architecture/
+// applications.md（Host-agnostic boundary））。
+
+debug {
+    // Force niri to render on Intel iGPU.
+    render-drm-device "/dev/dri/by-path/pci-0000:00:02.0-render"
+
+    // Ignore NVIDIA dGPU as a display/render device.
+    ignore-drm-device "/dev/dri/by-path/pci-0000:01:00.0-card"
+    ignore-drm-device "/dev/dri/by-path/pci-0000:01:00.0-render"
+}
+
+output "eDP-1" {
+    mode "2560x1600@165.040"
+    scale 1.4
+    transform "normal"
+    position x=0 y=0
+}

@@ -1,0 +1,671 @@
+// niri 通用配置（application-owned，host-agnostic；
+// docs/architecture/applications.md（Host-agnostic boundary））。
+//
+// 本文件包含所有与具体机器无关的 niri 行为：input、layout、
+// window/layer rules、animations、cursor 选择、binds、screenshot、
+// compositor behavior、graphical-session 启动项。
+//
+// 机器事实（DRM 设备选择、固定输出配置）不在本文件——由 host/
+// profile 层经 generic extra-configuration-files 机制以 host.kdl
+// 提供（config.kdl include）；本文件不知道"当前是哪台主机"。
+//
+// 会话内长期进程的单一 owner 是 niri session（spawn-at-startup）：
+// 不在 Home Shepherd / 系统 shepherd / wrapper 重复启动。
+// 已从原主机配置移除的启动项（AGENT.md §15，2026-08 审计）：
+//   - dbus-update-activation-environment --systemd：systemd 专属
+//     workaround；niri --session 自身会向 D-Bus 导入会话环境
+//     （pinned main.rs import_environment）；
+//   - gnome-keyring-daemon --start：Home Shepherd 的
+//     gnome-keyring-session 服务是 keyring daemon 唯一 owner；
+//   - xrdb -merge ~/.Xresources：原配置硬编码 HOME 绝对路径，且
+//     仓库无 .Xresources 归属。
+// 待办（roadmap）：xsettingsd / fcitx5 / clash-verge / noctalia
+// 的应用单元尚未入仓库——spawn 保留（图形会话组件），对应包
+// 加入 session PATH 前这些启动项会在无包机器上失败。
+
+debug {
+    honor-xdg-activation-with-invalid-serial
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Input
+// ─────────────────────────────────────────────────────────────────────────────
+
+input {
+    keyboard {
+        xkb {
+            layout "us"
+        }
+
+        numlock
+    }
+
+    touchpad {
+        tap
+        natural-scroll
+        scroll-method "two-finger"
+        accel-speed 0.5
+    }
+
+    mouse {
+        accel-speed 0.5
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layout
+// ─────────────────────────────────────────────────────────────────────────────
+
+layout {
+    gaps 8
+    background-color "transparent"
+
+    center-focused-column "never"
+    always-center-single-column
+
+    preset-column-widths {
+        proportion 0.5
+        proportion 0.2444
+        proportion 0.7556
+    }
+
+    preset-window-heights {
+        proportion 0.5
+        proportion 0.8
+        proportion 1.0
+    }
+
+    focus-ring {
+        width 4
+    }
+
+    border {
+        off
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Window and layer rules
+// ─────────────────────────────────────────────────────────────────────────────
+
+layer-rule {
+    match namespace="^wallpaper$"
+    place-within-backdrop true
+}
+
+layer-rule {
+    match namespace="^noctalia-wallpaper"
+    place-within-backdrop true
+}
+
+window-rule {
+    geometry-corner-radius 12
+    clip-to-geometry true
+}
+
+window-rule {
+    match app-id="steam" title=r#"^notificationtoasts_\d+_desktop$"#
+    default-floating-position x=10 y=10 relative-to="bottom-right"
+    open-focused false
+}
+
+prefer-no-csd
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Interface
+// ─────────────────────────────────────────────────────────────────────────────
+
+hotkey-overlay {
+    skip-at-startup
+}
+
+cursor {
+    xcursor-theme "Fluent-dark-cursors"
+    xcursor-size 24
+}
+
+overview {
+    workspace-shadow {
+        off
+    }
+}
+
+gestures {
+    hot-corners {
+        off
+    }
+}
+
+screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Animations
+// ─────────────────────────────────────────────────────────────────────────────
+
+animations {
+    workspace-switch {
+        spring damping-ratio=1.0 stiffness=1000 epsilon=0.0001
+    }
+
+    horizontal-view-movement {
+        spring damping-ratio=1.0 stiffness=800 epsilon=0.0001
+    }
+
+    window-movement {
+        spring damping-ratio=1.0 stiffness=800 epsilon=0.0001
+    }
+
+    window-resize {
+        spring damping-ratio=1.0 stiffness=800 epsilon=0.0001
+    }
+
+    window-open {
+        duration-ms 150
+        curve "ease-out-expo"
+    }
+
+    window-close {
+        duration-ms 150
+        curve "ease-out-quad"
+    }
+
+    overview-open-close {
+        spring damping-ratio=1.0 stiffness=800 epsilon=0.0001
+    }
+
+    config-notification-open-close {
+        spring damping-ratio=0.6 stiffness=1000 epsilon=0.001
+    }
+
+    exit-confirmation-open-close {
+        spring damping-ratio=0.6 stiffness=500 epsilon=0.01
+    }
+
+    screenshot-ui-open {
+        duration-ms 200
+        curve "ease-out-quad"
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hardware switch events（行为绑定，非机器事实；无对应事件的机器上
+// 不触发，配置合法）
+// ─────────────────────────────────────────────────────────────────────────────
+
+switch-events {
+    lid-close {
+        spawn "noctalia" "msg" "session" "lock-and-suspend"
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Key bindings
+// ─────────────────────────────────────────────────────────────────────────────
+
+binds {
+    // ── Help ─────────────────────────────────────────────────────────────────
+
+    Mod+Shift+Slash {
+        show-hotkey-overlay
+    }
+
+
+    // ── Applications ─────────────────────────────────────────────────────────
+
+    // ghostty 默认工作目录 = niri spawn 的 cwd（$HOME），不写死
+    // HOME 绝对路径（AGENT.md §13）。
+    Mod+T hotkey-overlay-title="Open a Terminal: ghostty" {
+        spawn-sh "exec ghostty --working-directory=\"$HOME\""
+    }
+
+    Mod+D hotkey-overlay-title="Run an Application: noctalia" {
+        spawn "noctalia" "msg" "panel-toggle" "launcher"
+    }
+
+    Mod+L hotkey-overlay-title="Lock the Screen: noctalia" {
+        spawn "noctalia" "msg" "session" "lock"
+    }
+
+    Mod+E {
+        spawn "nautilus" "--new-window"
+    }
+
+    Mod+Z {
+        spawn "google-chrome-stable"
+    }
+
+    Mod+P {
+        spawn "missioncenter"
+    }
+
+    Mod+Tab {
+        spawn-sh "noctalia msg window-switcher";
+    }
+
+    Alt+Tab {
+        spawn-sh "noctalia msg window-switcher";
+    }
+
+    Super+Alt+S allow-when-locked=true hotkey-overlay-title=null {
+        spawn-sh "pkill orca || exec orca"
+    }
+
+
+    // ── Audio ────────────────────────────────────────────────────────────────
+
+    XF86AudioRaiseVolume {
+        spawn "noctalia" "msg" "volume-up"
+    }
+
+    XF86AudioLowerVolume {
+        spawn "noctalia" "msg" "volume-down"
+    }
+
+    XF86AudioMute {
+        spawn "noctalia" "msg" "volume-mute"
+    }
+
+    XF86AudioMicMute allow-when-locked=true {
+        spawn "wpctl" "set-mute" "@DEFAULT_AUDIO_SOURCE@" "toggle"
+    }
+
+
+    // ── Brightness ───────────────────────────────────────────────────────────
+
+    XF86MonBrightnessUp {
+        spawn "noctalia" "msg" "brightness-up"
+    }
+
+    XF86MonBrightnessDown {
+        spawn "noctalia" "msg" "brightness-down"
+    }
+
+
+    // ── Media ────────────────────────────────────────────────────────────────
+
+    XF86AudioPlay allow-when-locked=true {
+        spawn "playerctl" "play-pause"
+    }
+
+    XF86AudioStop allow-when-locked=true {
+        spawn "playerctl" "stop"
+    }
+
+    XF86AudioPrev allow-when-locked=true {
+        spawn "playerctl" "previous"
+    }
+
+    XF86AudioNext allow-when-locked=true {
+        spawn "playerctl" "next"
+    }
+
+
+    // ── Overview and windows ─────────────────────────────────────────────────
+
+    Mod+O repeat=false {
+        toggle-overview
+    }
+
+    Mod+Q repeat=false {
+        close-window
+    }
+
+    Mod+Left {
+        focus-column-left
+    }
+
+    Mod+Right {
+        focus-column-right
+    }
+
+    Mod+Up {
+        focus-window-up
+    }
+
+    Mod+Down {
+        focus-window-down
+    }
+
+    Mod+Ctrl+Left {
+        move-column-left
+    }
+
+    Mod+Ctrl+Right {
+        move-column-right
+    }
+
+    Mod+Ctrl+Up {
+        move-window-up
+    }
+
+    Mod+Ctrl+Down {
+        move-window-down
+    }
+
+    Mod+Home {
+        focus-column-first
+    }
+
+    Mod+End {
+        focus-column-last
+    }
+
+    Mod+Ctrl+Home {
+        move-column-to-first
+    }
+
+    Mod+Ctrl+End {
+        move-column-to-last
+    }
+
+
+    // ── Monitor navigation ───────────────────────────────────────────────────
+
+    Mod+Shift+Left {
+        focus-monitor-left
+    }
+
+    Mod+Shift+Right {
+        focus-monitor-right
+    }
+
+    Mod+Shift+Up {
+        focus-monitor-up
+    }
+
+    Mod+Shift+Down {
+        focus-monitor-down
+    }
+
+    Mod+Shift+Ctrl+Left {
+        move-column-to-monitor-left
+    }
+
+    Mod+Shift+Ctrl+Right {
+        move-column-to-monitor-right
+    }
+
+    Mod+Shift+Ctrl+Up {
+        move-column-to-monitor-up
+    }
+
+    Mod+Shift+Ctrl+Down {
+        move-column-to-monitor-down
+    }
+
+
+    // ── Workspace navigation ─────────────────────────────────────────────────
+
+    Mod+Page_Down {
+        focus-workspace-down
+    }
+
+    Mod+Page_Up {
+        focus-workspace-up
+    }
+
+    Mod+U {
+        focus-workspace-down
+    }
+
+    Mod+I {
+        focus-workspace-up
+    }
+
+    Mod+Ctrl+Page_Down {
+        move-column-to-workspace-down
+    }
+
+    Mod+Ctrl+Page_Up {
+        move-column-to-workspace-up
+    }
+
+    Mod+Ctrl+U {
+        move-column-to-workspace-down
+    }
+
+    Mod+Ctrl+I {
+        move-column-to-workspace-up
+    }
+
+    Mod+Shift+Page_Down {
+        move-workspace-down
+    }
+
+    Mod+Shift+Page_Up {
+        move-workspace-up
+    }
+
+    Mod+Shift+U {
+        move-workspace-down
+    }
+
+    Mod+Shift+I {
+        move-workspace-up
+    }
+
+
+    // ── Mouse workspace navigation ───────────────────────────────────────────
+
+    Mod+WheelScrollDown cooldown-ms=150 {
+        focus-workspace-down
+    }
+
+    Mod+WheelScrollUp cooldown-ms=150 {
+        focus-workspace-up
+    }
+
+    Mod+Ctrl+WheelScrollDown cooldown-ms=150 {
+        move-column-to-workspace-down
+    }
+
+    Mod+Ctrl+WheelScrollUp cooldown-ms=150 {
+        move-column-to-workspace-up
+    }
+
+    Mod+WheelScrollRight {
+        focus-column-right
+    }
+
+    Mod+WheelScrollLeft {
+        focus-column-left
+    }
+
+    Mod+Ctrl+WheelScrollRight {
+        move-column-right
+    }
+
+    Mod+Ctrl+WheelScrollLeft {
+        move-column-left
+    }
+
+    Mod+Shift+WheelScrollDown {
+        focus-column-right
+    }
+
+    Mod+Shift+WheelScrollUp {
+        focus-column-left
+    }
+
+    Mod+Ctrl+Shift+WheelScrollDown {
+        move-column-right
+    }
+
+    Mod+Ctrl+Shift+WheelScrollUp {
+        move-column-left
+    }
+
+
+    // ── Numbered workspaces ──────────────────────────────────────────────────
+
+    Mod+1 { focus-workspace 1; }
+    Mod+2 { focus-workspace 2; }
+    Mod+3 { focus-workspace 3; }
+    Mod+4 { focus-workspace 4; }
+    Mod+5 { focus-workspace 5; }
+    Mod+6 { focus-workspace 6; }
+    Mod+7 { focus-workspace 7; }
+    Mod+8 { focus-workspace 8; }
+    Mod+9 { focus-workspace 9; }
+
+    Mod+Ctrl+1 { move-column-to-workspace 1; }
+    Mod+Ctrl+2 { move-column-to-workspace 2; }
+    Mod+Ctrl+3 { move-column-to-workspace 3; }
+    Mod+Ctrl+4 { move-column-to-workspace 4; }
+    Mod+Ctrl+5 { move-column-to-workspace 5; }
+    Mod+Ctrl+6 { move-column-to-workspace 6; }
+    Mod+Ctrl+7 { move-column-to-workspace 7; }
+    Mod+Ctrl+8 { move-column-to-workspace 8; }
+    Mod+Ctrl+9 { move-column-to-workspace 9; }
+
+
+    // ── Columns and window grouping ──────────────────────────────────────────
+
+    Mod+BracketLeft {
+        consume-or-expel-window-left
+    }
+
+    Mod+BracketRight {
+        consume-or-expel-window-right
+    }
+
+    Mod+Comma {
+        consume-window-into-column
+    }
+
+    Mod+Period {
+        expel-window-from-column
+    }
+
+    Mod+W {
+        toggle-column-tabbed-display
+    }
+
+    Mod+Shift+V {
+        switch-focus-between-floating-and-tiling
+    }
+
+
+    // ── Window sizing and positioning ────────────────────────────────────────
+
+    Mod+R {
+        switch-preset-column-width
+    }
+
+    Mod+Shift+R {
+        switch-preset-column-width-back
+    }
+
+    Mod+Ctrl+Shift+R {
+        switch-preset-window-height
+    }
+
+    Mod+Ctrl+R {
+        reset-window-height
+    }
+
+    Mod+F {
+        maximize-column
+    }
+
+    Mod+Shift+F {
+        fullscreen-window
+    }
+
+    Mod+M {
+        maximize-window-to-edges
+    }
+
+    Mod+Ctrl+F {
+        expand-column-to-available-width
+    }
+
+    Mod+C {
+        center-column
+    }
+
+    Mod+Ctrl+C {
+        center-visible-columns
+    }
+
+    Mod+Minus {
+        set-column-width "-10%"
+    }
+
+    Mod+Equal {
+        set-column-width "+10%"
+    }
+
+    Mod+Shift+Minus {
+        set-window-height "-10%"
+    }
+
+    Mod+Shift+Equal {
+        set-window-height "+10%"
+    }
+
+
+    // ── Noctalia panels ──────────────────────────────────────────────────────
+
+    Mod+V {
+        spawn "noctalia" "msg" "panel-toggle" "clipboard"
+    }
+
+
+    // ── Screenshots ──────────────────────────────────────────────────────────
+
+    Print {
+        screenshot
+    }
+
+    Ctrl+Print {
+        screenshot-screen
+    }
+
+    Alt+Print {
+        screenshot-window
+    }
+
+    Mod+Shift+S {
+        screenshot
+    }
+
+
+    // ── Session and compositor ───────────────────────────────────────────────
+
+    Mod+Escape allow-inhibiting=false {
+        toggle-keyboard-shortcuts-inhibit
+    }
+
+    Mod+Shift+E {
+        quit
+    }
+
+    Ctrl+Alt+Delete {
+        quit
+    }
+
+    Mod+Shift+P {
+        power-off-monitors
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Startup（graphical session owner = niri session）
+// ─────────────────────────────────────────────────────────────────────────────
+
+spawn-at-startup "mako"                 // notification daemon
+// polkit graphical authentication agent（apps/polkit-gnome：
+// ~/.local/bin wrapper 指向 libexec 二进制——PATH 稳定名，无 store
+// 字面量；polkitd 属于 system，agent 属于 graphical session）。
+spawn-at-startup "polkit-gnome-authentication-agent-1"
+
+// 以下图形会话组件来自原主机配置；对应应用单元尚未入仓库
+// （roadmap：xsettingsd / fcitx5 / clash-verge / noctalia）——
+// 包进入 session PATH 前，无包机器上这些启动会失败（仅运行期
+// 通知，不影响配置合法性）。
+spawn-at-startup "xsettingsd"           // GTK XSettings（X11 兼容）
+spawn-at-startup "fcitx5" "-d"          // input method
+spawn-at-startup "clash-verge"          // proxy GUI
+spawn-at-startup "noctalia"             // panel / wallpaper（也是
+                                        // noctalia.kdl 的运行时 owner）

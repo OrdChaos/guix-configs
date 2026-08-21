@@ -308,8 +308,11 @@
                                             (lambda (p) (read-string p)))))
                (not (text-contains-any? s %vendor-words))))
 
-(test-assert "NV4: niri config has no DRM node / output name"
-             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
+(test-assert "NV4: niri common config has no DRM node / output name"
+             ;; 拆分后 config.kdl 是 include-only 薄入口；机器事实
+             ;; 只允许出现在 host 贡献的 host.kdl（laptop），
+             ;; application-owned 的 common.kdl 必须无 vendor 泄漏。
+             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/common.kdl"
                                             (lambda (p) (read-string p)))))
                (not (text-contains-any? s
                                         (append %vendor-words
@@ -335,8 +338,8 @@
              (eq? nvidia-package-transform identity))
 
 ;; ── NV8：无全局 PRIME/DRM 环境变量 ─────────────────────────
-(test-assert "NV8: niri config has no global PRIME/DRM env vars"
-             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
+(test-assert "NV8: niri common config has no global PRIME/DRM env vars"
+             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/common.kdl"
                                             (lambda (p) (read-string p)))))
                (not (text-contains-any? s
                                         '("PRIME" "WLR_DRM_DEVICES"
@@ -400,8 +403,15 @@
                (not (string-contains s "rules.d"))))
 
 (test-assert "PK3: polkit-gnome starts once, from the graphical session only"
-             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
-                                            (lambda (p) (read-string p)))))
+             ;; 拆分后 spawn 位于 common.kdl——扫描全部 niri kdl
+             ;; 文件（config.kdl 入口 / common.kdl 通用 / host.kdl
+             ;; host 贡献）确保恰好一次。
+             (let ((s (string-join
+                       (map (lambda (f)
+                              (call-with-input-file f
+                                                    (lambda (p) (read-string p))))
+                            (find-files "modules/guixcfg/apps/niri" "\\.kdl$"))
+                       "\n")))
                (= 1 (length (filter (lambda (line)
                                       (string-contains line
                                                        "spawn-at-startup \"polkit-gnome-authentication-agent-1\""))
