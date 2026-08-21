@@ -2,7 +2,7 @@
        (name 'guix)
        (url "https://codeberg.org/guix/guix.git")
        (branch "master")
-       (commit "3dc50d9cda882dec8f9f0ee318dc6117d72f42dd")
+       (commit "14f805afc48bb642186e4608054de25c37a3e018")
        (introduction
         (make-channel-introduction
          "9edb3f66fd807b096b48283debdcddccfea34bad"
@@ -12,7 +12,7 @@
        (name 'nonguix)
        (url "https://gitlab.com/nonguix/nonguix")
        (branch "master")
-       (commit "7ae28dce7ffc13987b1b0eeef238e185699611db")
+       (commit "bdc27101e06737197834cb65e31256cd4d44d40a")
        (introduction
         (make-channel-introduction
          "897c1a470da759236cc11798f4e0a5f7d4d59fbc"
@@ -47,4 +47,9 @@
         (make-channel-introduction
          "12540f593092e9a177eb8a974a57bb4892327752"
          (openpgp-fingerprint
-          "3FFA 7335 973E 0A49 47FC  0A8C 38D5 96BE 07D3 34AB")))))
+          "3FFA 7335 973E 0A49 47FC  0A8C 38D5 96BE 07D3 34AB"))))
+      (channel
+       (name 'noctalia)
+       (url "https://github.com/noctalia-dev/noctalia")
+       (branch "main")
+       (commit "791e557417ceeba0e57562af2ddcbd3d8b93f62a")))

@@ -43,13 +43,13 @@
 ;; 当前仓库是 root + one primary user 的单用户设计。
 (define %primary-user
   (user-profile
-   (name "user")
+   (name "ordchaos")
    (uid 1000)
    (group "users")
    (supplementary-groups '("wheel" "netdev"))
    (shell (file-append bash "/bin/bash"))
-   (home-directory "/home/user")
-   (comment "VM test user")
+   (home-directory "/home/ordchaos")
+   (comment "A dragon who controls the Synfield.")
    ;; 密码 hash 是 install secret（secrets/install/user-password.hash.age），
    ;; 由 installer 在 LUKS 建立后注入目标系统 shadow；这里只保留逻辑名。
    (password-secret 'primary-user-password)))

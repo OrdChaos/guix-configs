@@ -1,6 +1,6 @@
 ;;; Noctalia
 
-(define-module (guixcfg apps app definition)
+(define-module (guixcfg apps noctalia-git definition)
                #:use-module (noctalia)                 ; noctalia-git
                #:use-module (guix gexp)                ; local-file
                #:use-module (guix records)
