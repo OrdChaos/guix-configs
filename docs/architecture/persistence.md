@@ -41,8 +41,8 @@ atomic replace（write temp → rename）产生新 inode，破坏 hardlink；
 |---|---|---|---|---|---|
 | `/gnu/store` | `@persist-gnu-store` | `/gnu/store` | direct（subvol mount） | no | no |
 | `/var/guix` | `@persist-var-guix` | `/var/guix` | direct（安装期不挂） | yes | no |
-| user dirs | `/persist/data-home/user/<d>` | `/home/user/<d>` | directory bind | yes | no |
-| guix-configs | `/persist/data-home/user/guix-configs` | `/home/user/guix-configs` | directory bind | yes | no |
+| user dirs | `/persist/data-home/<user>/<d>` | `/home/<user>/<d>` | directory bind | yes | no |
+| guix-configs | `/persist/data-home/<user>/guix-configs` | `/home/<user>/guix-configs` | directory bind | yes | no |
 | SSH host keys | `/persist/system/ssh/ssh_host_ed25519_key` | sshd HostKey | direct reference | yes | no |
 | age identity | `/persist/system/keys/age/identity` | secrets 解密 | direct reference | yes | no |
 | Secure Boot keys | `/persist/system/keys/secure-boot/*` | UKI 签名/enrollment | direct reference | yes | no |

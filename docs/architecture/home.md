@@ -60,8 +60,8 @@ contract、layout、local-file 语义、ownership 决策表、secret/
 
 ## Ephemeral /home + bind-mounted 用户目录
 
-`/home/user` 本身是 ephemeral（无状态 root）。初始持久目录由系统
-从 `/persist/data-home/user/` bind mount：
+`/home/<user>` 本身是 ephemeral（无状态 root）。初始持久目录由系统
+从 `/persist/data-home/<user>/` bind mount：
 
 ```text
 guix-configs / Projects / Documents / Downloads / Pictures
@@ -75,7 +75,7 @@ guix-configs / Projects / Documents / Downloads / Pictures
 
 ## Guix Home 是 derived state
 
-`/home/user` 是 ephemeral；Guix Home 管理的一切都是 **derived
+`/home/<user>` 是 ephemeral；Guix Home 管理的一切都是 **derived
 state**，由仓库 + 当前 system generation 重新生成——不持久化：
 
 - `~/.guix-home` 与 dotfile symlinks 不属于 persistence inventory；

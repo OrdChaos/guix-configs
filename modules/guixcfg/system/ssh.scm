@@ -2,7 +2,7 @@
 ;;;
 ;;; 所有权边界（Guix System owns）：
 ;;;   sshd、SSH server policy、SSH host keys、authorized-keys 策略。
-;;; 普通用户（user 等）通过系统密码或公钥登录；root 通过一切认证
+;;; 普通用户通过系统密码或公钥登录；root 通过一切认证
 ;;; 方式（password/pubkey/keyboard-interactive/...）完全禁止。
 ;;;
 ;;; 无状态 root 适配：当前根是 ephemeral root generation，/etc/ssh
