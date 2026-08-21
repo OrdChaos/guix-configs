@@ -57,8 +57,10 @@ herd start cow-store /mnt
 ```bash
 guix time-machine -C channels.lock.scm -- \
   shell -m manifests/secure-boot-keygen.scm -- \
-  guix repl tools/secure-boot-keygen.scm /mnt/persist/system/keys/secure-boot
+  guix repl -L modules tools/secure-boot-keygen.scm /mnt/persist/system/keys/secure-boot
 ```
+（`-L modules` 必需：工具自身不带 load path，缺了报
+`no code for module (guixcfg storage model)`——2026-08 实测。）
 
 ## 阶段 4.5：Nonguix substitute bootstrap（首次 transition 必需）
 
@@ -129,11 +131,11 @@ bootloader installed。有 db.key 则 UKI 已签名。
 GUIXCFG_ACCOUNTS_DIR=/mnt/persist/system/accounts \
   guix time-machine -C channels.lock.scm -- \
   shell -m manifests/secrets.scm -- \
-  guile -L modules -s tools/secrets.scm provision-password user \
+  guile -L modules -s tools/secrets.scm provision-password ordchaos \
   secrets/install/user-password.hash.age
 ```
 
-验证：`/mnt/persist/system/accounts/user/password.hash`，root 0600。
+验证：`/mnt/persist/system/accounts/ordchaos/password.hash`，root 0600。
 
 ## 阶段 8：commit-root
 
@@ -170,11 +172,11 @@ guix time-machine -C channels.lock.scm -- \
 ## 阶段 10：仓库复制到 persistent user data
 
 ```bash
-mkdir -p /mnt/persist/data-home/user
+mkdir -p /mnt/persist/data-home/ordchaos/guix-configs
 cd /root/guix-configs
 tar cf - --exclude='./vms' --exclude='*.log' . | \
-  tar xf - -C /mnt/persist/data-home/user/guix-configs
-chown -R 1000:998 /mnt/persist/data-home/user
+  tar xf - -C /mnt/persist/data-home/ordchaos/guix-configs
+chown -R 1000:998 /mnt/persist/data-home/ordchaos
 ```
 
 验证 channels.lock.scm/modules/tools/docs/manifests 存在、无 vms 泄漏。
@@ -185,14 +187,16 @@ chown -R 1000:998 /mnt/persist/data-home/user
 > 的内容会一直 root:root，用户侧 `git pull` 报
 > "cannot open '.git/FETCH_HEAD': Permission denied"（已实测一次）。
 
-## 收尾
+## 收尾（正常关机，不重启）
 
 ```bash
 cd /root
 herd stop cow-store
 umount -R /mnt
 sync
-reboot
+# 正常关机（安装完成绝不 reboot——2026-08 用户明确要求；
+# LiveCD 无 poweroff 命令，用 shepherd 的关机动作）
+herd power-off root
 ```
 
 ## TPM enrollment（Secure Boot 启用后，可选）
