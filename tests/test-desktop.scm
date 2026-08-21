@@ -298,7 +298,7 @@
   ;; 注意："xe" 作为独立 token 才相关（i915/xe），不单独列出——
   ;; 会误匹配 execl 等子串；"i915" 已覆盖 Intel driver 路径。
   '("nvidia" "nouveau" "nvda" "virtio_gpu" "i915" "renderD"
-    "/dev/dri" "card0" "card1"))
+             "/dev/dri" "card0" "card1"))
 
 (define (text-contains-any? text words)
   (any (lambda (w) (string-contains text w)) words))
@@ -317,7 +317,7 @@
                (not (text-contains-any? s
                                         (append %vendor-words
                                                 '("Virtual-1" "eDP-1"
-                                                  "DP-1" "HDMI-A-1"))))))
+                                                              "DP-1" "HDMI-A-1"))))))
 
 ;; ── NV5：NVIDIA adapter 记录未来 ownership ─────────────────
 (test-assert "NV5: nvidia adapter module documents its ownership"
@@ -343,15 +343,15 @@
                                             (lambda (p) (read-string p)))))
                (not (text-contains-any? s
                                         '("PRIME" "WLR_DRM_DEVICES"
-                                          "GBM_BACKEND" "WLR_RENDERER"
-                                          "WLR_BACKENDS")))))
+                                                  "GBM_BACKEND" "WLR_RENDERER"
+                                                  "WLR_BACKENDS")))))
 
 (test-assert "NV8: desktop.scm sets no global vendor env vars"
              (let ((s (call-with-input-file "modules/guixcfg/system/desktop.scm"
                                             (lambda (p) (read-string p)))))
                (not (text-contains-any? s
                                         '("PRIME" "WLR_DRM_DEVICES"
-                                          "GBM_BACKEND" "__GLX_VENDOR")))))
+                                                  "GBM_BACKEND" "__GLX_VENDOR")))))
 
 ;; ── PK：polkit system authority（Phase A；docs/architecture/
 ;; desktop-authentication.md）───────────────────────────────

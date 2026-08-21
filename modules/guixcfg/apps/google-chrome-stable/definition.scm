@@ -28,7 +28,7 @@
 ;;; persistence rule 持久化）——本模块不产生第二套 secret storage。
 ;;;
 ;;; 桌面集成（既有会话已满足，无新增）：.desktop 文件经 profile
-;;; share/applications 进 XDG_DATA_DIRS（fuzzel 自动发现）；Wayland
+;;; share/applications 进 XDG_DATA_DIRS（应用启动器自动发现）；Wayland
 ;;; 原生，X11 fallback 走 xwayland-satellite（会话已有）；字体由包
 ;;; 自带 + font-liberation input。默认参数运行，不加 Chromium flags。
 ;;;

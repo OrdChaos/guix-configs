@@ -28,10 +28,10 @@
     (append-map (lambda (e)
                   (let ((p (string-append dir "/" e)))
                     (cond ((string-suffix? ".scm" e) (list p))
-                          ((and (not (string-prefix? "." e))
-                                (eq? 'directory (stat:type (stat p))))
-                           (loop p))
-                          (else '()))))
+                      ((and (not (string-prefix? "." e))
+                            (eq? 'directory (stat:type (stat p))))
+                       (loop p))
+                      (else '()))))
                 (or (false-if-exception (scandir dir)) '()))))
 
 ;; ── 1. app definitions 可移植性 ─────────────────────────────
@@ -55,7 +55,7 @@
                       (let ((s (read-file p)))
                         (and (not (string-contains s "getcwd"))
                              (not (string-contains s "current-filename")
-                             )
+                                  )
                              (not (string-contains s "current-source-directory"))
                              (not (string-contains s "/home/")))))
                     %app-definitions))

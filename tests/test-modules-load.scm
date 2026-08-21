@@ -31,10 +31,10 @@
     (append-map (lambda (e)
                   (let ((p (string-append dir "/" e)))
                     (cond ((string-suffix? ".scm" e) (list p))
-                          ((and (not (string-prefix? "." e))
-                                (eq? 'directory (stat:type (stat p))))
-                           (loop p))
-                          (else '()))))
+                      ((and (not (string-prefix? "." e))
+                            (eq? 'directory (stat:type (stat p))))
+                       (loop p))
+                      (else '()))))
                 (or (false-if-exception (scandir dir)) '()))))
 
 (define (module-name-of file)
@@ -42,7 +42,7 @@
   (let ((rx (make-regexp "\\(define-module \\(([a-z0-9-]+( [a-z0-9-]+)*)")))
     (let ((m (regexp-exec rx
                           (call-with-input-file file
-                            (lambda (p) (read-string p))))))
+                                                (lambda (p) (read-string p))))))
       (if m
         (map string->symbol (string-split (match:substring m 1) #\space))
         (error "no define-module in" file)))))
@@ -51,11 +51,11 @@
   "FILE 中 #:use-module 引用的 guixcfg 模块名列表（跳过注释行）。"
   (let ((rx (make-regexp "#:use-module[ \t]+\\(\\(?guixcfg(( [a-z0-9-]+)*)")))
     (let loop ((lines (call-with-input-file file
-                        (lambda (p)
-                          (let loop ((acc '()))
-                            (let ((l (read-line p)))
-                              (if (eof-object? l) (reverse acc)
-                                  (loop (cons l acc))))))))
+                                            (lambda (p)
+                                              (let loop ((acc '()))
+                                                (let ((l (read-line p)))
+                                                  (if (eof-object? l) (reverse acc)
+                                                    (loop (cons l acc))))))))
                (acc '()))
       (if (null? lines)
         (reverse acc)

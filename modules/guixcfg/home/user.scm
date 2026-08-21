@@ -34,19 +34,19 @@
                          %guix-home))
 
 (define* (guix-home #:key (extra-configuration-files '()))
-  "构造 home-environment：registry 应用聚合 + 统一策略服务。
+         "构造 home-environment：registry 应用聚合 + 统一策略服务。
 HOST/profile 的额外应用配置文件经 EXTRA-CONFIGURATION-FILES
 （<extra-configuration-file> 列表）贡献（generic mechanism，
 host-agnostic）。"
-  (home-environment
-   (packages (append %fonts
-                     (applications-home-packages %applications)))
-   (services (append (list %xdg-default-apps-service
-                           %fontconfig-service
-                           %session-environment-service)
-                     (extra-configuration-files->home-services
-                      extra-configuration-files)
-                     (applications-home-services %applications)))))
+         (home-environment
+          (packages (append %fonts
+                            (applications-home-packages %applications)))
+          (services (append (list %xdg-default-apps-service
+                                  %fontconfig-service
+                                  %session-environment-service)
+                            (extra-configuration-files->home-services
+                             extra-configuration-files)
+                            (applications-home-services %applications)))))
 
 ;; 默认 home（host-agnostic）：VM 及其它无 host-specific 贡献的
 ;; 组装点直接使用；需要 host 额外配置的组装点调用

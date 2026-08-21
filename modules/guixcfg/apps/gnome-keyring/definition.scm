@@ -71,34 +71,34 @@
   (program-file
    "gnome-keyring-session"
    #~(begin
-       (let ((control (string-append (or (getenv "XDG_RUNTIME_DIR") "")
-                                     "/keyring/control"))
-             (secret #$%gnome-keyring-master-target))
-         ;; 每用户单 daemon：control socket 已存在 = 其他会话已启动
-         ;; daemon（本用户由它服务）→ no-op。
-         (when (and (not (string-null? control))
-                    (file-exists? control))
-           (exit 0))
-         ;; master 明文文件依赖：boot 时 ordinary publisher 部署；
-         ;; reconfigure 升级期间可能滞后（旧 generation 的 deploy 不含
-         ;; 新 secret）——有界等待最多 60 秒自愈，避免启动即失败触发
-         ;; shepherd 终止处理的边缘路径。正常登录时文件早已存在，
-         ;; 第一次检查即通过（零延迟）。
-         (let loop ((tries 60))
-           (unless (file-exists? secret)
-             (if (zero? tries)
-                 (exit 1)             ; fail closed：keyring 不可用
-                 (begin (sleep 1) (loop (- tries 1))))))
-         ;; 密码经 stdin（fd 0 ← master 文件）注入；不出现于 argv/env
-         ;; （纯 guile fd 重定向，无 /bin/sh 依赖；open-fdes/dup2/
-         ;; close-fdes/execl 均为 guile core）。
-         (let ((fd (open-fdes secret O_RDONLY)))
-           (dup2 fd 0)
-           (close-fdes fd))
-         (execl #$(file-append gnome-keyring
-                               "/bin/gnome-keyring-daemon")
-                "gnome-keyring-daemon" "--foreground" "--unlock"
-                "--components=secrets")))))
+      (let ((control (string-append (or (getenv "XDG_RUNTIME_DIR") "")
+                                    "/keyring/control"))
+            (secret #$%gnome-keyring-master-target))
+        ;; 每用户单 daemon：control socket 已存在 = 其他会话已启动
+        ;; daemon（本用户由它服务）→ no-op。
+        (when (and (not (string-null? control))
+                   (file-exists? control))
+          (exit 0))
+        ;; master 明文文件依赖：boot 时 ordinary publisher 部署；
+        ;; reconfigure 升级期间可能滞后（旧 generation 的 deploy 不含
+        ;; 新 secret）——有界等待最多 60 秒自愈，避免启动即失败触发
+        ;; shepherd 终止处理的边缘路径。正常登录时文件早已存在，
+        ;; 第一次检查即通过（零延迟）。
+        (let loop ((tries 60))
+          (unless (file-exists? secret)
+            (if (zero? tries)
+              (exit 1)             ; fail closed：keyring 不可用
+              (begin (sleep 1) (loop (- tries 1))))))
+        ;; 密码经 stdin（fd 0 ← master 文件）注入；不出现于 argv/env
+        ;; （纯 guile fd 重定向，无 /bin/sh 依赖；open-fdes/dup2/
+        ;; close-fdes/execl 均为 guile core）。
+        (let ((fd (open-fdes secret O_RDONLY)))
+          (dup2 fd 0)
+          (close-fdes fd))
+        (execl #$(file-append gnome-keyring
+                              "/bin/gnome-keyring-daemon")
+               "gnome-keyring-daemon" "--foreground" "--unlock"
+               "--components=secrets")))))
 
 (define %gnome-keyring
   (application

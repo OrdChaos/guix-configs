@@ -40,10 +40,10 @@
 （marker-based；evaluation-time，不进入 runtime closure）。"
   (let loop ((dir %helper-dir))
     (cond ((file-exists? (string-append dir "/channels.lock.scm")) dir)
-          ((string=? dir "/")
-           (error "repository-source: repo root not found (no channels.lock.scm above)"
-                  %helper-dir))
-          (else (loop (dirname dir))))))
+      ((string=? dir "/")
+       (error "repository-source: repo root not found (no channels.lock.scm above)"
+              %helper-dir))
+      (else (loop (dirname dir))))))
 
 (define (repository-file relative-path)
   "把仓库根相对路径 RELATIVE-PATH 解析为 local-file（file-like，
@@ -58,7 +58,7 @@ canonicalize-path 报裸路径。"
                  (> (string-length rel) 0)
                  (not (string-prefix? "/" rel))
                  (not (string-contains rel "..")))
-            (error "repository-file: unsafe relative path" relative-path))
+      (error "repository-file: unsafe relative path" relative-path))
     (let ((path (string-append (repository-root) "/" rel)))
       (unless (file-exists? path)
         (error "repository-file: resolved file does not exist"

@@ -42,12 +42,12 @@
 (define (strip-comments path)
   "读 PATH，去掉引号外的 ; 注释，返回行列表（K2 扫描用）。"
   (let loop ((lines (call-with-input-file path
-                                        (lambda (p)
-                                          (let l ((acc '()))
-                                            (let ((line (read-line p)))
-                                              (if (eof-object? line)
-                                                (reverse acc)
-                                                (l (cons line acc))))))))
+                                          (lambda (p)
+                                            (let l ((acc '()))
+                                              (let ((line (read-line p)))
+                                                (if (eof-object? line)
+                                                  (reverse acc)
+                                                  (l (cons line acc))))))))
              (acc '()))
     (if (null? lines)
       (reverse acc)
@@ -57,14 +57,14 @@
             (loop (cdr lines) (cons (list->string (reverse out)) acc))
             (let ((c (string-ref line i)))
               (cond
-               (in-str
-                (cond ((char=? c #\\) (scan (+ i 2) #t (cons c out)))
-                      ((char=? c #\") (scan (+ i 1) #f (cons c out)))
-                      (else (scan (+ i 1) #t (cons c out)))))
-               ((char=? c #\") (scan (+ i 1) #t (cons c out)))
-               ((char=? c #\;) (loop (cdr lines)
-                                     (cons (list->string (reverse out)) acc)))
-               (else (scan (+ i 1) #f (cons c out)))))))))))
+                (in-str
+                 (cond ((char=? c #\\) (scan (+ i 2) #t (cons c out)))
+                   ((char=? c #\") (scan (+ i 1) #f (cons c out)))
+                   (else (scan (+ i 1) #t (cons c out)))))
+                ((char=? c #\") (scan (+ i 1) #t (cons c out)))
+                ((char=? c #\;) (loop (cdr lines)
+                                      (cons (list->string (reverse out)) acc)))
+                (else (scan (+ i 1) #f (cons c out)))))))))))
 
 (define %boot-runtime-modules
   ;; boot/runtime 侧消费 kernel 的模块（K2 扫描范围）。

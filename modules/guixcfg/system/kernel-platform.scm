@@ -43,13 +43,13 @@
 (define %kernel-microcode-packages (list intel-microcode))
 
 (define* (microcode-ephemeral-initrd file-systems . rest)
-  "<operating-system> 的 initrd 构建器：microcode-initrd 把 Intel
+         "<operating-system> 的 initrd 构建器：microcode-initrd 把 Intel
 microcode cpio 拼接在 ephemeral-root-initrd 之前（combined-initrd，
 kernel 从单文件加载多个 initrd archive）。框架传入的 linux/
 linux-modules/mapped-devices/keyboard-layout 经 REST 透传给 custom
 initrd——custom initrd 仍是 authoritative payload implementation。
 调用约定由 operating-system-initrd-file 决定。"
-  (apply microcode-initrd file-systems
-         #:initrd ephemeral-root-initrd
-         #:microcode-packages %kernel-microcode-packages
-         rest))
+         (apply microcode-initrd file-systems
+           #:initrd ephemeral-root-initrd
+           #:microcode-packages %kernel-microcode-packages
+           rest))

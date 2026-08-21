@@ -52,8 +52,8 @@
              ;; 检查顶层节点形态（注释中的说明文字不算）。
              (not (text-contains-any? %config-kdl
                                       '("binds {" "spawn-at-startup"
-                                        "layout {" "input {" "output {"
-                                        "debug {"))))
+                                                  "layout {" "input {" "output {"
+                                                  "debug {"))))
 
 ;; ── 2. common.kdl：无机器事实残留 ───────────────────────────
 (test-assert "common.kdl has no DRM device references"
@@ -64,7 +64,7 @@
 (test-assert "common.kdl has no fixed output name"
              (not (text-contains-any? %common-kdl
                                       '("eDP-1" "Virtual-1" "DP-1"
-                                        "HDMI-A-1"))))
+                                                "HDMI-A-1"))))
 (test-assert "common.kdl has no host identifier"
              (not (string-contains %common-kdl "laptop")))
 
@@ -83,7 +83,7 @@
              ;; 检查顶层节点形态（注释里的单词不算）。
              (not (text-contains-any? %host-kdl
                                       '("binds {" "input {" "layout {"
-                                        "animations {" "spawn-at-startup"))))
+                                                  "animations {" "spawn-at-startup"))))
 
 ;; ── 4. 主机/FHS 硬编码审计（任务测试 13）────────────────────
 (define %all-niri-kdl
@@ -202,7 +202,7 @@
 (test-assert "installed host.kdl content matches the repo source byte-for-byte"
              (equal? %host-kdl
                      (read-file (string-append %laptop-config-dir
-                                                "/host.kdl"))))
+                                               "/host.kdl"))))
 
 ;; ── 10. niri validate：真实解析最终配置树（store 有二进制时）─
 (define (find-niri-binary)
@@ -226,21 +226,21 @@
   "system 的退出状态解码（兼容 wait status 与直接退出码两种形态）。"
   (let ((st (system cmd)))
     (cond ((eq? st #f) #f)
-          ((not (number? st)) #f)
-          ((zero? st) #t)
-          (else (let ((v (false-if-exception (status:exit-val st))))
-                  (and v (zero? v)))))))
+      ((not (number? st)) #f)
+      ((zero? st) #t)
+      (else (let ((v (false-if-exception (status:exit-val st))))
+              (and v (zero? v)))))))
 
 (if %niri-binary
-    (begin
-      (test-assert "niri validate: laptop config tree parses"
-                   (command-success?
-                    (string-append %niri-binary " validate -c "
-                                   %laptop-config-dir "/config.kdl")))
-      (test-assert "niri validate: VM config tree parses (no host.kdl)"
-                   (command-success?
-                    (string-append %niri-binary " validate -c "
-                                   %vm-config-dir "/config.kdl"))))
-    (test-skip "pinned niri binary not in store; validate skipped"))
+  (begin
+   (test-assert "niri validate: laptop config tree parses"
+                (command-success?
+                 (string-append %niri-binary " validate -c "
+                                %laptop-config-dir "/config.kdl")))
+   (test-assert "niri validate: VM config tree parses (no host.kdl)"
+                (command-success?
+                 (string-append %niri-binary " validate -c "
+                                %vm-config-dir "/config.kdl"))))
+  (test-skip "pinned niri binary not in store; validate skipped"))
 
 (test-end "niri-config")

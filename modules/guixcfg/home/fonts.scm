@@ -101,10 +101,10 @@
   ;; Maple Mono Normal NL NF CN 主 → Noto Sans Mono → CJK SC→TC→JP→KR
   ;; （§9；复杂 script 缺字时正确显示优先于等宽）
   '("Maple Mono Normal NL NF CN" "Noto Sans Mono"
-                          "Noto Sans CJK SC" "Noto Sans CJK TC" "Noto Sans CJK JP"
-                          "Noto Sans CJK KR"
-                          "Noto Sans Symbols" "Noto Sans Symbols 2"
-                          "Noto Color Emoji" "Unifont"))
+                                 "Noto Sans CJK SC" "Noto Sans CJK TC" "Noto Sans CJK JP"
+                                 "Noto Sans CJK KR"
+                                 "Noto Sans Symbols" "Noto Sans Symbols 2"
+                                 "Noto Color Emoji" "Unifont"))
 
 (define (alias-sxml generic families)
   "SXML：generic family 的 alias 主链。"

@@ -245,9 +245,9 @@
 (test-assert "extra file content preserved byte-for-byte"
              (equal? %extras-content
                      (call-with-input-file
-                       (string-append %lowered-home
-                                      "/files/.config/niri/host.kdl")
-                       (lambda (p) (read-string p)))))
+                      (string-append %lowered-home
+                                     "/files/.config/niri/host.kdl")
+                      (lambda (p) (read-string p)))))
 
 ;; ── Guix Home backstop：跨贡献方（extra vs app 自身）同路径 ──
 ;; Guix 的 assert-no-duplicates 在 lower 时对合并后的完整文件列表

@@ -75,15 +75,15 @@
 (define %allowed-lifecycles '(machine-owned))
 
 (define-record-type* <machine-state-persistence-rule>
-  machine-state-persistence-rule make-machine-state-persistence-rule
-  machine-state-persistence-rule?
-  (name machine-state-persistence-rule-name)          ; symbol
-  (backing machine-state-persistence-rule-backing)    ; string：machine-state root 相对
-  (consumer machine-state-persistence-rule-consumer)  ; string：absolute system path
-  (exposure machine-state-persistence-rule-exposure   ; symbol：仅 'bind-directory
-            (default 'bind-directory))
-  (lifecycle machine-state-persistence-rule-lifecycle ; symbol：仅 'machine-owned
-             (default 'machine-owned)))
+                     machine-state-persistence-rule make-machine-state-persistence-rule
+                     machine-state-persistence-rule?
+                     (name machine-state-persistence-rule-name)          ; symbol
+                     (backing machine-state-persistence-rule-backing)    ; string：machine-state root 相对
+                     (consumer machine-state-persistence-rule-consumer)  ; string：absolute system path
+                     (exposure machine-state-persistence-rule-exposure   ; symbol：仅 'bind-directory
+                               (default 'bind-directory))
+                     (lifecycle machine-state-persistence-rule-lifecycle ; symbol：仅 'machine-owned
+                                (default 'machine-owned)))
 
 (define (valid-relative-path? p)
   "P 是否是合法相对路径（非空、非绝对、无 .. 逃逸）。"
@@ -165,12 +165,12 @@ shepherd file-systems 服务挂载（boot/init/reconfigure 三路径安全）。
                                            #$%machine-state-root "/" backing))
                                  (mkdir-p (dirname consumer))))
                              (quote
-                              (#$@(map (lambda (rule)
-                                         (list (machine-state-persistence-rule-backing
-                                                rule)
-                                               (machine-state-persistence-rule-consumer
-                                                rule)))
-                                       rules)))))))
+                               (#$@(map (lambda (rule)
+                                          (list (machine-state-persistence-rule-backing
+                                                 rule)
+                                                (machine-state-persistence-rule-consumer
+                                                 rule)))
+                                        rules)))))))
 
 (define (machine-state-persistence-service rules)
   "把 RULES 的 backing/parent 创建挂到系统 activation。RULES 为空时

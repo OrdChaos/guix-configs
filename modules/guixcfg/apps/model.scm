@@ -38,7 +38,7 @@
                      (system-services application-system-services ; list of service
                                       (default '()))
                      (persistence application-persistence       ; list of <application-persistence-rule>
-                                 (default '()))
+                                  (default '()))
                      (secrets application-secrets               ; list of <secret-decl>
                               (default '())))
 

@@ -72,9 +72,9 @@
                        (name 'bad) (backing "x")
                        (consumer bad))))))
  '("" "etc/x" "relative/path" "/" "/etc/x/"
-   "/gnu/store/foo" "/run/foo" "/persist/foo"
-   "/persist/system/state/x" "/home/user/x" "/home/x"
-   "/proc/x" "/sys/x" "/dev/x" "/tmp/x"))
+      "/gnu/store/foo" "/run/foo" "/persist/foo"
+      "/persist/system/state/x" "/home/user/x" "/home/x"
+      "/proc/x" "/sys/x" "/dev/x" "/tmp/x"))
 
 ;; 合法 absolute consumer 通过
 (test-assert "valid absolute consumers accepted"

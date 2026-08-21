@@ -570,80 +570,80 @@ host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析�
 
 (let ((root (fake-root-with-identity)))
   (let-values (((out st) (run-deploy-script root %iso-critical-good)))
-    (test-assert "ISOL-1: critical all-success exits 0"
-                 (and st (zero? st)))
-    (test-assert "ISOL-1: critical generation published"
-                 (pair? (numeric-generations root "/run/guixcfg-secrets.d")))
-    (test-assert "ISOL-1: critical current symlink present"
-                 (current-link-valid? root "/run/guixcfg-secrets"))))
+              (test-assert "ISOL-1: critical all-success exits 0"
+                           (and st (zero? st)))
+              (test-assert "ISOL-1: critical generation published"
+                           (pair? (numeric-generations root "/run/guixcfg-secrets.d")))
+              (test-assert "ISOL-1: critical current symlink present"
+                           (current-link-valid? root "/run/guixcfg-secrets"))))
 
 (let ((root (fake-root-with-identity)))
   (let-values (((out st) (run-deploy-script root %iso-critical-bad)))
-    (test-assert "ISOL-2: critical one-fails exits non-zero"
-                 (and st (not (zero? st))))
-    (test-assert "ISOL-2: critical generation NOT published"
-                 (null? (numeric-generations root "/run/guixcfg-secrets.d")))
-    (test-assert "ISOL-2: critical current symlink absent"
-                 (not (file-exists? (string-append root "/run/guixcfg-secrets"))))))
+              (test-assert "ISOL-2: critical one-fails exits non-zero"
+                           (and st (not (zero? st))))
+              (test-assert "ISOL-2: critical generation NOT published"
+                           (null? (numeric-generations root "/run/guixcfg-secrets.d")))
+              (test-assert "ISOL-2: critical current symlink absent"
+                           (not (file-exists? (string-append root "/run/guixcfg-secrets"))))))
 
 (let ((root (fake-root-with-identity)))
   (let-values (((out st) (run-deploy-script root %iso-ordinary-good)))
-    (test-assert "ISOL-3: ordinary all-success exits 0"
-                 (and st (zero? st)))
-    (test-assert "ISOL-3: ordinary generation published at its own root"
-                 (pair? (numeric-generations root "/run/guixcfg-secrets-ordinary.d")))
-    (test-assert "ISOL-3: ordinary current symlink present"
-                 (current-link-valid? root "/run/guixcfg-secrets-ordinary"))))
+              (test-assert "ISOL-3: ordinary all-success exits 0"
+                           (and st (zero? st)))
+              (test-assert "ISOL-3: ordinary generation published at its own root"
+                           (pair? (numeric-generations root "/run/guixcfg-secrets-ordinary.d")))
+              (test-assert "ISOL-3: ordinary current symlink present"
+                           (current-link-valid? root "/run/guixcfg-secrets-ordinary"))))
 
 (let ((root (fake-root-with-identity)))
   (let-values (((out st) (run-deploy-script root %iso-ordinary-bad)))
-    (test-assert "ISOL-4: ordinary one-fails exits non-zero"
-                 (and st (not (zero? st))))
-    (test-assert "ISOL-4: ordinary generation NOT published"
-                 (null? (numeric-generations root "/run/guixcfg-secrets-ordinary.d")))
-    (test-assert "ISOL-4: ordinary current symlink absent"
-                 (not (file-exists? (string-append root "/run/guixcfg-secrets-ordinary"))))))
+              (test-assert "ISOL-4: ordinary one-fails exits non-zero"
+                           (and st (not (zero? st))))
+              (test-assert "ISOL-4: ordinary generation NOT published"
+                           (null? (numeric-generations root "/run/guixcfg-secrets-ordinary.d")))
+              (test-assert "ISOL-4: ordinary current symlink absent"
+                           (not (file-exists? (string-append root "/run/guixcfg-secrets-ordinary"))))))
 
 ;; ISOL-5：critical 失败不能被 ordinary 成功掩盖
 (let ((root (fake-root-with-identity)))
   (let-values (((out1 st1) (run-deploy-script root %iso-critical-bad)))
-    (let-values (((out2 st2) (run-deploy-script root %iso-ordinary-good)))
-      (test-assert "ISOL-5: critical fails while ordinary succeeds"
-                   (and st1 (not (zero? st1)) st2 (zero? st2)))
-      (test-assert "ISOL-5: critical generation still absent"
-                   (null? (numeric-generations root "/run/guixcfg-secrets.d")))
-      (test-assert "ISOL-5: critical symlink still absent"
-                   (not (file-exists? (string-append root "/run/guixcfg-secrets"))))
-      (test-assert "ISOL-5: ordinary generation present"
-                   (pair? (numeric-generations root "/run/guixcfg-secrets-ordinary.d"))))))
+              (let-values (((out2 st2) (run-deploy-script root %iso-ordinary-good)))
+                          (test-assert "ISOL-5: critical fails while ordinary succeeds"
+                                       (and st1 (not (zero? st1)) st2 (zero? st2)))
+                          (test-assert "ISOL-5: critical generation still absent"
+                                       (null? (numeric-generations root "/run/guixcfg-secrets.d")))
+                          (test-assert "ISOL-5: critical symlink still absent"
+                                       (not (file-exists? (string-append root "/run/guixcfg-secrets"))))
+                          (test-assert "ISOL-5: ordinary generation present"
+                                       (pair? (numeric-generations root "/run/guixcfg-secrets-ordinary.d"))))))
 
 ;; ISOL-6：ordinary 失败保留上一个已发布 generation（preserve-last-good）
 (let ((root (fake-root-with-identity)))
   (let-values (((out1 st1) (run-deploy-script root %iso-ordinary-good)))
-    (let-values (((out2 st2) (run-deploy-script root %iso-ordinary-bad)))
-      (test-assert "ISOL-6: first ordinary generation published, second fails"
-                   (and st1 (zero? st1) st2 (not (zero? st2))))
-      (test-assert "ISOL-6: exactly one ordinary generation retained"
-                   (= 1 (length (numeric-generations root "/run/guixcfg-secrets-ordinary.d"))))
-      (test-assert "ISOL-6: current symlink still points at the good generation"
-                   (let ((link (readlink (string-append root "/run/guixcfg-secrets-ordinary"))))
-                     (and (string-contains link "/run/guixcfg-secrets-ordinary.d/")
-                          (file-exists? (string-append root "/" (if (string-prefix? "/" link)
-                                                                  (substring link 1)
-                                                                  link)))))))))
+              (let-values (((out2 st2) (run-deploy-script root %iso-ordinary-bad)))
+                          (test-assert "ISOL-6: first ordinary generation published, second fails"
+                                       (and st1 (zero? st1) st2 (not (zero? st2))))
+                          (test-assert "ISOL-6: exactly one ordinary generation retained"
+                                       (= 1 (length (numeric-generations root "/run/guixcfg-secrets-ordinary.d"))))
+                          (test-assert "ISOL-6: current symlink still points at the good generation"
+                                       (let ((link (readlink (string-append root "/run/guixcfg-secrets-ordinary"))))
+                                         (and (string-contains link "/run/guixcfg-secrets-ordinary.d/")
+                                              (file-exists? (string-append root "/" (if (string-prefix? "/" link)
+                                                                                      (substring link 1)
+                                                                                      link)))))))))
 
 ;; ISOL-7：两 domain 同时发布，roots/symlinks 互不冲突
 (let ((root (fake-root-with-identity)))
   (let-values (((out1 st1) (run-deploy-script root %iso-critical-good)))
-    (let-values (((out2 st2) (run-deploy-script root %iso-ordinary-good)))
-      (test-assert "ISOL-7: both domains publish successfully"
-                   (and st1 (zero? st1) st2 (zero? st2)))
-      (let ((crit (readlink (string-append root "/run/guixcfg-secrets")))
-            (ord (readlink (string-append root "/run/guixcfg-secrets-ordinary"))))
-        (test-assert "ISOL-7: each domain symlink points into its own store root"
-                     (and (string-contains crit "/run/guixcfg-secrets.d/")
-                          (string-contains ord "/run/guixcfg-secrets-ordinary.d/")
-                          (not (string=? crit ord))))))))
+              (let-values (((out2 st2) (run-deploy-script root %iso-ordinary-good)))
+                          (test-assert "ISOL-7: both domains publish successfully"
+                                       (and st1 (zero? st1) st2 (zero? st2)))
+                          (let ((crit (readlink (string-append root "/run/guixcfg-secrets")))
+                                (ord (readlink (string-append root "/run/guixcfg-secrets-ordinary"))))
+                            (test-assert "ISOL-7: each domain symlink points into its own store root"
+                                         (and (string-contains crit "/run/guixcfg-secrets.d/")
+                                              (string-contains ord "/run/guixcfg-secrets-ordinary.d/")
+                                              (not (string=? crit ord))))))))
 
 ;; ── AP1：application-persistence activation 的 consumer parent 全
 ;; 层级 ownership（boot 回归）────────────────────────────────

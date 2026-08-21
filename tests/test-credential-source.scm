@@ -166,25 +166,25 @@
                     (%installed-identity-path installed)
                     (%luks-recovery-secret-rel
                      (string-append root "/luks-recovery.age")))
-       (age-init! root %test-pass)
-       (age-unlock! root %test-pass)
-       ;; age-install! 的 /persist 可用性 guard = dirname(dirname(...)) =
-       ;; <root>/persist/system（LUKS-backed persist 根）。
-       (mkdir (string-append root "/persist"))
-       (mkdir (string-append root "/persist/system"))
-       (age-install! root)
-       (let ((plain "installed-identity-luks-pw-42"))
-         (encrypt-for-identity! root plain)
-         ;; 模拟已装系统：runtime 目录不存在，只有 installed identity。
-         (parameterize ((%runtime-identity-dir (string-append root "/no-run"))
-                        (%runtime-identity-path
-                         (string-append root "/no-run/stable-identity"))
-                        (%installed-identity-dir installed-dir)
-                        (%installed-identity-path installed)
-                        (%luks-recovery-secret-rel
-                         (string-append root "/luks-recovery.age")))
-           (let ((reader (resolve-luks-passphrase-source 'luks-secret)))
-             (test-equal "T7: installed identity fallback decrypts luks-recovery.age"
-                         plain (reader)))))))))
+                   (age-init! root %test-pass)
+                   (age-unlock! root %test-pass)
+                   ;; age-install! 的 /persist 可用性 guard = dirname(dirname(...)) =
+                   ;; <root>/persist/system（LUKS-backed persist 根）。
+                   (mkdir (string-append root "/persist"))
+                   (mkdir (string-append root "/persist/system"))
+                   (age-install! root)
+                   (let ((plain "installed-identity-luks-pw-42"))
+                     (encrypt-for-identity! root plain)
+                     ;; 模拟已装系统：runtime 目录不存在，只有 installed identity。
+                     (parameterize ((%runtime-identity-dir (string-append root "/no-run"))
+                                    (%runtime-identity-path
+                                     (string-append root "/no-run/stable-identity"))
+                                    (%installed-identity-dir installed-dir)
+                                    (%installed-identity-path installed)
+                                    (%luks-recovery-secret-rel
+                                     (string-append root "/luks-recovery.age")))
+                                   (let ((reader (resolve-luks-passphrase-source 'luks-secret)))
+                                     (test-equal "T7: installed identity fallback decrypts luks-recovery.age"
+                                                 plain (reader)))))))))
 
 (test-end "credential-source")

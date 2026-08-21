@@ -17,7 +17,7 @@
 
 ;; 加载 tools/disk-install.scm（去末尾 main 调用——测试内不触发 CLI）。
 (let ((s (call-with-input-file "tools/disk-install.scm"
-                              (lambda (p) (read-string p)))))
+                               (lambda (p) (read-string p)))))
   (eval-string
    (string-join (filter (lambda (l) (not (string=? l "(main (command-line))")))
                         (string-split s #\newline))
@@ -82,8 +82,8 @@
      (test-assert "T3: existing identity untouched"
                   (string=? "existing"
                             (call-with-input-file
-                                (string-append target "/persist/system/keys/age/identity")
-                              (lambda (p) (read-string p))))))
+                             (string-append target "/persist/system/keys/age/identity")
+                             (lambda (p) (read-string p))))))
    (lambda ()
      (false-if-exception (delete-file-recursively root)))))
 

@@ -68,11 +68,11 @@
                      (name       secret-decl-name)          ; symbol（逻辑名）
                      (scope      secret-decl-scope)         ; 'install | 'system | 'user（deployment target）
                      (domain     secret-decl-domain)        ; 'login-critical | 'ordinary
-                                                            ; （readiness domain；显式必填——
-                                                            ;  缺失即编译错，防止新增 secret
-                                                            ;  无意继承错误安全语义）
+                     ; （readiness domain；显式必填——
+                     ;  缺失即编译错，防止新增 secret
+                     ;  无意继承错误安全语义）
                      (source     secret-decl-source)        ; file-like：ciphertext（caller 解析；
-                                                            ; generic 机制不知 repository layout）
+                     ; generic 机制不知 repository layout）
                      (target-name secret-decl-target-name)  ; string：runtime 文件名
                      (owner-user secret-decl-owner-user     ; string：owner 用户名
                                  (default "root"))
@@ -85,8 +85,8 @@
   (for-each (lambda (d)
               (unless (memq (secret-decl-domain d)
                             '(login-critical ordinary))
-                      (error "unknown secret deployment domain"
-                             (secret-decl-name d) (secret-decl-domain d))))
+                (error "unknown secret deployment domain"
+                       (secret-decl-name d) (secret-decl-domain d))))
             decls)
   (filter (lambda (d) (eq? 'login-critical (secret-decl-domain d))) decls))
 
@@ -95,8 +95,8 @@
   (for-each (lambda (d)
               (unless (memq (secret-decl-domain d)
                             '(login-critical ordinary))
-                      (error "unknown secret deployment domain"
-                             (secret-decl-name d) (secret-decl-domain d))))
+                (error "unknown secret deployment domain"
+                       (secret-decl-name d) (secret-decl-domain d))))
             decls)
   (filter (lambda (d) (eq? 'ordinary (secret-decl-domain d))) decls))
 

@@ -48,14 +48,14 @@
                                                     (l (cons line acc))))))))
              (in-entry? #f))
     (cond
-     ((null? lines) #f)
-     ((and (string-prefix? "/" (car lines))
-           (not (string-prefix? "//" (car lines))))
-      (loop (cdr lines)
-            (string=? (car lines) (string-append "/" label))))
-     ((and in-entry? (string-prefix? "    image_path:" (car lines)))
-      (car lines))
-     (else (loop (cdr lines) in-entry?)))))
+      ((null? lines) #f)
+      ((and (string-prefix? "/" (car lines))
+            (not (string-prefix? "//" (car lines))))
+       (loop (cdr lines)
+             (string=? (car lines) (string-append "/" label))))
+      ((and in-entry? (string-prefix? "    image_path:" (car lines)))
+       (car lines))
+      (else (loop (cdr lines) in-entry?)))))
 
 (test-begin "uki-menu")
 

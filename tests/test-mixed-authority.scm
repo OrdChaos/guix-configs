@@ -106,11 +106,11 @@
 ;; test-runtime-exec 的 build-script 模式）。
 (define %update-symlinks
   (let ((drv (run-with-store %store
-               (gexp->file
-                "update-symlinks-mixed-test"
-                (program-file-gexp
-                 ((module-ref (resolve-module '(gnu home services symlink-manager))
-                              'update-symlinks-script)))))))
+                             (gexp->file
+                              "update-symlinks-mixed-test"
+                              (program-file-gexp
+                               ((module-ref (resolve-module '(gnu home services symlink-manager))
+                                            'update-symlinks-script)))))))
     (build-derivations %store (list drv))
     (derivation->output-path drv)))
 

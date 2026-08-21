@@ -50,11 +50,11 @@
                          extra-configuration-files->home-services))
 
 (define-record-type* <extra-configuration-file>
-  extra-configuration-file make-extra-configuration-file
-  extra-configuration-file?
-  (application extra-configuration-file-application) ; symbol：registry 中的应用名（owner）
-  (path extra-configuration-file-path)      ; string：~/.config 相对的目标路径
-  (source extra-configuration-file-source)) ; file-like：原生格式文件（不透明）
+                     extra-configuration-file make-extra-configuration-file
+                     extra-configuration-file?
+                     (application extra-configuration-file-application) ; symbol：registry 中的应用名（owner）
+                     (path extra-configuration-file-path)      ; string：~/.config 相对的目标路径
+                     (source extra-configuration-file-source)) ; file-like：原生格式文件（不透明）
 
 ;; path 必须是合法的 ~/.config 相对路径：非空、非绝对、无 ".."
 ;; 逃逸（与 repository-file 相同的校验规则）。

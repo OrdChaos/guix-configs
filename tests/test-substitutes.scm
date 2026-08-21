@@ -72,7 +72,7 @@ substitutes.scm 一处）。"
     (filter (lambda (file)
               (and (not (string=? file target))
                    (let ((s (call-with-input-file file
-                                                 (lambda (p) (read-string p)))))
+                                                  (lambda (p) (read-string p)))))
                      (string-contains s %nonguix-substitute-url))))
             '("modules/guixcfg/hosts/vm.scm"
               "modules/guixcfg/hosts/laptop.scm"

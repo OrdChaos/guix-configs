@@ -212,8 +212,6 @@ binds {
 
     // ── Applications ─────────────────────────────────────────────────────────
 
-    // ghostty 默认工作目录 = niri spawn 的 cwd（$HOME），不写死
-    // HOME 绝对路径（AGENT.md §13）。
     Mod+T hotkey-overlay-title="Open a Terminal: ghostty" {
         spawn-sh "exec ghostty --working-directory=\"$HOME\""
     }
@@ -231,7 +229,7 @@ binds {
     }
 
     Mod+Z {
-        spawn "google-chrome-stable"
+        spawn "google-chrome"
     }
 
     Mod+P {

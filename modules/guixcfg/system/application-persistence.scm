@@ -66,15 +66,15 @@
 (define %allowed-lifecycles '(application-owned))
 
 (define-record-type* <application-persistence-rule>
-  application-persistence-rule make-application-persistence-rule
-  application-persistence-rule?
-  (name application-persistence-rule-name)            ; symbol
-  (backing application-persistence-rule-backing)      ; string：/persist/data-app 下相对路径
-  (consumer application-persistence-rule-consumer)    ; string：HOME 相对路径
-  (exposure application-persistence-rule-exposure     ; symbol：仅 'bind-directory
-            (default 'bind-directory))
-  (lifecycle application-persistence-rule-lifecycle   ; symbol：仅 'application-owned
-             (default 'application-owned)))
+                     application-persistence-rule make-application-persistence-rule
+                     application-persistence-rule?
+                     (name application-persistence-rule-name)            ; symbol
+                     (backing application-persistence-rule-backing)      ; string：/persist/data-app 下相对路径
+                     (consumer application-persistence-rule-consumer)    ; string：HOME 相对路径
+                     (exposure application-persistence-rule-exposure     ; symbol：仅 'bind-directory
+                               (default 'bind-directory))
+                     (lifecycle application-persistence-rule-lifecycle   ; symbol：仅 'application-owned
+                                (default 'application-owned)))
 
 (define (valid-relative-path? p)
   "P 是否是合法的相对路径（非空、非绝对、无 .. 逃逸）。"
@@ -178,12 +178,12 @@ consumer data）。"
                                        (chown dir uid gid)
                                        (loop (dirname dir))))))
                                (quote
-                                (#$@(map (lambda (rule)
-                                           (list (application-persistence-rule-backing
-                                                  rule)
-                                                 (application-persistence-rule-consumer
-                                                  rule)))
-                                         rules))))))))
+                                 (#$@(map (lambda (rule)
+                                            (list (application-persistence-rule-backing
+                                                   rule)
+                                                  (application-persistence-rule-consumer
+                                                   rule)))
+                                          rules))))))))
 
 (define (application-persistence-service rules user)
   "把 RULES 的 backing/parent 创建挂到系统 activation（bind mounts

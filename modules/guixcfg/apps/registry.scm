@@ -17,8 +17,8 @@
                #:use-module (guixcfg apps niri definition)
                #:use-module (guixcfg apps pipewire definition)
                #:use-module (guixcfg apps ghostty definition)
-               #:use-module (guixcfg apps fuzzel definition)
                #:use-module (guixcfg apps mako definition)
+               #:use-module (guixcfg apps nautilus definition)
                #:use-module (guixcfg apps wl-clipboard definition)
                #:use-module (guixcfg apps polkit-gnome definition)
                #:use-module (guixcfg apps ripgrep definition)
@@ -44,8 +44,8 @@
         %niri
         %pipewire
         %ghostty
-        %fuzzel
         %mako
+        %nautilus
         %wl-clipboard
         %polkit-gnome
         %ripgrep
