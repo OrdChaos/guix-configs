@@ -33,8 +33,9 @@
                #:use-module (gnu services)            ; simple-service
                #:use-module (gnu system file-systems) ; file-system
                #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
+               #:use-module (guixcfg utils home-path) ; ensure-home-parent-directories!
                #:use-module (guix gexp)
-               #:use-module (guix modules)            ; source-module-closure
+               #:use-module (guix modules)            ; source-module-closure、guix-module-name?
                #:use-module (guix records)
                #:use-module (srfi srfi-1)             ; append-map、filter
                #:export (<application-persistence-rule>
@@ -149,39 +150,38 @@ root-owned 目录下 mkdir 时 EACCES，整个 Home activation 失败
 （boot 实测 2026-08-19；回归测试 test-runtime-exec.scm AP1）。
 只补缺失目录、不重建已有数据（persistence 不自动迁移/覆盖/删除
 consumer data）。"
-  (with-imported-modules (source-module-closure '((guix build utils)))
-                         #~(begin
-                            (use-modules (guix build utils))
-                            (let* ((uid (passwd:uid (getpw #$user)))
-                                   (gid (passwd:gid (getpw #$user)))
-                                   (home (string-append "/home/" #$user)))
-                              (for-each
-                               (lambda (spec)
-                                 (let* ((backing (car spec))
-                                        (consumer (cadr spec))
-                                        (src (string-append
-                                              #$%application-persistence-root
-                                              "/" backing)))
-                                   (mkdir-p src)
-                                   (chown src uid gid)
-                                   ;; consumer parent 全层级归还 USER：
-                                   ;; 从最深 parent 逐级向上直到 home
-                                   ;; （/home/USER 本身由 user-persistence
-                                   ;; activation 负责）。
-                                   (let loop ((dir (dirname
-                                                    (string-append home "/"
-                                                                   consumer))))
-                                     (unless (string=? dir home)
-                                       (mkdir-p dir)
-                                       (chown dir uid gid)
-                                       (loop (dirname dir))))))
-                               (quote
-                                 (#$@(map (lambda (rule)
-                                            (list (application-persistence-rule-backing
-                                                   rule)
-                                                  (application-persistence-rule-consumer
-                                                   rule)))
-                                          rules))))))))
+  (with-imported-modules
+   (source-module-closure '((guix build utils)
+                            (guixcfg utils home-path))
+                          #:select? (lambda (name)
+                                      (or (guix-module-name? name)
+                                          (eq? (car name) 'guixcfg))))
+   #~(begin
+      (use-modules (guix build utils)
+                   (guixcfg utils home-path))
+      (let* ((uid (passwd:uid (getpw #$user)))
+             (gid (passwd:gid (getpw #$user)))
+             (home (string-append "/home/" #$user)))
+        (for-each
+         (lambda (spec)
+           (let* ((backing (car spec))
+                  (consumer (cadr spec))
+                  (src (string-append
+                        #$%application-persistence-root
+                        "/" backing)))
+             (mkdir-p src)
+             (chown src uid gid)
+             ;; consumer parent 全层级归还 USER（共享原语：
+             ;; (guixcfg utils home-path)；/home/USER 本身由
+             ;; user-persistence activation 负责）。
+             (ensure-home-parent-directories! home consumer uid gid)))
+         (quote
+           (#$@(map (lambda (rule)
+                      (list (application-persistence-rule-backing
+                             rule)
+                            (application-persistence-rule-consumer
+                             rule)))
+                    rules))))))))
 
 (define (application-persistence-service rules user)
   "把 RULES 的 backing/parent 创建挂到系统 activation（bind mounts

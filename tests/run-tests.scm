@@ -79,6 +79,7 @@
  (lambda ()
    (for-each run-file
              '("tests/test-atomic-file.scm"
+               "tests/test-home-path.scm"
                "tests/test-boot-state.scm"
                "tests/test-process.scm"
                "tests/test-spawn.scm"
