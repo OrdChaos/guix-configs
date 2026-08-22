@@ -8,7 +8,7 @@
 # canonical backing path and SSH is pointed at it via direct reference
 # (docs/architecture/persistence.md) — the same pattern as the system
 # sshd HostKey (/persist/system/ssh). The backing directory is created
-# by the ssh session service.
+# by the ssh application's system activation (root, owned by the user).
 #
 # Host-specific blocks must precede the generic `Host *` block:
 # OpenSSH uses the first obtained value per parameter.

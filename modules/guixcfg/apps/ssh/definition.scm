@@ -21,7 +21,9 @@
 ;;;        direct reference 模式，与 system/ssh.scm 的 HostKey 同
 ;;;        语义）。不用 single-file bind/symlink——OpenSSH 用
 ;;;        mkstemp+rename 原子更新 known_hosts，rename 会替换
-;;;        symlink 本身、bind 挂载点 EBUSY。
+;;;        symlink 本身、bind 挂载点 EBUSY。backing 目录由本应用的
+;;;        system activation 创建并归还用户所有（root-owned root
+;;;        下用户身份无法 mkdir）。
 ;;;
 ;;; 权限模型：~/.ssh 0700（session 服务保证）；私钥 0600（secret-decl
 ;;; mode，publisher 物化）。
@@ -36,6 +38,7 @@
                #:use-module (gnu services shepherd)        ; shepherd-service
                #:use-module (gnu packages ssh)             ; openssh（客户端）
                #:use-module (guix gexp)                    ; local-file、program-file
+               #:use-module (guix modules)                 ; source-module-closure
                #:use-module (guix records)
                #:use-module (guixcfg apps model)
                #:use-module (guixcfg security secrets)     ; secret-decl、runtime-secret-target
@@ -48,6 +51,23 @@
 ;; 字面量（test-source-hygiene 禁止 app definition 出现该字面）。
 (define %ssh-known-hosts-dir
   (string-append %application-persistence-root "/ssh"))
+
+;; backing 目录创建（system activation，root）：persistence root 是
+;; root-owned 子卷，用户身份无法在其中 mkdir——必须在 activation 以
+;; root 创建并归还 owner（与 application-persistence-activation /
+;; ssh-host-key-activation 同一语义；session 服务只消费，不创建）。
+(define (ssh-known-hosts-dir-activation)
+  "activation gexp：确保 %SSH-KNOWN-HOSTS-DIR 存在且归 primary user
+所有（幂等：mkdir-p 对已存在目录 no-op，chown 重复设置无害）。"
+  (with-imported-modules (source-module-closure '((guix build utils)))
+                         #~(begin
+                            (use-modules (guix build utils))
+                            (let* ((pw (getpw #$(user-profile-name
+                                                 %primary-user)))
+                                   (dir #$%ssh-known-hosts-dir))
+                              (mkdir-p dir)
+                              (chown dir (passwd:uid pw)
+                                     (passwd:gid pw))))))
 
 ;; 用户 SSH 私钥（user scope、ordinary domain——解密/部署失败绝不
 ;; 阻塞 greetd login；plaintext 仅 /run）。ciphertext colocate 本
@@ -102,10 +122,10 @@
       (define home (or (getenv "HOME") #$(user-profile-home-directory
                                           %primary-user)))
       (define ssh-dir (string-append home "/.ssh"))
-      ;; 1. 目录（幂等；session 以用户身份运行 → backing 归用户所有）
-      (for-each (lambda (d)
-                  (unless (file-exists? d) (mkdir d)))
-                (list ssh-dir #$%ssh-known-hosts-dir))
+      ;; 1. ~/.ssh 目录（幂等；session 以用户身份运行）。known_hosts
+      ;;    backing 由 system activation 创建（root-owned root 下
+      ;;    用户无法 mkdir），这里只防御性 chmod。
+      (unless (file-exists? ssh-dir) (mkdir ssh-dir))
       (chmod ssh-dir #o700)
       (chmod #$%ssh-known-hosts-dir #o700)
       ;; 2. 有界等待全部 runtime secret（ordinary domain fail-closed：
@@ -143,6 +163,10 @@
   (application
    (name 'ssh)
    (home-packages (list openssh))        ; 客户端工具；sshd 由 system 层提供
+   (system-services
+    (list (simple-service 'ssh-known-hosts-dir
+                          activation-service-type
+                          (ssh-known-hosts-dir-activation))))
    (home-services
     (list (simple-service
            'ssh-files
