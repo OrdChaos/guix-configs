@@ -34,6 +34,7 @@
                #:use-module (gnu system file-systems) ; file-system
                #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
                #:use-module (guixcfg utils home-path) ; ensure-home-parent-directories!
+               #:use-module (guixcfg system mount-metadata) ; %persistent-home-mount-options
                #:use-module (guix gexp)
                #:use-module (guix modules)            ; source-module-closure、guix-module-name?
                #:use-module (guix records)
@@ -126,7 +127,7 @@ docs/architecture/persistence.md 与 secrets.md 的 flatpak 例子）。"
 /home/<USER>/<consumer>）。挂载点由 file-systems 阶段创建
 （create-mount-point? #t）；intermediate parent ownership 由
 activation 恢复。options 带桌面集成 metadata（x-gvfs-hide,
-x-gvfs-trash——共享常量 (guixcfg utils home-path)，与
+x-gvfs-trash——共享常量 (guixcfg system mount-metadata)，与
 user-persistence 同一语义：GVfs 隐藏实现性挂载 + 允许 mount-local
 trash）。"
   (map (lambda (rule)

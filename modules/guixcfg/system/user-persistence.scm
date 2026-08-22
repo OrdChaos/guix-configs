@@ -22,6 +22,7 @@
                #:use-module (gnu system file-systems) ; file-system
                #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
                #:use-module (guixcfg utils home-path) ; ensure-home-parent-directories!
+               #:use-module (guixcfg system mount-metadata) ; %persistent-home-mount-options
                #:use-module (guix gexp)
                #:use-module (guix modules)            ; source-module-closure、guix-module-name?
                #:use-module (guix records)
@@ -71,9 +72,9 @@
 → /home/USER/<consumer>）。依赖 @persist-data-home 子卷挂载（/persist
 先就位），挂载点在 login 前由 file-systems 阶段创建。
 options 带桌面集成 metadata（x-gvfs-hide,x-gvfs-trash——共享常量
-(guixcfg utils home-path)）：经 fstab 声明 + mount-metadata 服务
-注入 /run/mount/utab，GVfs 据此隐藏实现性挂载并允许 mount-local
-trash（docs/architecture/home.md）。"
+(guixcfg system mount-metadata)）：经 fstab 声明 + mount-metadata
+服务注入 /run/mount/utab，GVfs 据此隐藏实现性挂载并允许
+mount-local trash（docs/architecture/home.md）。"
   (let ((persist-root (string-append (persist-mount-point "@persist-data-home") "/" user)))
     (map (lambda (d)
            (file-system

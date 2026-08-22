@@ -6,7 +6,7 @@
 (use-modules (gnu system file-systems)
              (guix gexp)
              (guixcfg system user-persistence)
-             (guixcfg utils home-path) ; %persistent-home-mount-options
+             (guixcfg system mount-metadata) ; %persistent-home-mount-options
              (srfi srfi-1)
              (srfi srfi-64))
 
