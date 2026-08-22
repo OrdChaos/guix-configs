@@ -27,6 +27,7 @@
                #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
                #:use-module (guixcfg apps model)      ; applications-secrets、applications-persistence
                #:use-module (guixcfg system application-persistence) ; application persistence generic executor
+               #:use-module (guixcfg system mount-metadata) ; gvfs-mount-metadata-service
                #:use-module (guixcfg hosts vm-secrets)  ; VM secret inventory（host-owned）
                #:use-module (gnu services guix)        ; guix-home-service-type
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
@@ -45,11 +46,24 @@
 (define %vm-users
   (list (primary-user-account)))
 
+;; HOME persistence bind mounts（user data + app state；单一定义，
+;; %vm-services 的 gvfs-mount-metadata 服务与 file-systems 字段共用）。
+(define %persistent-mount-file-systems
+  (append (user-persistence-file-systems
+           (user-profile-name %primary-user))
+          (application-persistence-file-systems
+           (applications-persistence %applications)
+           (user-profile-name %primary-user))))
+
 (define %vm-services
   (append
    (list ;; QEMU user-mode 网络需要 DHCP（当前 master 中 dhcp-client-service-type
     ;; 已由 dhcpcd-service-type 取代）。
-         (service dhcpcd-service-type))
+         (service dhcpcd-service-type)
+         ;; GVfs 桌面 metadata（x-gvfs-hide/x-gvfs-trash → utab）：
+         ;; 在 file-systems 挂载后注入，让 GIO 对 HOME persistence
+         ;; bind mounts 隐藏挂载并允许 mount-local trash。
+         (gvfs-mount-metadata-service %persistent-mount-file-systems))
    ;; 无状态根的用户态服务：启动确认（last-good）与旧 generation 清理
    ;; （docs/architecture/storage.md，Root generation 一节）。
    (ephemeral-root-shepherd-services
@@ -169,13 +183,7 @@
    (initrd microcode-ephemeral-initrd)
    (file-systems (append (system-file-systems %ephemeral-root-file-system)
                          ;; selected user persistence（bind mounts，login 前就位）
-                         (user-persistence-file-systems
-                          (user-profile-name %primary-user))
-                         ;; application persistence（/persist/data-app →
-                         ;; HOME consumer bind；backing 由 activation 创建）
-                         (application-persistence-file-systems
-                          (applications-persistence %applications)
-                          (user-profile-name %primary-user))
+                         %persistent-mount-file-systems
                          %base-file-systems))
    
    (swap-devices %swap-spaces)

@@ -6,6 +6,7 @@
 (use-modules (gnu system file-systems)
              (guix gexp)
              (guixcfg system user-persistence)
+             (guixcfg utils home-path) ; %persistent-home-mount-options
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -40,6 +41,8 @@
                                   (persistent-user-dir-backing d)))
                        (string=? (file-system-type fs) "none")
                        (member 'bind-mount (file-system-flags fs))
+                       (string=? (file-system-options fs)
+                                 %persistent-home-mount-options)
                        (file-system-create-mount-point? fs)))))
  %persistent-user-dirs)
 
@@ -61,19 +64,19 @@
                       "Pictures" "Projects" "Public" "Templates"
                       "Videos")))
 
-;; ── trash：用户数据持久化（嵌套 consumer）────────────────────
-(test-assert "trash is persisted as user data (nested consumer)"
-             (any (lambda (d)
-                    (string=? ".local/share/Trash"
-                              (persistent-user-dir-consumer d)))
-                  %persistent-user-dirs))
-(test-assert "trash backing lives under /persist/data-home/<user>"
-             (any (lambda (fs)
-                    (and (string=? "/home/user/.local/share/Trash"
-                                   (file-system-mount-point fs))
-                         (string=? "/persist/data-home/user/.local/share/Trash"
-                                   (file-system-device fs))))
-                  fss))
+;; ── home trash 不持久化（GLib 实证：独立 mount 破坏普通 HOME
+;;    文件的 trash——st_dev 判定走 home trash，rename 跨 mount
+;;    EXDEV；docs/architecture/home.md）────────────────────────
+(test-assert "home trash is NOT persisted (independent mount breaks trash)"
+             (not (any (lambda (d)
+                         (string=? ".local/share/Trash"
+                                   (persistent-user-dir-consumer d)))
+                       %persistent-user-dirs)))
+(test-assert "no trash bind mount declared"
+             (not (any (lambda (fs)
+                         (string=? "/home/user/.local/share/Trash"
+                                   (file-system-mount-point fs)))
+                       fss)))
 
 ;; activation gexp 可编译
 (test-assert "persistence activation gexp compiles"
@@ -90,12 +93,12 @@
                     (string-contains s "chown")
                     (string-contains s "chmod"))))
 
-;; 嵌套 consumer 的 HOME 侧中间层（.local、.local/share）owner 归还
-;; USER（AGENT.md §12：root 建的中间层会让 USER 后续写入 EACCES）。
-(test-assert "activation restores nested consumer parent ownership"
+;; 嵌套 consumer 的 HOME 侧中间父目录 owner 归还走共享原语
+;; (guixcfg utils home-path)（当前无嵌套 consumer——Trash 已按实证
+;; 移除；机制保留，未来嵌套 consumer 直接复用）。
+(test-assert "activation uses the shared home-parent ownership primitive"
              (let ((s (object->string (user-persistence-activation "user"))))
-               (and (string-contains s ".local/share")
-                    (string-contains s ".local"))))
+               (string-contains s "ensure-home-parent-directories!")))
 
 ;; Guix Home 环境跨重启由官方 guix-home-service-type 恢复（见
 ;; test-home.scm 的绑定断言），本模块不持久化任何 Home 生成物。

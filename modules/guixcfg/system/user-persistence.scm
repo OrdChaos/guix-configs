@@ -46,8 +46,14 @@
 
 ;; 持久化用户数据（XDG user directories 全集，与 (guixcfg home xdg)
 ;; 的 %xdg-user-dirs-service 对应——一致性由 tests/test-user-persistence.scm
-;; 回归）+ 仓库 checkout + trash（用户数据：$HOME/.local/share/Trash
-;; 嵌套 consumer，中间层 owner 由 activation 归还 USER）。
+;; 回归）+ 仓库 checkout。
+;;
+;; 明确不持久化 $HOME/.local/share/Trash（home trash）：GLib 的
+;; g_local_file_trash 按 st_dev 把普通 HOME 文件判为 home trash
+;; （$XDG_DATA_HOME/Trash）；该目录若被做成独立 bind mount，rename
+;; 跨 mount → EXDEV，所有普通文件删除失败（2026-08 实测；GLib
+;; 2.86 glocalfile.c）。home trash 随 ephemeral /home 每 boot 重建
+;; 是符合无状态系统语义的正确行为（docs/architecture/home.md）。
 (define %persistent-user-dirs
   (list (persistent-user-dir (backing "guix-configs") (consumer "guix-configs"))
         (persistent-user-dir (backing "Projects") (consumer "Projects"))
@@ -58,14 +64,16 @@
         (persistent-user-dir (backing "Pictures") (consumer "Pictures"))
         (persistent-user-dir (backing "Public") (consumer "Public"))
         (persistent-user-dir (backing "Templates") (consumer "Templates"))
-        (persistent-user-dir (backing "Videos") (consumer "Videos"))
-        (persistent-user-dir (backing ".local/share/Trash")
-                             (consumer ".local/share/Trash"))))
+        (persistent-user-dir (backing "Videos") (consumer "Videos"))))
 
 (define (user-persistence-file-systems user)
   "持久化用户数据的 bind mount 声明（/persist/data-home/USER/<backing>
 → /home/USER/<consumer>）。依赖 @persist-data-home 子卷挂载（/persist
-先就位），挂载点在 login 前由 file-systems 阶段创建。"
+先就位），挂载点在 login 前由 file-systems 阶段创建。
+options 带桌面集成 metadata（x-gvfs-hide,x-gvfs-trash——共享常量
+(guixcfg utils home-path)）：经 fstab 声明 + mount-metadata 服务
+注入 /run/mount/utab，GVfs 据此隐藏实现性挂载并允许 mount-local
+trash（docs/architecture/home.md）。"
   (let ((persist-root (string-append (persist-mount-point "@persist-data-home") "/" user)))
     (map (lambda (d)
            (file-system
@@ -75,6 +83,7 @@
                                         (persistent-user-dir-consumer d)))
             (type "none")
             (flags '(bind-mount))
+            (options %persistent-home-mount-options)
             (create-mount-point? #t)
             (check? #f)))
          %persistent-user-dirs)))

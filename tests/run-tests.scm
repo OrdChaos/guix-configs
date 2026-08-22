@@ -117,6 +117,7 @@
                "tests/test-ui-language.scm"
                "tests/test-ssh.scm"
                "tests/test-user-persistence.scm"
+               "tests/test-mount-metadata.scm"
                "tests/test-session.scm"
                "tests/test-home.scm"
                "tests/test-home-pivot.scm"

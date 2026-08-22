@@ -64,19 +64,17 @@ contract、layout、local-file 语义、ownership 决策表、secret/
 `/home/<user>` 本身是 ephemeral（无状态 root）。持久化用户数据由
 系统从 `/persist/data-home/<user>/` bind mount
 （`%persistent-user-dirs`，modules/guixcfg/system/user-persistence.scm）
-——标准 XDG user directories 全集 + 仓库 checkout + trash：
+——标准 XDG user directories 全集 + 仓库 checkout：
 
 ```text
 guix-configs / Projects / Desktop / Documents / Downloads /
 Music / Pictures / Public / Templates / Videos
-.local/share/Trash          # trash（用户数据；嵌套 consumer）
 ```
 
 每个条目是 `(backing, consumer)` 相对路径对：backing 位于
 `/persist/data-home/<user>/` 下（canonical 数据位置），consumer 是
-`$HOME` 下的挂载位置（可嵌套，如 `.local/share/Trash`）。嵌套
-consumer 的 HOME 侧中间层（`.local`、`.local/share`）由 activation
-把 owner 归还 USER（AGENT.md §12）。
+`$HOME` 下的挂载位置（可嵌套）。嵌套 consumer 的 HOME 侧中间父目录
+owner 归还走共享原语 `(guixcfg utils home-path)`（AGENT.md §12）。
 
 XDG user directories 由 Guix Home 声明（官方
 `home-xdg-user-directories-service-type`，`(guixcfg home xdg)` 的
@@ -84,12 +82,34 @@ XDG user directories 由 Guix Home 声明（官方
 activation 创建各目录；持久化 backing 与声明的一致性由
 tests/test-user-persistence.scm 回归。
 
-trash 功能由 gvfs 提供（nautilus app 显式安装 gvfs——其 D-Bus
-daemon 经 XDG_DATA_DIRS 的 share/dbus-1/services 激活）；trash 内容
-属用户数据，持久化在 `.local/share/Trash`。
+### Trash 语义（GLib 2.86 实证，2026-08）
+
+- **home trash（`$XDG_DATA_HOME/Trash`）不持久化**：GLib 的
+  `g_local_file_trash` 按 st_dev 把普通 HOME 文件判为 home trash；
+  若该目录是独立 bind mount，rename 跨 mount → EXDEV，所有普通
+  文件删除失败（实测复现）。home trash 随 ephemeral /home 每 boot
+  重建——符合无状态系统语义（重启前可恢复）。
+- **persistent mount 内文件（Documents 等）**：st_dev 与 home 不同
+  → freedesktop mount-local trash（该挂载根部的 `.Trash-$uid`，
+  同 mount rename，随 persistent storage 存活）；GVfs 的
+  `trash:///` 统一聚合展示。
+- **桌面集成 metadata**：HOME persistence bind mounts 带
+  `x-gvfs-hide,x-gvfs-trash`（共享常量
+  `%persistent-home-mount-options`，`(guixcfg utils home-path)`）：
+  - bind mount 经 mount(2) 挂载时 x-* 不进 mountinfo，GIO 的 fstab
+    fallback 对 bind 条目不可达——`(guixcfg system mount-metadata)`
+    的 one-shot 服务在 file-systems 后就位后把
+    `SRC/TARGET/OPTS` 条目幂等写入 `/run/mount/utab`（libmount
+    解析 mountinfo 时合并 utab 的 user options，GIO 由此看到
+    x-gvfs-*）；
+  - `x-gvfs-hide`：不作为独立挂载/卷出现在文件管理器侧边栏；
+  - `x-gvfs-trash`：允许该 mount 的 trash（bind mount 默认被 GLib
+    判为 system internal，trash 被拒）；
+  - machine-state persistence（/etc、/var 等）不带这些 options
+    （不是桌面用户 trash domain）。
 
 显式 ephemeral（本轮不持久化）：`~/.cache`、`~/.config`、
-`~/.local`（除 Trash）、`~/.mozilla`、`~/.steam`、整个 HOME。本轮不
+`~/.local`（含 Trash）、`~/.mozilla`、`~/.steam`、整个 HOME。本轮不
 声称完整用户状态持久化。**应用级 mutable state**（如未来 Firefox
 profile）走 `/persist/data-app` bind（application-persistence 规则，
 不整目录持久化；见 persistence.md）。
