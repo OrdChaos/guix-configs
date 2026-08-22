@@ -1,6 +1,13 @@
 ;;; Selected user persistence（System owns）：/home/<user> 本身保持
-;;; ephemeral（无状态 root），只有选定的用户数据目录经 bind mount
+;;; ephemeral（无状态 root），只有选定的用户数据位置经 bind mount
 ;;; 来自 /persist/data-home/<user>/。
+;;;
+;;; <persistent-user-dir> 对每个持久化条目记录两个相对位置：
+;;;   backing   /persist/data-home/<user> 下的持久化数据位置
+;;;             （嵌套路径合法，如 ".local/share/Trash"）
+;;;   consumer  $HOME 下的挂载位置（嵌套路径合法）
+;;; backing 与 consumer 不必同名——backing 是持久化侧的 canonical
+;;; 位置，consumer 是用户可见的挂载点。
 ;;;
 ;;; 所有权边界：映射、目录创建、ownership 由 Guix System 建立；
 ;;; Guix Home 不挂载 /persist；用户数据内容（/persist 侧）由
@@ -16,32 +23,67 @@
                #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
                #:use-module (guix gexp)
                #:use-module (guix modules)            ; source-module-closure
-               #:export (%persistent-user-dirs
+               #:use-module (guix records)
+               #:export (<persistent-user-dir>
+                         persistent-user-dir
+                         make-persistent-user-dir
+                         persistent-user-dir?
+                         persistent-user-dir-backing
+                         persistent-user-dir-consumer
+                         %persistent-user-dirs
                          user-persistence-file-systems
                          user-persistence-activation
                          user-persistence-service))
 
+;; 用户数据持久化条目：backing = /persist/data-home/<user> 相对；
+;; consumer = $HOME 相对（均可嵌套，如 ".local/share/Trash"）。
+(define-record-type* <persistent-user-dir>
+  persistent-user-dir make-persistent-user-dir
+  persistent-user-dir?
+  (backing persistent-user-dir-backing)    ; string
+  (consumer persistent-user-dir-consumer)) ; string
+
+;; consumer 的真前缀（不含自身）：".local/share/Trash"
+;; → (".local" ".local/share")。顶层目录（如 "Documents"）无前缀。
+(define (consumer-prefixes consumer)
+  (let loop ((parts (string-split consumer #\/))
+             (cur "")
+             (acc '()))
+    (if (null? (cdr parts))
+      (reverse acc)
+      (loop (cdr parts)
+            (string-append cur (car parts) "/")
+            (cons (string-append cur (car parts)) acc)))))
+
+;; 持久化用户数据（XDG user directories 全集，与 (guixcfg home xdg)
+;; 的 %xdg-user-dirs-service 对应——一致性由 tests/test-user-persistence.scm
+;; 回归）+ 仓库 checkout + trash（用户数据：$HOME/.local/share/Trash
+;; 嵌套 consumer，中间层 owner 由 activation 归还 USER）。
 (define %persistent-user-dirs
-  '("guix-configs"
-    "Projects"
-    "Desktop"
-    "Documents"
-    "Downloads"
-    "Music"
-    "Pictures"
-    "Public"
-    "Templates"
-    "Videos"))
+  (list (persistent-user-dir (backing "guix-configs") (consumer "guix-configs"))
+        (persistent-user-dir (backing "Projects") (consumer "Projects"))
+        (persistent-user-dir (backing "Desktop") (consumer "Desktop"))
+        (persistent-user-dir (backing "Documents") (consumer "Documents"))
+        (persistent-user-dir (backing "Downloads") (consumer "Downloads"))
+        (persistent-user-dir (backing "Music") (consumer "Music"))
+        (persistent-user-dir (backing "Pictures") (consumer "Pictures"))
+        (persistent-user-dir (backing "Public") (consumer "Public"))
+        (persistent-user-dir (backing "Templates") (consumer "Templates"))
+        (persistent-user-dir (backing "Videos") (consumer "Videos"))
+        (persistent-user-dir (backing ".local/share/Trash")
+                             (consumer ".local/share/Trash"))))
 
 (define (user-persistence-file-systems user)
-  "SELECTED 用户目录的 bind mount 声明（/persist/data-home/USER/<d>
-→ /home/USER/<d>）。依赖 @persist-data-home 子卷挂载（/persist
+  "持久化用户数据的 bind mount 声明（/persist/data-home/USER/<backing>
+→ /home/USER/<consumer>）。依赖 @persist-data-home 子卷挂载（/persist
 先就位），挂载点在 login 前由 file-systems 阶段创建。"
   (let ((persist-root (string-append (persist-mount-point "@persist-data-home") "/" user)))
     (map (lambda (d)
            (file-system
-            (device (string-append persist-root "/" d))
-            (mount-point (string-append "/home/" user "/" d))
+            (device (string-append persist-root "/"
+                                   (persistent-user-dir-backing d)))
+            (mount-point (string-append "/home/" user "/"
+                                        (persistent-user-dir-consumer d)))
             (type "none")
             (flags '(bind-mount))
             (create-mount-point? #t)
@@ -49,40 +91,64 @@
          %persistent-user-dirs)))
 
 (define (user-persistence-activation user)
-  "activation gexp：确保 /persist/data-home/USER 与 selected 子目录
-存在且 owner 为 USER（首次系统激活自动完成；不重建已有用户数据）。
-已有的 /home/USER/guix-configs 等存量目录的迁移是显式人工步骤
-（docs/operations/installation.md——先迁移到 /persist 再 reconfigure
-启用 bind，避免静默覆盖）。
+  "activation gexp：确保 /persist/data-home/USER 与各 backing 存在且
+owner 为 USER（首次系统激活自动完成；不重建已有用户数据）。已有的
+存量目录的迁移是显式人工步骤（docs/operations/installation.md——先
+迁移到 /persist 再 reconfigure 启用 bind，避免静默覆盖）。
+
+嵌套 consumer（如 .local/share/Trash）的 HOME 侧中间层（.local、
+.local/share）由 create-mount-point? 以 root 建出——activation 把每
+一层 owner 归还 USER（AGENT.md §12：只 chown 直接 parent 会留下
+root-owned 中间层，USER 后续写入 EACCES）。
 
 注意：/home/USER 本身是 ephemeral，但 file-systems 阶段为 bind mount
 创建挂载点时会把 /home/USER 以 root:root 0755 建出；guix 的
 activate-user-home 对已存在的 home 整体跳过（不 chown），导致用户
 无法在 ~ 顶层写入。这里显式恢复 home 的 owner/权限（与 guix 新建
 home 的语义一致：0700 + 用户所有）。"
-  (with-imported-modules (source-module-closure '((guix build utils)))
-                         #~(begin
-                            (use-modules (guix build utils))
-                            (let* ((persist (string-append "/persist/data-home/" #$user))
-                                   (home (string-append "/home/" #$user))
-                                   (uid (passwd:uid (getpw #$user)))
-                                   (gid (passwd:gid (getpw #$user))))
-                              (mkdir-p persist)
-                              (chown persist uid gid)
-                              (for-each
-                               (lambda (d)
-                                 (let ((src (string-append persist "/" d)))
-                                   (mkdir-p src)
-                                   (chown src uid gid)))
-                               '#$%persistent-user-dirs)
-                              ;; /home/USER 恢复标准语义（见上）。mkdir-p 只补缺失目录，
-                              ;; 不覆盖已存在的挂载点。
-                              (mkdir-p home)
-                              (chown home uid gid)
-                              (chmod home #o700)))))
+  ;; 预计算 (backing consumer prefixes) 三元组注入 gexp——纯数据，
+  ;; runtime 无模块依赖（AGENT.md §3）。
+  (let ((entries (map (lambda (d)
+                        (list (persistent-user-dir-backing d)
+                              (persistent-user-dir-consumer d)
+                              (consumer-prefixes
+                               (persistent-user-dir-consumer d))))
+                      %persistent-user-dirs)))
+    (with-imported-modules (source-module-closure '((guix build utils)))
+                           #~(begin
+                              (use-modules (guix build utils))
+                              (let* ((persist (string-append "/persist/data-home/" #$user))
+                                     (home (string-append "/home/" #$user))
+                                     (uid (passwd:uid (getpw #$user)))
+                                     (gid (passwd:gid (getpw #$user))))
+                                (mkdir-p persist)
+                                (chown persist uid gid)
+                                (for-each
+                                 (lambda (entry)
+                                   (let ((backing (car entry))
+                                         (consumer (cadr entry))
+                                         (prefixes (caddr entry)))
+                                     ;; persist 侧 backing（嵌套路径 mkdir-p 全建）
+                                     (let ((src (string-append persist "/" backing)))
+                                       (mkdir-p src)
+                                       (chown src uid gid))
+                                     ;; HOME 侧中间层（挂载点之前的每一级）
+                                     ;; owner 归还 USER；挂载点本身由
+                                     ;; file-systems 创建（bind 后无碍）。
+                                     (for-each
+                                      (lambda (p)
+                                        (let ((hp (string-append home "/" p)))
+                                          (mkdir-p hp)
+                                          (chown hp uid gid)))
+                                      prefixes)))
+                                 '#$entries)
+                                ;; /home/USER 恢复标准语义（见上）。mkdir-p 只补缺失目录，
+                                ;; 不覆盖已存在的挂载点。
+                                (mkdir-p home)
+                                (chown home uid gid)
+                                (chmod home #o700))))))
 
 (define (user-persistence-service user)
   "把 selected user 持久化目录创建挂到系统 activation。"
   (simple-service 'user-persistence activation-service-type
                   (user-persistence-activation user)))
-

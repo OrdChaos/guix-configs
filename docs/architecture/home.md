@@ -59,17 +59,24 @@ contract、layout、local-file 语义、ownership 决策表、secret/
 数据归属、runtime 不变量）与 `docs/development/applications.md`
 （逐步新增应用教程 E1-E9）。
 
-## Ephemeral /home + bind-mounted 用户目录
+## Ephemeral /home + bind-mounted 用户数据
 
-`/home/<user>` 本身是 ephemeral（无状态 root）。持久目录由系统
-从 `/persist/data-home/<user>/` bind mount（`%persistent-user-dirs`，
-modules/guixcfg/system/user-persistence.scm）——标准 XDG user
-directories 全集 + 仓库 checkout：
+`/home/<user>` 本身是 ephemeral（无状态 root）。持久化用户数据由
+系统从 `/persist/data-home/<user>/` bind mount
+（`%persistent-user-dirs`，modules/guixcfg/system/user-persistence.scm）
+——标准 XDG user directories 全集 + 仓库 checkout + trash：
 
 ```text
 guix-configs / Projects / Desktop / Documents / Downloads /
 Music / Pictures / Public / Templates / Videos
+.local/share/Trash          # trash（用户数据；嵌套 consumer）
 ```
+
+每个条目是 `(backing, consumer)` 相对路径对：backing 位于
+`/persist/data-home/<user>/` 下（canonical 数据位置），consumer 是
+`$HOME` 下的挂载位置（可嵌套，如 `.local/share/Trash`）。嵌套
+consumer 的 HOME 侧中间层（`.local`、`.local/share`）由 activation
+把 owner 归还 USER（AGENT.md §12）。
 
 XDG user directories 由 Guix Home 声明（官方
 `home-xdg-user-directories-service-type`，`(guixcfg home xdg)` 的
@@ -77,11 +84,15 @@ XDG user directories 由 Guix Home 声明（官方
 activation 创建各目录；持久化 backing 与声明的一致性由
 tests/test-user-persistence.scm 回归。
 
+trash 功能由 gvfs 提供（nautilus app 显式安装 gvfs——其 D-Bus
+daemon 经 XDG_DATA_DIRS 的 share/dbus-1/services 激活）；trash 内容
+属用户数据，持久化在 `.local/share/Trash`。
+
 显式 ephemeral（本轮不持久化）：`~/.cache`、`~/.config`、
-`~/.local`、`~/.mozilla`、`~/.steam`、整个 HOME。本轮不声称完整
-用户状态持久化。**应用级 mutable state**（如未来 Firefox profile）
-走 `/persist/data-app` bind（application-persistence 规则，不整目录
-持久化；见 persistence.md）。
+`~/.local`（除 Trash）、`~/.mozilla`、`~/.steam`、整个 HOME。本轮不
+声称完整用户状态持久化。**应用级 mutable state**（如未来 Firefox
+profile）走 `/persist/data-app` bind（application-persistence 规则，
+不整目录持久化；见 persistence.md）。
 
 ## Guix Home 是 derived state
 
