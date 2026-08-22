@@ -121,6 +121,10 @@ double authority 是架构违规（AGENT.md §12）。官方 service 自动贡�
 Does the application have mutable state?
     no  → Home config only（无需 persistence rule）
     yes
+Does the repo need to provide the initial state?
+    yes → persistence rule + seeds（seed-once：首次初始化后 repo
+          永久放弃 ownership；如 Noctalia settings.toml）
+    no
 Can state live in separate state/data directory?
     yes → persist only that directory（最优先；如
           .config/foo repo + .local/state/foo app → 只持久化后者）
@@ -137,6 +141,26 @@ fsync→rename 原子替换会破坏单文件 bind/symlink）；mixed container
 只允许 app-private namespace；**dual authority 是错误**（repo/Home
 与应用不得同时写同一文件——选择 repo-owned 或 app-owned，不
 merge，无 conflict-resolution framework）。
+
+**seed-once 规则**：`seeds` 只声明"从未存在过的初始状态"（`(target
+source)` 列表，source 为 app 目录 colocate 的 file-like）；机制
+在 `(guixcfg utils seed-once)` + application persistence activation
+（`docs/architecture/persistence.md`（seed-once））。seed 写入后
+**repository 永久放弃该文件 ownership**——后续 reconfigure / seed
+源更新都不得覆盖、同步或修正已初始化目标。**seed-once !=
+declarative management**：不要把它改写成"每次同步默认配置"。
+
+```scheme
+(persistence
+ (list (application-persistence-rule
+        (name 'state)
+        (backing "foo/state")
+        (consumer ".local/state/foo")
+        (exposure 'bind-directory)
+        (lifecycle 'application-owned)
+        (seeds `(("settings.toml"
+                  ,(local-file "base-settings.toml")))))))
+```
 
 ## Production example：MPV（第一个真实 consumer）
 

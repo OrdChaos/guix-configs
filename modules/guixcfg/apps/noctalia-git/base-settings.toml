@@ -1,0 +1,65 @@
+# Noctalia 初始配置 seed（repository authority，seed-once 模型）。
+#
+# 语义（docs/architecture/persistence.md（seed-once））：
+#   - 本文件只在 ~/.local/state/noctalia/settings.toml 从未存在时被
+#     首次写入（system activation，原子落盘 + marker 记录）；
+#   - 写入后 repository 永久放弃该文件 ownership——文件完全由
+#     Noctalia/用户运行时管理；后续 reconfigure 绝不覆盖/同步/修正
+#     （包括本 seed 本身的更新）；
+#   - seed-once != declarative management：不要把它改写成"每次同步
+#     默认配置"。
+#
+# 键名依据 pinned Noctalia example.toml / config schema
+# （settings.toml 是 overrides 格式，与 declarative config 同 schema）。
+# 未列出的项保持 Noctalia 内置默认值。
+
+# 当前 schema config version（pinned source
+# src/config/config_migrations.cpp：kPluginAutoUpdateModeMigrationVersion
+# = 13）：避免首启时 Noctalia 对无版本 overrides 表执行迁移回写。
+config_version = 13
+
+[shell]
+# Guix 负责完成首次初始化，Noctalia 不应再跑交互式 setup wizard
+# 做第二轮初始化。.setup-complete 由 Noctalia 自己管理（不伪造），
+# 随整个 state 目录持久化。
+setup_wizard_enabled = false
+telemetry_enabled = false
+
+[shell.screenshot]
+save_to_file = true
+copy_to_clipboard = true
+freeze_screen = true
+directory = "~/Pictures/Screenshots"
+
+[shell.launcher]
+categories = true
+show_icons = true
+sort_by_usage = true
+
+[theme]
+mode = "dark"
+source = "builtin"
+builtin = "Noctalia"
+
+[wallpaper]
+enabled = true
+fill_mode = "crop"
+directory = "~/Pictures/Wallpapers"
+
+[bar.main]
+position = "top"
+thickness = 34
+start = ["launcher", "wallpaper", "workspaces"]
+center = ["clock"]
+end = ["media", "tray", "notifications", "clipboard", "network", "bluetooth", "volume", "brightness", "battery", "control-center", "session"]
+
+[osd]
+position = "top_right"
+position_vertical = "top_center"
+orientation = "horizontal"
+
+[location]
+auto_locate = false
+
+[lockscreen]
+enabled = true

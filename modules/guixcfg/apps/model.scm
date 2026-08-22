@@ -65,10 +65,10 @@
 ;; 无耦合），source 为 opaque file-like（原生格式，generic 层不
 ;; 解析）。
 (define-record-type* <application-configuration-variant>
-  application-configuration-variant make-application-configuration-variant
-  application-configuration-variant?
-  (name application-configuration-variant-name)     ; symbol
-  (files application-configuration-variant-files))  ; list of (target source)
+                     application-configuration-variant make-application-configuration-variant
+                     application-configuration-variant?
+                     (name application-configuration-variant-name)     ; symbol
+                     (files application-configuration-variant-files))  ; list of (target source)
 
 (define (applications-home-packages apps)
   "聚合 APPS 的全部 home packages。"

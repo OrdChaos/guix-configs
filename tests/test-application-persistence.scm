@@ -3,8 +3,8 @@
 ;;;
 ;;; 覆盖：backing/consumer 生成、bind file-system source/target、
 ;;; path validation（..、绝对路径、空、整目录 consumer 拒绝）、
-;;; activation/ownership 可生成、无 data-nobackup mapping、
-;;; 无 copy/sync 实现。
+;;; activation/ownership 可生成、seed-once seeds 字段/校验/接线、
+;;; 无 data-nobackup mapping、无 copy/sync 实现。
 
 (use-modules (guixcfg system application-persistence)
              (gnu services)
@@ -26,6 +26,14 @@
    (consumer ".config/synthetic-test")
    (exposure 'bind-directory)
    (lifecycle 'application-owned)))
+
+(define seeded-rule
+  (application-persistence-rule
+   (name 'seeded-test)
+   (backing "seeded-test/state")
+   (consumer ".local/state/seeded-test")
+   (seeds `(("settings.toml"
+             ,(plain-file "settings.toml" "[shell]\nsetup_wizard_enabled = false\n"))))))
 
 (test-assert "rule record constructible"
              (application-persistence-rule? rule))
@@ -94,6 +102,49 @@
                     (name 'bad) (backing "x") (consumer ".config/x")
                     (lifecycle 'seed-once)))))
 
+;; ── seeds 字段（seed-once）─────────────────────────────────
+(test-equal "seeds field defaults to empty"
+            '()
+            (application-persistence-rule-seeds
+             (application-persistence-rule
+              (name 'x) (backing "x") (consumer ".config/x"))))
+(test-assert "rule with seeds passes validation"
+             (valid-application-persistence-rule? seeded-rule))
+(test-equal "seeds field round-trips targets"
+            '("settings.toml")
+            (map car (application-persistence-rule-seeds seeded-rule)))
+
+;; 非法 seed：空 / .. 逃逸 / 绝对路径 / marker 后缀冲突 /
+;; 非 file-like source——全部 fail closed
+(for-each
+ (lambda (bad-target)
+   (test-assert (string-append "reject seed target " bad-target)
+                (not (valid-application-persistence-rule?
+                      (application-persistence-rule
+                       (name 'bad) (backing "x") (consumer ".config/x")
+                       (seeds `((,bad-target
+                                 . ,(plain-file "s" "x")))))))))
+ '("" ".." "../x" "a/../b" "a/.." "/absolute" "x.seed-provided"))
+(test-assert "reject seed spec that is not a pair"
+             (not (valid-application-persistence-rule?
+                   (application-persistence-rule
+                    (name 'bad) (backing "x") (consumer ".config/x")
+                    (seeds '(("settings.toml")))))))
+(test-assert "reject non-file-like seed source"
+             (not (valid-application-persistence-rule?
+                   (application-persistence-rule
+                    (name 'bad) (backing "x") (consumer ".config/x")
+                    (seeds '(("settings.toml" . "not-a-file-like")))))))
+
+;; seed 目标必须落在 backing 内（backing/consumer 校验已保证），
+;; 且不引入独立白名单：seed 只针对首次初始化，目录持久化仍是
+;; 整个 consumer（bind directory）。
+(test-assert "seeded rule is still a directory bind"
+             (and (eq? 'bind-directory (application-persistence-rule-exposure
+                                        seeded-rule))
+                  (eq? 'application-owned (application-persistence-rule-lifecycle
+                                           seeded-rule))))
+
 ;; ── bind file-system 生成 ───────────────────────────────────
 (define mounts (application-persistence-file-systems (list rule) "alice"))
 (test-assert "one bind mount per rule"
@@ -139,6 +190,24 @@
                     (string-contains s "synthetic-test")
                     (string-contains s "mkdir-p")
                     (string-contains s "chown"))))
+
+;; ── seed-once 接线：activation 含 seed 目标 / marker / 状态机 ─
+(test-assert "seeded activation references seed target, marker and state machine"
+             (let ((s (object->string
+                       (gexp->approximate-sexp
+                        (application-persistence-activation
+                         (list seeded-rule) "alice")))))
+               (and (string-contains s "seeded-test/state")
+                    (string-contains s "settings.toml")
+                    (string-contains s ".seed-provided")
+                    (string-contains s "seed-once-file!")
+                    (string-contains s "chown"))))
+(test-assert "unseeded activation carries no seed machinery"
+             (let ((s (object->string
+                       (gexp->approximate-sexp
+                        (application-persistence-activation
+                         (list rule) "alice")))))
+               (not (string-contains s "seed-once-file!"))))
 
 ;; ── 无 copy/sync 实现 ───────────────────────────────────────
 (test-assert "no copy/sync primitives in generated artifacts"

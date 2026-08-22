@@ -40,10 +40,10 @@
 ;; 用户数据持久化条目：backing = /persist/data-home/<user> 相对；
 ;; consumer = $HOME 相对（均可嵌套，如 ".local/share/Trash"）。
 (define-record-type* <persistent-user-dir>
-  persistent-user-dir make-persistent-user-dir
-  persistent-user-dir?
-  (backing persistent-user-dir-backing)    ; string
-  (consumer persistent-user-dir-consumer)) ; string
+                     persistent-user-dir make-persistent-user-dir
+                     persistent-user-dir?
+                     (backing persistent-user-dir-backing)    ; string
+                     (consumer persistent-user-dir-consumer)) ; string
 
 ;; 持久化用户数据（XDG user directories 全集，与 (guixcfg home xdg)
 ;; 的 %xdg-user-dirs-service 对应——一致性由 tests/test-user-persistence.scm

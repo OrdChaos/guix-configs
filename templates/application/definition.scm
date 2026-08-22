@@ -45,7 +45,12 @@
    ;; (system-services (list ...))   ; system service（仅确有必要；greetd/elogind/
    ;;                                 ; accounts/SSH host keys/readiness/TPM/UKI/
    ;;                                 ; Secure Boot 等 core infrastructure 不迁进 apps）
-   ;; (persistence (list ...))       ; <application-persistence-rule>（bind-only）
+   ;; (persistence (list ...))       ; <application-persistence-rule>（bind-only；
+   ;;                                 ; 可选 seeds：首次初始状态（seed-once——
+   ;;                                 ; 写入后 repo 永久放弃该文件 ownership；
+   ;;                                 ; docs/architecture/persistence.md）：
+   ;;                                 ;   (seeds `(("settings.toml"
+   ;;                                 ;             ,(local-file "base-settings.toml"))))
    ;; (secrets (list ...))           ; <secret-decl>（source = 本目录 secrets/ 的
    ;;                                 ; file-like，如 (local-file "secrets/x.age")）
    ;; (configuration-variants        ; 可选配置变体（application-owned）：

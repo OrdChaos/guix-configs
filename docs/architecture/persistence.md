@@ -71,6 +71,7 @@ backing      /persist/data-app 下相对路径（唯一 canonical backing）
 consumer     HOME 相对路径（bind projection）
 exposure     仅 bind-directory（第一版）
 lifecycle    仅 application-owned
+seeds        可选：首次初始状态（(target source) 列表，seed-once）
 owner        由 primary user / assembler 参数统一提供
 ```
 
@@ -92,7 +93,27 @@ owner        由 primary user / assembler 参数统一提供
 - 严格 validation：无 `..`、无绝对路径、非空、consumer 不得是
   `.config` / `.local` / `.local/share` / `.cache` 整体或前缀；
 - 不产生 `/persist/data-nobackup` mapping；
-- 不实现 copy/sync/boot-copy/seed-once/自动迁移。
+- 不实现 copy/sync/boot-copy/自动迁移。
+
+**seed-once（首次初始状态）**：rule 可声明 `seeds`（`(target
+source)` 两元素列表；source 为 file-like），语义是"只负责创建一
+个从未存在过的用户状态，创建成功后永久放弃 ownership"：
+
+- 每次系统 activation 检查 **canonical backing 侧**的
+  `<backing>/<target>.seed-provided` marker（空文件，presence =
+  状态）与目标文件：
+  - marker 存在 → 已提供过，永不重复（即使目标被 app/用户删除；
+    删除 marker + 目标 = 显式重新 seed 的维护操作）；
+  - marker 缺失、目标存在 → 完全保留（备份恢复/崩溃窗口），补写
+    marker 固化决策，**绝不比较/merge/patch/覆盖**；
+  - 均缺失 → 原子写入（`.new` → fsync → rename → fsync 父目录，
+    `(guixcfg utils atomic-file)`），再写 marker——中途崩溃不会留
+    下可被误判为已初始化的半成品；
+- **seed-once != declarative management**：seed 之后 repository 对
+  该文件零写入，后续 reconfigure/seed 更新都不影响已初始化目标；
+- 实现：`(guixcfg utils seed-once)`（状态机）+ application
+  persistence activation 接线；生产 consumer：noctalia-git
+  （`.local/state/noctalia/settings.toml` 初始配置）。
 
 production consumers：
 - mpv（`.local/state/mpv` → `/persist/data-app/mpv/state`，

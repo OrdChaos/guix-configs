@@ -65,53 +65,53 @@
 (define %utab-test-path (string-append %utab-test-dir "/utab"))
 
 (parameterize ((%gvfs-utab-path %utab-test-path))
-  ;; 首次：全部写入
-  (test-equal "first run writes all service entries"
-              2 (ensure-gvfs-utab! %sample-entries
-                                   %persistent-home-mount-options))
-  ;; 重复：幂等（重建后仍是相同条目，无重复 TARGET）
-  (test-equal "re-run is idempotent (same entry count)"
-              2 (ensure-gvfs-utab! %sample-entries
-                                   %persistent-home-mount-options))
-  (let ((content (call-with-input-file %utab-test-path
-                                         (lambda (p) (read-string p)))))
-    (test-assert "utab content contains both entries"
-                 (and (string-contains content "TARGET=/home/user/Documents")
-                      (string-contains content "TARGET=/home/user/.local/state/mpv")))
-    (test-assert "utab content has no duplicate TARGET"
-                 (= 1 (length (filter (lambda (l)
-                                        (string-contains l
-                                                         "TARGET=/home/user/Documents"))
-                                      (string-split content #\newline))))))
-  ;; 场景 D：reconfigure 删除 consumer——旧 TARGET 随重建消失
-  (test-equal "rebuild with fewer entries removes stale targets"
-              1 (ensure-gvfs-utab!
-                 (list (car %sample-entries))
-                 %persistent-home-mount-options))
-  (let ((content (call-with-input-file %utab-test-path
-                                         (lambda (p) (read-string p)))))
-    (test-assert "stale target removed after rebuild"
-                 (and (string-contains content "TARGET=/home/user/Documents")
-                      (not (string-contains content
-                                            "TARGET=/home/user/.local/state/mpv")))))
-  ;; 场景 E：不破坏其他 owner 的条目
-  (call-with-output-file %utab-test-path
-                         (lambda (p)
-                           (display "SRC=/dev/sda1 TARGET=/mnt/other OPTS=rw,noatime\n"
-                                    p)))
-  (test-equal "rebuild preserves other owners' entries"
-              1 (ensure-gvfs-utab! (list (car %sample-entries))
-                                   %persistent-home-mount-options))
-  (let ((content (call-with-input-file %utab-test-path
-                                         (lambda (p) (read-string p)))))
-    (test-assert "foreign entry preserved"
-                 (string-contains content "TARGET=/mnt/other"))
-    (test-assert "foreign entry not duplicated"
-                 (= 1 (length (filter (lambda (l)
-                                        (string-contains l "TARGET=/mnt/other"))
-                                      (string-split content #\newline))))))
-  ;; 清理
-  (false-if-exception (delete-file-recursively %utab-test-dir)))
+              ;; 首次：全部写入
+              (test-equal "first run writes all service entries"
+                          2 (ensure-gvfs-utab! %sample-entries
+                                               %persistent-home-mount-options))
+              ;; 重复：幂等（重建后仍是相同条目，无重复 TARGET）
+              (test-equal "re-run is idempotent (same entry count)"
+                          2 (ensure-gvfs-utab! %sample-entries
+                                               %persistent-home-mount-options))
+              (let ((content (call-with-input-file %utab-test-path
+                                                   (lambda (p) (read-string p)))))
+                (test-assert "utab content contains both entries"
+                             (and (string-contains content "TARGET=/home/user/Documents")
+                                  (string-contains content "TARGET=/home/user/.local/state/mpv")))
+                (test-assert "utab content has no duplicate TARGET"
+                             (= 1 (length (filter (lambda (l)
+                                                    (string-contains l
+                                                                     "TARGET=/home/user/Documents"))
+                                                  (string-split content #\newline))))))
+              ;; 场景 D：reconfigure 删除 consumer——旧 TARGET 随重建消失
+              (test-equal "rebuild with fewer entries removes stale targets"
+                          1 (ensure-gvfs-utab!
+                             (list (car %sample-entries))
+                             %persistent-home-mount-options))
+              (let ((content (call-with-input-file %utab-test-path
+                                                   (lambda (p) (read-string p)))))
+                (test-assert "stale target removed after rebuild"
+                             (and (string-contains content "TARGET=/home/user/Documents")
+                                  (not (string-contains content
+                                                        "TARGET=/home/user/.local/state/mpv")))))
+              ;; 场景 E：不破坏其他 owner 的条目
+              (call-with-output-file %utab-test-path
+                                     (lambda (p)
+                                       (display "SRC=/dev/sda1 TARGET=/mnt/other OPTS=rw,noatime\n"
+                                                p)))
+              (test-equal "rebuild preserves other owners' entries"
+                          1 (ensure-gvfs-utab! (list (car %sample-entries))
+                                               %persistent-home-mount-options))
+              (let ((content (call-with-input-file %utab-test-path
+                                                   (lambda (p) (read-string p)))))
+                (test-assert "foreign entry preserved"
+                             (string-contains content "TARGET=/mnt/other"))
+                (test-assert "foreign entry not duplicated"
+                             (= 1 (length (filter (lambda (l)
+                                                    (string-contains l "TARGET=/mnt/other"))
+                                                  (string-split content #\newline))))))
+              ;; 清理
+              (false-if-exception (delete-file-recursively %utab-test-dir)))
 
 ;; ── escaping（libmount mangle 规则）──────────────────────────
 (test-assert "mangled utab entry encodes spaces"
@@ -171,43 +171,43 @@
 (if (and (command-available? "unshare")
          (command-available? "gio")
          (userns-available?))
-    (let* ((root "/tmp/guixcfg-it")
-           (gen-script (string-append root "/gen-utab.scm"))
-           (result
-            (system* "unshare" "-rm" "sh" "-c"
-                     (string-append
-                      "set -e; "
-                      "R=" root "; rm -rf $R; mkdir -p $R/home $R/persist; "
-                      "export HOME=$R/home XDG_DATA_HOME=$R/home/.local/share; "
-                      "mkdir -p $XDG_DATA_HOME /run/mount; "
-                      "mount -t tmpfs tmpfs-run /run/mount; "
-                      "mount -t tmpfs -o size=16M tmpfs-persist $R/persist; "
-                      "mkdir -p $R/persist/Documents $R/home/Documents; "
-                      "mount --bind $R/persist/Documents $R/home/Documents; "
-                      ;; 生产代码生成并写入 utab（userns 内读 mountinfo）
-                      "cat > " gen-script " <<'SCM'\n"
-                      "(add-to-load-path (string-append (getcwd) \"/modules\"))\n"
-                      "(use-modules (guixcfg utils mountinfo)\n"
-                      "         (guixcfg system mount-metadata))\n"
-                      "(ensure-gvfs-utab!\n"
-                      " (gvfs-utab-entries\n"
-                      "  (mountinfo-entries-for\n"
-                      "   '((\"" root "/persist/Documents\" . \"" root "/home/Documents\")))\n"
-                      "  %persistent-home-mount-options)\n"
-                      " %persistent-home-mount-options)\n"
-                      "SCM\n"
-                      "guix time-machine -C channels.lock.scm -- repl -L modules "
-                      gen-script " || exit 9; "
-                      "grep -q 'ROOT=' /run/mount/utab || exit 10; "
-                      "echo it > $R/home/Documents/it.txt; "
-                      "gio trash $R/home/Documents/it.txt || exit 11; "
-                      "test -d $R/home/Documents/.Trash-* || exit 12; "
-                      "ls $R/home/Documents/.Trash-*/files/it.txt >/dev/null 2>&1 || exit 13"))))
-      (test-assert "integration: production utab enables gio trash on \
+  (let* ((root "/tmp/guixcfg-it")
+         (gen-script (string-append root "/gen-utab.scm"))
+         (result
+          (system* "unshare" "-rm" "sh" "-c"
+                   (string-append
+                    "set -e; "
+                    "R=" root "; rm -rf $R; mkdir -p $R/home $R/persist; "
+                    "export HOME=$R/home XDG_DATA_HOME=$R/home/.local/share; "
+                    "mkdir -p $XDG_DATA_HOME /run/mount; "
+                    "mount -t tmpfs tmpfs-run /run/mount; "
+                    "mount -t tmpfs -o size=16M tmpfs-persist $R/persist; "
+                    "mkdir -p $R/persist/Documents $R/home/Documents; "
+                    "mount --bind $R/persist/Documents $R/home/Documents; "
+                    ;; 生产代码生成并写入 utab（userns 内读 mountinfo）
+                    "cat > " gen-script " <<'SCM'\n"
+                    "(add-to-load-path (string-append (getcwd) \"/modules\"))\n"
+                    "(use-modules (guixcfg utils mountinfo)\n"
+                    "         (guixcfg system mount-metadata))\n"
+                    "(ensure-gvfs-utab!\n"
+                    " (gvfs-utab-entries\n"
+                    "  (mountinfo-entries-for\n"
+                    "   '((\"" root "/persist/Documents\" . \"" root "/home/Documents\")))\n"
+                    "  %persistent-home-mount-options)\n"
+                    " %persistent-home-mount-options)\n"
+                    "SCM\n"
+                    "guix time-machine -C channels.lock.scm -- repl -L modules "
+                    gen-script " || exit 9; "
+                    "grep -q 'ROOT=' /run/mount/utab || exit 10; "
+                    "echo it > $R/home/Documents/it.txt; "
+                    "gio trash $R/home/Documents/it.txt || exit 11; "
+                    "test -d $R/home/Documents/.Trash-* || exit 12; "
+                    "ls $R/home/Documents/.Trash-*/files/it.txt >/dev/null 2>&1 || exit 13"))))
+    (test-assert "integration: production utab enables gio trash on \
 persistent bind mount"
-                   (zero? result))
-      ;; 清理
-      (false-if-exception (system* "rm" "-rf" root)))
-    (test-skip "consumer-side integration requires unshare userns + gio; skipped"))
+                 (zero? result))
+    ;; 清理
+    (false-if-exception (system* "rm" "-rf" root)))
+  (test-skip "consumer-side integration requires unshare userns + gio; skipped"))
 
 (test-end "mount-metadata")

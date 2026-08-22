@@ -61,8 +61,8 @@
                       (member d (map persistent-user-dir-consumer
                                      %persistent-user-dirs)))
                     '("Desktop" "Documents" "Downloads" "Music"
-                      "Pictures" "Projects" "Public" "Templates"
-                      "Videos")))
+                                "Pictures" "Projects" "Public" "Templates"
+                                "Videos")))
 
 ;; ── home trash 不持久化（GLib 实证：独立 mount 破坏普通 HOME
 ;;    文件的 trash——st_dev 判定走 home trash，rename 跨 mount

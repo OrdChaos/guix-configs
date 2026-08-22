@@ -93,15 +93,15 @@
                           %laptop-application-configuration-selections)))
 (test-assert "hosts/laptop.scm contains no target path"
              (let ((s (call-with-input-file "modules/guixcfg/hosts/laptop.scm"
-                                             (lambda (p) (read-string p)))))
+                                            (lambda (p) (read-string p)))))
                (not (string-contains s "niri/host.kdl"))))
 (test-assert "hosts/laptop.scm contains no source file path"
              (let ((s (call-with-input-file "modules/guixcfg/hosts/laptop.scm"
-                                             (lambda (p) (read-string p)))))
+                                            (lambda (p) (read-string p)))))
                (not (string-contains s ".kdl"))))
 (test-assert "hosts/laptop.scm does not use local-file"
              (let ((s (call-with-input-file "modules/guixcfg/hosts/laptop.scm"
-                                             (lambda (p) (read-string p)))))
+                                            (lambda (p) (read-string p)))))
                (not (string-contains s "local-file"))))
 
 ;; ── 解析：laptop selection → 配置文件贡献 ────────────────────
@@ -345,9 +345,9 @@
 (test-assert "installed variant content matches the niri-owned source byte-for-byte"
              (equal? %laptop-kdl-content
                      (call-with-input-file
-                       (string-append %lowered-laptop
-                                      "/files/.config/niri/host.kdl")
-                       (lambda (p) (read-string p)))))
+                      (string-append %lowered-laptop
+                                     "/files/.config/niri/host.kdl")
+                      (lambda (p) (read-string p)))))
 
 ;; ── Guix Home backstop：跨贡献方（variant vs app 自身）同路径 ──
 ;; Guix 的 assert-no-duplicates 在 lower 时对合并后的完整文件列表

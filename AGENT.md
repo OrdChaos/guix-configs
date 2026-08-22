@@ -216,6 +216,12 @@ docs/reference/repository-layout.md；本节省略版开发约束：
   occupants 由 pinned Guix Home symlink-manager 清理，不建 custom
   inventory。
 - persistence 不得自动迁移/覆盖/删除已有 consumer data。
+- **seed-once（seeds 字段）只创建从未存在过的初始状态**：写入后
+  repository 永久放弃该文件 ownership——后续 reconfigure / seed 源
+  更新都不得覆盖、同步或修正已初始化目标（marker `<target>
+  .seed-provided` 记录；机制 `(guixcfg utils seed-once)`）。
+  seed-once != declarative management：禁止改写成"每次同步默认
+  配置"。
 - app-private encrypted secrets colocate（apps/<app>/secrets/）；
   system/shared/install/bootstrap secrets 集中（top-level
   secrets/）；generic security mechanism 不知道具体 application

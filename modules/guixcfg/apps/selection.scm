@@ -38,10 +38,10 @@
                          application-configuration-selections->home-services))
 
 (define-record-type* <application-configuration-selection>
-  application-configuration-selection make-application-configuration-selection
-  application-configuration-selection?
-  (application application-configuration-selection-application) ; symbol
-  (variant application-configuration-selection-variant))       ; symbol
+                     application-configuration-selection make-application-configuration-selection
+                     application-configuration-selection?
+                     (application application-configuration-selection-application) ; symbol
+                     (variant application-configuration-selection-variant))       ; symbol
 
 ;; target 必须是合法的 ~/.config 相对路径：非空、非绝对、无 ".."
 ;; 逃逸（与 repository-file 相同的校验规则）。
@@ -101,8 +101,8 @@ such configuration variant"
          (application-configuration-variant-files decl))))
 
 (define* (application-configuration-selections->home-services selections
-          #:key (apps %applications))
-  "把 SELECTIONS（<application-configuration-selection> 列表）解析为
+                                                              #:key (apps %applications))
+         "把 SELECTIONS（<application-configuration-selection> 列表）解析为
 home-xdg-configuration-files-service-type 的 extension 贡献（返回
 service 列表，供 home assembly 直接 append）。APPS 默认是 registry
 的 %applications（启用唯一权威）；可参数化注入（测试/组合）。
@@ -120,43 +120,43 @@ variant → resolve files → 校验 target → 冲突检测 → 聚合。
      路径与全部来源（application + variant + source 描述；Guix
      Home 的 assert-no-duplicates 仍作为跨贡献方冲突的 lower 兜底）。
 "
-  (for-each (lambda (sel)
-              (unless (application-configuration-selection? sel)
-                (error "application-configuration-selections->home-services: \
+         (for-each (lambda (sel)
+                     (unless (application-configuration-selection? sel)
+                       (error "application-configuration-selections->home-services: \
 not an application-configuration-selection" sel))
-              (validate-application!
-               (application-configuration-selection-application sel)
-               apps))
-            selections)
-  (let* ((entries (append-map (lambda (sel) (resolve-selection sel apps))
-                              selections))
-         (seen (make-hash-table)))
-    ;; 冲突检测：按最终 target path 分组，组内多于一条即冲突。
-    (for-each (lambda (e)
-                (let ((target (car e)))
-                  (hash-set! seen target (cons e (hash-ref seen target '())))))
-              entries)
-    (hash-for-each
-     (lambda (target contributors)
-       (when (pair? (cdr contributors))
-         (error "application-configuration-selection: duplicate target \
+                     (validate-application!
+                      (application-configuration-selection-application sel)
+                      apps))
+                   selections)
+         (let* ((entries (append-map (lambda (sel) (resolve-selection sel apps))
+                                     selections))
+                (seen (make-hash-table)))
+           ;; 冲突检测：按最终 target path 分组，组内多于一条即冲突。
+           (for-each (lambda (e)
+                       (let ((target (car e)))
+                         (hash-set! seen target (cons e (hash-ref seen target '())))))
+                     entries)
+           (hash-for-each
+            (lambda (target contributors)
+              (when (pair? (cdr contributors))
+                (error "application-configuration-selection: duplicate target \
 path (one owner per final path)"
-                target
-                (map (lambda (e)
-                       (list (caddr e)   ; application
-                             (cadddr e)  ; variant
-                             (file-description (cadr e))))
-                     contributors))))
-     seen)
-    (if (null? entries)
-      '()
-      ;; 共享 sink 经 native extension 贡献（AGENT.md §12：不创建
-      ;; 第二个完整服务实例；canonical target 由
-      ;; instantiate-missing-services 自动实例化）。条目形态为两元素
-      ;; 列表 (target source)——与仓库其它 xdg-config 贡献一致
-      ;; （quasiquote 列表形态；home-files 的 assert-no-duplicates
-      ;; 只匹配该形态）。
-      (list (simple-service 'application-configuration-files
-                            home-xdg-configuration-files-service-type
-                            (map (lambda (e) (list (car e) (cadr e)))
-                                 entries))))))
+                       target
+                       (map (lambda (e)
+                              (list (caddr e)   ; application
+                                    (cadddr e)  ; variant
+                                    (file-description (cadr e))))
+                            contributors))))
+            seen)
+           (if (null? entries)
+             '()
+             ;; 共享 sink 经 native extension 贡献（AGENT.md §12：不创建
+             ;; 第二个完整服务实例；canonical target 由
+             ;; instantiate-missing-services 自动实例化）。条目形态为两元素
+             ;; 列表 (target source)——与仓库其它 xdg-config 贡献一致
+             ;; （quasiquote 列表形态；home-files 的 assert-no-duplicates
+             ;; 只匹配该形态）。
+             (list (simple-service 'application-configuration-files
+                                   home-xdg-configuration-files-service-type
+                                   (map (lambda (e) (list (car e) (cadr e)))
+                                        entries))))))
