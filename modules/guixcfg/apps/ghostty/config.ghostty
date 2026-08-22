@@ -1,3 +1,5 @@
+theme = noctalia
+
 keybind = performable:ctrl+c=copy_to_clipboard
 selection-clear-on-copy = true
 

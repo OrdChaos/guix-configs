@@ -1,0 +1,24 @@
+# Declarative SSH client configuration — owned by the guixcfg ssh
+# application. Rebuilt from the Home generation on every boot; edit
+# the repository, not this file.
+#
+# known_hosts persistence: SSH's atomic rewrite (mkstemp + rename) is
+# incompatible with single-file bind mounts and with symlinks (rename
+# replaces the symlink itself), so the mutable TOFU state lives at its
+# canonical backing path and SSH is pointed at it via direct reference
+# (docs/architecture/persistence.md) — the same pattern as the system
+# sshd HostKey (/persist/system/ssh). The backing directory is created
+# by the ssh session service.
+#
+# Host-specific blocks must precede the generic `Host *` block:
+# OpenSSH uses the first obtained value per parameter.
+
+Host aur.archlinux.org
+    IdentityFile ~/.ssh/aur
+    User aur
+
+Host *
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
+    UserKnownHostsFile /persist/data-app/ssh/known_hosts
+    HashKnownHosts yes

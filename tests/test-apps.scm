@@ -67,6 +67,45 @@
              (equal? (applications-home-services (list app-a app-b))
                      (applications-home-services (list app-a app-b))))
 
+;; ── home-files 目标归属校验（~/.config 必须走 xdg service）────
+(define bad-config-app
+  (application
+   (name 'bad-config)
+   (home-services
+    (list (service home-files-service-type '((".config/foo" . 1)))))))
+
+(define bad-config-exact-app
+  (application
+   (name 'bad-config-exact)
+   (home-services
+    (list (service home-files-service-type '((".config" . 1)))))))
+
+(define good-dotfile-app
+  (application
+   (name 'good-dotfile)
+   (home-services
+    (list (service home-files-service-type '((".ssh/config" . 1)
+                                            (".gitconfig" . 2)))))))
+
+(test-assert "home-files target under ~/.config/ rejected (fail fast)"
+             (catch #t
+               (lambda ()
+                 (applications-home-services (list bad-config-app))
+                 #f)
+               (lambda (k . a) #t)))
+
+(test-assert "home-files exact ~/.config target rejected"
+             (catch #t
+               (lambda ()
+                 (applications-home-services (list bad-config-exact-app))
+                 #f)
+               (lambda (k . a) #t)))
+
+(test-equal "non-config dotfile targets still aggregate"
+            2 (length (service-value
+                       (car (applications-home-services
+                             (list good-dotfile-app))))))
+
 ;; ── service-type-extend 不是 generic same-kind merger ────────
 (define-record-type* <synthetic-config> synthetic-config make-synthetic-config
                      synthetic-config?

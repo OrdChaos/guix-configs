@@ -80,6 +80,30 @@ service-type ...)` 创建第二个完整实例（ambiguous-target-service）。
 `(service ...)`。aggregator 只 concatenation，不做 same-kind
 merge（`service-type-extend` 不是 base-value merger）。
 
+**文件归属 service 选择规则**：pinned Guix 里
+`home-xdg-configuration-files-service-type` 就是
+`home-files-service-type` 的 `.config/` 前缀 extension——两者是
+"通用 sink + XDG 特化"的分层，不是两个等价选择。选择标准：
+
+- `~/.config` 下的文件**一律**经 `home-xdg-configuration-files-
+  service-type`（target 写 config 相对路径，如 `mpv/mpv.conf`）；
+- XDG 约定覆盖不到的 HOME dotfile（`.ssh/*`、`.gitconfig`、
+  `.local/bin/*` 等）才用 `home-files-service-type`（target 写 HOME
+  相对路径，如 `.gitconfig`）。
+
+禁止用 home-files 写 `~/.config/*`（与 xdg service 的职责重复），
+也禁止把 XDG 覆盖范围外的路径塞进 xdg service。现有先例：config
+系（ghostty/niri/mpv/noctalia）全走 xdg service；非 config dotfile
+（git 的 `.gitconfig`、ssh 的 `.ssh/*`、polkit-gnome 的
+`.local/bin`）全走 home-files——零交叉。**本规则已机制化**：
+`(guixcfg apps model)` 的 `applications-home-services` 在聚合时
+校验每个 app 的 home-files 贡献，target 落在 `~/.config`（含深层）
+立即报错（fail fast，错误消息含 app 名与违规 target，见
+`tests/test-apps.scm`）。注意 variant/selection
+机制（E9）构建在 xdg service 上：variant 文件只能落 `~/.config`；
+需要 per-host 的 `.ssh/*` 或 `.gitconfig` 变体时是已知边界，须先
+扩展 selection resolver。
+
 ## E4. Official Home service
 
 如果 pinned Guix 已提供官方 Home service，**优先使用**：

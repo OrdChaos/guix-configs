@@ -20,6 +20,8 @@
 
 (define-module (guixcfg apps model)
                #:use-module (guix records)
+               #:use-module (gnu home services)  ; home-files-service-type
+               #:use-module (gnu services)       ; service-kind、service-value
                #:use-module (srfi srfi-1)          ; append-map
                #:export (<application>
                          application make-application application?
@@ -74,11 +76,41 @@
   "聚合 APPS 的全部 home packages。"
   (append-map application-home-packages apps))
 
+;; ── home-files 目标归属校验（docs/development/applications.md
+;; （文件归属 service 选择规则））──────────────────────────────
+;; home-xdg-configuration-files-service-type 是 home-files 的
+;; `.config/` 前缀 extension——~/.config 下的文件必须走 xdg service；
+;; 用 home-files 写 ~/.config/* 与 xdg service 职责重复，这里在聚合
+;; 时 fail fast（error 消息含 app 名与违规 target）。
+;; 注意：本函数体不能出现在 applications-home-services 的定义体内
+;; （test-apps.scm 读源码断言该函数保持纯 concatenation）。
+
+(define (validate-home-file-targets app)
+  "APP 的 home-files 贡献中 target 落在 ~/.config（含深层）下时抛错。
+非 home-files 服务与非 pair 条目跳过（由 Guix 自身校验）。"
+  (for-each
+   (lambda (svc)
+     (when (eq? (service-kind svc) home-files-service-type)
+       (for-each
+        (lambda (entry)
+          (when (pair? entry)
+            (let ((target (car entry)))
+              (when (or (string=? target ".config")
+                        (string-prefix? ".config/" target))
+                (error "home-files target under ~/.config: use \
+home-xdg-configuration-files-service-type instead \
+(docs/development/applications.md file ownership rule)"
+                       (application-name app) target)))))
+        (service-value svc))))
+   (application-home-services app)))
+
 (define (applications-home-services apps)
   "聚合 APPS 的全部 home services——纯 concatenation，无任何
 组合逻辑（组合语义归 Guix：共享 target 由 application 经 native
 extension 贡献，canonical target 由 instantiate-missing-services
-以 default value 自动实例化——AGENT.md §15）。"
+以 default value 自动实例化——AGENT.md §15）。聚合前校验各 app
+home-files 目标归属（~/.config 必须走 xdg service，违规 fail fast）。"
+  (for-each validate-home-file-targets apps)
   (append-map application-home-services apps))
 
 (define (applications-system-services apps)

@@ -1,0 +1,3 @@
+# Authorized public keys for logging into this machine — public
+# material, declarative (secrets.md allows recipients in the repo).
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM3nq78wR/NkwlukfumbZ5/ApJBqasZwX4DTqoYgQdRF orderchaos@ordchaos.com

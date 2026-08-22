@@ -34,6 +34,9 @@
                #:use-module (guixcfg apps gnome-keyring definition)
                #:use-module (guixcfg apps mpv definition)
                #:use-module (guixcfg apps google-chrome-stable definition)
+               #:use-module (guixcfg apps gnupg definition)
+               #:use-module (guixcfg apps seahorse definition)
+               #:use-module (guixcfg apps ssh definition)
                #:export (%applications))
 
 (define %applications
@@ -62,7 +65,10 @@
         %fastfetch
         %mpv
         %google-chrome-stable
-        %gnome-keyring))
+        %gnome-keyring
+        %gnupg
+        %seahorse
+        %ssh))
 
 ;; 完整性检查：启用集合的名字必须唯一（fail fast，加载即报错）。
 (define %application-names (map application-name %applications))
