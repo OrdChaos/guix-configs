@@ -105,9 +105,14 @@
                          (user-profile-name %primary-user)))
 
 ;; 用户私钥集合：(runtime secret target, ~/.ssh 链接名)。
-(define %ssh-user-keys
-  (list (cons %ssh-user-key-target "id_ed25519")
-        (cons %ssh-aur-key-target "aur")))
+;; ⚠️ 本常量只作文档/配对声明——**禁止**把它整体嵌入 gexp：
+;; 裸 cons/list 字面量在生成脚本的表达式位置会变成
+;; (("a" . "b") ...)，guile read/expand 阶段即 syntax violation
+;; （build 不报错，运行才炸；2026-08 VM 实测 ssh-session）。gexp
+;; 模板内必须用 (list (list ...)) 显式构造（见 wrapper）。
+(define %ssh-user-key-entries
+  (list (list %ssh-user-key-target "id_ed25519")
+        (list %ssh-aur-key-target "aur")))
 
 ;; session one-shot wrapper：有界等待全部 runtime secret → 建 ~/.ssh
 ;; （0700）与 known_hosts backing 目录 → 各私钥 symlink（幂等：目标
@@ -124,13 +129,27 @@
       (define ssh-dir (string-append home "/.ssh"))
       ;; 1. ~/.ssh 目录（幂等；session 以用户身份运行）。known_hosts
       ;;    backing 由 system activation 创建（root-owned root 下
-      ;;    用户无法 mkdir），这里只防御性 chmod。
+      ;;    用户无法 mkdir）——这里防御性 chmod：backing 缺失时仅
+      ;;    警告（known_hosts 持久化优雅降级），绝不阻断 key wiring。
       (unless (file-exists? ssh-dir) (mkdir ssh-dir))
       (chmod ssh-dir #o700)
-      (chmod #$%ssh-known-hosts-dir #o700)
+      (catch #t
+        (lambda ()
+          (chmod #$%ssh-known-hosts-dir #o700))
+        (lambda (k . a)
+          (format (current-error-port)
+                  "ssh-session: warning: known-hosts backing missing (~a); \
+known_hosts will not persist this session~%"
+                  #$%ssh-known-hosts-dir)))
       ;; 2. 有界等待全部 runtime secret（ordinary domain fail-closed：
       ;;    解密发布要么全有要么全无；reconfigure 升级期间可能滞后——
-      ;;    最多 60 秒自愈；失败 = 服务 failed，登录不受影响）
+      ;;    最多 60 秒自愈；失败 = 服务 failed，登录不受影响）。
+      ;;    entries 以 (list (list ...)) 显式构造——嵌入裸列表字面量
+      ;;    会在表达式位置产生 (("a" "b") ...)，read/expand 即炸
+      ;;    （见 %ssh-user-key-entries 注释）。
+      (define entries
+        (list (list #$%ssh-user-key-target "id_ed25519")
+              (list #$%ssh-aur-key-target "aur")))
       (for-each
        (lambda (target)
          (let loop ((tries 60))
@@ -138,13 +157,13 @@
              (if (zero? tries)
                (exit 1)
                (begin (sleep 1) (loop (- tries 1)))))))
-       (map car #$%ssh-user-keys))
+       (map car entries))
       ;; 3. 私钥 symlink（幂等；替换陈旧/非 symlink 目标）+ 防御性
       ;;    权限（publisher 已按 decl 物化 0600；双保险）
       (for-each
        (lambda (entry)
          (let* ((secret (car entry))
-                (name (cdr entry))
+                (name (cadr entry))
                 (link (string-append ssh-dir "/" name)))
            (catch #t
              (lambda ()
@@ -157,7 +176,7 @@
                  (lambda (k . a) #t))
                (symlink secret link)))
            (chmod secret #o600)))
-       #$%ssh-user-keys))))
+       entries))))
 
 (define %ssh
   (application
