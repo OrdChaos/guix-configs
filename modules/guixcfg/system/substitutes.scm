@@ -28,7 +28,6 @@
                #:use-module (guix gexp)            ; local-file
                #:use-module (guix store)           ; %default-substitute-urls
                #:export (%nonguix-substitute-url
-                         %nonguix-substitute-key-file
                          %transition-substitute-urls
                          nonguix-substitute-service))
 

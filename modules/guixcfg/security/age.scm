@@ -26,18 +26,15 @@
                          %stable-identity-rel
                          recipient-format?
                          runtime-identity-present?
-                         current-identity-path
                          age-init!
                          age-unlock!
                          age-install!
                          age-verify!
                          age-lock!
                          age-decrypt-file
-                         age-decrypt-to-string
                          make-age-secret-reader
                          %account-credentials-dir
-                         provision-password-hash!
-                         password-hash-format?))
+                         provision-password-hash!))
 
 ;; 运行时临时 S（tmpfs；目录 0700、文件 0600）与安装后的
 ;; authoritative S（LUKS-backed persist）的默认路径；函数经 parameter

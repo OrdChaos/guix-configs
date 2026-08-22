@@ -37,7 +37,6 @@
                #:use-module (srfi srfi-13)                 ; string-tokenize
                #:export (tpm-unlock-in-initrd
                          cmdline-option
-                         proc-cmdline-option
                          tpm-unlock-candidate?))
 
 ;; initrd 里 ESP 的临时挂载点与机器级 artifact 目录（PCR7 不随

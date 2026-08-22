@@ -11,7 +11,6 @@
                #:use-module (srfi srfi-13)  ; 字符串工具
                #:export (;; 状态文件位置
                          %root-generations-dir-name
-                         %state-file-name
                          state-file-path
                          ;; 状态记录
                          <root-state>

@@ -41,13 +41,14 @@ single-owner mechanism 执行：
 - secrets → `(guixcfg security secrets)` publisher（ciphertext
   file-like 由 app definition 解析；见 secrets.md）。
 
-**Host 额外配置**：host/profile 层可经 generic
-`extra-configuration-files` 机制（`(guixcfg apps extra-config)`）向
-`~/.config` 贡献原生配置文件（如 laptop 的 niri/host.kdl）。
-`guix-home` 接受 `#:extra-configuration-files` 参数；默认
-`%guix-home`（无 host 贡献）供 VM 等组装点直接使用。
-依赖方向 application ← host（application 不读取 host；详见
-applications.md（Host-agnostic boundary））。
+**Configuration variant selection**：application 声明可选配置变体
+（资源 colocate 在应用目录）；host/profile 层只做 logical
+selection（`(guixcfg apps selection)`：application 名 + variant 名，
+不知道文件/路径）。`guix-home` 接受
+`#:application-configuration-selections` 参数；默认 `%guix-home`
+（无特殊 selection）供 VM 等组装点直接使用。依赖方向
+application ← host（application 不读取 host；详见 applications.md
+（Host-agnostic boundary））。
 
 不实现 NixOS/RDE module framework（无 solver/priority/override/
 自动发现）。新增应用：`cp -r templates/application
@@ -60,12 +61,21 @@ contract、layout、local-file 语义、ownership 决策表、secret/
 
 ## Ephemeral /home + bind-mounted 用户目录
 
-`/home/<user>` 本身是 ephemeral（无状态 root）。初始持久目录由系统
-从 `/persist/data-home/<user>/` bind mount：
+`/home/<user>` 本身是 ephemeral（无状态 root）。持久目录由系统
+从 `/persist/data-home/<user>/` bind mount（`%persistent-user-dirs`，
+modules/guixcfg/system/user-persistence.scm）——标准 XDG user
+directories 全集 + 仓库 checkout：
 
 ```text
-guix-configs / Projects / Documents / Downloads / Pictures
+guix-configs / Projects / Desktop / Documents / Downloads /
+Music / Pictures / Public / Templates / Videos
 ```
+
+XDG user directories 由 Guix Home 声明（官方
+`home-xdg-user-directories-service-type`，`(guixcfg home xdg)` 的
+`%xdg-user-dirs-service`）：生成 `~/.config/user-dirs.dirs` 并在
+activation 创建各目录；持久化 backing 与声明的一致性由
+tests/test-user-persistence.scm 回归。
 
 显式 ephemeral（本轮不持久化）：`~/.cache`、`~/.config`、
 `~/.local`、`~/.mozilla`、`~/.steam`、整个 HOME。本轮不声称完整

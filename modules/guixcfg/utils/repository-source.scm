@@ -22,7 +22,7 @@
 
 (define-module (guixcfg utils repository-source)
                #:use-module (guix gexp)   ; local-file、assume-source-relative-file-name
-               #:export (repository-file repository-root))
+               #:export (repository-file))
 
 ;; 本模块所在目录（modules/guixcfg/utils/）。%load-path 必须含
 ;; modules/（guix repl -L modules / tests 的 add-to-load-path）。

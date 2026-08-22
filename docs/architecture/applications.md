@@ -3,90 +3,108 @@
 用户态配置的纵向组织单元。**How-to（新增应用）见
 `docs/development/applications.md`**；开发约束摘要见 AGENT.md §12。
 
-## Host-agnostic boundary（依赖方向）
+## Host-agnostic boundary（资源所有权 / variant selection）
 
 ```text
 application
-    │
-    │ 提供应用本身及通用配置
+    │ 拥有配置资源 + 声明 logical configuration variants
     ▼
-profile / host overlay
-    │
-    │ 提供额外的原生配置文件（generic extra-configuration-files）
-    ▼
-Guix Home composition
-    │
-    ▼
-最终 ~/.config/...
+generic application composition
+    │ 解析 selection → 校验 → 安装声明文件
+    ▲
+host/profile
+    │ 只做 logical variant selection（application 名 + variant 名）
 ```
 
-**Applications are host-agnostic.**
+**Applications own their configuration resources and declare logical
+configuration variants.**
 
-- Application modules own their common configuration.
-- Profiles/hosts may contribute opaque native configuration files
-  through the generic `extra-configuration-files` mechanism.
+- Application modules own their common configuration **and** their
+  optional configuration variants (resources colocate in the
+  application's own directory).
+- Hosts/profiles select variants by application and logical variant
+  name only.
+- The generic application composition layer resolves selections into
+  opaque configuration-file contributions.
 - The application layer must not inspect host or hardware inventory.
 
 ```text
 inventory  = facts
-host/profile = policy
-application = application behavior
-composition = assembly
+host/profile = policy / selection
+application = resource ownership / application behavior
+composition = resolution / assembly
 ```
 
-inventory（如有）只描述事实；host/profile 依据这些事实做策略决定；
-application 模块不得反向依赖 host。禁止 application 读取当前 host、
-判断 laptop/VM/GPU/display。
+inventory（如有）只描述事实；host/profile 依据这些事实做策略与
+selection 决定；application 模块不得反向依赖 host。禁止 application
+读取当前 host、判断 laptop/VM/GPU/display。
 
-### generic extra-configuration-files（`(guixcfg apps extra-config)`）
+### configuration variants（`(guixcfg apps model)`）
+
+application 声明可选配置变体——**application 拥有资源与声明**：
 
 ```scheme
-(extra-configuration-file
- (application 'niri)          ; owner：registry 中的应用名（启用唯一
-                              ;   权威 + ownership/诊断）——不隐含任何
-                              ;   路径约定
- (path "niri/host.kdl")       ; 完整的、相对于 ~/.config 的目标路径
- (source (local-file ...)))   ; file-like，不透明原生格式（KDL/TOML/...）
+(application-configuration-variant
+ (name 'laptop)                    ; 稳定 logical identifier
+ (files `(("niri/host.kdl"         ; 完整 ~/.config 相对 target
+           ,(local-file "variants/laptop.kdl")))))  ; opaque file-like
 ```
 
-`extra-configuration-files->home-services` 把贡献列表转为
-`home-xdg-configuration-files-service-type` 的 native extension：
-`path` 原样作为目标路径安装（Scheme 只校验路径、组合、交给 Guix
-Home——**不解析文件内容**）。`path` 与 application name **无耦合**
-（不假设"应用名 = 配置目录名"）；application 仅作 owner 校验与
-冲突诊断。
+```scheme
+(application
+ (name 'niri)
+ ...
+ (configuration-variants (list ...)))
+```
 
-**冲突语义**：同一最终目标路径只能有一个 owner。
+- variant 是 application 自己声明的资源；source 文件 colocate 在
+  application 自己的目录（如 `apps/niri/variants/laptop.kdl`）；
+- `files` 是 `(target source)` 两元素列表的集合——一个 variant 可
+  贡献多个文件；target 是完整 `~/.config` 相对路径（与 application
+  name **无耦合**，不假设"应用名 = 配置目录名"）；source 是 opaque
+  file-like，generic 层不解析格式。
 
-- 聚合器在组合时按 `path` 查重，重复立即报错并列出冲突路径与
-  全部贡献的 owner/来源（fail fast，无隐式顺序覆盖）；
-- 跨贡献方冲突（如 extra 与 application 自身文件撞同一路径）由
-  Guix Home 的 `assert-no-duplicates` 在 lower 时兜底报错（
-  gnu/home/services.scm `files->files-directory`）——复用官方机制，
-  不重复实现另一套冲突系统。
+### variant selection（`(guixcfg apps selection)`）
 
-host 侧示例（laptop；host 只是本机制的**第一个消费者**）：
+host/profile 只做 logical selection——**不知道文件、目标路径、
+source 位置**：
 
 ```scheme
 ;; modules/guixcfg/hosts/laptop.scm
-(define %laptop-extra-configuration-files
-  (list (extra-configuration-file
+(define %laptop-application-configuration-selections
+  (list (application-configuration-selection
          (application 'niri)
-         (path "niri/host.kdl")
-         (source (local-file "laptop/niri-host.kdl"
-                             "laptop-niri-host.kdl")))))
+         (variant 'laptop))))
 ```
 
 ```scheme
 ;; modules/guixcfg/home/user.scm
-(guix-home #:extra-configuration-files %laptop-extra-configuration-files)
+(guix-home #:application-configuration-selections
+           %laptop-application-configuration-selections)
 ```
 
-niri 当前只消费一个 `host.kdl`（application 与 host overlay 之间的
-稳定接缝名）；机制本身支持任意多个文件、任意 application、任意
-`~/.config` 目标。**不要把 "host-specific" 写死成 generic interface
-的定义——host 只是第一个消费者；机制本身只表达 extra configuration
-contribution。**
+`application-configuration-selections->home-services` 解析：
+selection → lookup application（registry）→ lookup 声明 variant →
+resolve files → 校验 target → 冲突检测 → 聚合为
+`home-xdg-configuration-files-service-type` 的 native extension。
+
+**封装不变量**：改变 variant 背后的文件或目标路径（如
+`niri/host.kdl` → `niri/device.kdl`，或一个文件拆成多个）**不需要
+修改 host 的 selection**。
+
+**冲突语义**：同一最终目标路径只能有一个 owner。
+
+- resolver 在解析后按 target 查重，重复立即报错并列出冲突路径与
+  全部来源（application + variant + source 描述，fail fast，无隐式
+  顺序覆盖）；
+- 跨贡献方冲突（如 variant 与 application 自身文件撞同一路径）由
+  Guix Home 的 `assert-no-duplicates` 在 lower 时兜底报错（
+  gnu/home/services.scm `files->files-directory`）——复用官方机制，
+  不重复实现另一套冲突系统。
+
+**不要把 variant 定义成 host/hardware 专用概念**：'laptop 只是
+第一个实际 variant；API vocabulary 保持 application-generic
+（未来可有 'compact-ui / 'accessibility 等）。
 
 ## 为什么存在（旧问题）
 

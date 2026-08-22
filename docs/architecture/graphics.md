@@ -60,9 +60,11 @@ interactive-session-ready（core readiness join barrier）
     noctalia.kdl 时配置仍合法）；
   - `common.kdl`（app-owned）：全部机器无关行为（input/layout/
     rules/animations/binds/cursor/spawn）；
-  - `host.kdl`（host-owned）：机器事实（DRM 设备、固定输出），经
-    generic extra-configuration-files 机制由 host 层贡献（laptop →
-    hosts/laptop/niri-host.kdl）；VM 不贡献（optional include）；
+  - `variants/laptop.kdl`（app-owned）：niri 声明的 'laptop
+    configuration variant——机器事实（DRM 设备、固定输出），由
+    generic selection resolver 安装为 `host.kdl`；host 层只做
+    logical selection（(guixcfg apps selection)），不知道文件/路径；
+    VM 无 selection（optional include 仅警告）；
   - `noctalia.kdl`：Noctalia 运行时生成（唯一 owner = Noctalia，
     Guix Home 不安装；entrypoint 只 include 不声明）。
 

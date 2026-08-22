@@ -55,7 +55,6 @@
                          machine-state-persistence-rule-lifecycle
                          %machine-state-root
                          valid-machine-state-persistence-rule?
-                         validate-machine-state-persistence-rule
                          machine-state-persistence-file-systems
                          machine-state-persistence-activation
                          machine-state-persistence-service))

@@ -1,17 +1,20 @@
 ;;; niri application unit：用户桌面生命周期（home-niri-service-type，
 ;;; bash -l -c "exec niri --session"；profile 自动贡献 dbus/niri/
 ;;; xdg-desktop-portal-*/xwayland-satellite；requirement home-dbus）
-;;; + niri 公开配置（config.kdl 入口 + common.kdl 通用配置，本目录
-;;; colocate）。
+;;; + niri 公开配置（config.kdl 入口 + common.kdl 通用配置 + 可选
+;;; configuration variants，本目录 colocate）。
 ;;;
 ;;; 配置树（docs/architecture/graphics.md）：
 ;;;   config.kdl   薄入口：include common.kdl + host.kdl(optional) +
 ;;;                noctalia.kdl(optional)（include 语义见文件头注释）
 ;;;   common.kdl   application-owned：全部机器无关行为
-;;;   host.kdl     不由本模块生成——host/profile 层经 generic
-;;;                extra-configuration-files 机制
-;;;                （(guixcfg apps extra-config)）贡献（laptop 见
-;;;                hosts/laptop.scm）；VM 无此文件
+;;;   variants/    application-owned 可选配置变体（如 laptop.kdl）：
+;;;                application 声明变体及其文件/目标路径；host 层只
+;;;                做 logical selection（(guixcfg apps selection)），
+;;;                不知道文件与路径
+;;;   host.kdl     由 'laptop variant 解析安装（~/.config/niri/
+;;;                host.kdl）；VM 无 selection → 不安装（config.kdl
+;;;                的 optional include 仅警告）
 ;;;   noctalia.kdl 运行时由 Noctalia 生成（唯一 owner = Noctalia；
 ;;;                本模块不安装、不声明）
 ;;;
@@ -43,4 +46,14 @@
                           `(("niri/config.kdl"
                              ,(local-file "config.kdl" "niri-config.kdl"))
                             ("niri/common.kdl"
-                             ,(local-file "common.kdl" "niri-common.kdl"))))))))
+                             ,(local-file "common.kdl" "niri-common.kdl"))))))
+   ;; 可选配置变体（application-owned）：'laptop 携带机器事实
+   ;; （DRM 选择、固定内屏输出），解析安装为 ~/.config/niri/host.kdl
+   ;; ——target 是完整 ~/.config 相对路径，与 application name 无
+   ;; 耦合；host 层只按 (niri, laptop) 选择。
+   (configuration-variants
+    (list (application-configuration-variant
+           (name 'laptop)
+           (files `(("niri/host.kdl"
+                     ,(local-file "variants/laptop.kdl"
+                                  "niri-laptop.kdl")))))))))

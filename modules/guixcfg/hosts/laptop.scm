@@ -1,45 +1,45 @@
 ;;; Laptop 最终组装点（阶段 6；docs/README.md）。Host 负责组合硬件、
 ;;; 存储 policy、boot 配置和服务。
 ;;;
-;;; Host 是策略层（inventory = facts / host = policy / application =
-;;; application behavior / composition = assembly；docs/architecture/
-;;; applications.md（Host-agnostic boundary））：经 generic
-;;; extra-configuration-files 机制向应用配置目录贡献原生配置文件
-;;; （本机 = niri/host.kdl，源文件 colocate 本目录）。application
-;;; 层不读取本模块，依赖方向保持 application ← host。
+;;; Host 是策略/选择层（inventory = facts / host = policy+selection /
+;;; application = resource ownership+behavior / composition =
+;;; resolution+assembly；docs/architecture/applications.md
+;;; （Host-agnostic boundary））：对 application 只做 logical
+;;; configuration variant selection——本模块不知道 variant 背后的
+;;; 文件、目标路径或 source 位置（那些由 application 自己声明，
+;;; generic (guixcfg apps selection) 解析）。application 层不读取
+;;; 本模块，依赖方向保持 application ← host。
 ;;;
 ;;; 当前 laptop 尚无完整 <operating-system> 组装（roadmap：
 ;;; Laptop host 组装点）；本模块先落地 host 层的 home 组合 seam：
-;;;   %laptop-extra-configuration-files：host 贡献（niri/host.kdl）
-;;;   %laptop-guix-home：(guix-home #:extra-configuration-files ...)
-;;; VM 用默认 %guix-home（无 extra 贡献——host.kdl 不存在，niri
-;;; config.kdl 的 optional include 仅警告，pinned niri 26.04 语义）。
+;;;   %laptop-application-configuration-selections：logical selection
+;;;   %laptop-guix-home：(guix-home #:application-configuration-selections ...)
+;;; VM 用默认 %guix-home（无 selection——可选配置不安装；应用侧
+;;; optional include 语义保证配置仍合法，pinned niri 26.04 核实）。
 
 (define-module (guixcfg hosts laptop)
                #:use-module ((guixcfg storage policies) #:prefix storage:)
-               #:use-module (guixcfg apps extra-config) ; extra-configuration-file
-               #:use-module (guixcfg home user)     ; guix-home
-               #:use-module (guix gexp)             ; local-file
+               #:use-module (guixcfg apps selection) ; application-configuration-selection
+               #:use-module (guixcfg home user)      ; guix-home
                #:export (%laptop-storage-policy
-                         %laptop-extra-configuration-files
+                         %laptop-application-configuration-selections
                          %laptop-guix-home))
 
 ;; 与 VM 一样，policy 本体放在 (guixcfg storage policies)，使磁盘安装
 ;; 阶段不必加载完整 host/boot/channel 图。
 (define %laptop-storage-policy storage:%laptop-storage-policy)
 
-;; Host-owned niri 机器事实（原生 KDL，source-relative local-file
-;; colocate 本目录：hosts/laptop/niri-host.kdl → 安装为
-;; ~/.config/niri/host.kdl——"niri/host.kdl" 是 application 与 host
-;; overlay 之间的稳定接缝名，path 是完整 ~/.config 相对路径，
-;; application 只作 owner）。
-(define %laptop-extra-configuration-files
-  (list (extra-configuration-file
+;; laptop 对 application 的 logical variant selection。本模块只表达
+;; "选什么"，不表达"装什么文件/装到哪里"——改变 niri 'laptop
+;; variant 背后的文件或目标路径不要求修改这里。
+(define %laptop-application-configuration-selections
+  (list (application-configuration-selection
          (application 'niri)
-         (path "niri/host.kdl")
-         (source (local-file "laptop/niri-host.kdl"
-                             "laptop-niri-host.kdl")))))
+         (variant 'laptop))))
 
-;; laptop 的 Guix Home 组合：默认 home + host 额外配置贡献。
+;; laptop 的 Guix Home 组合：默认 home + logical selections（由
+;; generic resolver 解析为配置文件贡献）。
 (define %laptop-guix-home
-  (guix-home #:extra-configuration-files %laptop-extra-configuration-files))
+  (guix-home
+   #:application-configuration-selections
+   %laptop-application-configuration-selections))

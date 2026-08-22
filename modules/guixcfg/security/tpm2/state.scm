@@ -24,7 +24,6 @@
                #:use-module (ice-9 rdelim)               ; read
                #:use-module (srfi srfi-1)                ; assq-ref
                #:export (%tpm2-state-dir
-                         %tpm2-state-format-version
                          %tpm2-pcr-bank
                          %tpm2-pcr-list
                          <tpm2-enrollment>

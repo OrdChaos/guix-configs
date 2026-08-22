@@ -21,13 +21,17 @@
                          user-persistence-activation
                          user-persistence-service))
 
-;; 持久化目录（后续按应用状态需求单独扩展）。
 (define %persistent-user-dirs
   '("guix-configs"
     "Projects"
+    "Desktop"
     "Documents"
     "Downloads"
-    "Pictures"))
+    "Music"
+    "Pictures"
+    "Public"
+    "Templates"
+    "Videos"))
 
 (define (user-persistence-file-systems user)
   "SELECTED 用户目录的 bind mount 声明（/persist/data-home/USER/<d>

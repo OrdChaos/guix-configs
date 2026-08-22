@@ -46,9 +46,7 @@
                          application-persistence-rule-consumer
                          application-persistence-rule-exposure
                          application-persistence-rule-lifecycle
-                         %application-persistence-root
                          valid-application-persistence-rule?
-                         validate-application-persistence-rule
                          application-persistence-file-systems
                          application-persistence-activation
                          application-persistence-service))

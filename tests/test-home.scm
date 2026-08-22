@@ -57,6 +57,12 @@
                          (service-type-extensions (service-kind s))))
                   (home-environment-services %guix-home)))
 
+(test-assert "xdg user directories service composed into %guix-home"
+             (any (lambda (s)
+                    (eq? 'home-xdg-user-directories
+                         (service-type-name (service-kind s))))
+                  (home-environment-services %guix-home)))
+
 (test-assert "fontconfig policy service composed into %guix-home"
              (any (lambda (s)
                     (any (lambda (ext)

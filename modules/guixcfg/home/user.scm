@@ -5,10 +5,10 @@
 ;;; 来自 (guixcfg home environment)。本文件不知道 Git/Niri/Bash 等
 ;;; 具体应用配置。
 ;;;
-;;; host/profile 层可经 generic extra-configuration-files 机制
-;;; （(guixcfg apps extra-config)）向应用配置目录额外贡献原生配置
-;;; 文件（如 laptop 的 niri/host.kdl）——guix-home 接受
-;;; #:extra-configuration-files 参数；应用层不反向依赖 host。
+;;; host/profile 层只做 logical application configuration variant
+;;; selection（(guixcfg apps selection)）——guix-home 接受
+;;; #:application-configuration-selections 参数，由 generic resolver
+;;; 解析为应用声明文件的安装；应用层不反向依赖 host。
 ;;;
 ;;;   registry（%applications）    (guixcfg home xdg)   (guixcfg home fonts)
 ;;;      ↓ aggregation               ↓ 默认应用策略      ↓ %fonts + fontconfig
@@ -26,31 +26,33 @@
                #:use-module (gnu home)              ; home-environment
                #:use-module (guixcfg apps model)
                #:use-module (guixcfg apps registry)
-               #:use-module (guixcfg apps extra-config) ; extra-configuration-files->home-services
-               #:use-module (guixcfg home xdg)      ; %xdg-default-apps-service
+               #:use-module (guixcfg apps selection) ; application-configuration-selections->home-services
+               #:use-module (guixcfg home xdg)      ; %xdg-default-apps-service、%xdg-user-dirs-service
                #:use-module (guixcfg home fonts)    ; %fonts、%fontconfig-service
                #:use-module (guixcfg home environment) ; %session-environment-service
                #:export (guix-home
                          %guix-home))
 
-(define* (guix-home #:key (extra-configuration-files '()))
+(define* (guix-home #:key (application-configuration-selections '()))
          "构造 home-environment：registry 应用聚合 + 统一策略服务。
-HOST/profile 的额外应用配置文件经 EXTRA-CONFIGURATION-FILES
-（<extra-configuration-file> 列表）贡献（generic mechanism，
-host-agnostic）。"
+HOST/profile 的 application configuration variant selections 经
+APPLICATION-CONFIGURATION-SELECTIONS（<application-configuration-
+selection> 列表）贡献（generic mechanism，host 只做 logical
+selection，不知道文件/路径）。"
          (home-environment
           (packages (append %fonts
                             (applications-home-packages %applications)))
           (services (append (list %xdg-default-apps-service
+                                  %xdg-user-dirs-service
                                   %fontconfig-service
                                   %session-environment-service)
-                            (extra-configuration-files->home-services
-                             extra-configuration-files)
+                            (application-configuration-selections->home-services
+                             application-configuration-selections)
                             (applications-home-services %applications)))))
 
-;; 默认 home（host-agnostic）：VM 及其它无 host-specific 贡献的
-;; 组装点直接使用；需要 host 额外配置的组装点调用
-;; (guix-home #:extra-configuration-files ...)。
+;; 默认 home（host-agnostic）：VM 及其它无特殊 selection 的组装点
+;; 直接使用；需要 variant 的组装点调用
+;; (guix-home #:application-configuration-selections ...)。
 (define %guix-home (guix-home))
 
 ;; 末尾裸表达式：guix home 的入口文件约定（取最后一个表达式）。

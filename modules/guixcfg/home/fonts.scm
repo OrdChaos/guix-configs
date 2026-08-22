@@ -56,7 +56,6 @@
                #:use-module (virelith packages fonts)     ; 自定义字体
                #:use-module (srfi srfi-1)                 ; append-map
                #:export (%fonts
-                         %fontconfig-snippets
                          %fontconfig-service))
 
 ;; ── 字体集合（profile 层：决定“有哪些字体”）─────────────────

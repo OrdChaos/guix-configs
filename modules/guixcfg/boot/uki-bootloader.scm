@@ -20,8 +20,7 @@
                #:use-module (guix gexp)
                #:use-module (guix records)
                #:use-module (ice-9 regex)   ; string-match（gnu.system= 解析）
-               #:export (%deploy-script-path
-                         uki-bootloader))
+               #:export (uki-bootloader))
 
 ;; 部署脚本在目标系统上的落点（install-boot-config 复制到这里）。
 (define %deploy-script-path "/boot/deploy-uki")

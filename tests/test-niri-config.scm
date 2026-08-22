@@ -1,9 +1,9 @@
 ;;; niri 配置拆分测试（任务架构调整落地）：config.kdl 薄入口、
-;;; common.kdl application-owned 通用配置、host.kdl 由 host 层经
-;;; generic extra-configuration-files 贡献、VM 无 host 配置语义、
-;;; noctalia.kdl ownership 唯一、主机/FHS 硬编码审计，以及（store
-;;; 中存在 pinned niri 二进制时）niri validate 对最终配置树的真实
-;;; 解析验证。
+;;; common.kdl application-owned 通用配置、host.kdl 由 niri 的
+;;; 'laptop configuration variant 解析安装（host 只做 logical
+;;; selection）、VM 无 selection 语义、noctalia.kdl ownership 唯一、
+;;; 主机/FHS 硬编码审计，以及（store 中存在 pinned niri 二进制时）
+;;; niri validate 对最终配置树的真实解析验证。
 
 (use-modules (guix store)         ; open-connection
              (guix monads)
@@ -15,7 +15,7 @@
              (gnu services)          ; service-kind、service-value
              (guixcfg apps model)
              (guixcfg apps niri definition)
-             (guixcfg apps extra-config)
+             (guixcfg apps selection)
              (guixcfg home user)
              (guixcfg hosts laptop)
              (ice-9 rdelim)          ; read-string
@@ -33,8 +33,9 @@
 
 (define %config-kdl (read-file "modules/guixcfg/apps/niri/config.kdl"))
 (define %common-kdl (read-file "modules/guixcfg/apps/niri/common.kdl"))
+;; laptop-specific KDL 由 niri application colocate（variants/）。
 (define %host-kdl
-  (read-file "modules/guixcfg/hosts/laptop/niri-host.kdl"))
+  (read-file "modules/guixcfg/apps/niri/variants/laptop.kdl"))
 
 (define (text-contains-any? text words)
   (any (lambda (w) (string-contains text w)) words))
@@ -130,37 +131,36 @@
              (assoc "niri/config.kdl" %niri-xdg-value))
 (test-assert "niri application installs common.kdl"
              (assoc "niri/common.kdl" %niri-xdg-value))
-(test-assert "niri application installs no host.kdl (host-contributed)"
+(test-assert "niri application installs no host.kdl (variant-resolved)"
              (not (assoc "niri/host.kdl" %niri-xdg-value)))
 
-;; ── 8. host 层组合：laptop 贡献经 generic 机制进入 home ─────
-(test-assert "laptop extra files target niri/host.kdl (full ~/.config path)"
-             (equal? '("niri/host.kdl")
-                     (map extra-configuration-file-path
-                          %laptop-extra-configuration-files)))
-(test-assert "laptop extra files are owned by niri"
-             (equal? '(niri)
-                     (map extra-configuration-file-application
-                          %laptop-extra-configuration-files)))
-(test-assert "laptop home includes the extra-configuration-files extension"
+;; ── 8. host 层组合：laptop 只做 logical selection，generic
+;;     resolver 把 niri 'laptop variant 解析进 home ───────────
+(test-assert "laptop selects the niri laptop variant (logical only)"
+             (equal? '((niri laptop))
+                     (map (lambda (s)
+                            (list (application-configuration-selection-application s)
+                                  (application-configuration-selection-variant s)))
+                          %laptop-application-configuration-selections)))
+(test-assert "laptop home includes the application-configuration-files extension"
              (any (lambda (s)
-                    (eq? 'extra-configuration-files
+                    (eq? 'application-configuration-files
                          (service-type-name (service-kind s))))
                   (home-environment-services %laptop-guix-home)))
-(test-assert "default home (VM) has no extra-configuration-files extension"
+(test-assert "default home (VM) has no application-configuration-files extension"
              (not (any (lambda (s)
-                         (eq? 'extra-configuration-files
+                         (eq? 'application-configuration-files
                               (service-type-name (service-kind s))))
                        (home-environment-services %guix-home))))
 
 ;; ── 9. lower 验证：laptop 与 VM 的最终配置目录 ──────────────
-(define (lower-xdg-home extra-services)
-  "lower 含 niri-xdg-config + EXTRA-SERVICES 的合成 home（无包，
-只装配置文件），返回输出目录。"
+(define (lower-xdg-home selection-services)
+  "lower 含 niri-xdg-config + SELECTION-SERVICES（resolver 输出）的
+合成 home（无包，只装配置文件），返回输出目录。"
   (let* ((store (open-connection))
          (home (home-environment
                 (packages '())
-                (services (append extra-services
+                (services (append selection-services
                                   (list (find (lambda (s)
                                                 (eq? 'niri-xdg-config
                                                      (service-type-name
@@ -174,8 +174,8 @@
 (define %laptop-config-dir
   (string-append
    (lower-xdg-home
-    (extra-configuration-files->home-services
-     %laptop-extra-configuration-files))
+    (application-configuration-selections->home-services
+     %laptop-application-configuration-selections))
    "/files/.config/niri"))
 
 (define %vm-config-dir

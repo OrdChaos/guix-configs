@@ -10,7 +10,6 @@
 
 (define-module (guixcfg utils atomic-file)
                #:export (fsync-path!
-                         fsync-parent-directory!
                          atomic-replace-file!
                          atomic-write-file!))
 

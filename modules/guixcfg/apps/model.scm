@@ -3,9 +3,16 @@
 ;;;
 ;;; <application> 只是 contribution container——它声明这个应用贡献
 ;;; 哪些 home packages / home services / system services /
-;;; persistence rules / secrets；部署、挂载、发布一律由各自的
-;;; generic single-owner mechanism 执行（Guix Home、file-systems、
-;;; secrets publisher）。
+;;; persistence rules / secrets / configuration variants；部署、
+;;; 挂载、发布一律由各自的 generic single-owner mechanism 执行
+;;; （Guix Home、file-systems、secrets publisher、selection
+;;; resolver）。
+;;;
+;;; <application-configuration-variant>：application 自己声明的可选
+;;; 配置变体（如 'laptop）——application 拥有配置资源与 variant
+;;; 声明；host/profile 只做 logical selection（(guixcfg apps
+;;; selection)），不接触文件/路径（docs/architecture/applications.md
+;;; （Host-agnostic boundary））。
 ;;;
 ;;; 明确不是：NixOS/RDE module system。无 dependency solver、
 ;;; 无 priority、无 override、无自动发现、无继承。启用/禁用必须经
@@ -22,6 +29,13 @@
                          application-system-services
                          application-persistence
                          application-secrets
+                         application-configuration-variants
+                         <application-configuration-variant>
+                         application-configuration-variant
+                         make-application-configuration-variant
+                         application-configuration-variant?
+                         application-configuration-variant-name
+                         application-configuration-variant-files
                          applications-home-packages
                          applications-home-services
                          applications-system-services
@@ -40,7 +54,21 @@
                      (persistence application-persistence       ; list of <application-persistence-rule>
                                   (default '()))
                      (secrets application-secrets               ; list of <secret-decl>
-                              (default '())))
+                              (default '()))
+                     (configuration-variants
+                      application-configuration-variants        ; list of <application-configuration-variant>
+                      (default '())))
+
+;; 可选配置变体声明（application-owned）：NAME 是稳定 logical
+;; identifier（如 'laptop）；FILES 是 (target source) 两元素列表
+;; 的集合——target 为完整 ~/.config 相对路径（与 application name
+;; 无耦合），source 为 opaque file-like（原生格式，generic 层不
+;; 解析）。
+(define-record-type* <application-configuration-variant>
+  application-configuration-variant make-application-configuration-variant
+  application-configuration-variant?
+  (name application-configuration-variant-name)     ; symbol
+  (files application-configuration-variant-files))  ; list of (target source)
 
 (define (applications-home-packages apps)
   "聚合 APPS 的全部 home packages。"

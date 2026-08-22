@@ -1,8 +1,10 @@
-;;; Generic extra-configuration-files 机制测试（(guixcfg apps
-;;; extra-config)）：record 构造、校验（app 注册 / 路径合法性）、
-;;; 冲突语义（同路径单 owner，fail fast）、聚合、lower 验证（安装
-;;; 路径与内容保真）、Guix Home 重复路径 backstop。框架级测试
-;;; （合成 fixture，不检查具体应用内容）。
+;;; Generic application configuration variant selection 测试
+;;; （(guixcfg apps selection) + model 的 variant 声明）：
+;;; variant record、selection record、校验（app 注册 / variant
+;;; 声明 / target 安全）、冲突语义（同 target 单 owner，fail fast）、
+;;; 解析、lower 验证（安装路径与内容保真）、Guix Home 重复路径
+;;; backstop、ownership 边界（host 只做 logical selection）。
+;;; 框架级测试（合成 fixture 经 #:apps 注入 + 真实 niri/laptop）。
 
 (use-modules (guix store)         ; %store（合成 XDG lower）
              (guix monads)
@@ -14,204 +16,311 @@
              (gnu services)          ; simple-service、service-kind、service-value
              (guixcfg apps model)
              (guixcfg apps registry) ; %applications（校验权威）
-             (guixcfg apps extra-config)
+             (guixcfg apps selection)
+             (guixcfg apps niri definition)
+             (guixcfg hosts laptop)
              (ice-9 rdelim)          ; read-string
+             (ice-9 ftw)             ; scandir
              (srfi srfi-1)
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
 
-(test-begin "extra-config")
+(test-begin "selection")
 
-;; ── record 构造与字段 ───────────────────────────────────────
-(define sample
-  (extra-configuration-file
+;; ── variant record 构造与字段 ───────────────────────────────
+(define sample-variant
+  (application-configuration-variant
+   (name 'laptop)
+   (files `(("niri/host.kdl" ,(plain-file "host.kdl" "debug {}\n"))))))
+
+(test-assert "application-configuration-variant constructible"
+             (application-configuration-variant? sample-variant))
+(test-equal "variant name field" 'laptop
+            (application-configuration-variant-name sample-variant))
+(test-assert "variant files is a list of (target source) entries"
+             (let ((files (application-configuration-variant-files
+                           sample-variant)))
+               (and (= 1 (length files))
+                    (string=? "niri/host.kdl" (car (car files)))
+                    (file-like? (cadr (car files))))))
+
+;; ── niri 声明：laptop variant（application-owned）────────────
+(define %niri-laptop-variant
+  (find (lambda (v)
+          (eq? 'laptop (application-configuration-variant-name v)))
+        (application-configuration-variants %niri)))
+
+(test-assert "niri declares a laptop configuration variant"
+             (application-configuration-variant? %niri-laptop-variant))
+(test-assert "niri laptop variant targets niri/host.kdl (full ~/.config path)"
+             (string=? "niri/host.kdl"
+                       (car (car (application-configuration-variant-files
+                                  %niri-laptop-variant)))))
+(test-assert "niri laptop variant source is a file-like"
+             (file-like? (cadr (car (application-configuration-variant-files
+                                     %niri-laptop-variant)))))
+(test-assert "niri laptop variant source lives in the niri application tree"
+             (file-exists? "modules/guixcfg/apps/niri/variants/laptop.kdl"))
+
+;; ── selection record：只携带 logical 字段 ────────────────────
+(define sample-selection
+  (application-configuration-selection
    (application 'niri)
-   (path "niri/host.kdl")
-   (source (plain-file "host.kdl" "debug {}\n"))))
+   (variant 'laptop)))
 
-(test-assert "extra-configuration-file constructible"
-             (extra-configuration-file? sample))
-(test-equal "application field" 'niri
-            (extra-configuration-file-application sample))
-(test-equal "path field is the full ~/.config-relative target"
-            "niri/host.kdl"
-            (extra-configuration-file-path sample))
-(test-assert "source field is a file-like"
-             (file-like? (extra-configuration-file-source sample)))
+(test-assert "selection constructible"
+             (application-configuration-selection? sample-selection))
+(test-equal "selection application field" 'niri
+            (application-configuration-selection-application sample-selection))
+(test-equal "selection variant field" 'laptop
+            (application-configuration-selection-variant sample-selection))
+(test-assert "selection carries no file/path fields (logical only)"
+             (let ((fields (record-type-fields
+                            (record-type-descriptor sample-selection))))
+               (and (member 'application fields)
+                    (member 'variant fields)
+                    (not (member 'path fields))
+                    (not (member 'source fields))
+                    (not (member 'files fields)))))
 
-;; ── 聚合：生成 home-xdg-configuration-files 的 extension ────
-(define sample-svcs
-  (extra-configuration-files->home-services (list sample)))
+;; ── laptop host 只做 logical selection ───────────────────────
+(test-assert "laptop selections are logical (niri, laptop)"
+             (equal? '((niri laptop))
+                     (map (lambda (s)
+                            (list (application-configuration-selection-application s)
+                                  (application-configuration-selection-variant s)))
+                          %laptop-application-configuration-selections)))
+(test-assert "hosts/laptop.scm contains no target path"
+             (let ((s (call-with-input-file "modules/guixcfg/hosts/laptop.scm"
+                                             (lambda (p) (read-string p)))))
+               (not (string-contains s "niri/host.kdl"))))
+(test-assert "hosts/laptop.scm contains no source file path"
+             (let ((s (call-with-input-file "modules/guixcfg/hosts/laptop.scm"
+                                             (lambda (p) (read-string p)))))
+               (not (string-contains s ".kdl"))))
+(test-assert "hosts/laptop.scm does not use local-file"
+             (let ((s (call-with-input-file "modules/guixcfg/hosts/laptop.scm"
+                                             (lambda (p) (read-string p)))))
+               (not (string-contains s "local-file"))))
 
-(test-assert "aggregator returns exactly one service"
-             (= 1 (length sample-svcs)))
-(test-assert "service extends home-xdg-configuration-files"
+;; ── 解析：laptop selection → 配置文件贡献 ────────────────────
+(define laptop-svcs
+  (application-configuration-selections->home-services
+   %laptop-application-configuration-selections))
+
+(test-assert "laptop selection resolves to exactly one service"
+             (= 1 (length laptop-svcs)))
+(test-assert "resolved service extends home-xdg-configuration-files"
              (eq? (service-extension-target
-                   (car (service-type-extensions (service-kind (car sample-svcs)))))
+                   (car (service-type-extensions (service-kind (car laptop-svcs)))))
                   home-xdg-configuration-files-service-type))
-(test-assert "target path is used verbatim (no implicit prefix)"
-             (equal? '(("niri/host.kdl" #t))
-                     (map (lambda (entry)
-                            (list (car entry) (file-like? (cadr entry))))
-                          (service-value (car sample-svcs)))))
+(test-assert "resolved contribution is niri/host.kdl with an opaque source"
+             (let ((entry (car (service-value (car laptop-svcs)))))
+               (and (string=? "niri/host.kdl" (car entry))
+                    (file-like? (cadr entry)))))
 
-;; ── path 与 application name 解耦（不是"app 名 = 配置目录"）───
-(define decoupled
-  (extra-configuration-files->home-services
-   (list (extra-configuration-file
-          (application 'niri)          ; owner 是 niri
-          (path "custom-dir/file.conf") ; 但目标路径与 app 名无关
-          (source (plain-file "file.conf" "a=1\n"))))))
+;; ── empty selection：无贡献（VM 语义）────────────────────────
+(test-equal "empty selection list yields no services"
+            '() (application-configuration-selections->home-services '()))
 
-(test-assert "target path does not have to start with the application name"
-             (equal? '(("custom-dir/file.conf" #t))
-                     (map (lambda (entry)
-                            (list (car entry) (file-like? (cadr entry))))
-                          (service-value (car decoupled)))))
-
-;; ── 多文件组合：不同路径全部保留 ─────────────────────────────
-(define multi-files
-  (list (extra-configuration-file
-         (application 'niri)
-         (path "niri/docked.kdl")
-         (source (plain-file "docked.kdl" "docked\n")))
-        (extra-configuration-file
-         (application 'ghostty)
-         (path "ghostty/laptop.conf")
-         (source (plain-file "laptop.conf" "font-size=13\n")))))
-
-(define multi-svcs
-  (extra-configuration-files->home-services multi-files))
-
-(test-assert "multiple different-path extras compose into one contribution"
-             (let ((paths (map car (service-value (car multi-svcs)))))
-               (and (member "niri/docked.kdl" paths)
-                    (member "ghostty/laptop.conf" paths))))
-
-;; ── 空列表：无贡献（无 host 配置的机器语义）──────────────────
-(test-equal "empty extra list yields no services"
-            '() (extra-configuration-files->home-services '()))
-
-;; ── 校验：未知/未启用 application 立即报错（fail fast）───────
+;; ── 校验：未知 application → fail fast ───────────────────────
 (test-assert "unknown application rejected"
              (catch #t
                (lambda ()
-                 (extra-configuration-files->home-services
-                  (list (extra-configuration-file
+                 (application-configuration-selections->home-services
+                  (list (application-configuration-selection
                          (application 'no-such-app)
-                         (path "x.kdl")
-                         (source (plain-file "x.kdl" "")))))
+                         (variant 'laptop))))
                  #f)
                (lambda (key . args) #t)))
 
-(test-assert "unknown application error names the app and the registry"
+(test-assert "unknown application error names the app"
              (catch #t
                (lambda ()
-                 (extra-configuration-files->home-services
-                  (list (extra-configuration-file
+                 (application-configuration-selections->home-services
+                  (list (application-configuration-selection
                          (application 'no-such-app)
-                         (path "x.kdl")
-                         (source (plain-file "x.kdl" "")))))
+                         (variant 'laptop))))
                  #f)
                (lambda (key . args)
                  (string-contains (object->string args) "no-such-app"))))
 
-;; ── 校验：目标路径必须是应用配置目录内的合法相对路径 ─────────
-(define (path-rejected? path)
-  (catch #t
-    (lambda ()
-      (extra-configuration-files->home-services
-       (list (extra-configuration-file
-              (application 'niri)
-              (path path)
-              (source (plain-file "x" "")))))
-      #f)
-    (lambda (key . args) #t)))
-
-(test-assert "absolute path rejected"
-             (path-rejected? "/etc/host.kdl"))
-(test-assert "parent-escape path rejected"
-             (path-rejected? "../host.kdl"))
-(test-assert "empty path rejected"
-             (path-rejected? ""))
-
-;; ── 校验：非 record 输入 ────────────────────────────────────
-(test-assert "non-record input rejected"
+;; ── 校验：未声明 variant → fail fast（错误含 app + variant）───
+(test-assert "undeclared variant rejected"
              (catch #t
                (lambda ()
-                 (extra-configuration-files->home-services '(("niri" "x")))
+                 (application-configuration-selections->home-services
+                  (list (application-configuration-selection
+                         (application 'niri)
+                         (variant 'no-such-variant))))
                  #f)
                (lambda (key . args) #t)))
 
-;; ── 冲突语义：同一最终 target path 只能有一个 owner ────────
-(test-assert "duplicate target rejected before lowering"
+(test-assert "undeclared variant error names application and variant"
              (catch #t
                (lambda ()
-                 (extra-configuration-files->home-services
-                  (list (extra-configuration-file
+                 (application-configuration-selections->home-services
+                  (list (application-configuration-selection
                          (application 'niri)
-                         (path "niri/host.kdl")
-                         (source (plain-file "a.kdl" "a")))
-                        (extra-configuration-file
-                         (application 'niri)
-                         (path "niri/host.kdl")
-                         (source (plain-file "b.kdl" "b")))))
-                 #f)
-               (lambda (key . args) #t)))
-
-(test-assert "duplicate error names the conflicting final path"
-             (catch #t
-               (lambda ()
-                 (extra-configuration-files->home-services
-                  (list (extra-configuration-file
-                         (application 'niri)
-                         (path "niri/host.kdl")
-                         (source (plain-file "a.kdl" "a")))
-                        (extra-configuration-file
-                         (application 'niri)
-                         (path "niri/host.kdl")
-                         (source (plain-file "b.kdl" "b")))))
+                         (variant 'no-such-variant))))
                  #f)
                (lambda (key . args)
-                 (string-contains (object->string args) "niri/host.kdl"))))
+                 (let ((msg (object->string args)))
+                   (and (string-contains msg "niri")
+                        (string-contains msg "no-such-variant"))))))
 
-;; 冲突判定基于最终路径，与 owner 无关：两个不同 application
-;; 贡献同一路径同样冲突（诊断里两个 owner 都在场）。
-(test-assert "same final path from different owners is a conflict"
+;; ── 校验：target 必须是安全 ~/.config 相对路径（合成 apps）───
+(define %synthetic-app
+  (application
+   (name 'synthetic)
+   (configuration-variants
+    (list (application-configuration-variant
+           (name 'base)
+           (files `(("synthetic/config.ini"
+                     ,(plain-file "config.ini" "x=1\n")))))))))
+
+(define %synthetic-app-bad
+  (application
+   (name 'synthetic)
+   (configuration-variants
+    (list (application-configuration-variant
+           (name 'base)
+           (files (list (list "/etc/host.conf" (plain-file "h" "")))))))))
+
+(define %synthetic-app-escape
+  (application
+   (name 'synthetic)
+   (configuration-variants
+    (list (application-configuration-variant
+           (name 'base)
+           (files (list (list "../escape.conf" (plain-file "e" "")))))))))
+
+(test-assert "absolute target path rejected"
              (catch #t
                (lambda ()
-                 (extra-configuration-files->home-services
-                  (list (extra-configuration-file
-                         (application 'niri)
-                         (path "shared/x.conf")
-                         (source (plain-file "a" "a")))
-                        (extra-configuration-file
-                         (application 'ghostty)
-                         (path "shared/x.conf")
-                         (source (plain-file "b" "b")))))
+                 (application-configuration-selections->home-services
+                  (list (application-configuration-selection
+                         (application 'synthetic)
+                         (variant 'base)))
+                  #:apps (list %synthetic-app-bad))
+                 #f)
+               (lambda (key . args) #t)))
+
+(test-assert "parent-escape target path rejected"
+             (catch #t
+               (lambda ()
+                 (application-configuration-selections->home-services
+                  (list (application-configuration-selection
+                         (application 'synthetic)
+                         (variant 'base)))
+                  #:apps (list %synthetic-app-escape))
+                 #f)
+               (lambda (key . args) #t)))
+
+;; ── 多文件 variant：一个 variant 贡献多个文件 ────────────────
+(define %multi-file-app
+  (application
+   (name 'multi)
+   (configuration-variants
+    (list (application-configuration-variant
+           (name 'dual)
+           (files `(("multi/a.conf" ,(plain-file "a.conf" "a=1\n"))
+                    ("multi/b.conf" ,(plain-file "b.conf" "b=2\n")))))))))
+
+(define multi-svcs
+  (application-configuration-selections->home-services
+   (list (application-configuration-selection
+          (application 'multi)
+          (variant 'dual)))
+   #:apps (list %multi-file-app)))
+
+(test-assert "single variant may contribute multiple files"
+             (let ((paths (map car (service-value (car multi-svcs)))))
+               (and (member "multi/a.conf" paths)
+                    (member "multi/b.conf" paths))))
+
+;; ── 冲突语义：同一最终 target path 只能有一个 owner ─────────
+(define %conflict-app-a
+  (application
+   (name 'conflict-a)
+   (configuration-variants
+    (list (application-configuration-variant
+           (name 'v1)
+           (files `(("shared/x.conf" ,(plain-file "a" "a")))))))))
+
+(define %conflict-app-b
+  (application
+   (name 'conflict-b)
+   (configuration-variants
+    (list (application-configuration-variant
+           (name 'v2)
+           (files `(("shared/x.conf" ,(plain-file "b" "b")))))))))
+
+(test-assert "duplicate target across selections rejected before lowering"
+             (catch #t
+               (lambda ()
+                 (application-configuration-selections->home-services
+                  (list (application-configuration-selection
+                         (application 'conflict-a)
+                         (variant 'v1))
+                        (application-configuration-selection
+                         (application 'conflict-b)
+                         (variant 'v2)))
+                  #:apps (list %conflict-app-a %conflict-app-b))
+                 #f)
+               (lambda (key . args) #t)))
+
+(test-assert "duplicate error names the conflicting target and both sources"
+             (catch #t
+               (lambda ()
+                 (application-configuration-selections->home-services
+                  (list (application-configuration-selection
+                         (application 'conflict-a)
+                         (variant 'v1))
+                        (application-configuration-selection
+                         (application 'conflict-b)
+                         (variant 'v2)))
+                  #:apps (list %conflict-app-a %conflict-app-b))
                  #f)
                (lambda (key . args)
                  (let ((msg (object->string args)))
                    (and (string-contains msg "shared/x.conf")
-                        (string-contains msg "niri")
-                        (string-contains msg "ghostty"))))))
+                        (string-contains msg "conflict-a")
+                        (string-contains msg "conflict-b"))))))
 
-(test-assert "different final paths never conflict"
-             (let ((svcs (extra-configuration-files->home-services
-                          (list (extra-configuration-file
-                                 (application 'niri)
-                                 (path "niri/host.kdl")
-                                 (source (plain-file "a" "a")))
-                                (extra-configuration-file
-                                 (application 'ghostty)
-                                 (path "ghostty/host.kdl")
-                                 (source (plain-file "b" "b")))))))
+;; 同一 variant 内两个文件撞同一 target 也冲突
+(define %self-conflict-app
+  (application
+   (name 'self-conflict)
+   (configuration-variants
+    (list (application-configuration-variant
+           (name 'v1)
+           (files `(("dup/f.conf" ,(plain-file "a" "a"))
+                    ("dup/f.conf" ,(plain-file "b" "b")))))))))
+
+(test-assert "duplicate target within one variant rejected"
+             (catch #t
+               (lambda ()
+                 (application-configuration-selections->home-services
+                  (list (application-configuration-selection
+                         (application 'self-conflict)
+                         (variant 'v1)))
+                  #:apps (list %self-conflict-app))
+                 #f)
+               (lambda (key . args) #t)))
+
+(test-assert "different targets never conflict"
+             (let ((svcs (application-configuration-selections->home-services
+                          (list (application-configuration-selection
+                                 (application 'multi)
+                                 (variant 'dual)))
+                          #:apps (list %multi-file-app))))
                (let ((paths (map car (service-value (car svcs)))))
-                 (and (member "niri/host.kdl" paths)
-                      (member "ghostty/host.kdl" paths)))))
+                 (and (member "multi/a.conf" paths)
+                      (member "multi/b.conf" paths)))))
 
-;; ── lower：extra 文件安装到正确 XDG 路径且内容保真 ───────────
+;; ── lower：variant 文件安装到正确 XDG 路径且内容保真 ─────────
 (define (lower-home services)
   "lower + build 一个无包合成 home，返回输出目录。"
   (let* ((store (open-connection))
@@ -220,58 +329,47 @@
     (build-derivations store (list drv))
     (derivation->output-path drv)))
 
-(define %extras-content "x=1\nsecond line\n")
-(define %lowered-home
+(define %laptop-kdl-content
+  (call-with-input-file "modules/guixcfg/apps/niri/variants/laptop.kdl"
+                        (lambda (p) (read-string p))))
+
+(define %lowered-laptop
   (lower-home
-   (list (car (extra-configuration-files->home-services
-               (list (extra-configuration-file
-                      (application 'niri)
-                      (path "niri/host.kdl")
-                      (source (plain-file "host.kdl" %extras-content)))
-                     (extra-configuration-file
-                      (application 'ghostty)
-                      (path "ghostty/laptop.conf")
-                      (source (plain-file "laptop.conf"
-                                          "font-size=13\n")))))))))
+   (application-configuration-selections->home-services
+    %laptop-application-configuration-selections)))
 
-(test-assert "extra file installed under the application's XDG config dir"
+(test-assert "laptop variant file installed under niri XDG config dir"
              (file-exists?
-              (string-append %lowered-home
+              (string-append %lowered-laptop
                              "/files/.config/niri/host.kdl")))
-(test-assert "second extra file installed at its own path"
-             (file-exists?
-              (string-append %lowered-home
-                             "/files/.config/ghostty/laptop.conf")))
-(test-assert "extra file content preserved byte-for-byte"
-             (equal? %extras-content
+(test-assert "installed variant content matches the niri-owned source byte-for-byte"
+             (equal? %laptop-kdl-content
                      (call-with-input-file
-                      (string-append %lowered-home
-                                     "/files/.config/niri/host.kdl")
-                      (lambda (p) (read-string p)))))
+                       (string-append %lowered-laptop
+                                      "/files/.config/niri/host.kdl")
+                       (lambda (p) (read-string p)))))
 
-;; ── Guix Home backstop：跨贡献方（extra vs app 自身）同路径 ──
+;; ── Guix Home backstop：跨贡献方（variant vs app 自身）同路径 ──
 ;; Guix 的 assert-no-duplicates 在 lower 时对合并后的完整文件列表
-;; 查重——复用官方机制，不重复实现另一套冲突系统（任务 §七）。
-;; （注意：不能在顶层定义该冲突 home——assert 在 lower 时抛错会
-;; 直接让测试文件加载失败；必须包在 catch 内。）
+;; 查重——复用官方机制，不重复实现另一套冲突系统。
 (test-assert "cross-contributor duplicate target fails at lower time"
              (catch #t
                (lambda ()
                  (lower-home
-                  (list (simple-service 'app-own-config
-                                        home-xdg-configuration-files-service-type
-                                        `(("niri/config.kdl"
-                                           ,(plain-file "own.kdl" "own"))))
-                        (car (extra-configuration-files->home-services
-                              (list (extra-configuration-file
-                                     (application 'niri)
-                                     (path "niri/config.kdl")
-                                     (source (plain-file "extra.kdl"
-                                                         "extra"))))))))
+                  (append
+                   (application-configuration-selections->home-services
+                    (list (application-configuration-selection
+                           (application 'synthetic)
+                           (variant 'base)))
+                    #:apps (list %synthetic-app))
+                   (list (simple-service 'app-own-config
+                                         home-xdg-configuration-files-service-type
+                                         `(("synthetic/config.ini"
+                                            ,(plain-file "own.ini" "own")))))))
                  #f)
                (lambda (key . args)
                  (or (string-contains (object->string args) "duplicate")
                      (string-contains (object->string args)
-                                      "niri/config.kdl")))))
+                                      "synthetic/config.ini")))))
 
-(test-end "extra-config")
+(test-end "selection")

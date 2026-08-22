@@ -34,7 +34,6 @@
                          boot-plan-kernel boot-plan-initrd boot-plan-cmdline
                          boot-plan-system
                          ;; 固定位置
-                         %secure-boot-keydir
                          %uki-esp-subdir
                          ;; 部署脚本生成
                          make-uki-deploy-program))

@@ -29,7 +29,6 @@
 (define-module (guixcfg home pivot)
                #:use-module (ice-9 regex)
                #:export (store-home-path-form?
-                         store-home-path?
                          stale-pivot-disposition
                          remove-stale-pivot!))
 

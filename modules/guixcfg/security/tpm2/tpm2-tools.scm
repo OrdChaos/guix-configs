@@ -26,17 +26,12 @@
                #:use-module (ice-9 binary-ports)      ; get-bytevector-all
                #:use-module (srfi srfi-1)             ; append-map
                #:use-module (srfi srfi-11)            ; let-values
-               #:export (;; 环境（production / test 显式区分）
+               #:export (;; 环境（内部 parameter/helper；initrd 的
+                         ;; tpm-unlock 消费 %tpm2-tools-tcti / with-tcti）
                          %tpm2-tools-tcti
-                         <tpm2-environment>
-                         tpm2-environment make-tpm2-environment
-                         tpm2-environment?
-                         tpm2-environment-tcti
-                         tpm2-environment-cleanup
-                         current-tpm2-environment
-                         make-test-tpm2-environment
                          with-tcti
-                         ;; 低层原语（按 tpm2-tools 命令一对一）
+                         ;; 低层原语（按 tpm2-tools 命令一对一；
+                         ;; TCTI 一律显式传参，环境变量经子进程转发）
                          tpm2-createprimary!
                          tpm2-policy-pcr-digest!
                          tpm2-create-sealed!

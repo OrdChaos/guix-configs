@@ -24,15 +24,12 @@
                #:use-module (srfi srfi-1)    ; filter
                #:use-module (srfi srfi-13)   ; string-tokenize/string-join
                #:export (%boot-states-path
-                         %last-good-gc-root
                          read-boot-states
                          read-boot-command-line
                          read-boot-last-good
                          write-boot-states!
-                         boot-states-last-good
                          protect-last-good!
                          current-kernel-command-line
-                         resolve-generation
                          current-system-generation))
 
 ;; 注册表位置（运行系统视角；initrd 不涉及）。

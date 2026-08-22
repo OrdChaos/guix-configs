@@ -27,8 +27,7 @@
                #:use-module (guix gexp)
                #:use-module (guix modules)                 ; source-module-closure
                #:use-module (srfi srfi-1)                  ; append-map
-               #:export (%staging-root-path
-                         ephemeral-root-initrd))
+               #:export (ephemeral-root-initrd))
 
 ;; initrd 里选中子卷的挂载点；os 的根 file-system 声明为对它的 bind-mount。
 (define %staging-root-path "/selected-root")

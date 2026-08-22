@@ -20,11 +20,7 @@
                          device-node-mounted?
                          ;; IO 探测
                          probe-device
-                         find-persistent-alias
-                         system-disk-device
-                         canonical-device
                          ;; 命令执行辅助（install.scm 的环境检查等使用）
-                         command-lines
                          first-command-line))
 
 ;;; ────────────────────────────────────────────────────────────

@@ -27,7 +27,6 @@
                          session-infra-ready-service
                          interactive-session-ready-service
                          readiness-services
-                         login-gate-activation
                          login-gate-pam-service
                          login-gate-services
                          %login-gate-path
