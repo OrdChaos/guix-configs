@@ -16,10 +16,13 @@
 ;;;   - gpg-agent 生命周期自动跟随 GNUPGHOME（首次使用自 spawn，
 ;;;     socket 随 session 消亡），无需 system service；
 ;;;   - 本 key 带 passphrase：签名/解密时经 pinentry 提示（已含
-;;;     pinentry-gtk2），agent 按 gpg.conf 的 cache-ttl 缓存——
+;;;     pinentry-gtk2），agent 按 gpg-agent.conf 的 cache-ttl 缓存——
 ;;;     ephemeral GNUPGHOME 下缓存随 session 结束失效，每 session
 ;;;     至多提示一次。passphrase 本身不入仓库（age 密文只保护
 ;;;     ciphertext 的传输/静止；两者是不同层的防线）。
+;;;   - gpg.conf 与 gpg-agent.conf 分开：agent 选项（cache-ttl）放
+;;;     gpg-agent.conf；放进 gpg.conf 会让 gpg 报 invalid option
+;;;     并以 exit 2 中止（2026-08 VM 实测教训）。
 ;;;
 ;;; 不做持久化：pubring.kbx/trustdb/tofu 随 session 重建（runtime-only
 ;;; 起步；验证他人签名由 gpg.conf 的 auto-key-retrieve 兜底。持久化
@@ -95,11 +98,16 @@
       ;;    目录归用户所有）
       (unless (file-exists? gnupg-home) (mkdir gnupg-home))
       (chmod gnupg-home #o700)
-      ;; 2. gpg.conf 拷贝（store 只读 symlink 不可用：gpg 要求
-      ;;    homedir 文件属主为当前用户、权限 0600）
+      ;; 2. gpg.conf 与 gpg-agent.conf 拷贝（store 只读 symlink 不可
+      ;;    用：gpg 要求 homedir 文件属主为当前用户、权限 0600；
+      ;;    agent 选项在 gpg-agent.conf——放进 gpg.conf 会使 gpg
+      ;;    exit 2 中止）
       (copy-file #$(local-file "gpg.conf" "gnupg-gpg-conf")
                  (string-append gnupg-home "/gpg.conf"))
       (chmod (string-append gnupg-home "/gpg.conf") #o600)
+      (copy-file #$(local-file "gpg-agent.conf" "gnupg-gpg-agent-conf")
+                 (string-append gnupg-home "/gpg-agent.conf"))
+      (chmod (string-append gnupg-home "/gpg-agent.conf") #o600)
       ;; 3. 有界等待 runtime secret（boot 时 ordinary publisher
       ;;    部署；reconfigure 升级期间可能滞后——最多 60 秒自愈）
       (let loop ((tries 60))
