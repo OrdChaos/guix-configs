@@ -1,13 +1,14 @@
 ;;; GVfs mount metadata 测试（(guixcfg system mount-metadata) +
-;;; (guixcfg utils home-path) 的 utab 原语）：utab 条目生成与幂等
-;;; 注入、mount-metadata 服务只处理带 x-gvfs-trash 的 HOME
-;;; persistence bind mounts（machine-state 不误获）、entry 格式与
-;;; libmount 的 utab 契约一致（SRC/TARGET/OPTS 键值对）。
+;;; (guixcfg utils mountinfo)）：utab 条目生成与幂等重建、mount-
+;;; metadata 服务只处理带 x-gvfs-trash 的 HOME persistence bind
+;;; mounts（machine-state 不误获）、entry 格式与 libmount 的 utab
+;;; 契约一致（SRC/TARGET/ROOT/OPTS 键值对 + mangle escaping）。
 
 (use-modules (gnu system file-systems)
              (gnu services)
              (gnu services shepherd) ; shepherd-root-service-type、shepherd-service-*
-             (guixcfg system mount-metadata)
+             (guixcfg utils mountinfo)      ; runtime 原语
+             (guixcfg system mount-metadata) ; 服务 + 常量
              (guixcfg system user-persistence)
              (guixcfg system machine-state-persistence)
              (ice-9 rdelim)      ; read-string
@@ -50,7 +51,8 @@
    '(("/persist/data-home/user/Documents"
       "/home/user/Documents" "/user/Documents")
      ("/persist/data-app/mpv/state"
-      "/home/user/.local/state/mpv" "/user/.local/state/mpv"))))
+      "/home/user/.local/state/mpv" "/user/.local/state/mpv"))
+   %persistent-home-mount-options))
 
 (test-equal "utab entry format (SRC TARGET ROOT OPTS)"
             '("SRC=/persist/data-home/user/Documents TARGET=/home/user/Documents ROOT=/user/Documents OPTS=x-gvfs-hide,x-gvfs-trash"
@@ -65,10 +67,12 @@
 (parameterize ((%gvfs-utab-path %utab-test-path))
   ;; 首次：全部写入
   (test-equal "first run writes all service entries"
-              2 (ensure-gvfs-utab! %sample-entries))
+              2 (ensure-gvfs-utab! %sample-entries
+                                   %persistent-home-mount-options))
   ;; 重复：幂等（重建后仍是相同条目，无重复 TARGET）
   (test-equal "re-run is idempotent (same entry count)"
-              2 (ensure-gvfs-utab! %sample-entries))
+              2 (ensure-gvfs-utab! %sample-entries
+                                   %persistent-home-mount-options))
   (let ((content (call-with-input-file %utab-test-path
                                          (lambda (p) (read-string p)))))
     (test-assert "utab content contains both entries"
@@ -82,7 +86,8 @@
   ;; 场景 D：reconfigure 删除 consumer——旧 TARGET 随重建消失
   (test-equal "rebuild with fewer entries removes stale targets"
               1 (ensure-gvfs-utab!
-                 (list (car %sample-entries))))
+                 (list (car %sample-entries))
+                 %persistent-home-mount-options))
   (let ((content (call-with-input-file %utab-test-path
                                          (lambda (p) (read-string p)))))
     (test-assert "stale target removed after rebuild"
@@ -95,7 +100,8 @@
                            (display "SRC=/dev/sda1 TARGET=/mnt/other OPTS=rw,noatime\n"
                                     p)))
   (test-equal "rebuild preserves other owners' entries"
-              1 (ensure-gvfs-utab! (list (car %sample-entries))))
+              1 (ensure-gvfs-utab! (list (car %sample-entries))
+                                   %persistent-home-mount-options))
   (let ((content (call-with-input-file %utab-test-path
                                          (lambda (p) (read-string p)))))
     (test-assert "foreign entry preserved"
@@ -112,7 +118,8 @@
              (let ((entry (car (gvfs-utab-entries
                                 '(("/persist/data home/My Docs"
                                    "/home/user/My Docs"
-                                   "/data home/My Docs"))))))
+                                   "/data home/My Docs"))
+                                %persistent-home-mount-options))))
                (string-contains entry "SRC=/persist/data\\040home/My\\040Docs")))
 
 ;; ── mount-metadata 服务：只处理带 x-gvfs-trash 的 HOME bind ──
@@ -180,11 +187,14 @@
                       ;; 生产代码生成并写入 utab（userns 内读 mountinfo）
                       "cat > " gen-script " <<'SCM'\n"
                       "(add-to-load-path (string-append (getcwd) \"/modules\"))\n"
-                      "(use-modules (guixcfg system mount-metadata))\n"
+                      "(use-modules (guixcfg utils mountinfo)\n"
+                      "         (guixcfg system mount-metadata))\n"
                       "(ensure-gvfs-utab!\n"
                       " (gvfs-utab-entries\n"
                       "  (mountinfo-entries-for\n"
-                      "   '((\"" root "/persist/Documents\" . \"" root "/home/Documents\")))))\n"
+                      "   '((\"" root "/persist/Documents\" . \"" root "/home/Documents\")))\n"
+                      "  %persistent-home-mount-options)\n"
+                      " %persistent-home-mount-options)\n"
                       "SCM\n"
                       "guix time-machine -C channels.lock.scm -- repl -L modules "
                       gen-script " || exit 9; "
