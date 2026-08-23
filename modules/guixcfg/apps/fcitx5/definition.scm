@@ -9,11 +9,19 @@
 ;;;     手工环境变量；
 ;;;   - Virelith (virelith packages fcitx5)：fcitx5-rime-virelith
 ;;;     （闭包内含 librime-virelith（合并 lua+octagram 插件）与
-;;;     rime-data-virelith（雾凇 schema/dict/lua/opencc + 万象
-;;;     .gram）；RIME_DATA_DIR 编译期指向该 immutable shared
-;;;     data）、fcitx5-fluentlight-theme（FluentLight /
-;;;     FluentLight-solid）。不显式安装 librime-virelith/rime-ice/
-;;;     rime-data-virelith——闭包已含。
+;;;     rime-data-virelith（雾凇 schema/dict/lua/opencc）；
+;;;     RIME_DATA_DIR 编译期指向该 immutable shared data）、
+;;;     fcitx5-fluentlight-theme（FluentLight / FluentLight-solid）。
+;;;     不显式安装 librime-virelith/rime-ice/rime-data-virelith——
+;;;     闭包已含。
+;;;
+;;; 万象 .gram 模型本体**不**来自频道包：上游 LTS 是滚动地址
+;;; （内容原地更新、无固定历史版本 URL），fixed-output 的 sha256
+;;; 会随时失效，不适合作为频道包。本单元经 (guixcfg utils
+;;; online-file) 把它声明为构建期在线数据（不检验 sha256、
+;;; cache-first——仓库不追踪上游更新），作为 declarative occupant
+;;; 落在 rime 用户目录（与仓库分发的配置文件同等级；Rime 资源解析
+;;; user dir 优先于 shared dir，频道侧若仍带旧副本则被其覆盖）。
 ;;;
 ;;; 生命周期：单一 owner = niri session（apps/niri/common.kdl 的
 ;;; spawn-at-startup "fcitx5" "-d"；会话内长期进程禁止第二 owner
@@ -35,9 +43,11 @@
 ;;;     （home-files——非 .config 目标；Rime 只读 custom.yaml 从不
 ;;;     写入，无 dual-authority）。父目录保持真实目录，Rime 运行时
 ;;;     在旁边写 build/、user.yaml 等互不干扰；
-;;;   - 不把 shared data（cn_dicts/lua/opencc/*.gram）复制或
-;;;     symlink 进 HOME——RIME_DATA_DIR 已由 fcitx5-rime-virelith
-;;;     提供。
+;;;   - 不把频道 shared data（cn_dicts/lua/opencc 等版本化内容）
+;;;     复制或 symlink 进 HOME——RIME_DATA_DIR 已由
+;;;     fcitx5-rime-virelith 提供。唯一例外是万象 .gram：它不是
+;;;     版本化 shared data 而是滚动资源，由 online-file 以
+;;;     declarative occupant 形式放进用户目录（见文件头上段）。
 ;;;
 ;;; 持久化边界（ephemeral HOME；docs/architecture/persistence.md
 ;;; 决策树 Preferred 2——mutable subdirectory）：
@@ -75,7 +85,14 @@
                #:use-module (virelith packages fcitx5) ; fcitx5-rime-virelith、fcitx5-fluentlight-theme
                #:use-module (guixcfg apps model)
                #:use-module (guixcfg system application-persistence)
+               #:use-module (guixcfg utils online-file) ; online-file（构建期在线数据）
                #:export (%fcitx5))
+
+;; 万象语法模型 LTS 地址：滚动资源（内容原地更新、无固定历史版本
+;; URL），不检验 sha256；cache-first 语义见 (guixcfg utils
+;; online-file) 头部。显式刷新 = 删除 cache 后重新 build。
+(define %wanxiang-gram-url
+  "https://github.com/amzxyz/RIME-LMDG/releases/download/LTS/wanxiang-lts-zh-hans.gram")
 
 (define %fcitx5
   (application
@@ -106,7 +123,13 @@
                                           "fcitx5-rime-default-custom.yaml"))
                             (".local/share/fcitx5/rime/rime_ice.custom.yaml"
                              ,(local-file "rime_ice.custom.yaml"
-                                          "fcitx5-rime-ice-custom.yaml"))))
+                                          "fcitx5-rime-ice-custom.yaml"))
+                            ;; 万象语法模型本体（构建期在线数据；
+                            ;; 见文件头与 (guixcfg utils online-file)）。
+                            (".local/share/fcitx5/rime/wanxiang-lts-zh-hans.gram"
+                             ,(online-file "wanxiang-lts-zh-hans.gram"
+                                           %wanxiang-gram-url
+                                           #:sha256 #f))))
           ;; 会话环境（home-environment-variables 共享 sink 的
           ;; native extension——polkit-gnome PATH 同款模式）。
           (simple-service 'fcitx5-env

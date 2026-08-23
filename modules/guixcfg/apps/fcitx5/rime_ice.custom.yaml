@@ -3,10 +3,11 @@
 # 事实来源：pinned rime-ice 80d213e 的
 # others/recipes/grammar.recipe.yaml（schema=rime_ice 参数展开后的
 # 等价声明式结果）。Virelith rime-ice 包删除了 others/，recipe
-# 不进 store；.gram 模型本体由 Virelith rime-wanxiang-gram-zh-hans
-# 作为 immutable shared data 提供。不运行 Plum、不联网安装、不在
-# 运行时修改 schema。bump rime-ice 时对照上游 recipe 重新核对本
-# 文件。
+# 不进 store；.gram 模型本体由本应用经 (guixcfg utils online-file)
+# 以构建期在线数据落在用户目录（上游 LTS 是滚动地址，不作为频道
+# 包版本化——见 definition.scm 头部）。不运行 Plum、不联网安装、
+# 不在运行时修改 schema。bump rime-ice 时对照上游 recipe 重新核对
+# 本文件。
 patch:
   grammar:
     language: wanxiang-lts-zh-hans
