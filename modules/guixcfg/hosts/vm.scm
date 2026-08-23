@@ -66,9 +66,10 @@
          ;; 在 file-systems 挂载后注入，让 GIO 对 HOME persistence
          ;; bind mounts 隐藏挂载并允许 mount-local trash。
          (gvfs-mount-metadata-service %persistent-mount-file-systems))
-   ;; 无状态根的用户态服务：启动确认（last-good）与旧 generation 清理
+   ;; 无状态根的用户态服务：登录确认（last-good promote 挂在 greetd
+   ;; PAM session open——成功图形登录后）与旧 generation 清理
    ;; （docs/architecture/storage.md，Root generation 一节）。
-   (ephemeral-root-shepherd-services
+   (ephemeral-root-services
     (host-storage-policy-keep-root-generations %vm-storage-policy))
    ;; 基础 session infrastructure（elogind：/run/user、XDG_RUNTIME_DIR、
    ;; PAM session——system/common 拥有）。

@@ -27,6 +27,9 @@
 ;;; AP1 覆盖 application-persistence activation 的 consumer parent 全
 ;;;   层级 ownership（boot 回归：activation 只 chown 直接 parent 会留下
 ;;;   root-owned 的 ~/.local，Home activation mkdir ~/.local/share EACCES）。
+;;; EP1-EP4 覆盖 ephemeral-root-confirm（登录期 last-good promote）：
+;;;   PAM_TYPE 门（close_session 不动）、trying→ok 确认、boot-state
+;;;   幂等跳过与过期 promote。
 
 (add-to-load-path (string-append (getcwd) "/modules"))
 
@@ -42,6 +45,8 @@
              (guixcfg security secrets)
              (guixcfg system accounts)    ; account-databases-activation/verify
              (guixcfg system application-persistence) ; AP1 activation ownership
+             (guixcfg services ephemeral-root) ; EP: ephemeral-root-confirm-program
+             (guixcfg storage root-generation) ; EP: root-state、state->alist、read-state
              (gnu system accounts)     ; user-account、user-group
              (guixcfg system readiness)
              (ice-9 rdelim)
@@ -701,5 +706,118 @@ host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析�
                  (and uids
                       (= 3 (length uids))
                       (every (lambda (u) (string=? "1000" u)) uids)))))
+
+;; ── EP：ephemeral-root-confirm（登录期 last-good promote）──────
+;; 确认时机从 shepherd user-processes（登录前）移到 greetd PAM
+;; session open（成功图形登录后）。在 fake root 内真实执行 confirm
+;; 程序（/run/current-system 与 var/guix/profiles/system-42-link 指向
+;; 一个真实 store 路径，模拟当前系统 = generation 42）。
+(define %confirm-program (build-thing (ephemeral-root-confirm-program)))
+
+(define (make-ephemeral-root status)
+  "fake root：/persist/system/root-generations/state.scm 含
+BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
+  (let ((dir (string-append (or (getenv "TMPDIR") "/tmp")
+                            "/guixcfg-runtime-ep-" (number->string (getpid))
+                            "-" (number->string (random 100000)))))
+    (mkdir-p (string-append dir "/persist/system/root-generations"))
+    (mkdir-p (string-append dir "/gnu/store"))
+    (mkdir-p (string-append dir "/var/guix/profiles"))
+    (mkdir-p (string-append dir "/run"))
+    ;; /proc 在 user namespace 里无法 bind——用普通文件伪造
+    ;; cmdline（current-kernel-command-line 只 read）。
+    (mkdir-p (string-append dir "/proc"))
+    (call-with-output-file (string-append dir "/proc/cmdline")
+      (lambda (p) (display "BOOT_IMAGE=/vmlinuz root=/dev/mapper/test rootmode=normal\n" p)))
+    (call-with-output-file
+        (string-append dir "/persist/system/root-generations/state.scm")
+      (lambda (p)
+        (write (state->alist (root-state (next-generation 2)
+                                         (current-generation 1)
+                                         (last-good-generation #f)
+                                         (boot-status status)))
+               p)
+        (newline p)))
+    (symlink %confirm-program (string-append dir "/run/current-system"))
+    (symlink %confirm-program
+             (string-append dir "/var/guix/profiles/system-42-link"))
+    dir))
+
+(define (run-confirm root pam-type)
+  "fake root 内执行 confirm 程序（PAM_TYPE 按需注入），返回 exit code。"
+  (dynamic-wind
+    (lambda () (if pam-type (setenv "PAM_TYPE" pam-type) (unsetenv "PAM_TYPE")))
+    (lambda () (run-in-root %confirm-program root))
+    (lambda () (unsetenv "PAM_TYPE"))))
+
+(define (ephemeral-state root)
+  (read-state (string-append root "/persist/system/root-generations/state.scm")))
+
+(define (write-boot-state-file root generation)
+  "写一份 v2 boot-state（last-good generation = GENERATION）。"
+  (call-with-output-file (string-append root "/persist/system/boot-states.scm")
+    (lambda (p)
+      (write `((format-version . 2)
+               (last-good . ((generation . ,generation)
+                             (system . "/gnu/store/fake")
+                             (command-line . "root=/dev/fake"))))
+             p)
+      (newline p))))
+
+;; EP1：无 PAM_TYPE（人工/测试调用）+ trying → root 轴确认 + Guix 轴
+;; promote（无 candidate → artifact/menu 按其语义跳过，boot-state 与
+;; GC root 仍写入）。
+(let* ((root (make-ephemeral-root 'trying))
+       (code (run-confirm root #f))
+       (state (ephemeral-state root)))
+  (test-equal "EP1: confirm exits 0" 0 code)
+  (test-eq "EP1: root-state trying -> ok" 'ok (root-state-boot-status state))
+  (test-equal "EP1: last-good = current" 1
+              (root-state-last-good-generation state))
+  (test-assert "EP1: GC root written (Guix axis promoted)"
+               (file-exists?
+                (string-append root "/var/guix/gcroots/guixcfg/last-good-system")))
+  (false-if-exception (delete-file-recursively root)))
+
+;; EP2：pam_exec 在 close_session 也会调用——门在程序内，不动状态。
+(let* ((root (make-ephemeral-root 'trying))
+       (code (run-confirm root "close_session"))
+       (state (ephemeral-state root)))
+  (test-equal "EP2: close_session exits 0" 0 code)
+  (test-eq "EP2: close_session leaves state trying" 'trying
+           (root-state-boot-status state))
+  (false-if-exception (delete-file-recursively root)))
+
+;; EP3：boot-state 已记录当前 generation（42）→ promote 幂等跳过：
+;; boot-state 内容不变、不产生 GC root。
+(let* ((root (make-ephemeral-root 'ok))
+       (bs (string-append root "/persist/system/boot-states.scm")))
+  (write-boot-state-file root 42)
+  (let ((before (call-with-input-file bs (lambda (p) (read-string p))))
+        (code (run-confirm root #f)))
+    (test-equal "EP3: already last-good exits 0" 0 code)
+    (test-equal "EP3: boot-state untouched (idempotent skip)"
+                before
+                (call-with-input-file bs (lambda (p) (read-string p))))
+    (test-assert "EP3: no GC root created on skip"
+                 (not (file-exists?
+                       (string-append root "/var/guix/gcroots"))))
+    (false-if-exception (delete-file-recursively root))))
+
+;; EP4：boot-state 过期（41 ≠ 当前 42）→ promote 执行：boot-state
+;; 更新为 42 + GC root 建立。
+(let* ((root (make-ephemeral-root 'ok)))
+  (write-boot-state-file root 41)
+  (let ((code (run-confirm root #f))
+        (bs (string-append root "/persist/system/boot-states.scm")))
+    (test-equal "EP4: stale last-good promotes, exits 0" 0 code)
+    (test-assert "EP4: boot-state now records generation 42"
+                 (string-contains
+                  (call-with-input-file bs (lambda (p) (read-string p)))
+                  "(generation . 42)"))
+    (test-assert "EP4: GC root created"
+                 (file-exists?
+                  (string-append root "/var/guix/gcroots/guixcfg/last-good-system")))
+    (false-if-exception (delete-file-recursively root))))
 
 (test-end "runtime-exec")

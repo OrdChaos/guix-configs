@@ -167,6 +167,66 @@
              (not (greetd-allow-empty-passwords?
                    (service-value (os-service greetd-service-type)))))
 
+;; ── LG：last-good promote 时机（成功图形登录后）─────────────
+;; pam-configuration 访问器未导出，经模块内绑定（同 GK 组
+;; test-gnome-keyring 的模式）。
+(define pam-configuration-services
+  (module-ref (resolve-module '(gnu system pam)) 'pam-configuration-services))
+(define pam-configuration-transformers
+  (module-ref (resolve-module '(gnu system pam)) 'pam-configuration-transformers))
+
+(define %pam-cfg
+  (service-value (fold-services (operating-system-services %os)
+                                #:target-type pam-root-service-type)))
+
+(define (final-pam-service name)
+  "应用全部 transformers 后的 NAME PAM service（/etc/pam.d/NAME
+的实际内容）。"
+  (let ((svc (find (lambda (s) (string=? name (pam-service-name s)))
+                   (pam-configuration-services %pam-cfg))))
+    (and svc
+         ((apply compose identity (pam-configuration-transformers %pam-cfg))
+          svc))))
+
+(define (pam-exec-confirm-entry? entry)
+  "ENTRY 是否是指向 ephemeral-root-confirm 的 pam_exec。"
+  (and (string-contains (object->string (pam-entry-module entry))
+                        "pam_exec.so")
+       (any (lambda (arg)
+              (string-contains (object->string arg)
+                               "ephemeral-root-confirm"))
+            (pam-entry-arguments entry))))
+
+(test-assert "LG1: greetd PAM session runs confirm via pam_exec"
+             (let ((greetd (final-pam-service "greetd")))
+               (and greetd
+                    (any pam-exec-confirm-entry?
+                         (pam-service-session greetd)))))
+
+(test-assert "LG1: login/sshd PAM have NO confirm hook"
+             (every (lambda (name)
+                      (let ((svc (final-pam-service name)))
+                        (and svc
+                             (not (any pam-exec-confirm-entry?
+                                       (pam-service-session svc))))))
+                    '("login" "sshd")))
+
+(test-assert "LG2: no boot-time confirm shepherd service"
+             (not (any (lambda (svc)
+                         (member 'ephemeral-root-confirm
+                                 (shepherd-service-provision svc)))
+                       (shepherd-configuration-services
+                        (all-shepherd-services)))))
+
+(test-assert "LG2: cleanup anchored at persistent-state-ready (pre-login)"
+             (any (lambda (svc)
+                    (and (member 'ephemeral-root-cleanup
+                                 (shepherd-service-provision svc))
+                         (equal? '(persistent-state-ready)
+                                 (shepherd-service-requirement svc))))
+                  (shepherd-configuration-services
+                   (all-shepherd-services))))
+
 ;; ── D5：elogind 仍是 session authority ─────────────────────
 (test-assert "D5: elogind service present in %os"
              (let ((cfg (os-service elogind-service-type)))

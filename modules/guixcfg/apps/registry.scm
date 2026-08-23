@@ -18,7 +18,6 @@
                #:use-module (guixcfg apps noctalia-git definition)
                #:use-module (guixcfg apps pipewire definition)
                #:use-module (guixcfg apps ghostty definition)
-               #:use-module (guixcfg apps mako definition)
                #:use-module (guixcfg apps nautilus definition)
                #:use-module (guixcfg apps wl-clipboard definition)
                #:use-module (guixcfg apps polkit-gnome definition)
@@ -38,6 +37,8 @@
                #:use-module (guixcfg apps seahorse definition)
                #:use-module (guixcfg apps ssh definition)
                #:use-module (guixcfg apps fcitx5 definition)
+               #:use-module (guixcfg apps gtk definition)
+               #:use-module (guixcfg apps xsettingsd definition)
                #:export (%applications))
 
 (define %applications
@@ -50,7 +51,6 @@
         %noctalia-git
         %pipewire
         %ghostty
-        %mako
         %nautilus
         %wl-clipboard
         %polkit-gnome
@@ -70,7 +70,9 @@
         %gnupg
         %seahorse
         %ssh
-        %fcitx5))
+        %fcitx5
+        %gtk
+        %xsettingsd))
 
 ;; 完整性检查：启用集合的名字必须唯一（fail fast，加载即报错）。
 (define %application-names (map application-name %applications))

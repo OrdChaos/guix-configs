@@ -92,6 +92,11 @@ enabled = true
 position = "top_right"
 position_vertical = "top_right"
 
+[notification]
+# org.freedesktop.Notifications 唯一 owner = Noctalia（mako 应用
+# 单元已移除）。默认即 true；显式声明以固定归属语义。
+enable_daemon = true
+
 [system.monitor]
 enabled = false
 
@@ -102,8 +107,26 @@ custom_palette = "fluent-blue"
 wallpaper_scheme = "m3-fruit-salad"
 
 [theme.templates]
-builtin_ids = [ "gtk3", "gtk4", "ghostty", "kcolorscheme", "niri", "qt", "starship" ]
+# 内置 gtk3/gtk4 已移除：其 stock post-hook（apply.sh）会在
+# gtk.css 缺 import 时 rm 重建 Guix Home 的 store symlink——不允许
+# 触碰 repo-owned 文件。GTK 动态配色改由下方 user template 承载
+# （vendored 输入 + 窄职责 post-hook；见 apps/gtk 头部）。
+builtin_ids = [ "ghostty", "kcolorscheme", "niri", "qt", "starship" ]
 community_ids = [ "obsidian", "vscode", "discord", "obs", "steam", "telegram" ]
+
+# GTK 动态配色 user template（pinned schema：[theme.templates.user.
+# <id>]，键 input_path/output_path/post_hook——config_schema.cpp）。
+# 只生成 gtk-{3,4}/noctalia.css；post-hook 经 /bin/sh -lc 执行
+# （PATH 解析 appearance-sync——apps/gtk）。{{ mode }} = dark|light。
+[theme.templates.user.gtk3]
+input_path = "$XDG_CONFIG_HOME/noctalia/templates/gtk3.css"
+output_path = "$XDG_CONFIG_HOME/gtk-3.0/noctalia.css"
+post_hook = "appearance-sync {{ mode }}"
+
+[theme.templates.user.gtk4]
+input_path = "$XDG_CONFIG_HOME/noctalia/templates/gtk4.css"
+output_path = "$XDG_CONFIG_HOME/gtk-4.0/noctalia.css"
+post_hook = "appearance-sync {{ mode }}"
 
 [wallpaper]
 enabled = true

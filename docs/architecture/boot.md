@@ -84,9 +84,10 @@ boot menu depth 解耦。
 - Recovery candidate 的 Guix 轴：部署脚本总是用【当前 deployment】
   的 kernel/initrd + `rootmode=recovery` 构建候选，并把 system
   identity 记入 `EFI/Guix/candidate.scm`；只有用户态 confirm
-  （`ephemeral-root-confirm` → `(guixcfg boot recovery)` 的
-  promote-recovery!）验证 candidate.system == /run/current-system
-  后才 promote 到稳定路径并加菜单项——部署成功 ≠ 启动成功，
+  （greetd PAM session open 触发的 `ephemeral-root-confirm` 程序 →
+  `(guixcfg boot recovery)` 的 promote-recovery!——成功图形登录后
+  才执行）验证 candidate.system == /run/current-system 后才
+  promote 到稳定路径并加菜单项——部署成功 ≠ 启动成功 ≠ 登录可用，
   failed Normal 不会污染 Recovery pair。
 - `/persist/system/boot-states.scm` 是 confirm 写入的 commit
   record（last-good generation、system store identity、确认时实际

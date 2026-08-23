@@ -29,7 +29,9 @@ interactive-session-ready（core readiness join barrier）
      │                │    "exec niri --session"）
      │                ├─ pipewire + wireplumber
      │                │    （home-pipewire-service-type）
-     │                └─ niri config spawn：mako、polkit-gnome
+     │                └─ niri config spawn：polkit-gnome、fcitx5、
+     │                     noctalia（兼 notification daemon）、
+     │                     xsettingsd-session（X11 XSETTINGS）
      └─ mingetty（tty2-6，同样 gated by interactive-session-ready——
          desktop 故障时 fallback tty 仍可登录）
 ```

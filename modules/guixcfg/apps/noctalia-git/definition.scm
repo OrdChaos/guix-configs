@@ -23,6 +23,15 @@
 ;;;
 ;;; niri 集成：~/.config/niri/noctalia.kdl 由 Noctalia 运行时生成
 ;;; （唯一 owner = Noctalia），与 seed 模型无关（见 apps/niri）。
+;;;
+;;; GTK 动态配色（任务七边界）：templates/gtk{3,4}.css 是 pinned
+;;; Noctalia 内置模板的 vendored 副本（stock post-hook apply.sh 含
+;;; gtk.css mutation——store symlink 缺 import 时会 rm 重建——不用）；
+;;; 经 xdg-config 发布为 ~/.config/noctalia/templates/，由 seed 的
+;;; [theme.templates.user.gtk{3,4}] 引用，只生成
+;;; gtk-{3,4}/noctalia.css；post-hook 是窄职责的 appearance-sync
+;;; （apps/gtk）。内置 gtk3/gtk4 template 在 seed 的 builtin_ids 中
+;;; 已移除（双 hook owner 禁令同 §7）。
 
 (define-module (guixcfg apps noctalia-git definition)
                #:use-module (noctalia)                 ; noctalia-git
@@ -43,7 +52,17 @@
                           home-xdg-configuration-files-service-type
                           `(("noctalia/palettes/fluent-blue.json"
                              ,(local-file "fluent-blue.json"
-                                          "noctalia-fluent-blue.json"))))))
+                                          "noctalia-fluent-blue.json"))))
+          ;; GTK 动态配色模板（vendored；user template 的
+          ;; input_path——见头部 GTK 段）。
+          (simple-service 'noctalia-gtk-templates
+                          home-xdg-configuration-files-service-type
+                          `(("noctalia/templates/gtk3.css"
+                             ,(local-file "templates/gtk3.css"
+                                          "noctalia-gtk3.css"))
+                            ("noctalia/templates/gtk4.css"
+                             ,(local-file "templates/gtk4.css"
+                                          "noctalia-gtk4.css"))))))
    (persistence
     (list (application-persistence-rule
            (name 'state)

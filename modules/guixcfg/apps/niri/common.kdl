@@ -19,9 +19,9 @@
 //     gnome-keyring-session 服务是 keyring daemon 唯一 owner；
 //   - xrdb -merge ~/.Xresources：原配置硬编码 HOME 绝对路径，且
 //     仓库无 .Xresources 归属。
-// 待办（roadmap）：xsettingsd / clash-verge 的应用单元尚未入
-// 仓库——spawn 保留（图形会话组件），对应包加入 session PATH 前
-// 这些启动项会在无包机器上失败。
+// 待办（roadmap）：clash-verge 的应用单元尚未入仓库——spawn
+// 保留（图形会话组件），对应包加入 session PATH 前该启动项会在
+// 无包机器上失败。
 
 debug {
     honor-xdg-activation-with-invalid-serial
@@ -652,20 +652,24 @@ binds {
 // Startup（graphical session owner = niri session）
 // ─────────────────────────────────────────────────────────────────────────────
 
-spawn-at-startup "mako"                 // notification daemon
 // polkit graphical authentication agent（apps/polkit-gnome：
 // ~/.local/bin wrapper 指向 libexec 二进制——PATH 稳定名，无 store
 // 字面量；polkitd 属于 system，agent 属于 graphical session）。
 spawn-at-startup "polkit-gnome-authentication-agent-1"
 // 输入法（apps/fcitx5：包、声明式配置、Rime userdb 持久化）。
 spawn-at-startup "fcitx5" "-d"
-// panel / wallpaper（apps/noctalia-git；也是 noctalia.kdl 的
-// 运行时 owner）。
+// panel / wallpaper / notification daemon（apps/noctalia-git）：
+// org.freedesktop.Notifications 由 Noctalia 持有（pinned
+// notification.enable_daemon 默认 true；mako 已移除，无第二
+// owner——AGENT.md §7 双 owner 禁令）；也是 noctalia.kdl 的
+// 运行时 owner。
 spawn-at-startup "noctalia"
+// X11/XWayland 的 XSETTINGS 服务（apps/xsettingsd）：wrapper 先按
+// 声明默认 mode reconcile runtime 外观状态，再 exec xsettingsd
+// -c $XDG_RUNTIME_DIR/guixcfg/xsettingsd.conf。
+spawn-at-startup "xsettingsd-session"
 
 // 以下图形会话组件来自原主机配置；对应应用单元尚未入仓库
-// （roadmap：xsettingsd / clash-verge）——包进入 session PATH
-// 前，无包机器（VM）上这些启动会失败（仅运行期通知，不影响
-// 配置合法性）。
-spawn-at-startup "xsettingsd"           // GTK XSettings（X11 兼容）
+// （roadmap：clash-verge）——包进入 session PATH 前，无包机器
+// （VM）上这些启动会失败（仅运行期通知，不影响配置合法性）。
 spawn-at-startup "clash-verge"          // proxy GUI

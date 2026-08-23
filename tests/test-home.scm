@@ -26,9 +26,11 @@
 (test-assert "home packages non-empty"
              (pair? (home-environment-packages %guix-home)))
 
+;; 条目可以是 package 或 (package output) tuple（manifest 合法
+;; 形式，如 (list glib "bin")——apps/gtk 的 gsettings CLI）。
 (test-assert "home packages only contain normal-user CLI tools"
              (every (lambda (p)
-                      (not (member (package-name p)
+                      (not (member (package-name (if (package? p) p (car p)))
                                    '("cryptsetup" "btrfs-progs" "tpm2-tools"
                                                   "sbkeysync" "efibootmgr"))))
                     (home-environment-packages %guix-home)))

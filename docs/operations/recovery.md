@@ -58,8 +58,9 @@ cat /mnt/persist-system/boot-states.scm
 - root generation 状态损坏：`read-state` 自动回退 `.prev`。
 - Recovery 入口：`RECOVERY.EFI`（rootmode=recovery）→ 不调 TPM →
   人工密码 → last-good Guix generation + last-good root。
-- 若 boot-status 卡在 trying：确认能正常登录后，`herd restart
-  ephemeral-root-confirm` 或重跑 reconfigure 恢复。
+- 若 boot-status 卡在 trying：正常完成一次图形登录即自动恢复
+  （confirm 挂在 greetd PAM session open——登录成功本身就是确认
+  信号），或重跑 reconfigure。
 
 ## 密码 keyslot 永远存在
 

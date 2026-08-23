@@ -5,13 +5,6 @@ roadmap（Git history 就是历史）。
 
 ## Known design debt / TODO
 
-### root Last Good readiness boundary
-
-`ephemeral-root-confirm` 在 user-processes 后标记 boot ok / promote
-Last Good，可能先于真正 interactive readiness（no usable login 但
-root 被标 Last Good）。未来应与正确的 interactive readiness/health
-语义对齐（对齐 login/session 就绪信号后再 promote）。
-
 ### stable identity offline-attack boundary
 
 `secrets/bootstrap/stable-identity.age`（passphrase 加密私钥）位于
@@ -34,21 +27,12 @@ application 单元（registry 条目 + 包）尚未入仓库——包进入 sess
 PATH 前，无包机器（VM）上这些启动/按键会运行期失败（仅通知，不
 影响配置合法性）：
 
-- `xsettingsd`（GTK XSettings，X11 兼容）
 - `clash-verge`（proxy GUI）
 - binds 引用的 `missioncenter` / `playerctl` / `orca`
   （Guix 官方包名核对后入 registry）
 
-（已入仓库：noctalia-git、mako、polkit-gnome、nautilus、fcitx5。）
-
-### Fluent-dark-cursors 主题包
-
-niri common.kdl 声明 `cursor { xcursor-theme "Fluent-dark-cursors"
-xcursor-size 24 }`，但主题包未入仓库（Home profile 无此主题；
-Guix Home setup-environment 已把 profile 的 share/icons 前置进
-XCURSOR_PATH——主题包入 profile 后即生效）。原主机配置的
-XCURSOR_PATH 硬编码（HOME + /usr/share FHS 路径）已按规则删除，
-不迁移。
+（已入仓库：noctalia-git、polkit-gnome、nautilus、fcitx5、
+xsettingsd。）
 
 ### 历史 E2E harness（保留、不维护）
 
