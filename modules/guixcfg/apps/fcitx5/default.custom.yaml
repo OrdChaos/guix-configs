@@ -1,0 +1,18 @@
+# Rime 用户配置入口（repo-owned；Rime 只读不写 *.custom.yaml，
+# 无 dual-authority）。
+#
+# __include 引用 shared data 中的雾凇默认配置：Virelith rime-ice
+# 包把 upstream default.yaml 重命名为 rime_ice_suggestion.yaml
+# （nixpkgs/AUR 惯例，避免覆盖前端全局 default.yaml）；
+# rime-data-virelith 的全局 default.yaml 刻意留空，用户策略由本
+# 文件提供。
+#
+# schema_list 收窄为仅雾凇全拼：suggestion 默认带 9 个方案（7 种
+# 双拼 + t9），ephemeral HOME 每次 boot 都重新 deploy，不编译
+# 未用方案可省启动开销。menu/page_size 7 是本机实机习惯
+# （suggestion 默认 5）。
+patch:
+  __include: rime_ice_suggestion:/
+  schema_list:
+    - schema: rime_ice
+  menu/page_size: 7

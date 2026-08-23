@@ -1,0 +1,20 @@
+# 万象语法模型 patch（repo-owned）。
+#
+# 事实来源：pinned rime-ice 80d213e 的
+# others/recipes/grammar.recipe.yaml（schema=rime_ice 参数展开后的
+# 等价声明式结果）。Virelith rime-ice 包删除了 others/，recipe
+# 不进 store；.gram 模型本体由 Virelith rime-wanxiang-gram-zh-hans
+# 作为 immutable shared data 提供。不运行 Plum、不联网安装、不在
+# 运行时修改 schema。bump rime-ice 时对照上游 recipe 重新核对本
+# 文件。
+patch:
+  grammar:
+    language: wanxiang-lts-zh-hans
+    collocation_max_length: 6
+    collocation_min_length: 3
+    collocation_penalty: -14
+    non_collocation_penalty: -6
+    weak_collocation_penalty: -100
+    rear_penalty: -20
+  translator/contextual_suggestions: false
+  translator/max_homophones: 8

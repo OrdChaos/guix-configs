@@ -35,13 +35,11 @@ PATH 前，无包机器（VM）上这些启动/按键会运行期失败（仅通
 影响配置合法性）：
 
 - `xsettingsd`（GTK XSettings，X11 兼容）
-- `fcitx5`（输入法；会话环境变量 XMODIFIERS=@im=fcitx 已在
-  `(guixcfg home environment)` 声明，惰性无害）
 - `clash-verge`（proxy GUI）
 - binds 引用的 `missioncenter` / `playerctl` / `orca`
   （Guix 官方包名核对后入 registry）
 
-（已入仓库：noctalia-git、mako、polkit-gnome、nautilus。）
+（已入仓库：noctalia-git、mako、polkit-gnome、nautilus、fcitx5。）
 
 ### Fluent-dark-cursors 主题包
 

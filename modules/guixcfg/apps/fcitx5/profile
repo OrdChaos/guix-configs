@@ -1,0 +1,23 @@
+# fcitx5 输入法组（repo-owned，derived state，不持久化）。
+# 输入法列表：Keyboard - English (US) + Rime；默认英文起步，
+# Ctrl+Space 切换（fcitx5 默认触发键，无需声明全局 config）。
+#
+# single-authority 立场：fcitx5 在运行时 IM 列表被修改时会原子
+# rename 重写本文件（替换 store symlink，当次会话内漂移，下次
+# Home activation 自愈）——本单元不安装 fcitx5-configtool，不支持
+# 运行时改 IM 列表，配置修改只走仓库（见 definition.scm 头部）。
+[Groups/0]
+Name=Default
+Default Layout=us
+DefaultIM=keyboard-us
+
+[Groups/0/Items/0]
+Name=keyboard-us
+Layout=
+
+[Groups/0/Items/1]
+Name=rime
+Layout=
+
+[GroupOrder]
+0=Default

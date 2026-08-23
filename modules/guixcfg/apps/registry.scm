@@ -37,6 +37,7 @@
                #:use-module (guixcfg apps gnupg definition)
                #:use-module (guixcfg apps seahorse definition)
                #:use-module (guixcfg apps ssh definition)
+               #:use-module (guixcfg apps fcitx5 definition)
                #:export (%applications))
 
 (define %applications
@@ -68,7 +69,8 @@
         %gnome-keyring
         %gnupg
         %seahorse
-        %ssh))
+        %ssh
+        %fcitx5))
 
 ;; 完整性检查：启用集合的名字必须唯一（fail fast，加载即报错）。
 (define %application-names (map application-name %applications))

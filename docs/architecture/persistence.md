@@ -126,7 +126,12 @@ production consumers：
   `/persist/data-app/google-chrome-stable/user-data`，Chromium 官方
   User Data Directory 整体——不做 profile 内部细分；`~/.cache/
   google-chrome` 保持 ephemeral；`apps/google-chrome-stable/
-  definition.scm`）。
+  definition.scm`）；
+- fcitx5（`.local/share/fcitx5/rime/rime_ice.userdb` →
+  `/persist/data-app/fcitx5/rime_ice.userdb`，Rime 用户学习词库——
+  雾凇主翻译器唯一可写 leveldb；`*.custom.yaml` 为 declarative
+  repo-owned，`build/`/`user.yaml`/`installation.yaml` 保持
+  ephemeral；`apps/fcitx5/definition.scm`）。
 
 后续应用按同一契约显式 adopt。
 

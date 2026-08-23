@@ -2,7 +2,7 @@
        (name 'guix)
        (url "https://codeberg.org/guix/guix.git")
        (branch "master")
-       (commit "14f805afc48bb642186e4608054de25c37a3e018")
+       (commit "b5ff8a003e2ac4497954e1b3bafa5c89c6432189")
        (introduction
         (make-channel-introduction
          "9edb3f66fd807b096b48283debdcddccfea34bad"
@@ -12,7 +12,7 @@
        (name 'nonguix)
        (url "https://gitlab.com/nonguix/nonguix")
        (branch "master")
-       (commit "bdc27101e06737197834cb65e31256cd4d44d40a")
+       (commit "caa8c0b4646b993537be13c9bc819b3df68ab9b2")
        (introduction
         (make-channel-introduction
          "897c1a470da759236cc11798f4e0a5f7d4d59fbc"
@@ -22,7 +22,7 @@
        (name 'rosenthal)
        (url "https://codeberg.org/hako/rosenthal.git")
        (branch "trunk")
-       (commit "6e28a0825bd8931815d7835ff4512b34678db32c")
+       (commit "21391bab6e38561488bd807493da1035a85c24cb")
        (introduction
         (make-channel-introduction
          "7677db76330121a901604dfbad19077893865f35"
@@ -32,7 +32,7 @@
        (name 'virelith)
        (url "https://github.com/ordchaos/virelith.git")
        (branch "master")
-       (commit "df4278d8de04830e5f9e9a2ac67b8ea7f057ae6e")
+       (commit "60fbe1786a90cf0d1ac543fb090159fa462754bd")
        (introduction
         (make-channel-introduction
          "cae11b77a64f281cc9ab45e20567e59efc37e96b"
@@ -52,4 +52,4 @@
        (name 'noctalia)
        (url "https://github.com/noctalia-dev/noctalia")
        (branch "main")
-       (commit "791e557417ceeba0e57562af2ddcbd3d8b93f62a")))
+       (commit "d8ba5a01cac5ba8617bf262249829b4aa5945369")))

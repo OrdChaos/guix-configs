@@ -140,9 +140,13 @@
                     (append-map (lambda (r)
                                   (list (application-persistence-rule-consumer r)))
                                 (applications-persistence %applications))))
+               ;; .local/share 下只放行审计过的精确叶子（添加即表态）：
+               ;; gnome-keyring vault、fcitx5 的 Rime 学习词库
+               ;; （rime_ice.userdb——pinned schema 唯一可写 leveldb）。
                (every (lambda (c)
                         (or (not (string-prefix? ".local/share/" c))
-                            (string=? ".local/share/keyrings" c)))
+                            (member c '(".local/share/keyrings"
+                                        ".local/share/fcitx5/rime/rime_ice.userdb"))))
                       consumers)))
 
 (test-assert "GK4: no /run/user persistence anywhere"
