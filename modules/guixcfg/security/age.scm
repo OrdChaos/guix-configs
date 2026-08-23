@@ -31,9 +31,11 @@
                          age-install!
                          age-verify!
                          age-lock!
+                         ensure-installed-identity!
                          age-decrypt-file
                          make-age-secret-reader
                          %account-credentials-dir
+                         %password-hash-regex
                          provision-password-hash!))
 
 ;; 运行时临时 S（tmpfs；目录 0700、文件 0600）与安装后的
@@ -215,6 +217,26 @@ already-unlocked（复用）或 unlocked（新解密）。"
   (false-if-exception (delete-file (%runtime-identity-path)))
   #t)
 
+(define* (ensure-installed-identity! target
+                                     #:optional (runtime (%runtime-identity-path)))
+         "安装收尾兜底（docs/operations/installation.md 阶段 5 与
+commit-root 之间）：TARGET 下的 installed identity 必须就位——首次
+boot 的 secrets-deploy 用它解密（boot 后无 runtime identity），缺失
+会导致 interactive-secrets-ready 失败、login barrier 卡死。缺失时从
+RUNTIME（同一安装会话 unlock 的 identity）自动安装；无 runtime
+identity 则 fail fast（提示先 secrets unlock）。"
+         (let ((installed (string-append target (%installed-identity-path))))
+           (unless (file-exists? installed)
+             (if (file-exists? runtime)
+               (begin
+                (mkdir-p (dirname installed))
+                (chmod (dirname installed) #o700)
+                (copy-file runtime installed)
+                (chmod installed #o600)
+                (format #t "installed stable identity to ~a (stage 5 fallback)~%"
+                        installed))
+               (error "installed identity missing and no runtime identity; run 'secrets unlock' first (installation stage 5)")))))
+
 (define (age-install! root)
   "把运行时临时 S 安装为机器的 authoritative identity：
 /persist/system/keys/age/identity（root:root，目录 0700、文件 0600）。
@@ -279,14 +301,10 @@ already-unlocked（复用）或 unlocked（新解密）。"
 (define (age-decrypt-to-string ciphertext-path)
   "用 installed S 解密 CIPHERTEXT-PATH，明文作为字符串返回（只在
 本进程内存；经 /run 0600 临时文件中转，读回即删）。"
-  (let ((tmp (string-append (%runtime-identity-dir) "/.dec-str-"
-                            (number->string (getpid)))))
-    (mkdir-p (%runtime-identity-dir))
-    (chmod (%runtime-identity-dir) #o700)
+  (let ((tmp (fresh-run-temp (string-append ".dec-str-"
+                                            (number->string (getpid))))))
     (dynamic-wind
-     (lambda ()
-       (call-with-output-file tmp (lambda (port) #t))
-       (chmod tmp #o600))
+     (lambda () #t)
      (lambda ()
        (invoke-with-stdin "" "age" "--decrypt"
                           "-i" (current-identity-path)
@@ -316,11 +334,15 @@ already-unlocked（复用）或 unlocked（新解密）。"
                       (string-append (persist-mount-point "@persist-system")
                                      "/accounts"))))
 
+;; shadow 兼容 crypt hash 的格式（$id$salt$hash）——本仓库唯一
+;; authority；(guixcfg system accounts) 的投影与验证共用同一常量。
+(define %password-hash-regex "^\\$[0-9a-z]+\\$[^:$]+\\$[^: \n]+$")
+
 (define (password-hash-format? s)
   "S 是否是 shadow 兼容的 crypt hash（$id$salt$hash，非空、无换行/
   冒号注入）。"
   (and (string? s)
-       (string-match "^\\$[0-9a-z]+\\$[^:$]+\\$[^: \n]+$" s)
+       (string-match %password-hash-regex s)
        #t))
 
 (define (provision-password-hash! user ciphertext-path)

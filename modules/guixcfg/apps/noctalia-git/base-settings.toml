@@ -1,4 +1,51 @@
-config_version = 12
+# Noctalia 初始配置 seed（repository authority，seed-once 模型）。
+#
+# 语义（docs/architecture/persistence.md（seed-once））：
+#   - 本文件只在 ~/.local/state/noctalia/settings.toml 从未存在时被
+#     首次写入（system activation，原子落盘 + marker 记录）；
+#   - 写入后 repository 永久放弃该文件 ownership——文件完全由
+#     Noctalia/用户运行时管理；后续 reconfigure 绝不覆盖/同步/修正
+#     （包括本 seed 本身的更新）；
+#   - seed-once != declarative management：不要把它改写成"每次同步
+#     默认配置"。
+#
+# 键名依据 pinned Noctalia example.toml / config schema
+# （settings.toml 是 overrides 格式，与 declarative config 同 schema）。
+# 未列出的项保持 Noctalia 内置默认值。
+#
+# 可移植性规则：seed 不得含用户绝对路径（用 ~/）、机器专属输出
+# （显示器名等）、运行时产生的状态（wallpaper.last、widget 实例
+# ID）——它不是任何一台机器 live settings.toml 的快照。
+
+# 当前 schema config version（pinned source
+# src/config/config_migrations.cpp：kPluginAutoUpdateModeMigrationVersion
+# = 13）：避免首启时 Noctalia 对无版本 overrides 表执行迁移回写。
+config_version = 13
+
+[shell]
+# Guix 负责完成首次初始化，Noctalia 不应再跑交互式 setup wizard
+# 做第二轮初始化。.setup-complete 由 Noctalia 自己管理（不伪造），
+# 随整个 state 目录持久化。
+setup_wizard_enabled = false
+telemetry_enabled = false
+app_icon_color = "primary"
+font_family = "Segoe UI"
+avatar_path = "~/Pictures/avatar.png"
+settings_show_advanced = false
+
+[shell.screenshot]
+save_to_file = true
+copy_to_clipboard = true
+freeze_screen = true
+directory = "~/Pictures/Screenshots"
+
+[shell.launcher]
+categories = true
+show_icons = true
+sort_by_usage = false
+
+[shell.panel]
+open_near_click_control_center = true
 
 [bar.default]
 center = [ "clock", "weather" ]
@@ -35,122 +82,33 @@ sidebar_section = "none"
     type = "power_profile"
 
 [location]
+auto_locate = false
 address = "Wuhan,China"
 
-[lockscreen_widgets]
+[lockscreen]
 enabled = true
-schema_version = 2
-widget_order = [ "lockscreen-login-box@eDP-1", "lockscreen-widget-0000000000000001", "lockscreen-widget-0000000000000002" ]
-
-    [lockscreen_widgets.grid]
-    cell_size = 16
-    major_interval = 4
-    visible = true
-
-    [lockscreen_widgets.widget."lockscreen-login-box@eDP-1"]
-    box_height = 128.0
-    box_width = 720.0
-    cx = 914.5
-    cy = 649.5
-    output = "eDP-1"
-    rotation = 0.0
-    type = "login_box"
-
-        [lockscreen_widgets.widget."lockscreen-login-box@eDP-1".settings]
-        background_color = "surface_variant"
-        background_opacity = 0.0
-        background_radius = 0.0
-        center_password_text = true
-        input_opacity = 1.0
-        input_radius = 8.0
-        layout = "regular"
-        show_caps_lock = true
-        show_keyboard_layout = true
-        show_login_button = false
-        show_media = false
-        show_session_buttons = true
-        show_unlock_hint = false
-        show_weather = false
-
-    [lockscreen_widgets.widget.lockscreen-widget-0000000000000001]
-    box_height = 208.0
-    box_width = 304.0
-    cx = 914.5
-    cy = 475.5
-    output = "eDP-1"
-    rotation = 0.0
-    type = "clock"
-
-        [lockscreen_widgets.widget.lockscreen-widget-0000000000000001.settings]
-        background = false
-        center_text = true
-        clock_style = "digital"
-        color = "on_secondary"
-        shadow = false
-
-    [lockscreen_widgets.widget.lockscreen-widget-0000000000000002]
-    box_height = 176.0
-    box_width = 192.0
-    cx = 114.5
-    cy = 1043.5
-    output = "eDP-1"
-    rotation = 0.0
-    type = "weather"
-
-        [lockscreen_widgets.widget.lockscreen-widget-0000000000000002.settings]
-        background = false
-        color = "on_secondary"
-        shadow = false
-        show_forecast = true
 
 [osd]
 position = "top_right"
 position_vertical = "top_right"
 
-[shell]
-app_icon_color = "primary"
-avatar_path = "/home/ordchaos/Pictures/avatar.png"
-font_family = "Segoe UI"
-settings_show_advanced = false
-
-    [shell.launcher]
-    sort_by_usage = false
-
-    [shell.panel]
-    open_near_click_control_center = true
-
-    [shell.screenshot]
-    directory = "/home/ordchaos/Pictures/Screenshots"
-
 [system.monitor]
 enabled = false
 
 [theme]
-builtin = "Nord"
-community_palette = "One"
-custom_palette = "fluent-blue"
 mode = "light"
 source = "custom"
+custom_palette = "fluent-blue"
 wallpaper_scheme = "m3-fruit-salad"
 
-    [theme.templates]
-    builtin_ids = [ "gtk3", "gtk4", "ghostty", "kcolorscheme", "niri", "qt", "starship" ]
-    community_ids = [ "obsidian", "vscode", "discord", "obs", "steam", "telegram" ]
+[theme.templates]
+builtin_ids = [ "gtk3", "gtk4", "ghostty", "kcolorscheme", "niri", "qt", "starship" ]
+community_ids = [ "obsidian", "vscode", "discord", "obs", "steam", "telegram" ]
 
-[wallpaper.default]
-path = "/home/ordchaos/Pictures/Wallpapers/golden-gate-bridge-fog.jpg"
-
-[wallpaper.last]
-path = "/home/ordchaos/Pictures/Wallpapers/golden-gate-bridge-fog.jpg"
-
-[wallpaper.monitors.eDP-1]
-path = "/home/ordchaos/Pictures/Wallpapers/golden-gate-bridge-fog.jpg"
-
-[[wallpaper.favorite]]
-builtin_palette = "Ayu"
-palette_source = "builtin"
-path = "/home/ordchaos/Pictures/Wallpapers/BanYue.jpeg"
-theme_mode = "light"
+[wallpaper]
+enabled = true
+fill_mode = "crop"
+directory = "~/Pictures/Wallpapers"
 
 [widget.battery]
 capsule = true

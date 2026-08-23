@@ -86,12 +86,14 @@ python3 -c 'import socket;s=socket.socket(socket.AF_UNIX);s.connect("vms/monitor
 
 ## E2E / TPM 场景
 
-- `tools/t7-e2e.sh` + `tools/t7-scenario.sh`：OVMF Secure Boot +
-  swtpm + 签名 UKI 场景（auto-unlock / secboot-off / tpm-clear /
-  corrupt / recovery）。
-- `tools/test-tpm2-poc.sh`：swtpm PolicyPCR 机制（seal/unseal、
-  extend 后失败）。
-- `tools/test-tpm2-luks.sh`：真实 cryptsetup 回退场景。
+- 当前活入口：`tests/integration/t3/`（run.sh + boot.sh + fixtures），
+  经 `tools/t7-e2e.sh`（install 与 QEMU 常量）与 `tools/t7-interact.py`
+  （串口交互）驱动 OVMF Secure Boot + swtpm + 签名 UKI 场景
+  （A auto-unlock / B tpm-clear / C PCR7 change / D recovery /
+  E corrupt）。
+- 历史 harness（保留、不维护、无调用者）：`tools/t7-scenario.sh`
+  （已被 t3/run.sh 自带的 scenario 取代）、`tools/test-tpm2-poc.sh`
+  （swtpm PolicyPCR 机制 PoC）、`tools/test-tpm2-luks.sh`（真实
+  cryptsetup 回退场景——tests/ 内尚无 Level 1-4 等价覆盖）。
 
-这些是历史 E2E harness；新功能开发优先用 Level 1-4 测试（见
-`development/testing.md`）。
+新功能开发优先用 Level 1-4 测试（见 `development/testing.md`）。

@@ -1,5 +1,5 @@
 ;;; Boot readiness capability DAG 测试（docs/architecture/accounts-sessions.md
-;;; J8 / Boot Readiness Contract）：六个 *-ready 的 provision/
+;;; Readiness DAG）：六个 *-ready 的 provision/
 ;;; requirement 结构与 join barrier 语义。
 
 (use-modules (gnu services)

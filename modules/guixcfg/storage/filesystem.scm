@@ -2,8 +2,7 @@
 ;;; 对应 docs/architecture/storage.md（磁盘布局）（固定物理布局）。
 
 (define-module (guixcfg storage filesystem)
-               #:use-module (guixcfg storage model)
-               #:use-module (guixcfg storage partition)  ; by-partlabel-path
+               #:use-module (guixcfg storage model)   ; by-partlabel-path 等固定事实
                #:use-module (guixcfg utils process)      ; invoke-with-stdin
                #:use-module (guix build utils)          ; invoke（mkfs 等）
                #:export (execute-format-esp

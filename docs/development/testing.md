@@ -38,7 +38,7 @@ thunk、secrets deploy、只读 verify。
 ```bash
 GUIX_CONFIG_FACTS=<facts> \
   guix time-machine -C channels.lock.scm -- system build \
-  -L modules -e '(@ (guixcfg hosts vm) %os)'
+  -L "$PWD/modules" -e '(@ (guixcfg hosts vm) %os)'
 ```
 
 证明：完整 OS 可构建，所有 activation/shepherd 配置生成正确。
@@ -69,7 +69,7 @@ guix time-machine -C channels.lock.scm -- repl tests/run-tests.scm
 # system build dry-run / build
 GUIX_CONFIG_FACTS=/tmp/facts.scm \
   guix time-machine -C channels.lock.scm -- system build \
-  -L modules -e '(@ (guixcfg hosts vm) %os)'
+  -L "$PWD/modules" -e '(@ (guixcfg hosts vm) %os)'
 ```
 
 不要把 "gexp successfully builds" 当作 "runtime program definitely
@@ -83,7 +83,7 @@ works"——Level 3 才证明后者。
 
 ```bash
 guix time-machine -C channels.lock.scm -- build --dry-run \
-  -L modules \
+  -L "$PWD/modules" \
   --substitute-urls='https://ci.guix.gnu.org https://bordeaux.guix.gnu.org https://substitutes.nonguix.org' \
   -e '(@ (guixcfg system kernel-platform) %kernel)'
 ```
@@ -113,7 +113,7 @@ toolchain、WebKit/Chromium 类），如果 dry-run 意外显示
 ```bash
 # 例：exact selected kernel 的 substitute-aware dry-run
 guix time-machine -C channels.lock.scm -- build --dry-run \
-  -L modules -e '(@ (guixcfg system kernel-platform) %kernel)'
+  -L "$PWD/modules" -e '(@ (guixcfg system kernel-platform) %kernel)'
 ```
 
 这不是宣称“大包必须有 substitute”；语义是：**预期有 substitute

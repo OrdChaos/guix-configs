@@ -188,14 +188,9 @@
    (lambda ()
      (false-if-exception (delete-file-recursively no-identity-dir)))))
 
-;; ── Test D：模块 compile/load 无 unbound/wrong-import 警告 ────
-(test-assert "D: tpm2-enroll.scm compiles without unbound-variable warnings"
-             (let ((out (with-output-to-string
-                         (lambda ()
-                           (compile-file "tools/tpm2-enroll.scm"
-                                         #:output-file
-                                         "/tmp/guixcfg-enroll-check.go")))))
-               (false-if-exception (delete-file "/tmp/guixcfg-enroll-check.go"))
-               (not (string-contains out "unbound"))))
+;; tools/*.scm 的 compile 检查已并入 test-modules-load.scm（那里的
+;; current-warning-port 捕获才是真正生效的写法——本处旧实现用
+;; with-output-to-string 抓 current-output-port，Guile 编译警告走
+;; current-warning-port，导致该断言永远为真）。
 
 (test-end "tpm2-enroll")

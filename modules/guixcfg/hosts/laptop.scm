@@ -1,5 +1,5 @@
-;;; Laptop 最终组装点（阶段 6；docs/README.md）。Host 负责组合硬件、
-;;; 存储 policy、boot 配置和服务。
+;;; Laptop 组装点（docs/README.md）。Host 负责组合硬件、存储 policy、
+;;; boot 配置和服务。
 ;;;
 ;;; Host 是策略/选择层（inventory = facts / host = policy+selection /
 ;;; application = resource ownership+behavior / composition =

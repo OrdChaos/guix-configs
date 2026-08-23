@@ -3,19 +3,6 @@
 只记录尚未完成的事项、已知设计债与未来功能。已完成事项不保留在
 roadmap（Git history 就是历史）。
 
-## Core phase gate
-
-当前 Core phase 结束条件：
-
-- consistency audit passes（本基线审计）
-- docs restructure complete
-- full tests pass
-- system build passes
-- fresh VM installation passes
-- fresh boot/login passes
-
-满足后才正式进入 Desktop / Laptop / Application persistence。
-
 ## Known design debt / TODO
 
 ### root Last Good readiness boundary
@@ -25,51 +12,11 @@ Last Good，可能先于真正 interactive readiness（no usable login 但
 root 被标 Last Good）。未来应与正确的 interactive readiness/health
 语义对齐（对齐 login/session 就绪信号后再 promote）。
 
-### login-critical vs ordinary secrets
-
-`interactive-secrets-ready` 当前由全部 secrets（含 test/普通应用
-secret）共同 provision——普通非关键 secret 失败会阻塞 interactive
-login。**架构已落好**（app-secret ownership 分布、file-like
-source、host-owned inventory），但运行时仍是单一事务性发布者
-（一个 /run/guixcfg-secrets generation publication、fail-closed
-全量事务）——区分 login-critical 与 ordinary 需要两个独立发布者/
-两个 generation 根，属 secrets subsystem 重构，刻意未做（避免
-扩大范围与破坏现有 fail-closed 事务；2026-08 app-layer 重构报告）。
-未来：`interactive-secrets-ready` 只代表 login-critical 类。
-
-**已实现（2026-08 Phase A）**：runtime secret publication 已按
-failure/readiness domain 拆分：
-
-```text
-runtime secret publisher mechanism
-    ├── login-critical transaction/domain → interactive-secrets-ready
-    │     （/run/guixcfg-secrets，独立 staging/generation/current）
-    └── ordinary application transaction/domain → ordinary-secrets-ready
-          （/run/guixcfg-secrets-ordinary，独立 atomic root；不阻塞 login）
-```
-
-domain 间 failure-isolated、domain 内 fail-closed；`<secret-decl>` 的
-`domain` 字段显式必填（'login-critical | 'ordinary）；composition
-发生在 host/system assembly（`applications-secrets` 聚合 + host
-inventory → 按 domain 分区 → generic publisher 实例）。classification
-属于具体 `secret-decl` 的 deployment/readiness contract，不是整个
-`<application>` 的属性。
-
-### Application persistence（/persist/data-app）
-
-generic engine 已实现（`system/application-persistence.scm`：
-bind-only directory bind、严格 path validation、activation 恢复
-consumer parent ownership、三路径安全审计）。**当前无真实 production
-application persistence rule**——状态：mechanism ready, production
-rules pending explicit application adoption。每新增 rule 必须满足
-persistence contract（canonical backing / consumer / exposure /
-owner / lifecycle）；backup 是未来独立 concern，不制造 taxonomy。
-
 ### stable identity offline-attack boundary
 
 `secrets/bootstrap/stable-identity.age`（passphrase 加密私钥）位于
 public repo，给攻击者离线尝试 master passphrase 的目标。长期选择：
-public repo 只含 recipient + ciphertext，private identity 另存密码
+public repo 只含 recipient + ciphertext、private identity 另存密码
 管理器/离线备份；或维持现状但 master passphrase 必须高熵、独立于
 登录密码（当前已独立）。不擅自迁移。
 
@@ -80,7 +27,7 @@ provisioning source → atomically update installed persistent hash →
 trigger/revalidate account projection → preserve fail-closed。不能长期
 依赖运行期 `passwd user`（只改 ephemeral shadow，reboot 丢失）。
 
-### 图形会话组件应用单元（niri spawn 引用，未入仓库）
+### 图形会话组件应用单元（niri spawn 引用，部分未入仓库）
 
 niri common.kdl 的 spawn-at-startup / binds 引用以下二进制，对应
 application 单元（registry 条目 + 包）尚未入仓库——包进入 session
@@ -91,10 +38,10 @@ PATH 前，无包机器（VM）上这些启动/按键会运行期失败（仅通
 - `fcitx5`（输入法；会话环境变量 XMODIFIERS=@im=fcitx 已在
   `(guixcfg home environment)` 声明，惰性无害）
 - `clash-verge`（proxy GUI）
-- `noctalia`（panel/wallpaper 套件；同时是 `~/.config/niri/
-  noctalia.kdl` 的运行时 owner）
-- binds 引用的 `nautilus` / `missioncenter` / `playerctl` / `orca`
+- binds 引用的 `missioncenter` / `playerctl` / `orca`
   （Guix 官方包名核对后入 registry）
+
+（已入仓库：noctalia-git、mako、polkit-gnome、nautilus。）
 
 ### Fluent-dark-cursors 主题包
 
@@ -105,19 +52,15 @@ XCURSOR_PATH——主题包入 profile 后即生效）。原主机配置的
 XCURSOR_PATH 硬编码（HOME + /usr/share FHS 路径）已按规则删除，
 不迁移。
 
-### Application persistence（/persist/data-app）
+### 历史 E2E harness（保留、不维护）
 
-当前是骨架/规划。每增加一个 app persistence rule 必须指定 canonical
-backing、consumer path、bind/symlink/direct、backup class、ownership、
-lifecycle。
-
-### Cleanup candidates（疑似 dead，保留待确认）
-
-- `tools/t7-e2e.sh`、`tools/t7-interact.py`、`tools/t7-scenario.sh`、
-  `tools/test-tpm2-luks.sh`、`tools/test-tpm2-poc.sh`：历史 TPM/VM
-  E2E harness，当前零代码引用（有文档引用）。保留历史价值，命名
-  整理待定。
-- `tools/format-scheme.mjs`：零引用，疑似死代码。
+`tools/test-tpm2-poc.sh`、`tools/test-tpm2-luks.sh`、
+`tools/t7-scenario.sh`：历史 PoC/场景驱动，当前无调用者
+（t7-scenario 已被 tests/integration/t3/run.sh 自带的 scenario
+取代；test-tpm2-luks 的真实 cryptsetup 回退场景在 tests/ 无等价物）。
+注意 `tools/t7-e2e.sh` 与 `tools/t7-interact.py` **不是** dead code：
+tests/integration/t3 仍在用。若未来把 test-tpm2-luks 的场景移植为
+Level 1-4 测试，这三个文件可删。
 
 ## Future features
 
@@ -131,9 +74,9 @@ lifecycle。
   自动 git pull、自动 clone 丢失仓库、自动更新 channel、自动部署脏
   工作区、后台监控、开机自动 reconfigure、自动删 Flatpak、自动选择
   可破坏磁盘。
-- Desktop / greetd：login gate 从 mingetty 扩展到 greetd。
-- Laptop：host 组装点 + 硬件驱动（kernel platform 已就位：
+- Laptop：完整 host 组装点 + 硬件驱动（kernel platform 已就位：
   `(guixcfg system kernel-platform)` 的 standard Linux +
   linux-firmware + Intel microcode 直接复用；实机 firmware 选择与
   microcode revision 验收属 laptop phase）。
 - Mihomo / Flatpak 应用管理（docs 已规划，未实现）。
+

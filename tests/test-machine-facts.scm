@@ -7,6 +7,7 @@
 ;;; mapped-device 时抛出。
 
 (use-modules (srfi srfi-64)
+             (ice-9 textual-ports)        ; get-string-all
              (gnu system mapped-devices)  ; mapped-device-source
              (gnu system uuid))           ; uuid、uuid=?
 

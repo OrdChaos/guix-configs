@@ -20,7 +20,7 @@
 # script/stty 工具链）
 guix time-machine -C channels.lock.scm -- \
   shell -m manifests/secrets.scm -- \
-  guile -L modules -s tools/secrets.scm unlock
+  guile -L "$PWD/modules" -s tools/secrets.scm unlock
 ```
 
 得到 `/run/guixcfg-age/stable-identity`（0600，tmpfs）。所有 install
@@ -57,9 +57,9 @@ herd start cow-store /mnt
 ```bash
 guix time-machine -C channels.lock.scm -- \
   shell -m manifests/secure-boot-keygen.scm -- \
-  guix repl -L modules tools/secure-boot-keygen.scm /mnt/persist/system/keys/secure-boot
+  guix repl -L "$PWD/modules" tools/secure-boot-keygen.scm /mnt/persist/system/keys/secure-boot
 ```
-（`-L modules` 必需：工具自身不带 load path，缺了报
+（`-L "$PWD/modules"` 必需：工具自身不带 load path，缺了报
 `no code for module (guixcfg storage model)`——2026-08 实测。）
 
 ## 阶段 4.5：Nonguix substitute bootstrap（首次 transition 必需）
@@ -85,7 +85,7 @@ guix archive --authorize < modules/guixcfg/system/nonguix-key.pub
 GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
   guix time-machine -C channels.lock.scm -- system init \
   --substitute-urls='https://ci.guix.gnu.org https://bordeaux.guix.gnu.org https://substitutes.nonguix.org' \
-  -L modules modules/guixcfg/hosts/vm.scm /mnt
+  -L "$PWD/modules" modules/guixcfg/hosts/vm.scm /mnt
 ```
 
 **昂贵构建预检**（development/testing.md）：`system init` 前先对
@@ -94,7 +94,7 @@ download，而不是 will be built：
 
 ```bash
 guix time-machine -C channels.lock.scm -- build --dry-run \
-  -L modules -e '(@ (guixcfg system kernel-platform) %kernel)'
+  -L "$PWD/modules" -e '(@ (guixcfg system kernel-platform) %kernel)'
 ```
 
 ## 阶段 5：安装 stable S 到 persist
@@ -119,7 +119,7 @@ install -m 600 /run/guixcfg-age/stable-identity \
 GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
   guix time-machine -C channels.lock.scm -- system init \
   --substitute-urls='https://ci.guix.gnu.org https://bordeaux.guix.gnu.org https://substitutes.nonguix.org' \
-  -L modules modules/guixcfg/hosts/vm.scm /mnt
+  -L "$PWD/modules" modules/guixcfg/hosts/vm.scm /mnt
 ```
 
 成功标志：system-1-link、EFI/Guix/A/{CURRENT,RECOVERY}.EFI、
@@ -131,7 +131,7 @@ bootloader installed。有 db.key 则 UKI 已签名。
 GUIXCFG_ACCOUNTS_DIR=/mnt/persist/system/accounts \
   guix time-machine -C channels.lock.scm -- \
   shell -m manifests/secrets.scm -- \
-  guile -L modules -s tools/secrets.scm provision-password ordchaos \
+  guile -L "$PWD/modules" -s tools/secrets.scm provision-password ordchaos \
   secrets/install/user-password.hash.age
 ```
 
@@ -224,7 +224,7 @@ guix repl tools/tpm2-enroll.scm -- enroll --noninteractive      # stdin 直读
 
 - `--luks-secret`：与 disk-install 的 apply 同一来源——stable S 解密
   `secrets/install/luks-recovery.age`（需先 `secrets unlock`；
-  安装流程见 30.2.1）。runtime identity 缺失或解密失败立即中止，
+  安装流程见阶段 1）。runtime identity 缺失或解密失败立即中止，
   不会回退到交互输入；plaintext 不进 argv/env/log/store。
 - `--noninteractive`：从 stdin 直读一行（脚本/自动化注入）。
 - `status` / `preflight` 不接受任何 credential 来源 flag。

@@ -2,6 +2,7 @@
 
 (use-modules (guixcfg storage model)
              (guixcfg storage plan)
+             (guixcfg storage policies)      ; %vm-storage-policy
              (srfi srfi-1)
              (srfi srfi-64))
 

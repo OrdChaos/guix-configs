@@ -22,6 +22,6 @@ result-*
 # ── 机密明文 ───────────────────────────────────────────────
 # secrets/ 下只允许提交 age 加密后的文件（*.age）和占位 .gitkeep；
 # 真正的解密 identity（host.key）放在 /persist/system/keys/age/，
-# 见 docs/secrets.md。这里兜底拦截误放进来的明文私钥。
+# 见 docs/architecture/secrets.md。这里兜底拦截误放进来的明文私钥。
 secrets/**/*.key
 secrets/**/identity*

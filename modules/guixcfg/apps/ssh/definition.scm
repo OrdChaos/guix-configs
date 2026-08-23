@@ -104,22 +104,17 @@
   (runtime-secret-target %ssh-aur-key-secret
                          (user-profile-name %primary-user)))
 
-;; 用户私钥集合：(runtime secret target, ~/.ssh 链接名)。
-;; ⚠️ 本常量只作文档/配对声明——**禁止**把它整体嵌入 gexp：
-;; 裸 cons/list 字面量在生成脚本的表达式位置会变成
-;; (("a" . "b") ...)，guile read/expand 阶段即 syntax violation
-;; （build 不报错，运行才炸；2026-08 VM 实测 ssh-session）。gexp
-;; 模板内必须用 (list (list ...)) 显式构造（见 wrapper）。
-(define %ssh-user-key-entries
-  (list (list %ssh-user-key-target "id_ed25519")
-        (list %ssh-aur-key-target "aur")))
-
 ;; session one-shot wrapper：有界等待全部 runtime secret → 建 ~/.ssh
 ;; （0700）与 known_hosts backing 目录 → 各私钥 symlink（幂等：目标
 ;; 一致跳过，陈旧/非 symlink 替换——ephemeral HOME 下 ~/.ssh 每
 ;; boot 重建，路径由本应用拥有）→ 防御性 chmod 0600。只用 core
 ;; bindings（与 gnome-keyring 同一模式；失败 = 服务 failed，登录
 ;; 不受影响——ordinary domain 语义）。
+;;
+;; ⚠️ entries 必须像下面这样用 (list (list ...)) 显式构造：把模块级
+;; 裸列表字面量（'(("a" . "b") ...)）直接嵌入 gexp 会在生成脚本的
+;; 表达式位置变成 (("a" . "b") ...)，guile read/expand 阶段即语法
+;; 错误（build 不报错，运行才炸；2026-08 VM 实测 ssh-session）。
 (define %ssh-session-wrapper
   (program-file
    "ssh-session"
@@ -144,9 +139,7 @@ known_hosts will not persist this session~%"
       ;; 2. 有界等待全部 runtime secret（ordinary domain fail-closed：
       ;;    解密发布要么全有要么全无；reconfigure 升级期间可能滞后——
       ;;    最多 60 秒自愈；失败 = 服务 failed，登录不受影响）。
-      ;;    entries 以 (list (list ...)) 显式构造——嵌入裸列表字面量
-      ;;    会在表达式位置产生 (("a" "b") ...)，read/expand 即炸
-      ;;    （见 %ssh-user-key-entries 注释）。
+      ;;    entries 以 (list (list ...)) 显式构造——原因见上方注释。
       (define entries
         (list (list #$%ssh-user-key-target "id_ed25519")
               (list #$%ssh-aur-key-target "aur")))
@@ -191,13 +184,13 @@ known_hosts will not persist this session~%"
            'ssh-files
            home-files-service-type
            `((".ssh/config"            ; 声明式（公开，非 secret）
-              ,(local-file "config" "ssh-client-config"))
+                                       ,(local-file "config" "ssh-client-config"))
              (".ssh/authorized_keys"
               ,(local-file "authorized_keys" "ssh-authorized-keys"))
              (".ssh/id_ed25519.pub"    ; 公开材料（public key 非 secret）
-              ,(local-file "id_ed25519.pub" "ssh-id-ed25519-pub"))
+                                       ,(local-file "id_ed25519.pub" "ssh-id-ed25519-pub"))
              (".ssh/aur.pub"           ; AUR 公钥（public key 非 secret）
-              ,(local-file "aur.pub" "ssh-aur-pub"))))
+                                       ,(local-file "aur.pub" "ssh-aur-pub"))))
           (simple-service
            'ssh-session
            home-shepherd-service-type

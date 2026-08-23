@@ -69,10 +69,10 @@
      (mkdir-p (string-append dir "/EFI/Guix/A"))
      (call-with-output-file (string-append dir "/EFI/Guix/A/RECOVERY.EFI")
                             (lambda (p) (display "slot-uki" p)))
-     ;; slot 用 symbol（(slot . A)）——string-append 兼容（修复回归）
+     ;; slot 与生产一致写字符串（部署脚本只写 "A"/"B"）
      (call-with-output-file (string-append dir "/EFI/Guix/candidate.scm")
                             (lambda (p)
-                              (write '((system . "/gnu/store/FAKE-SYSTEM") (slot . A)) p)
+                              (write '((system . "/gnu/store/FAKE-SYSTEM") (slot . "A")) p)
                               (newline p)))
      ;; candidate.system（FAKE）与 current（REAL）不一致 → 拒绝 promote
      ;; artifact；GC root 与 boot-state 仍记录 REAL（当前系统确认）。
@@ -94,7 +94,7 @@
      (false-if-exception (delete-file boot-state))
      (false-if-exception (delete-file-recursively gc-root)))))
 
-;; ── promote-recovery! fail-closed（Phase 8）──────────────
+;; ── promote-recovery! fail-closed ──────────────
 ;; /run/current-system 无法解析为有效 identity → 中止整个 confirm：
 ;; 不更新 GC root、不 promote artifact、不写 last-good boot-state。
 (let ((dir (mkdtemp "/tmp/guixcfg-recovery-fc-XXXXXX"))
@@ -110,7 +110,7 @@
                             (lambda (p) (display "slot-uki" p)))
      (call-with-output-file (string-append dir "/EFI/Guix/candidate.scm")
                             (lambda (p)
-                              (write '((system . "/gnu/store/CANDIDATE") (slot . A)) p)
+                              (write '((system . "/gnu/store/CANDIDATE") (slot . "A")) p)
                               (newline p)))
      (let ((err (catch #t
                   (lambda ()
@@ -136,7 +136,7 @@
      (false-if-exception (delete-file boot-state))
      (false-if-exception (delete-file-recursively gc-root)))))
 
-;; ── promote-recovery!：identity match 完整 promote（Phase 8）────
+;; ── promote-recovery!：identity match 完整 promote ────
 (let ((dir (mkdtemp "/tmp/guixcfg-recovery-ok-XXXXXX"))
       (boot-state (string-append "/tmp/guixcfg-recovery-ok-state-"
                                  (number->string (getpid))))
@@ -150,7 +150,7 @@
                             (lambda (p) (display "slot-uki" p)))
      (call-with-output-file (string-append dir "/EFI/Guix/candidate.scm")
                             (lambda (p)
-                              (write '((system . "/gnu/store/MATCH-SYSTEM") (slot . A)) p)
+                              (write '((system . "/gnu/store/MATCH-SYSTEM") (slot . "A")) p)
                               (newline p)))
      (call-with-output-file (string-append dir "/limine.conf")
                             (lambda (p) (display "timeout: 3\n" p)))

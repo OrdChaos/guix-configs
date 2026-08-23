@@ -136,7 +136,6 @@
              ;; system build --dry-run 证明（最终 derivation 使用
              ;; nonguix linux 7.1 source）。
              (let* ((bp (boot-plan
-                         (label "test")
                          (kernel (operating-system-kernel-file %os))
                          (initrd (computed-file "test-initrd"
                                                 #~(mkdir-p #$output)))

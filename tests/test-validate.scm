@@ -2,7 +2,7 @@
 
 (use-modules (guixcfg storage model)
              (guixcfg storage validate)
-             (guixcfg hosts vm)
+             (guixcfg storage policies)   ; %vm-storage-policy、%laptop-storage-policy
              (srfi srfi-64))
 
 ;; 一个“好”的目标设备：整盘、未挂载、非系统盘、非 LiveCD、容量足够。

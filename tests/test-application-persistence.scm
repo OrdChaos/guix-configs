@@ -1,5 +1,6 @@
 ;;; Application persistence generic engine 测试：synthetic rules 验证
-;;; 机制（当前无 production rule——本文件不 invent 任何真实应用）。
+;;; 机制本身（真实 production rule——mpv/gnome-keyring/google-chrome/
+;;; noctalia-git——的接线由 test-desktop.scm D8 与各 app 测试覆盖）。
 ;;;
 ;;; 覆盖：backing/consumer 生成、bind file-system source/target、
 ;;; path validation（..、绝对路径、空、整目录 consumer 拒绝）、

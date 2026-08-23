@@ -4,8 +4,7 @@
 ;;;
 ;;; <persistent-user-dir> 对每个持久化条目记录两个相对位置：
 ;;;   backing   /persist/data-home/<user> 下的持久化数据位置
-;;;             （嵌套路径合法，如 ".local/share/Trash"）
-;;;   consumer  $HOME 下的挂载位置（嵌套路径合法）
+;;;   consumer  $HOME 下的挂载位置（均可嵌套）
 ;;; backing 与 consumer 不必同名——backing 是持久化侧的 canonical
 ;;; 位置，consumer 是用户可见的挂载点。
 ;;;
@@ -23,8 +22,9 @@
                #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
                #:use-module (guixcfg utils home-path) ; ensure-home-parent-directories!
                #:use-module (guixcfg system mount-metadata) ; %persistent-home-mount-options
+               #:use-module (guixcfg utils module-closure) ; guixcfg-module-select?
                #:use-module (guix gexp)
-               #:use-module (guix modules)            ; source-module-closure、guix-module-name?
+               #:use-module (guix modules)            ; source-module-closure
                #:use-module (guix records)
                #:export (<persistent-user-dir>
                          persistent-user-dir
@@ -38,7 +38,7 @@
                          user-persistence-service))
 
 ;; 用户数据持久化条目：backing = /persist/data-home/<user> 相对；
-;; consumer = $HOME 相对（均可嵌套，如 ".local/share/Trash"）。
+;; consumer = $HOME 相对。
 (define-record-type* <persistent-user-dir>
                      persistent-user-dir make-persistent-user-dir
                      persistent-user-dir?
@@ -95,11 +95,10 @@ owner 为 USER（首次系统激活自动完成；不重建已有用户数据）
 存量目录的迁移是显式人工步骤（docs/operations/installation.md——先
 迁移到 /persist 再 reconfigure 启用 bind，避免静默覆盖）。
 
-嵌套 consumer（如 .local/share/Trash）的 HOME 侧中间层（.local、
-.local/share）由 create-mount-point? 以 root 建出——中间父目录
-ownership 归还 USER 走共享原语 (guixcfg utils home-path)
-（AGENT.md §12：只 chown 直接 parent 会留下 root-owned 中间层，
-USER 后续写入 EACCES）。
+嵌套 consumer 的 HOME 侧中间层（如 consumer 为 a/b 时的 a）由
+create-mount-point? 以 root 建出——中间父目录 ownership 归还 USER
+走共享原语 (guixcfg utils home-path)（AGENT.md §12：只 chown 直接
+parent 会留下 root-owned 中间层，USER 后续写入 EACCES）。
 
 注意：/home/USER 本身是 ephemeral，但 file-systems 阶段为 bind mount
 创建挂载点时会把 /home/USER 以 root:root 0755 建出；guix 的
@@ -111,17 +110,16 @@ home 的语义一致：0700 + 用户所有）。"
   (let ((entries (map (lambda (d)
                         (list (persistent-user-dir-backing d)
                               (persistent-user-dir-consumer d)))
-                      %persistent-user-dirs)))
+                      %persistent-user-dirs))
+        (persist-root (persist-mount-point "@persist-data-home")))
     (with-imported-modules
      (source-module-closure '((guix build utils)
                               (guixcfg utils home-path))
-                            #:select? (lambda (name)
-                                        (or (guix-module-name? name)
-                                            (eq? (car name) 'guixcfg))))
+                            #:select? guixcfg-module-select?)
      #~(begin
         (use-modules (guix build utils)
                      (guixcfg utils home-path))
-        (let* ((persist (string-append "/persist/data-home/" #$user))
+        (let* ((persist (string-append #$persist-root "/" #$user))
                (home (string-append "/home/" #$user))
                (uid (passwd:uid (getpw #$user)))
                (gid (passwd:gid (getpw #$user))))

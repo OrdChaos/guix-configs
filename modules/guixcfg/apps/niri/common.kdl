@@ -19,9 +19,9 @@
 //     gnome-keyring-session 服务是 keyring daemon 唯一 owner；
 //   - xrdb -merge ~/.Xresources：原配置硬编码 HOME 绝对路径，且
 //     仓库无 .Xresources 归属。
-// 待办（roadmap）：xsettingsd / fcitx5 / clash-verge / noctalia
-// 的应用单元尚未入仓库——spawn 保留（图形会话组件），对应包
-// 加入 session PATH 前这些启动项会在无包机器上失败。
+// 待办（roadmap）：xsettingsd / fcitx5 / clash-verge 的应用单元
+// 尚未入仓库——spawn 保留（图形会话组件），对应包加入 session
+// PATH 前这些启动项会在无包机器上失败。
 
 debug {
     honor-xdg-activation-with-invalid-serial

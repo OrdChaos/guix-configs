@@ -4,6 +4,7 @@
 
 (define-module (guixcfg system file-systems)
                #:use-module (guixcfg storage model)
+               #:use-module (guixcfg boot layout)       ; %esp-mount-point（ESP 布局 authority）
                #:use-module (guixcfg boot tpm-unlock)      ; tpm-unlock-in-initrd
                #:use-module (virelith packages tpm2)        ; tpm2-tools-compat
                #:use-module (guixcfg boot device-resolver) ; resolve-system-device
@@ -28,7 +29,7 @@
 ;;   3. 否则 → 无 machine facts（boot-critical fact 缺失时在构造
 ;;      mapped-device 处 fail-closed，不回退 by-partlabel）。
 (define %default-machine-facts-path
-  "/persist/system/facts/host.scm")
+  (string-append (persist-mount-point "@persist-system") "/facts/host.scm"))
 
 (define (regular-file? path)
   "PATH 存在且是普通文件（目录等显式拒绝）。"
@@ -180,8 +181,7 @@ reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
          (target %luks-mapper-name)
          (type luks-tpm2-device-mapping))))
 
-(define %mapper-path
-  (string-append "/dev/mapper/" %luks-mapper-name))
+(define %mapper-path %luks-mapper-path)
 
 (define (subvolume-options-string sv)
   "把子卷记录转成 Btrfs 挂载选项字符串：subvol=...,compress=zstd 形式。"
@@ -192,9 +192,8 @@ reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
 (define (persist-subvolume->file-system sv)
   "一个持久子卷的 file-system 声明。/gnu/store 等保存系统本体，
 必须 needed-for-boot 且依赖 LUKS 映射。
-create-mount-point?：阶段 4 起每个新 root generation 都是空子卷，
-挂载点目录必须在挂载时自动创建。check? #f：btrfs 由 CoW 自愈，
-不在启动时跑 fsck。"
+create-mount-point?：每个新 root generation 都是空子卷，挂载点目录
+必须在挂载时自动创建。check? #f：btrfs 由 CoW 自愈，不在启动时跑 fsck。"
   (file-system
    (device %mapper-path)
    (mount-point (subvolume-mount-point sv))
@@ -203,19 +202,6 @@ create-mount-point?：阶段 4 起每个新 root generation 都是空子卷，
    (dependencies (cryptroot-mapped-devices))
    (needed-for-boot? #t)
    (create-mount-point? #t)
-   (check? #f)))
-
-(define (root-file-system root-subvolume)
-  "固定子卷的 root 文件系统（调试用）。
-正常系统用 %ephemeral-root-file-system：root generation 由 initrd
-在启动时选择（docs/architecture/storage.md）。"
-  (file-system
-   (device %mapper-path)
-   (mount-point "/")
-   (type "btrfs")
-   (options (string-append "subvol=" root-subvolume))
-   (dependencies (cryptroot-mapped-devices))
-   (needed-for-boot? #t)
    (check? #f)))
 
 ;; 无状态根：initrd 启动时把选中的 @root-N 挂到 staging 目录，
@@ -233,8 +219,8 @@ create-mount-point?：阶段 4 起每个新 root generation 都是空子卷，
 
 (define %esp-file-system
   (file-system
-   (device (string-append "/dev/disk/by-partlabel/" %esp-partlabel))
-   (mount-point "/efi")
+   (device (by-partlabel-path %esp-partlabel))
+   (mount-point %esp-mount-point)
    (type "vfat")
    (create-mount-point? #t)   ; 新 root generation 上没有 /efi 目录
    (check? #f)))
@@ -249,4 +235,5 @@ ROOT-FS 是根文件系统记录，正常传 %ephemeral-root-file-system。"
 ;; Btrfs swapfile（docs/architecture/storage.md（Swap））。
 (define %swap-spaces
   (list (swap-space
-         (target "/persist/swap/swapfile"))))
+         (target (string-append (persist-mount-point "@persist-swap")
+                                "/swapfile")))))

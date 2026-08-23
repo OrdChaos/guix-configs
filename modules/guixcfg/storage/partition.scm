@@ -5,18 +5,13 @@
 ;;; 对应 docs/operations/installation.md、docs/architecture/storage.md（磁盘布局）。
 
 (define-module (guixcfg storage partition)
-               #:use-module (guixcfg storage model)
+               #:use-module (guixcfg storage model)  ; by-partlabel-path（固定事实构造器）
                #:use-module (guix build utils)  ; invoke（失败即抛异常，配合 install.scm 的失败即停）
                #:use-module (ice-9 format)
                #:use-module (srfi srfi-1)       ; every
                #:export (execute-wipe
                          execute-partition
-                         execute-wait-udev
-                         by-partlabel-path))
-
-(define (by-partlabel-path label)
-  "PARTLABEL 对应的设备节点。"
-  (string-append "/dev/disk/by-partlabel/" label))
+                         execute-wait-udev))
 
 (define (execute-wipe device)
   "清除磁盘上的旧分区表和签名（sgdisk --zap-all 同时清掉 GPT 主备两头和 PMBR）。"

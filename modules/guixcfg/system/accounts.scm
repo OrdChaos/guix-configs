@@ -64,9 +64,9 @@
   (string-append (%account-credentials-dir) "/" user "/password.hash"))
 
 ;; 合法 crypt hash 形态：$id$salt$hash（id 数字/字母，salt/hash 不含
-;; 冒号与换行）。拒绝空、拒绝 "!"（locked placeholder）。
-(define %credential-hash-regex
-  "^\\$[0-9a-z]+\\$[^:$]+\\$[^: \n]+$")
+;; 冒号与换行）。单一 authority：(guixcfg security age) 的
+;; %password-hash-regex（拒绝空、拒绝 "!" locked placeholder 由
+;; 投影/验证逻辑各自表达）。
 
 (define (account-databases-activation accounts+groups)
   "Return an activation gexp that (re)writes /etc/passwd, /etc/group and
@@ -140,7 +140,7 @@ needed and the FFI-dependent flock path is bypassed entirely.
                                                                   (lambda (p)
                                                                     (read-string p)))
                                             #\newline))))
-                                (unless (string-match #$%credential-hash-regex hash)
+                                (unless (string-match #$%password-hash-regex hash)
                                   (error "persistent credential malformed" path))
                                 hash))
                             
@@ -262,7 +262,7 @@ account-state-ready 不 provision（fail-closed）。"
                                (string-append #$(%account-credentials-dir)
                                               "/" user "/password.hash"))
                              (define (valid-hash? s)
-                               (and (string-match "^\\$[0-9a-z]+\\$[^:$]+\\$[^: \n]+$" s)
+                               (and (string-match #$%password-hash-regex s)
                                     #t))
                              ;; core `any`（generated program 只 import 显式模块）。
                              (define (shadow-line user lines)

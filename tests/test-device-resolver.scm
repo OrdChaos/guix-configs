@@ -1,6 +1,6 @@
 ;;; boot device resolver 的单元测试：
-;;;   - hex->bytes 往返（config identity == runtime identity，Phase 4.2
-;;;     gexp UUID boundary 修复的证明：config 侧 bytes->hex 嵌入，
+;;;   - hex->bytes 往返（config identity == runtime identity——gexp
+;;;     UUID boundary 修复的证明：config 侧 bytes->hex 嵌入，
 ;;;     initrd 侧 hex->bytes 还原必须与 uuid-bytevector 一致）
 ;;;   - resolve-esp-device 的 sibling 语义（0/1/多 PARTNAME=esp）
 

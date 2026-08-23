@@ -7,6 +7,7 @@
 ;;; 避免 srfi-64 失败信息打印 passphrase 本身。
 
 (use-modules (srfi srfi-64)
+             (srfi srfi-1)       ; every、any
              (ice-9 rdelim)      ; read-line
              (ice-9 textual-ports)  ; get-string-all
              (guixcfg storage model)

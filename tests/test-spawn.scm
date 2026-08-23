@@ -1,4 +1,4 @@
-;;; spawn primitive 的单元/集成测试（Phase 5）：
+;;; spawn primitive 的单元/集成测试：
 ;;;   1. producer → pipe → consumer
 ;;;   2. binary data 含 NUL
 ;;;   3. producer exit != 0

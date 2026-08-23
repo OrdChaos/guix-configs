@@ -22,11 +22,10 @@
 ;; 字体配置的 SC-first 语义（(guixcfg home fonts) 已核实，无破坏）。
 (define %common-locale "zh_CN.utf8")
 
-;; 基础 session infrastructure（docs/architecture/accounts-sessions.md J6）：
+;; 基础 session infrastructure（docs/architecture/accounts-sessions.md）：
 ;; elogind 提供 login/session tracking、/run/user/<uid> 生命周期与
 ;; XDG_RUNTIME_DIR。它是系统层职责——Home/persistence 都不碰 runtime
-;; 目录。所有 host（VM: sshd+elogind；未来 desktop: greetd+elogind）
-;; 共享这一层；%base-services 不含 elogind，这里显式补充。
+;; 目录。所有 host 共享这一层；%base-services 不含 elogind，这里显式补充。
 ;;
 ;; Nonguix substitute trust（docs/architecture/overview.md（Nonguix
 ;; integration））：guix-daemon 的 additive extension——官方 Guix

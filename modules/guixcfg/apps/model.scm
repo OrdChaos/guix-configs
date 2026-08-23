@@ -108,7 +108,7 @@ home-xdg-configuration-files-service-type instead \
   "聚合 APPS 的全部 home services——纯 concatenation，无任何
 组合逻辑（组合语义归 Guix：共享 target 由 application 经 native
 extension 贡献，canonical target 由 instantiate-missing-services
-以 default value 自动实例化——AGENT.md §15）。聚合前校验各 app
+以 default value 自动实例化——AGENT.md §12）。聚合前校验各 app
 home-files 目标归属（~/.config 必须走 xdg service，违规 fail fast）。"
   (for-each validate-home-file-targets apps)
   (append-map application-home-services apps))

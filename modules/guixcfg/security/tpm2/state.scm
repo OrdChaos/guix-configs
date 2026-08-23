@@ -19,6 +19,7 @@
 
 (define-module (guixcfg security tpm2 state)
                #:use-module (guixcfg utils atomic-file)  ; atomic-write-file!
+               #:use-module (guixcfg storage model)     ; persist-mount-point（/persist 语义路径 authority）
                #:use-module (guix build utils)           ; mkdir-p
                #:use-module (guix records)               ; define-record-type*
                #:use-module (ice-9 rdelim)               ; read
@@ -41,8 +42,10 @@
                          enrollment-artifact-dir
                          enrollment-artifacts-present?))
 
-;; 固定路径。PCR7-only：单一 enrollment，无 pending/active 分目录。
-(define %tpm2-state-dir "/persist/system/tpm2")
+;; 固定路径（@persist-system 挂载点 + "tpm2"）。PCR7-only：单一
+;; enrollment，无 pending/active 分目录。
+(define %tpm2-state-dir
+  (string-append (persist-mount-point "@persist-system") "/tpm2"))
 (define %tpm2-state-file (string-append %tpm2-state-dir "/state.scm"))
 
 ;; 本项目 PCR 选择的固定事实（docs/architecture/boot.md（TPM2））：PCR7-only，

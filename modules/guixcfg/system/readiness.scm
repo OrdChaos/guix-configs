@@ -1,5 +1,5 @@
-;;; Boot readiness capabilities（docs/architecture/accounts-sessions.md J8 /
-;;; Boot Readiness Contract）。
+;;; Boot readiness capabilities（docs/architecture/accounts-sessions.md
+;;; 的 Readiness DAG 一节）。
 ;;;
 ;;; 六个语义 capability（阶段语义，不是函数执行状态）：
 ;;;
@@ -33,12 +33,19 @@
                          %interactive-session-requirements
                          %persistent-state-paths))
 
-;; interactive-session-ready 的四个 prerequisite（Section 19）。
+;; interactive-session-ready 的四个 prerequisite
+;; （docs/architecture/accounts-sessions.md（Readiness DAG））。
 (define %interactive-session-requirements
   '(account-state-ready
     interactive-secrets-ready
     home-ready
     session-infra-ready))
+
+;; login gate 文件：存在即拒绝普通 interactive 登录（pam_nologin 语义；
+;; root 豁免是 pam_nologin 的标准行为——保留 console recovery 路径）。
+;; 项目统一所有，不与系统其它 nologin owner 冲突。
+;; 单一来源：activation 关闭端、barrier 开启端、PAM 段都引用它。
+(define %login-gate-path "/run/guixcfg/session-not-ready")
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; persistent-state-ready：file-systems 的就绪 + 关键持久路径在位
@@ -52,8 +59,8 @@
 (define %persistent-state-paths
   (list (persist-mount-point "@persist-system")
         (persist-mount-point "@persist-data-home")
-        "/var/guix"
-        "/gnu/store"))
+        (persist-mount-point "@persist-var-guix")
+        (persist-mount-point "@persist-gnu-store")))
 
 (define (persistent-state-ready-service)
   "确认 boot-critical persistent filesystem 已挂载的 one-shot 服务
@@ -133,8 +140,7 @@ the login gate (provides interactive-session-ready).")
                               ;; gate 单一 owner：只有本服务创建/删除
                               ;; gate 文件。
                               (false-if-exception
-                               (delete-file
-                                "/run/guixcfg/session-not-ready"))
+                               (delete-file #$%login-gate-path))
                               #t))
                          (stop #~(const #f))))))
 
@@ -144,21 +150,16 @@ the login gate (provides interactive-session-ready).")
 (define (readiness-services home-provision)
   "完整 readiness DAG（HOME-PROVISION 是 guix-home-service-type 生成
 的服务 provision 名，如 guix-home-user）。account/secrets ready 不
-注入 user-processes（Section 28：sshd listener 与 session 分离——
-listener 可早开；readiness 的 join 由 interactive-session-ready
-barrier 承担，不靠卡住 user-processes）。"
+注入 user-processes（sshd listener 与 session 分离——listener 可早开；
+readiness 的 join 由 interactive-session-ready barrier 承担，不靠卡住
+user-processes——docs/architecture/accounts-sessions.md）。"
   (list (persistent-state-ready-service)
         (home-ready-service home-provision)
         (session-infra-ready-service)
         (interactive-session-ready-service)))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; Interactive login gate（docs/architecture/accounts-sessions.md J8）。
-
-;; gate 文件：存在即拒绝普通 interactive 登录（pam_nologin 语义；
-;; root 豁免是 pam_nologin 的标准行为——保留 console recovery 路径）。
-;; 项目统一所有，不与系统其它 nologin owner 冲突。
-(define %login-gate-path "/run/guixcfg/session-not-ready")
+;;; Interactive login gate（docs/architecture/accounts-sessions.md）。
 
 (define (login-gate-activation)
   "activation gexp：boot 早期关闭 gate（创建 gate 文件）。gate 由
@@ -174,9 +175,11 @@ interactive-session-ready 服务在全部 prerequisite 成功后原子打开。"
                                                               p))))))
 
 (define (login-gate-pam-service)
-  "PAM gate：对 login frontends（login、sshd——未来 greetd）的 account
-段插入 pam_nologin.so file=<gate>。gate 文件存在时普通用户认证失败；
-root 豁免是 pam_nologin 标准语义（console recovery 保留）。使用
+  "PAM gate：对 login frontends（login、sshd）的 account 段插入
+pam_nologin.so file=<gate>。gate 文件存在时普通用户认证失败；root
+豁免是 pam_nologin 标准语义（console recovery 保留）。greetd 不在此
+横切范围内——它经 desktop.scm 的 extra-shepherd-requirement 在
+interactive-session-ready 之前不启动（gate 语义等价）。使用
 pam-extension transformer（横切机制，同 elogind 的 pam_elogind
 注入模式）。"
   (simple-service 'login-gate-pam pam-root-service-type

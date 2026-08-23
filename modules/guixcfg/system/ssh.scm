@@ -15,6 +15,7 @@
                #:use-module (gnu services)            ; service、simple-service
                #:use-module (gnu services ssh)        ; openssh-service-type
                #:use-module (gnu packages ssh)        ; openssh
+               #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
                #:use-module (guix gexp)
                #:use-module (guix modules)            ; source-module-closure
                #:export (%ssh-host-key-dir
@@ -23,7 +24,8 @@
                          secure-ssh-service))
 
 ;; SSH host key 持久化目录（机器状态，跨 root generation 不变）。
-(define %ssh-host-key-dir "/persist/system/ssh")
+(define %ssh-host-key-dir
+  (string-append (persist-mount-point "@persist-system") "/ssh"))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 首启 host-key 生成（activation 阶段，sshd 启动前）。

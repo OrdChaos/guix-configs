@@ -146,4 +146,35 @@
              (let ((os (module-ref (resolve-module '(guixcfg hosts vm)) '%os)))
                (list? ((@ (gnu system) operating-system-services) os))))
 
+;; tools/*.scm 是 CLI 脚本（无 define-module）：脚本里的未绑定变量只有
+;; 运行到对应分支才炸（实测教训：(unresolved) 曾在 disk-install 的
+;; inspect 分支存活）。compile-file 到临时 .go（不执行脚本），编译警告
+;; 经 current-warning-port 捕获。
+(test-assert "tools/*.scm compile without unbound-variable warnings"
+             (let ((warnings (open-output-string)))
+               (let ((ok (every (lambda (file)
+                                  (catch #t
+                                    (lambda ()
+                                      (parameterize ((current-warning-port warnings))
+                                                    (compile-file
+                                                     (string-append "tools/" file)
+                                                     #:output-file
+                                                     "/tmp/guixcfg-tools-compile-check.go"))
+                                      #t)
+                                    (lambda (key . args)
+                                      (format (current-error-port)
+                                              "tool compile failed: ~a (~a ~a)~%"
+                                              file key args)
+                                      #f)))
+                                (or (scandir "tools"
+                                             (lambda (f)
+                                               (string-suffix? ".scm" f)))
+                                    '()))))
+                 (false-if-exception
+                  (delete-file "/tmp/guixcfg-tools-compile-check.go"))
+                 (let ((text (get-output-string warnings)))
+                   (when (string-contains text "unbound")
+                     (format (current-error-port) "~a" text))
+                   (and ok (not (string-contains text "unbound")))))))
+
 (test-end)

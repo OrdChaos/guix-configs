@@ -30,11 +30,11 @@
        \"size\": 2147483648, \"mountpoints\": [\"/boot\"]}
    ]}")
 
-;; 旧版 lsblk：mountpoint 是单个字符串而不是 mountpoints 数组。
-(define %legacy-lsblk-json
+;; LiveCD 介质（rom，挂载在 /run/install）。
+(define %livecd-rom-json
   "{\"blockdevices\": [
       {\"name\": \"/dev/sr0\", \"path\": \"/dev/sr0\", \"type\": \"rom\",
-       \"size\": 1500000000, \"mountpoint\": \"/run/install\"}
+       \"size\": 1500000000, \"mountpoints\": [\"/run/install\"]}
    ]}")
 
 (test-begin "storage-device")
@@ -58,9 +58,7 @@
               (test-equal "recognizes partition type" "part" (device-node-type part))
               (test-assert "partition mounted" (device-node-mounted? part)))
             
-            (let ((rom (parse-lsblk-json %legacy-lsblk-json)))
-              (test-equal "legacy single-string mountpoint normalized"
-                          '("/run/install") (device-node-mountpoints rom))
+            (let ((rom (parse-lsblk-json %livecd-rom-json)))
               (test-assert "LiveCD media recognized as mounted" (device-node-mounted? rom))))
 
 (test-end)

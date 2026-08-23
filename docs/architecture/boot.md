@@ -81,9 +81,18 @@ boot menu depth 解耦。
 - 槽内命名固定（`CURRENT.EFI`、`RECOVERY.EFI`）；Normal 指向
   CURRENT.EFI（rootmode 缺省 = normal），Recovery 指向稳定路径
   RECOVERY.EFI（rootmode=recovery，promote 后出现在菜单）。
-- Recovery UKI 的 Guix 轴数据源：`/persist/system/boot-states.scm`
-  （保存 last-good generation 及实际 kernel command line，剔除
-  `rootmode=`）。
+- Recovery candidate 的 Guix 轴：部署脚本总是用【当前 deployment】
+  的 kernel/initrd + `rootmode=recovery` 构建候选，并把 system
+  identity 记入 `EFI/Guix/candidate.scm`；只有用户态 confirm
+  （`ephemeral-root-confirm` → `(guixcfg boot recovery)` 的
+  promote-recovery!）验证 candidate.system == /run/current-system
+  后才 promote 到稳定路径并加菜单项——部署成功 ≠ 启动成功，
+  failed Normal 不会污染 Recovery pair。
+- `/persist/system/boot-states.scm` 是 confirm 写入的 commit
+  record（last-good generation、system store identity、确认时实际
+  cmdline，剔除 `rootmode=`）+ GC root 保护 last-good closure；
+  它是人工救援的审计输入（`operations/recovery.md`），部署期没有
+  程序化读者。
 
 ## Secure Boot
 

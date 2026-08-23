@@ -39,7 +39,7 @@ system 成功 + Home 失败   → gate 保持关闭，exit 2；
 ```bash
 GUIX_CONFIG_FACTS=/persist/system/facts/host.scm \
   guix time-machine -C channels.lock.scm -- system reconfigure \
-  -L modules modules/guixcfg/hosts/vm.scm
+  -L "$PWD/modules" modules/guixcfg/hosts/vm.scm
 ```
 
 日常验证：`guix system describe`、`herd status`、`guix home` 链接。

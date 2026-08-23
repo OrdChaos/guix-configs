@@ -13,7 +13,8 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
                        logical selection）+ <app>/definition.scm
                        （纵向配置单元；公开配置、variants/ 与
                        app-private secrets colocate）
-  boot/                initrd、UKI、TPM 解锁、boot-state、Recovery
+  boot/                initrd、UKI、TPM 解锁、boot-state、Recovery、
+                       layout（ESP/部署路径固定事实的唯一 authority）
   home/                Guix Home 入口（薄 assembly，聚合 apps
                        registry；guix-home 接受 host 的 logical
                        application-configuration-selections）+ 会话
@@ -28,7 +29,8 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
                        user-persistence、application-persistence
   users/               用户结构事实
   utils/               跨领域原语（atomic-file / process / spawn /
-                       repository-source）
+                       repository-source / home-path / mountinfo /
+                       seed-once / paths / module-closure）
 tools/                 命令行工具（disk-install、secrets、secure-boot、reconfigure、
                        tpm2-enroll、历史 E2E harness）
 templates/            新组件模板（application/definition.scm）

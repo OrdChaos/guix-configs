@@ -28,7 +28,8 @@
                #:use-module (gnu services shepherd)   ; shepherd-service
                #:use-module (gnu system file-systems) ; file-system-*
                #:use-module (guix gexp)
-               #:use-module (guix modules)            ; source-module-closure、guix-module-name?
+               #:use-module (guix modules)            ; source-module-closure
+               #:use-module (guixcfg utils module-closure) ; guixcfg-module-select?
                #:use-module (guixcfg utils mountinfo) ; 运行时原语（program 闭包）
                #:use-module (srfi srfi-1)             ; filter
                #:export (%persistent-home-mount-options
@@ -69,9 +70,7 @@ file-systems——挂载后就位，运行时从 mountinfo 读 SOURCE/ROOT；
             ;; （实测：rust-crates patch 缺失构建失败）。
             (source-module-closure '((guix build utils)
                                      (guixcfg utils mountinfo))
-                                   #:select? (lambda (name)
-                                               (or (guix-module-name? name)
-                                                   (eq? (car name) 'guixcfg))))
+                                   #:select? guixcfg-module-select?)
             #~(begin
                (use-modules (guix build utils)
                             (guixcfg utils mountinfo))

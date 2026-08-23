@@ -39,12 +39,9 @@
                          tpm2-policy-pcr-session!
                          tpm2-unseal!
                          tpm2-pcrread!
-                         tpm2-pcrextend!
-                         tpm2-flush-transients!
                          tpm2-start-policy-session!
                          tpm2-flush-session!
                          ;; 辅助
-                         hex->bytes
                          bytes->hex))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -162,7 +159,6 @@ transient 回收语义由 (current-tpm2-environment) 决定：
            ;; -f <原始 pcr 值> + -l <bank:index> 正常。
            (tpm2-run tcti bin "-S" sess "-L" out "-f" pcr-value-file "-l" pcr)
            (tpm2-run tcti (string-append tpm2-tools-bin "/tpm2_flushcontext") sess)
-           (tpm2-flush-transients! tcti tpm2-tools-bin)
            out))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -268,17 +264,6 @@ wait-exit pid（spawn 路径，父进程不 fork——见 (guixcfg utils spawn)
                (false-if-exception (delete-file tmp))
                hex))))
 
-(define* (tpm2-pcrextend! tcti tpm2-tools-bin spec)
-         "扩展 PCR，SPEC 如 \"7:sha256=<hex>\"。仅测试/调试用。"
-         (let ((bin (string-append tpm2-tools-bin "/tpm2_pcrextend")))
-           (tpm2-run tcti bin spec)))
-
-(define* (tpm2-flush-transients! tcti tpm2-tools-bin)
-         "显式 flush 全部 transient objects。仅限测试/调试手工调用；
-不是生产语义：生产走 /dev/tpmrm0 内核 RM，禁止全局 flush。"
-         (let ((bin (string-append tpm2-tools-bin "/tpm2_flushcontext")))
-           (false-if-exception (tpm2-run tcti bin "-t"))))
-
 (define* (tpm2-start-policy-session! tcti tpm2-tools-bin
                                      #:key (out "policy.session.ctx"))
          "启动真实 policy session 并保存 context。"
@@ -293,18 +278,6 @@ wait-exit pid（spawn 路径，父进程不 fork——见 (guixcfg utils spawn)
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 辅助
-
-(define (hex->bytes hex)
-  "HEX 字符串 → bytevector。"
-  (let* ((hex (string-downcase hex))
-         (len (quotient (string-length hex) 2)))
-    (let ((bv (make-bytevector len 0)))
-      (let loop ((i 0))
-        (when (< i len)
-          (bytevector-u8-set! bv i
-                              (string->number (substring hex (* i 2) (+ (* i 2) 2)) 16))
-          (loop (1+ i))))
-      bv)))
 
 (define (bytes->hex bv)
   "bytevector → 小写 hex 字符串。"

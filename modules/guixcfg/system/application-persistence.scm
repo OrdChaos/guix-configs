@@ -40,11 +40,13 @@
                #:use-module (gnu services)            ; simple-service
                #:use-module (gnu system file-systems) ; file-system
                #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
+               #:use-module (guixcfg utils paths)     ; valid-relative-path?（persistence 契约共享）
                #:use-module (guixcfg utils home-path) ; ensure-home-parent-directories!
                #:use-module (guixcfg utils seed-once) ; seed-once-file!、%seed-marker-suffix
                #:use-module (guixcfg system mount-metadata) ; %persistent-home-mount-options
+               #:use-module (guixcfg utils module-closure) ; guixcfg-module-select?
                #:use-module (guix gexp)
-               #:use-module (guix modules)            ; source-module-closure、guix-module-name?
+               #:use-module (guix modules)            ; source-module-closure
                #:use-module (guix records)
                #:use-module (srfi srfi-1)             ; append-map、filter
                #:export (<application-persistence-rule>
@@ -106,16 +108,6 @@ input——AGENT.md §12）。非法抛错（fail closed）。"
   (unless (file-like? (cadr spec))
     (error "application persistence seed source must be a file-like"
            (cadr spec))))
-
-(define (valid-relative-path? p)
-  "P 是否是合法的相对路径（非空、非绝对、无 .. 逃逸）。"
-  (and (string? p)
-       (> (string-length p) 0)
-       (not (string-prefix? "/" p))
-       (not (string=? p ".."))
-       (not (string-prefix? "../" p))
-       (not (string-contains p "/../"))
-       (not (string-suffix? "/.." p))))
 
 (define (forbidden-consumer? consumer)
   "CONSUMER 是否是禁止整体持久化的全局目录（精确匹配——任务契约
@@ -222,9 +214,7 @@ seed 判断天然同一位置：已有持久化 state 时 seed-once 直接看到
    (source-module-closure `((guix build utils)
                             (guixcfg utils home-path)
                             ,@seed-closure-modules)
-                          #:select? (lambda (name)
-                                      (or (guix-module-name? name)
-                                          (eq? (car name) 'guixcfg))))
+                          #:select? guixcfg-module-select?)
    #~(begin
       (use-modules (guix build utils)
                    (guixcfg utils home-path)

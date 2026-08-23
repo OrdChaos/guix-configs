@@ -247,6 +247,13 @@ pinned Guix 事实（94a84f9 `guix/gexp.scm`）：`local-file` 是宏，
 ../../../files/...
 ```
 
+**前提：load path 必须绝对**。local-file 的目录解析延迟到 lowering
+（`delay` + `current-source-directory`）才执行；load path 含相对条目
+（`-L modules`）时解析退化为裸文件名、`canonicalize-path` 报
+"No such file or directory"（实测 2026-08）。因此**一切构建/部署入口
+的 `-L` 必须绝对**（`-L "$PWD/modules"` / `-L "$ROOT/modules"`；
+tests 的 `add-to-load-path` 本来就拼绝对路径）。
+
 `(guixcfg utils repository-source)` 的 `repository-file` 只用于
 **top-level repository/global resources**（如 `secrets/hosts/...`、
 `secrets/shared/...`——taxonomy 见 secrets.md），

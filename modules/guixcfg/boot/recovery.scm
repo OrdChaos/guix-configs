@@ -16,6 +16,8 @@
 (define-module (guixcfg boot recovery)
                #:use-module (guix build utils)       ; mkdir-p
                #:use-module (guixcfg boot boot-state) ; write-boot-states!、protect-last-good!
+               #:use-module (guixcfg boot layout)     ; ESP 布局固定事实
+               #:use-module (guixcfg boot limine-menu) ; recovery-menu-entry-text（菜单文本单一来源）
                #:use-module (guixcfg utils atomic-file) ; atomic-replace-file!、atomic-write-file!
                #:use-module (rnrs bytevectors)        ; get-bytevector-all
                #:use-module (ice-9 binary-ports)      ; get-bytevector-all
@@ -25,19 +27,15 @@
                          candidate-meta
                          add-recovery-menu-entry!))
 
-;; 与 (guixcfg boot uki) 部署脚本一致的布局常量。
-(define %uki-esp-subdir "EFI/Guix")
-(define %recovery-stable "EFI/Guix/RECOVERY.EFI")
-
 (define (read-all-string path)
-  "读取整个文件为字符串（guix repl 环境无 get-string-all，用字节读）。"
+  "读取整个文件为字符串（经字节读，不依赖 textual-ports）。"
   (utf8->string (call-with-input-file path
                                       (lambda (p)
                                         (get-bytevector-all p)))))
 
 (define (candidate-meta esp)
   "读取 ESP 上的 candidate 元数据（((system . S) (slot . A|B))）或 #f。"
-  (let ((path (string-append esp "/" %uki-esp-subdir "/candidate.scm")))
+  (let ((path (string-append esp "/" %esp-uki-directory "/candidate.scm")))
     (and (file-exists? path)
          (false-if-exception
           (call-with-input-file path read)))))
@@ -51,10 +49,8 @@
           (atomic-write-file! config
                               (lambda (port)
                                 (display content port)
-                                (display (string-append
-                                          "\n/GNU Guix (Recovery)\n"
-                                          "    protocol: efi_chainload\n"
-                                          "    image_path: boot():/EFI/Guix/RECOVERY.EFI\n")
+                                (display (string-append "\n"
+                                                        (recovery-menu-entry-text))
                                          port))))))))
 
 (define* (promote-recovery! esp generation command-line
@@ -90,12 +86,11 @@ aborting confirm (fail-closed)"))
            (when match?
              ;; 3. promote artifact（槽内 candidate → 稳定路径，原子替换）
              (let* ((slot (assq-ref meta 'slot))
-                    ;; candidate.scm 里 slot 是符号（(slot . A)）；string-append
-                    ;; 需要字符串，兼容两种写法。
-                    (slot-str (if (symbol? slot) (symbol->string slot) slot))
-                    (slot-uki (string-append esp "/" %uki-esp-subdir
-                                             "/" slot-str "/RECOVERY.EFI"))
-                    (stable-uki (string-append esp "/" %recovery-stable)))
+                    ;; 部署脚本（(guixcfg boot uki)）写出的 slot 总是字符串
+                    ;;（"A"/"B"）。
+                    (slot-uki (string-append esp "/" %esp-uki-directory
+                                             "/" slot "/RECOVERY.EFI"))
+                    (stable-uki (string-append esp "/" %recovery-uki-esp-path)))
                (if (file-exists? slot-uki)
                  (begin
                   (mkdir-p (dirname stable-uki))

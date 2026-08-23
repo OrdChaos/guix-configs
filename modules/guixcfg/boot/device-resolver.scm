@@ -4,14 +4,16 @@
 ;;;   LUKS UUID   = system volume authoritative identity
 ;;;   PARTLABEL   = semantic role（ESP 只在 system 的 sibling disk 上找）
 ;;;
-;;; 只依赖低层 guile 与 (gnu build file-systems)（find-partition-by-luks-uuid
-;;; 扫描块设备 LUKS 头）——不拉 (guix gexp)/(guix packages)/(guix utils)：
-;;; guile-static-initrd 下这些模块进 initrd 闭包会因 strverscmp dlsym
-;;; 失败而构建失败（实测）。
+;;; 只依赖低层 guile、(gnu build file-systems)（find-partition-by-luks-uuid
+;;; 扫描块设备 LUKS 头）与 (guixcfg storage model)（纯数据常量，本就随
+;;; tpm-unlock 进 initrd 闭包）——不拉 (guix gexp)/(guix packages)/
+;;; (guix utils)：guile-static-initrd 下这些模块进 initrd 闭包会因
+;;; strverscmp dlsym 失败而构建失败（实测）。
 
 (define-module (guixcfg boot device-resolver)
                #:use-module ((gnu build file-systems)
                              #:select (find-partition-by-luks-uuid))
+               #:use-module (guixcfg storage model)     ; %esp-partlabel（纯数据，initrd 闭包安全）
                #:use-module (rnrs bytevectors)        ; make-bytevector
                #:use-module (ice-9 ftw)               ; scandir
                #:use-module (ice-9 rdelim)            ; read-line
@@ -69,7 +71,9 @@ PARTNAME 猜测（配置与磁盘事实不一致时必须失败）。"
   - 新内核（linux 7.x）：/sys/block 只列 disk（vda），分区在
     /sys/block/<disk>/<part> 与 /sys/class/block/<part>（symlink 到
     ../../devices/.../vda/vda2，dirname 即 disk）
-两个位置都尝试；disk 名取 realpath 的 dirname basename。"
+两个位置都尝试；disk 名取 realpath 的 dirname basename。
+SYSFS 是 /sys/block 注入点；class/block fallback 从同一 sysfs 根推导，
+测试注入时不读宿主真实 /sys。"
   (define (disk-of-link link)
     (and (false-if-exception (lstat link))  ; symlink 本身存在（不跟随）
          (let ((real (readlink link)))
@@ -78,17 +82,17 @@ PARTNAME 猜测（配置与磁盘事实不一致时必须失败）。"
                        (disk (basename dir)))
                   (and (not (string=? disk partition)) disk))))))
   (or (disk-of-link (string-append sysfs "/" partition))
-      (disk-of-link (string-append "/sys/class/block/" partition))))
+      (disk-of-link (string-append (dirname sysfs) "/class/block/" partition))))
 
 (define* (resolve-esp-device system-device
                              #:key (sysfs "/sys/block"))
          "SYSTEM-DEVICE（/dev/<分区>）的 sibling ESP：parent disk → 只扫该
-disk → PARTNAME=esp；0 个或多个 → error。"
+disk → PARTNAME=%esp-partlabel；0 个或多个 → error。"
          (let* ((partition (basename system-device))
                 (disk (partition-parent-disk sysfs partition)))
            (unless disk
              (error "cannot determine parent disk of system partition" system-device))
-           (let ((esps (partname-devices-on-disk sysfs disk "esp")))
+           (let ((esps (partname-devices-on-disk sysfs disk %esp-partlabel)))
              (case (length esps)
                ((0) (error "no PARTNAME=esp on system disk" disk))
                ((1) (car esps))

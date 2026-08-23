@@ -1,5 +1,5 @@
 ;;; 存储模型：GPT / LUKS2 / Btrfs 布局的纯数据结构与固定事实。
-;;; 本模块只描述“磁盘应该是什么样”，不执行任何磁盘操作（阶段 2 才执行）。
+;;; 本模块只描述“磁盘应该是什么样”，不执行任何磁盘操作。
 ;;; 对应 docs/architecture/storage.md。
 ;;;
 ;;; 记录类型一律使用 (guix records) 的 define-record-type*（项目约定）：
@@ -10,12 +10,12 @@
                #:use-module (srfi srfi-1)   ; find
                #:use-module (srfi srfi-13)  ; 字符串工具（string-prefix? 等）
                #:export (;; 单位换算
-                         mib gib
+                         gib
                          ;; 固定命名事实（docs/architecture/storage.md（固定命名事实））
-                         %esp-partlabel %system-partlabel
+                         %esp-partlabel %system-partlabel by-partlabel-path
                          %esp-gpt-typecode %system-gpt-typecode
                          %esp-filesystem-label %btrfs-filesystem-label
-                         %luks-label %luks-mapper-name
+                         %luks-label %luks-mapper-name %luks-mapper-path
                          %esp-min-size %esp-max-size
                          ;; host policy
                          <host-storage-policy>
@@ -25,7 +25,6 @@
                          host-storage-policy-min-disk-size
                          host-storage-policy-swapfile-size
                          host-storage-policy-keep-root-generations
-                         host-storage-policy-expected-disk-by-id
                          ;; 持久子卷
                          <subvolume>
                          subvolume make-subvolume subvolume?
@@ -42,15 +41,19 @@
 ;;; ────────────────────────────────────────────────────────────
 ;;; 单位：全部尺寸统一用字节数（整数）表示，避免单位混乱。
 
-(define (mib n) (* n 1024 1024))
 (define (gib n) (* n 1024 1024 1024))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 固定命名事实（docs/architecture/storage.md（固定命名事实）：直接写进实现，不做配置项）。
-;;; 启动和挂载优先使用这些语义名称，而不是安装时生成的 UUID（第 19 章）。
+;;; 启动和挂载优先使用这些语义名称，而不是安装时生成的 UUID。
 
 (define %esp-partlabel "esp")            ; GPT PARTLABEL：EFI 系统分区
 (define %system-partlabel "system")      ; GPT PARTLABEL：加密系统分区
+
+;; PARTLABEL 对应的 udev 设备节点（/dev/disk/by-partlabel/ 是固定前缀）。
+(define (by-partlabel-path label)
+  "PARTLABEL 对应的设备节点。"
+  (string-append "/dev/disk/by-partlabel/" label))
 
 ;; GPT 分区类型码（sgdisk）：EF00 = EFI System，8309 = Linux LUKS。
 (define %esp-gpt-typecode "EF00")
@@ -60,6 +63,10 @@
 (define %btrfs-filesystem-label "rootfs"); Btrfs 文件系统标签
 (define %luks-label "cryptroot")         ; LUKS2 头标签
 (define %luks-mapper-name "cryptroot")   ; device-mapper 名：/dev/mapper/cryptroot
+
+;; LUKS mapper 设备路径（device-mapper 固定前缀 + 上面的语义名）。
+(define %luks-mapper-path
+  (string-append "/dev/mapper/" %luks-mapper-name))
 
 ;; ESP 大小策略范围（docs/architecture/storage.md（磁盘布局）：2–4 GiB）。
 (define %esp-min-size (gib 2))
@@ -85,9 +92,7 @@
                      (esp-size              host-storage-policy-esp-size)              ; 字节，须在 2–4 GiB
                      (min-disk-size         host-storage-policy-min-disk-size)         ; 字节，目标盘容量下限
                      (swapfile-size         host-storage-policy-swapfile-size)         ; 字节
-                     (keep-root-generations host-storage-policy-keep-root-generations) ; 保留的旧 root 数
-                     (expected-disk-by-id   host-storage-policy-expected-disk-by-id    ; /dev/disk/by-id/... 或 #f
-                                            (default #f)))
+                     (keep-root-generations host-storage-policy-keep-root-generations)) ; 保留的旧 root 数
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 持久子卷（docs/architecture/storage.md（持久子卷）：固定项目事实）。
@@ -107,10 +112,10 @@
                      (mount-at-install? subvolume-mount-at-install?
                                         (default #t)))
 
-(define %swap-subvolume-name "@persist-swap")   ; swapfile 所在子卷（第 13.5 节）
+(define %swap-subvolume-name "@persist-swap")   ; swapfile 所在子卷（docs/architecture/storage.md（Swap））
 
 ;; 固定的 8 个持久子卷。顺序即创建顺序。
-;; 除 /gnu/store 和 /var/guix 外，挂载点一律位于 /persist（第 10.2 节）。
+;; 除 /gnu/store 和 /var/guix 外，挂载点一律位于 /persist。
 ;; 注意 /boot 不在此列：它是 root generation 上的普通目录——
 ;; bootloader 状态（UKI/Limine）全部在 ESP 上，不依赖 /boot 持久化。
 (define %persist-subvolumes
@@ -130,7 +135,7 @@
         (subvolume (name "@persist-data-nobackup")
                    (mount-point "/persist/data-nobackup")
                    (options '("compress=zstd")))
-        ;; @persist-swap 专用于隔离 swapfile 约束：NOCOW、不压缩、不做快照（第 13.5 节）。
+        ;; @persist-swap 专用于隔离 swapfile 约束：NOCOW、不压缩、不做快照。
         (subvolume (name %swap-subvolume-name)
                    (mount-point "/persist/swap"))
         (subvolume (name "@persist-snapshots")
@@ -153,7 +158,7 @@ subvolume-name（遮蔽会 wrong-type-to-apply）。"
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; Root generation 命名（docs/architecture/storage.md）。
-;;; 不带 @persist- 前缀：它们是可替换的 root，不是长期状态（第 10.3 节）。
+;;; 不带 @persist- 前缀：它们是可替换的 root，不是长期状态。
 
 (define %root-installing-name "@root-installing")  ; 安装期工作 root
 (define %root-template-name    "@root-template")   ; 只读模板

@@ -45,6 +45,7 @@
              (guixcfg security tpm2 state)
              (guixcfg security credential-source) ; resolve-luks-passphrase-source
              (guixcfg storage model)     ; %system-partlabel
+             (guixcfg boot layout)       ; ESP 布局固定事实（与 initrd 解锁同一 authority）
              (guixcfg utils process)
              (guixcfg utils spawn)       ; wait-exit（unseal 管道回收）
              ((guix build utils) #:select (mkdir-p invoke delete-file-recursively)) ; #:select：不整体导入，避免 guile-user 下 delete 覆盖警告
@@ -81,11 +82,13 @@
 ;; "swtpm:path=..."）——绝不默默回退 swtpm。
 (define %tcti (or (getenv "GUIXCFG_TPM_TCTI") "device:/dev/tpmrm0"))
 
-;; ESP 挂载点（GUIXCFG_ESP 供测试覆盖）。
-(define %esp (or (getenv "GUIXCFG_ESP") "/efi"))
+;; ESP 挂载点（GUIXCFG_ESP 供测试覆盖；默认是 (guixcfg boot layout) 的
+;; 固定事实）。
+(define %esp (or (getenv "GUIXCFG_ESP") %esp-mount-point))
 
-;; ESP 侧 artifact 目录（initrd 解锁前读取）。
-(define %esp-tpm2-dir (string-append %esp "/EFI/Guix/tpm2"))
+;; ESP 侧 artifact 目录（initrd 解锁前读取；路径与 (guixcfg boot
+;; tpm-unlock) 共享同一 authority——单边改动会静默破坏自动解锁）。
+(define %esp-tpm2-dir (string-append %esp "/" %esp-tpm2-directory))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 环境检查（从 d832ef4 恢复，去掉 PolicyAuthorize 部分）
@@ -120,7 +123,7 @@ SetupMode==0 才认为 Secure Boot 已启用；无法读取返回 #f
 
 (define (luks-device)
   "LUKS 设备路径。完整系统有 udev，PARTLABEL 链接可用。"
-  (string-append "/dev/disk/by-partlabel/" %system-partlabel))
+  (by-partlabel-path %system-partlabel))
 
 (define (luks-is-luks2?)
   (zero? (system* %cryptsetup "isLuks" (luks-device))))
@@ -225,8 +228,8 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
            (and (file-exists? (luks-device)) (luks-is-luks2?)))
     (check "Secure Boot enabled (SecureBoot==1 and not SetupMode)"
            (secure-boot-enabled?))
-    (check "ESP mounted (/efi/EFI/Guix exists)"
-           (file-exists? "/efi/EFI/Guix"))
+    (check "ESP mounted (uki directory exists)"
+           (file-exists? (string-append %esp "/" %esp-uki-directory)))
     (check "/persist writable"
            (dir-writable? (persist-mount-point "@persist-system"))))
    (executable-checks)))
@@ -254,7 +257,9 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
          (unless
            (secure-boot-enabled?)
            (error "Secure Boot not enabled/provable; refusing TPM enrollment"))
-         (unless (file-exists? "/efi/EFI/Guix") (error "ESP not mounted or layout missing (/efi/EFI/Guix)"))
+         (unless (file-exists? (string-append %esp "/" %esp-uki-directory))
+           (error "ESP not mounted or layout missing"
+                  (string-append %esp "/" %esp-uki-directory)))
          (let ((existing (read-tpm2-state)))
            (when (and (tpm2-enrolled? existing) (not replace?))
              (error "TPM enrollment already exists (~a). Use replace to re-enroll"
@@ -338,7 +343,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                     (call-with-output-file
                      pw-file
                      (lambda (p) (display passphrase p)))
-                    (chmod pw-file 384)
+                    (chmod pw-file #o600)
                     
                     (let ((old-slots (or (luks-max-keyslot) -1)))
                       (invoke-with-stdin
@@ -474,7 +479,7 @@ PASSPHRASE-SOURCE 为 reader thunk（互斥来源之一；#f 时交互读取）�
                (tpm2-enrollment-created state))
        (format #t "  pcr-bank : ~a~%" (tpm2-enrollment-pcr-bank state))
        (format #t "  pcr-list : ~a~%" (tpm2-enrollment-pcr-list state))
-       (format #t "  pcr7     : ~a~%" (or (tpm2-enrollment-pcr7 state) (not recorded)))
+       (format #t "  pcr7     : ~a~%" (or (tpm2-enrollment-pcr7 state) "(not recorded)"))
        (format #t "  ESP side  : ~a~%"
                (if (and (file-exists? (string-append %esp-tpm2-dir "/seal.pub"))
                         (file-exists? (string-append %esp-tpm2-dir "/seal.priv")))

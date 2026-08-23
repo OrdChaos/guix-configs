@@ -197,6 +197,9 @@ docs/reference/repository-layout.md；本节省略版开发约束：
   （`(local-file "config.kdl")` 按所在文件目录解析）；禁止重新散布
   跨层 `../../../files/...`。top-level secrets 引用只能走
   `(guixcfg utils repository-source)` 的唯一 resolver。
+  **前提：构建/部署入口的 `-L` 必须绝对路径**（`-L "$PWD/modules"`）——
+  local-file 的目录解析延迟到 lowering，相对 load-path 条目会让
+  解析退化为裸文件名并报 canonicalize-path 错（2026-08 实测）。
 - mutable application state 的 canonical backing 位于
   `/persist/data-app`（bind projection）；禁止持久化整个
   `.config/.local/.local/share/.cache`。

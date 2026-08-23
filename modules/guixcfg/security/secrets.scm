@@ -79,25 +79,24 @@
                      (mode       secret-decl-mode           ; integer
                                  (default #o400)))
 
-(define (login-critical-secrets decls)
-  "DECLS 中 login-critical domain 的子集（含 domain 合法性校验——
-未知 domain fail fast，防拼写错误静默丢 secret）。"
+(define (validate-secret-domains! decls)
+  "校验 DECLS 的 domain 合法性——未知 domain fail fast（防拼写错误
+静默丢 secret）。"
   (for-each (lambda (d)
               (unless (memq (secret-decl-domain d)
                             '(login-critical ordinary))
                 (error "unknown secret deployment domain"
                        (secret-decl-name d) (secret-decl-domain d))))
-            decls)
+            decls))
+
+(define (login-critical-secrets decls)
+  "DECLS 中 login-critical domain 的子集。"
+  (validate-secret-domains! decls)
   (filter (lambda (d) (eq? 'login-critical (secret-decl-domain d))) decls))
 
 (define (ordinary-secrets decls)
-  "DECLS 中 ordinary domain 的子集（含 domain 合法性校验）。"
-  (for-each (lambda (d)
-              (unless (memq (secret-decl-domain d)
-                            '(login-critical ordinary))
-                (error "unknown secret deployment domain"
-                       (secret-decl-name d) (secret-decl-domain d))))
-            decls)
+  "DECLS 中 ordinary domain 的子集。"
+  (validate-secret-domains! decls)
   (filter (lambda (d) (eq? 'ordinary (secret-decl-domain d))) decls))
 
 (define (runtime-secret-target decl user)
@@ -158,13 +157,14 @@ publication，docs/architecture/secrets.md（Runtime secrets））：
                                (define identity #$(%installed-identity-path))
                                (define store-dir #$store-root)
                                (define current-link #$runtime-root)
-                               ;; 预检：identity 缺失（如 fresh install 漏装阶段 6）
+                               ;; 预检：identity 缺失（如 fresh install 漏装
+                               ;; 阶段 5——docs/operations/installation.md）
                                ;; 会让所有 decrypt 失败、interactive-secrets-ready
                                ;; 卡死 login barrier——这里先给出明确错误。
                                (unless (file-exists? identity)
                                  (error "secrets-deploy: age identity missing; \
 install stable identity to /persist/system/keys/age/identity (installation \
-stage 6)"))
+stage 5)"))
                                
                                (define (decrypt-into cipher out-path uid gid mode)
                                  ;; 输出先到同目录 .new（0600）再原子 rename——age 失败不写
@@ -198,9 +198,6 @@ stage 6)"))
                                (define (rm-rf path)
                                  (when (file-exists? path)
                                    (delete-file-recursively path)))
-                               
-                               (unless (file-exists? identity)
-                                 (error "stable identity missing; refusing to prompt" identity))
                                
                                (let* ((n (next-generation))
                                       (tmp-dir (string-append store-dir "/." (number->string n)

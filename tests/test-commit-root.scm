@@ -4,7 +4,7 @@
 ;;; 需要 root + loop 设备（宿主通常非 root：run-tests 下自动 skip；
 ;;; 以 root 单独跑时完整执行——测试 VM/安装环境的真实路径）。
 ;;;
-;;; 覆盖（Phase 12）：
+;;; 覆盖：
 ;;;   1. rename 保持 mounted view（TARGET content visible after commit）
 ;;;   2. template readonly（ro=true）
 ;;;   3. @root-0 内容 == 安装期 root 内容（rename 而非复制）
@@ -150,7 +150,7 @@
      cleanup)))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; Phase 10C：rename 后 deploy 失败 → 回滚到 @root-installing。
+;;; rename 后 deploy 失败 → 回滚到 @root-installing。
 ;;; 新 scratch 环境：deploy 脚本 exit 1 触发失败路径。
 
 (let ((scratch2 "/tmp/guixcfg-commit-fail.btrfs")

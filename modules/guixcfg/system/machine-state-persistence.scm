@@ -13,7 +13,7 @@
 ;;;   machine-state-persistence：/persist/system/state → absolute system
 ;;;   consumer（root-owned）
 ;;;
-;;; 与 host secret 的区别（docs/architecture/secrets.md §15）：
+;;; 与 host secret 的区别（docs/architecture/secrets.md）：
 ;;;   secrets/hosts/<host>：repository 是 authority（declarative
 ;;;   ciphertext → runtime plaintext）
 ;;;   /persist/system/state：machine 是 authority（本机产生的 mutable
@@ -43,6 +43,7 @@
                #:use-module (guix modules)            ; source-module-closure
                #:use-module (guix records)
                #:use-module (guixcfg storage model)   ; persist-mount-point
+               #:use-module (guixcfg utils paths)     ; valid-relative-path?（persistence 契约共享）
                #:use-module (srfi srfi-1)             ; every
                #:export (<machine-state-persistence-rule>
                          machine-state-persistence-rule
@@ -83,16 +84,6 @@
                                (default 'bind-directory))
                      (lifecycle machine-state-persistence-rule-lifecycle ; symbol：仅 'machine-owned
                                 (default 'machine-owned)))
-
-(define (valid-relative-path? p)
-  "P 是否是合法相对路径（非空、非绝对、无 .. 逃逸）。"
-  (and (string? p)
-       (> (string-length p) 0)
-       (not (string-prefix? "/" p))
-       (not (string=? p ".."))
-       (not (string-prefix? "../" p))
-       (not (string-contains p "/../"))
-       (not (string-suffix? "/.." p))))
 
 (define (valid-absolute-consumer? consumer)
   "CONSUMER 是否是合法的 absolute system consumer（非根、不在禁止

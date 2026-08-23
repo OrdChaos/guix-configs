@@ -2,13 +2,12 @@
 ;;;
 ;;;   ephemeral-root-confirm   启动成功进入系统后，把 current 标记为
 ;;;                            last-good（boot-status: trying → ok）。
-;;;                            这是第 17.4 节的“健康检查通过”；
+;;;                            这是“健康检查通过”的确认点；
 ;;;                            目前以 shepherd 启动到 user-processes
 ;;;                            为健康标准（见 one-shot-program-service）。
 ;;;   ephemeral-root-cleanup   按 host policy 的 keep-root-generations
-;;;                            清理旧 @root-N（第 17.8 节），
-;;;                            永不删除 current / last-good；
-;;;                            顺带清理对应的 created-at 元数据。
+;;;                            清理旧 @root-N，永不删除 current /
+;;;                            last-good；顺带清理对应的 created-at 元数据。
 ;;;   状态文件一律经 (guixcfg storage root-generation) 的
 ;;;   read-state / write-state! 读写（原子写 + .prev 回退）。
 ;;;
@@ -25,6 +24,8 @@
 (define-module (guixcfg services ephemeral-root)
                #:use-module (guixcfg storage model)
                #:use-module (guixcfg storage root-generation)
+               #:use-module (guixcfg boot layout)         ; %esp-mount-point
+               #:use-module (guixcfg utils module-closure) ; guixcfg-module-select?
                #:use-module (gnu services)                 ; simple-service
                #:use-module (gnu services shepherd)        ; shepherd-service
                #:use-module (gnu packages linux)           ; btrfs-progs
@@ -38,12 +39,6 @@
 
 ;; 清理时临时挂载 Btrfs 顶层的位置。
 (define %btrfs-top-mount "/run/guixcfg-btrfs-top")
-
-;; source-module-closure 的默认 select? 只收 (guix …)/(gnu …) 模块，
-;; (guixcfg …) 会被静默过滤导致运行期 no code for module，必须自定义。
-(define (guixcfg-module-select? name)
-  (or (guix-module-name? name)
-      (eq? (car name) 'guixcfg)))
 
 (define (ephemeral-root-confirm-program)
   (program-file
@@ -70,7 +65,7 @@
        (let ((n (current-system-generation)))
          (if n
            (begin
-            (promote-recovery! "/efi" n (current-kernel-command-line))
+            (promote-recovery! #$%esp-mount-point n (current-kernel-command-line))
             (format #t "boot-state: Guix generation ~a confirmed as last-good~%"
                     n))
            (format #t "boot-state: cannot determine current Guix generation; skipping~%")))))))
@@ -96,7 +91,7 @@
                     (ice-9 ftw))        ; scandir（不在 Guile core，在 ftw 里）
        (let ((state-path (state-file-path #$%persist-system-mount))
              (top #$%btrfs-top-mount)
-             (mapper #$(string-append "/dev/mapper/" %luks-mapper-name))
+             (mapper #$%luks-mapper-path)
              (btrfs (string-append #$btrfs-progs "/bin/btrfs")))
          (if (not (file-exists? state-path))
            (format #t "ephemeral-root: state file missing; skipping cleanup~%")

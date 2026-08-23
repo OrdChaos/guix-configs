@@ -60,7 +60,7 @@
                         "/btrfs-top/@persist-system/root-generations/state.scm"
                         (state-file-path "/btrfs-top/@persist-system")))
 
-;;; ── 启动模式解析（第 17.6 节；公开 boot model 只有 normal/recovery）
+;;; ── 启动模式解析（公开 boot model 只有 normal/recovery）
 
 (test-group "rootmode= parsing"
             (test-eq "normal" 'normal
@@ -74,7 +74,7 @@
             (test-assert "rejects keep" (not (parse-boot-mode "keep")))
             (test-assert "rejects keep:3" (not (parse-boot-mode "keep:3"))))
 
-;;; ── 启动决策（第 17.4–17.6 节）
+;;; ── 启动决策
 
 (define %installed (initial-state 1000))   ; 装完未启动：current=0, next=1
 
@@ -126,7 +126,7 @@
                         (test-error "no last-good throws" #t
                                     (plan-boot %installed (parse-boot-mode "recovery") 4000))))
 
-;;; ── 用户态确认（第 17.4 节）
+;;; ── 用户态确认
 
 (test-group "confirm-boot"
             (let ((confirmed (confirm-boot %sample-state)))
@@ -135,7 +135,7 @@
               (test-eq "state set to ok" 'ok (root-state-boot-status confirmed))
               (test-equal "next unchanged" 3 (root-state-next-generation confirmed))))
 
-;;; ── 清理（第 17.8 节）
+;;; ── 清理
 
 (test-group "generations-to-delete"
             ;; %sample-state: current=2, last-good=1，均受保护；

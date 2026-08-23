@@ -10,6 +10,7 @@
                #:use-module (guixcfg storage model)
                #:use-module ((guixcfg storage policies) #:prefix storage:)
                #:use-module (guixcfg boot initrd)          ; ephemeral-root-initrd
+               #:use-module (guixcfg boot layout)          ; %esp-mount-point
                #:use-module (guixcfg boot uki-bootloader)  ; uki-bootloader
                #:use-module (guixcfg system kernel-platform) ; %kernel、microcode-ephemeral-initrd（M1）
                #:use-module (guixcfg system desktop) ; desktop-services（M2 greetd/niri）
@@ -40,9 +41,10 @@
 
 ;; Primary user 来自 (guixcfg users user) 的 %primary-user（结构事实的
 ;; 唯一来源：username/uid/groups/shell/home）。密码 hash 不在此处——
-;; user-account password 为 #f，hash 由 install secret 在 LUKS 建立后
-;; 注入目标 shadow（ephemeral root 下 account activation 复用既有
-;; shadow 条目，跨 boot/reconfigure 保留；docs/architecture/secrets.md）。
+;; user-account password 为 #f；hash 的 persistent verifier 由安装流程
+;; 物化（/persist/system/accounts/<user>/password.hash），每 boot 由
+;; account databases 投影内联进 ephemeral /etc/shadow
+;;（docs/architecture/secrets.md（credential 三层模型））。
 (define %vm-users
   (list (primary-user-account)))
 
@@ -74,7 +76,8 @@
    ;; applications 的 system services（官方 service 实例；当前无 app
    ;; 声明——composition root 契约保留，同 persistence/secrets）。
    (applications-system-services %applications)
-   ;; TTY login prompt 的强语义（Section 57）：login: 出现 =
+   ;; TTY login prompt 的强语义（docs/architecture/accounts-sessions.md）：
+   ;; login: 出现 =
    ;; interactive-session-ready 已过——mingetty 延迟到 barrier 之后；
    ;; PAM gate 是 correctness fallback（新增 frontend 漏加
    ;; requirement 也绕不过 readiness policy）。
@@ -165,7 +168,7 @@
    ;; ESP 部署由 (guixcfg boot uki) 的部署脚本完成。
    (bootloader (bootloader-configuration
                 (bootloader uki-bootloader)
-                (targets '("/efi"))))
+                (targets (list %esp-mount-point))))
    
    (mapped-devices (cryptroot-mapped-devices))
    

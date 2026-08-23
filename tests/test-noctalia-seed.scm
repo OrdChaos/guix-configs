@@ -36,7 +36,7 @@
 (test-assert "seed covers launcher"
              (string-contains %seed-text "[shell.launcher]"))
 (test-assert "seed covers theme"
-             (string-contains %seed-text "mode = \"dark\""))
+             (string-contains %seed-text "mode = \"light\""))
 (test-assert "seed covers wallpaper"
              (string-contains %seed-text "[wallpaper]"))
 (test-assert "seed covers bar with tray/network/volume/battery widgets"
@@ -50,6 +50,12 @@
              (string-contains %seed-text "[location]"))
 (test-assert "seed covers lockscreen"
              (string-contains %seed-text "[lockscreen]"))
+;; seed 是可移植初始状态（seed-once 语义）：禁止用户绝对路径
+;; （/home/<user>——AGENT.md §13）与机器专属输出（eDP-1 等）。
+(test-assert "seed is portable (no absolute /home paths)"
+             (not (string-contains %seed-text "/home/")))
+(test-assert "seed has no machine-specific monitor sections"
+             (not (string-contains %seed-text "eDP-")))
 
 ;; ── 2. persistence rule 声明 ────────────────────────────────
 (define rules (applications-persistence (list %noctalia-git)))

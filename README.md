@@ -30,8 +30,9 @@ guix time-machine -C channels.lock.scm -- repl tests/run-tests.scm
 guix time-machine -C channels.lock.scm -- repl tools/disk-install.scm -- inspect /dev/vda
 guix time-machine -C channels.lock.scm -- repl tools/disk-install.scm -- plan vm /dev/vda
 
-# 构建 VM 系统配置
-guix time-machine -C channels.lock.scm -- system build -L modules modules/guixcfg/hosts/vm.scm
+# 构建 VM 系统配置（已装系统外需要 facts 文件，见 development/testing.md）
+GUIX_CONFIG_FACTS=/tmp/facts.scm \
+  guix time-machine -C channels.lock.scm -- system build -L "$PWD/modules" modules/guixcfg/hosts/vm.scm
 
 # 日常更新（安装后）
 sudo tools/reconfigure.sh

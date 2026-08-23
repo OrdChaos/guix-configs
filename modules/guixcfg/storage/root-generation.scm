@@ -1,7 +1,7 @@
 ;;; Root generation 生命周期模型：状态文件、启动模式、启动决策与清理规则。
 ;;; 本模块是纯模型——只描述“状态应该是什么样、这次启动该做什么”，
 ;;; 不做任何 Btrfs / 挂载操作（initrd 和用户态服务分别消费这些决策）。
-;;; 对应 docs/architecture/storage.md（root generation）与第 19 章（机器事实）。
+;;; 对应 docs/architecture/storage.md（Root generation）。
 
 (define-module (guixcfg storage root-generation)
                #:use-module (guix records)  ; define-record-type*
@@ -75,7 +75,7 @@
                      (current-generation    root-state-current-generation)
                      ;; 最近一次被用户态确认“启动成功”的 generation；未确认为 #f
                      (last-good-generation  root-state-last-good-generation)
-                     ;; generation → Unix 时间的 alist，仅作 metadata（第 17.1 节）
+                     ;; generation → Unix 时间的 alist，仅作 metadata
                      (created-at            root-state-created-at
                                             (default '()))
                      ;; 符号：first-boot（装完未启动）/ trying（已启动未确认）/ ok（已确认）
@@ -85,7 +85,7 @@
                                             (default "@root-template")))
 
 (define (initial-state now)
-  "安装期提交完成时的初始状态：@root-0 已就绪但从未启动（第 17.3、17.4 节）。
+  "安装期提交完成时的初始状态：@root-0 已就绪但从未启动。
 NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
   (root-state (next-generation 1)
               (current-generation 0)
@@ -239,9 +239,9 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
        (reuse-plan last-good)))
     ((normal)
      (if (eq? (root-state-boot-status state) 'first-boot)
-       ;; 首次启动：直接用安装期建好的 @root-0（第 17.4 节）
+       ;; 首次启动：直接用安装期建好的 @root-0
        (reuse-plan (root-state-current-generation state))
-       ;; 正常启动：从只读模板新建 @root-N（第 17.5 节）
+       ;; 正常启动：从只读模板新建 @root-N
        (let ((n (root-state-next-generation state)))
          (boot-plan
           (target-subvolume (root-generation-name n))
@@ -261,7 +261,7 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
 ;;; 用户态确认：启动成功进入系统后，把 current 标记为 last-good。
 
 (define (confirm-boot state)
-  "启动健康检查通过后调用：current 提升为 last-good，状态置 ok（第 17.4 节）。"
+  "启动健康检查通过后调用：current 提升为 last-good，状态置 ok。"
   (root-state (inherit state)
               (last-good-generation (root-state-current-generation state))
               (boot-status 'ok)))

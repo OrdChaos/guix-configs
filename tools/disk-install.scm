@@ -48,7 +48,7 @@ host: vm, laptop~%"))
 (define (cmd-inspect device)
   (let ((facts (probe-device device)))
     (format #t "device: ~a~%" (device-facts-path facts))
-    (format #t "  by-id/path: ~a~%" (or (device-facts-by-id facts) (unresolved)))
+    (format #t "  by-id/path: ~a~%" (or (device-facts-by-id facts) "(unresolved)"))
     (format #t "  is a partition: ~a~%" (if (device-facts-partition? facts) "yes" "no"))
     (format #t "  mounted:     ~a~%" (if (device-facts-mounted? facts) "yes" "no"))
     (format #t "  system disk: ~a~%" (if (device-facts-system-disk? facts) "yes" "no"))
@@ -83,25 +83,9 @@ stable S，安装过程复用 /run 中的临时 S）；否则交互读取。来�
     (run-install (load-policy host) device
                  #:passphrase-reader reader)))
 
-(define* (ensure-installed-identity! target #:optional (runtime (%runtime-identity-path)))
-         "安装收尾（阶段 6 兜底）：/persist/system/keys/age/identity 必须就位——
-首次 boot 的 secrets-deploy 用它解密（boot 后无 runtime identity），缺失
-会导致 interactive-secrets-ready 失败、login barrier 卡死。缺失时从
-RUNTIME（同一安装会话 unlock 的 identity）自动安装；无 runtime identity
-则 fail fast（提示先 secrets unlock）。"
-         (let ((installed (string-append target (%installed-identity-path))))
-           (unless (file-exists? installed)
-             (if (file-exists? runtime)
-               (begin
-                (mkdir-p (dirname installed))
-                (chmod (dirname installed) #o700)
-                (copy-file runtime installed)
-                (chmod installed #o600)
-                (format #t "installed stable identity to ~a (stage 6 fallback)~%"
-                        installed))
-               (error "installed identity missing and no runtime identity; run 'secrets unlock' first (installation stage 6)")))))
-
 (define (cmd-commit-root target)
+  ;; identity 兜底（安装阶段 5 漏装时从 runtime identity 自动安装或
+  ;; fail fast）——实现归属 (guixcfg security age)。
   (ensure-installed-identity! target)
   (commit-root-generation target))
 

@@ -3,7 +3,8 @@
 ;;; <menu-entry> 框架——输入是我们自己的 <boot-plan> 记录；
 ;;; 框架转换在 (guixcfg boot uki-bootloader) 适配层完成。
 ;;;
-;;; ESP 布局（全部归我们管理，记入 .deployed，其余文件一律不碰）：
+;;; ESP 布局（全部归我们管理，记入 .deployed，其余文件一律不碰；
+;;; 路径固定事实的唯一 authority 是 (guixcfg boot layout)）：
 ;;;   /EFI/Guix/A/*.EFI          完整 deployment 槽 A
 ;;;   /EFI/Guix/B/*.EFI          完整 deployment 槽 B
 ;;;   /EFI/Guix/.deployed        所有权清单
@@ -18,8 +19,9 @@
 ;;; ukify 直接签 UKI，sbsign 签 Limine；不存在则全部不签（开发期）。
 
 (define-module (guixcfg boot uki)
-               #:use-module (guixcfg boot boot-state)
                #:use-module (guixcfg boot limine-menu) ; limine-config-text（部署脚本加载）
+               #:use-module (guixcfg boot layout)      ; ESP 布局固定事实
+               #:use-module (guixcfg utils module-closure) ; guixcfg-module-select?
                #:use-module (rosenthal packages bootloaders)  ; limine、systemd-stub、ukify
                #:use-module (gnu packages efi)   ; sbsigntools
                #:use-module (guix gexp)
@@ -30,11 +32,8 @@
                #:export (;; Boot Plan
                          <boot-plan>
                          boot-plan make-boot-plan boot-plan?
-                         boot-plan-label
                          boot-plan-kernel boot-plan-initrd boot-plan-cmdline
                          boot-plan-system
-                         ;; 固定位置
-                         %uki-esp-subdir
                          ;; 部署脚本生成
                          make-uki-deploy-program))
 
@@ -42,16 +41,12 @@
 (define %secure-boot-keydir
   (string-append (persist-mount-point "@persist-system") "/keys/secure-boot"))
 
-;; ESP 上 UKI 的存放子目录。
-(define %uki-esp-subdir "EFI/Guix")
-
 ;;; ────────────────────────────────────────────────────────────
 ;;; Boot Plan：一个可启动项的全部输入（框架无关）。
 
 (define-record-type* <boot-plan>
                      boot-plan make-boot-plan
                      boot-plan?
-                     (label   boot-plan-label)
                      (kernel  boot-plan-kernel)
                      (initrd  boot-plan-initrd)
                      (cmdline boot-plan-cmdline)
@@ -68,7 +63,11 @@
 
 (define (make-uki-deploy-program current)
   "生成 UKI 部署脚本。CURRENT 是当前 generation 的 <boot-plan>。
-Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
+Recovery candidate 总是由【当前 deployment】的 kernel/initrd +
+rootmode=recovery 构建（并记录 system identity 到 candidate.scm）；
+只有 userspace confirm 验证 candidate.system == /run/current-system
+后才 promote 为正式 Recovery（见 (guixcfg boot recovery)）——部署期
+不读取也不信任任何历史状态。"
   (program-file
    "deploy-uki"
    (with-imported-modules
@@ -76,9 +75,7 @@ Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
                              (guix build syscalls)
                              (guixcfg boot limine-menu)
                              (guixcfg utils atomic-file))
-                           #:select? (lambda (name)
-                                       (or (guix-module-name? name)
-                                           (eq? (car name) 'guixcfg))))
+                           #:select? guixcfg-module-select?)
     #~(begin
        (use-modules ((guix build utils) #:hide (delete))
                     (guix build syscalls)
@@ -111,7 +108,7 @@ Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
        (define db-crt (string-append keydir "/db.crt"))
        (define signed? (and (file-exists? db-key) (file-exists? db-crt)))
        
-       (define uki-dir (string-append esp "/" #$%uki-esp-subdir))
+       (define uki-dir (string-append esp "/" #$%esp-uki-directory))
        (define boot-dir (string-append esp "/EFI/BOOT"))
        (define config-file (string-append esp "/limine.conf"))
        (define deployed-file (string-append uki-dir "/.deployed"))
@@ -134,8 +131,14 @@ Recovery 的 Guix 轴由部署期从 boot-state 注册表解析。"
                                         (let ((line (read-line port)))
                                           (cond
                                             ((eof-object? line) #f)
-                                            ((string-contains line "/EFI/Guix/A/") "A")
-                                            ((string-contains line "/EFI/Guix/B/") "B")
+                                            ((string-contains
+                                              line
+                                              #$(string-append "/" %esp-uki-directory "/A/"))
+                                             "A")
+                                            ((string-contains
+                                              line
+                                              #$(string-append "/" %esp-uki-directory "/B/"))
+                                             "B")
                                             (else (loop)))))))))
        
        (define active (active-slot))

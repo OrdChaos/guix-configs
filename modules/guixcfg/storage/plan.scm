@@ -1,5 +1,5 @@
 ;;; 操作计划：把存储模型 + host policy 展开成一串有序步骤。
-;;; 本模块只生成计划（纯函数），不执行；阶段 2 的 install.scm 负责执行，
+;;; 本模块只生成计划（纯函数），不执行；install.scm 负责执行，
 ;;; tools/disk-install.scm 的 plan/dry-run 子命令直接打印这里的输出。
 ;;; 对应 docs/operations/installation.md和 docs/architecture/storage.md。
 
@@ -15,7 +15,7 @@
                          plan->text display-plan))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 计划步骤：id 是符号（阶段 2 按 id 分派执行），summary 给人看，
+;;; 计划步骤：id 是符号（install.scm 按 id 分派执行），summary 给人看，
 ;;; detail 是一个关联列表（alist），携带执行所需的参数。
 ;;;
 ;;; 关联列表就是“键值对列表”：'((device . "/dev/vda") (size . 2147483648))，
@@ -37,7 +37,7 @@
   "生成把空盘 DEVICE 安装成 POLICY 描述布局的有序步骤列表。"
   (let ((esp-size     (host-storage-policy-esp-size policy))
         (swap-size    (host-storage-policy-swapfile-size policy))
-        (mapper-path  (string-append "/dev/mapper/" %luks-mapper-name)))
+        (mapper-path  %luks-mapper-path))
     (append
      (list
       ;; 安全闸门：validate.scm 的全部检查 + 人工输入完整设备路径确认。

@@ -24,7 +24,7 @@ account-state-ready（只读 verify 服务 provision）
 interactive-session-ready
     |
     v
-login（mingetty / sshd）
+login（greetd（tty1，图形桌面入口）/ mingetty（tty2-6 fallback）/ sshd）
     |
     v
 PAM / elogind（session、/run/user/<uid>）
@@ -100,10 +100,10 @@ gate 由 activation 创建，interactive-session-ready 打开。PAM 横切
 - elogind 提供 login/session tracking、/run/user/<uid> 生命周期与
   XDG_RUNTIME_DIR。
 - 系统层职责；Home/persistence 都不碰 runtime 目录。
-- mingetty 的 shepherd-requirement 含 interactive-session-ready：
-  `login:` 出现即 barrier 已过。
+- greetd（tty1）与 mingetty（tty2-6 fallback）的 shepherd
+  requirement 都含 interactive-session-ready：`login:` 出现即
+  barrier 已过（图形桌面链路见 `graphics.md`）。
 
 ## 未来
 
-- greetd（desktop 阶段）替代/补充 mingetty，沿用同一 login gate。
 - root 的 Last Good readiness 边界：见 development/roadmap.md。

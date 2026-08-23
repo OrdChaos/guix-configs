@@ -4,7 +4,7 @@
 # 仍是规划中的未来工作）。
 #
 # 职责：system reconfigure + 成功后热激活绑定的 Guix Home + readiness
-# gate 事务语义（docs/architecture/accounts-sessions.md J8）：
+# gate 事务语义（docs/architecture/accounts-sessions.md）：
 #
 #   close gate（新 interactive session 被拒；已有 session 不动）
 #     → guix system reconfigure
@@ -13,8 +13,8 @@
 #     → 验证：Home 链接状态 + 各 readiness capability 无 failed
 #     → open gate
 #
-# 为什么需要显式热激活验证（错误语义见 docs/architecture/accounts-sessions.md
-# J5）：`guix system reconfigure` 的服务升级对 one-shot 服务是
+# 为什么需要显式热激活验证：`guix system reconfigure` 的服务升级对
+# one-shot 服务是
 # fire-and-forget：shepherd 把 activate 进程 fork 出去即视为成功——
 # Home activate 失败（如 ~/.guix-home 被非空目录阻塞、或上次失败残留
 # 的 ~/.guix-home.new pivot）不会反馈到 reconfigure 退出码。这里在
@@ -69,8 +69,10 @@ if [ -L "/home/$HOME_USER/.guix-home" ]; then
 fi
 
 # 1. system reconfigure（失败则 Home 完全不动、gate 重新打开）
+# 注意 -L 必须绝对路径：source-relative local-file（apps/*/definition.scm）
+# 在相对 load-path 下于 lowering 阶段解析失败（canonicalize-path 报裸文件名）。
 if ! guix time-machine -C channels.lock.scm -- system reconfigure \
-       "modules/guixcfg/hosts/$HOST.scm" -L modules; then
+       "modules/guixcfg/hosts/$HOST.scm" -L "$ROOT/modules"; then
   rm -f "$GATE"
   echo "reconfigure: system reconfigure FAILED; Home left untouched;" >&2
   echo "  gate reopened (no state changed)." >&2

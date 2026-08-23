@@ -24,6 +24,7 @@
 
 (define-module (guixcfg boot tpm-unlock)
                #:use-module (guixcfg boot device-resolver) ; resolve-system/esp-device
+               #:use-module (guixcfg boot layout)          ; %esp-tpm2-directory（ESP 布局 authority）
                #:use-module (guixcfg storage model)        ; %luks-mapper-name
                #:use-module (guixcfg security tpm2 tpm2-tools)
                #:use-module (guixcfg utils spawn)          ; spawn-pipeline
@@ -37,12 +38,12 @@
                #:use-module (srfi srfi-13)                 ; string-tokenize
                #:export (tpm-unlock-in-initrd
                          cmdline-option
-                         tpm-unlock-candidate?))
+                         tpm-unlock-disabled-by-cmdline?))
 
-;; initrd 里 ESP 的临时挂载点与机器级 artifact 目录（PCR7 不随
-;; UKI slot 变化，固定路径；enrollment 工具写，见 tools/tpm2-enroll.scm）。
+;; initrd 里 ESP 的临时挂载点；artifact 目录是 ESP 相对固定路径
+;; （(guixcfg boot layout)；PCR7 不随 UKI slot 变化，enrollment 工具写，
+;; 见 tools/tpm2-enroll.scm）。
 (define %esp-tpm-mount "/run/guixcfg-esp")
-(define %esp-tpm2-dir "EFI/Guix/tpm2")
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; cmdline 解析（纯函数便于测试）
@@ -57,12 +58,10 @@
             (string-drop (car args) (+ 1 (string-length name))))
            (else (loop (cdr args)))))))
 
-(define (proc-cmdline-option name)
-  "从 /proc/cmdline 读 NAME=VALUE 选项的值；不存在返回 #f。"
-  (cmdline-option (false-if-exception
-                   (call-with-input-file "/proc/cmdline"
-                                         (lambda (p) (read-line p))))
-                  name))
+(define (proc-cmdline)
+  "读取 /proc/cmdline 内容（单行）；不可读返回 #f。"
+  (false-if-exception
+   (call-with-input-file "/proc/cmdline" (lambda (p) (read-line p)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 设备发现：LUKS UUID authoritative（(guixcfg boot device-resolver)——
@@ -70,13 +69,15 @@
 ;;; 猜测）。
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 决策纯函数（测试用）
+;;; cmdline 门控（生产使用；纯函数便于测试）
 
-(define (tpm-unlock-candidate? recovery? tpm-available? artifacts-present?)
-  "是否应尝试 TPM 自动解锁：非 Recovery 且 TPM 可用且 artifact 完整。"
-  (and (not recovery?)
-       tpm-available?
-       artifacts-present?))
+(define (tpm-unlock-disabled-by-cmdline? line)
+  "cmdline 门控：rootmode=recovery（Recovery 不尝试 TPM，始终人工密码）
+或 guixcfg.tpm-unlock=0（显式禁用）→ 跳过 TPM 自动解锁。"
+  (let ((raw-mode (cmdline-option line "rootmode"))
+        (tpm-off (cmdline-option line "guixcfg.tpm-unlock")))
+    (or (and tpm-off (string=? tpm-off "0"))
+        (and raw-mode (string-prefix? "recovery" raw-mode)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; initrd 解锁尝试
@@ -89,12 +90,9 @@ TPM2-BIN/CRYPTSETUP-BIN 为 store 中的可执行文件路径。LUKS-UUID-HEX
 UUID 是权威身份。"
   (catch #t
     (lambda ()
-      ;; ── cmdline 门控：Recovery 与显式禁用都跳过（双保险）
-      (let ((raw-mode (proc-cmdline-option "rootmode"))
-            (tpm-off (proc-cmdline-option "guixcfg.tpm-unlock")))
-        (when (or (and tpm-off (string=? tpm-off "0"))
-                  (and raw-mode (string-prefix? "recovery" raw-mode)))
-          (throw 'tpm-skip "cmdline disabled (Recovery/explicit)")))
+      ;; ── cmdline 门控：Recovery 与显式禁用都跳过
+      (when (tpm-unlock-disabled-by-cmdline? (proc-cmdline))
+        (throw 'tpm-skip "cmdline disabled (Recovery/explicit)"))
       
       ;; ── TPM 设备可用性（生产 /dev/tpmrm0）
       (unless (file-exists? "/dev/tpmrm0")
@@ -113,7 +111,8 @@ UUID 是权威身份。"
         (dynamic-wind
          (lambda () #t)
          (lambda ()
-           (let* ((tpm2-dir (string-append %esp-tpm-mount "/" %esp-tpm2-dir))
+           (let* ((tpm2-dir (string-append %esp-tpm-mount "/"
+                                           %esp-tpm2-directory))
                   (seal-pub (string-append tpm2-dir "/seal.pub"))
                   (seal-priv (string-append tpm2-dir "/seal.priv")))
              (unless (and (file-exists? seal-pub) (file-exists? seal-priv))

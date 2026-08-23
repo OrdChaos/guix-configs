@@ -85,7 +85,7 @@
    (name 'good-dotfile)
    (home-services
     (list (service home-files-service-type '((".ssh/config" . 1)
-                                            (".gitconfig" . 2)))))))
+                                             (".gitconfig" . 2)))))))
 
 (test-assert "home-files target under ~/.config/ rejected (fail fast)"
              (catch #t

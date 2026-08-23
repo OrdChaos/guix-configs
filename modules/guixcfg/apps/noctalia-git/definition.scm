@@ -44,9 +44,6 @@
                           `(("noctalia/palettes/fluent-blue.json"
                              ,(local-file "fluent-blue.json"
                                           "noctalia-fluent-blue.json"))))))
-   ;; (system-services (list ...))   ; system service（仅确有必要；greetd/elogind/
-   ;;                                 ; accounts/SSH host keys/readiness/TPM/UKI/
-   ;;                                 ; Secure Boot 等 core infrastructure 不迁进 apps）
    (persistence
     (list (application-persistence-rule
            (name 'state)
@@ -56,7 +53,4 @@
            (lifecycle 'application-owned)
            ;; seed-once：首次初始化 settings.toml；此后 repo 永不触碰。
            (seeds `(("settings.toml"
-                     ,(local-file "base-settings.toml" "noctalia-base-settings.toml")))))))
-   ;; (secrets (list ...))           ; <secret-decl>（source = 本目录 secrets/ 的
-   ;;                                 ; file-like，如 (local-file "secrets/x.age")）
-   ))
+                     ,(local-file "base-settings.toml" "noctalia-base-settings.toml")))))))))

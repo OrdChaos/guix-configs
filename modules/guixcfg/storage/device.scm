@@ -14,7 +14,7 @@
                #:export (;; 纯解析（可测试）
                          <device-node>
                          device-node device-node?
-                         device-node-path device-node-type device-node-size
+                         device-node-type device-node-size
                          device-node-mountpoints device-node-children
                          parse-lsblk-json
                          device-node-mounted?
@@ -42,8 +42,8 @@
 ;;; ────────────────────────────────────────────────────────────
 ;;; lsblk --json 解析。
 ;;; Guile 的 (json)：对象解析为键是字符串的关联列表，数组解析为向量。
-;;; 不同 lsblk 版本的挂载点字段不同（新版 MOUNTPOINTS 是数组，旧版 MOUNTPOINT
-;;; 是单个字符串），这里统一归一化成字符串列表。
+;;; 目标环境固定（manifests/installer.scm 的 pinned util-linux）：
+;;; MOUNTPOINTS 总是数组。
 
 (define (jref obj key)
   "从 json->scm 产出的关联列表里按字符串键取值；兼容符号键。"
@@ -58,12 +58,7 @@
     (else '())))
 
 (define (node-mountpoints obj)
-  (let ((mps (jref obj "mountpoints"))
-        (mp  (jref obj "mountpoint")))
-    (filter string?
-            (cond (mps (jlist mps))
-              (mp  (list mp))
-              (else '())))))
+  (filter string? (jlist (jref obj "mountpoints"))))
 
 (define (parse-device-node obj)
   "把一个 blockdevice 对象解析成 <device-node>（递归处理 children）。"

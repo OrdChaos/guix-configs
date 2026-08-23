@@ -24,6 +24,7 @@
                #:use-module (guixcfg storage root-generation)
                #:use-module (guixcfg storage subvolume)
                #:use-module (guixcfg storage device)
+               #:use-module (guixcfg boot layout)  ; ESP/部署脚本路径固定事实
                #:use-module (guix build utils)  ; mkdir-p、delete-file-recursively
                #:use-module (srfi srfi-13)  ; string-contains
                #:use-module (ice-9 format)
@@ -39,7 +40,7 @@
   (state-file-path (top-path "@persist-system")))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 幂等判定：安装提交的 committed predicate（Phase 11）。
+;;; 幂等判定：安装提交的 committed predicate。
 ;;; 综合 @root-0 / @root-installing / state 三要素，不靠单一文件猜。
 
 (define (commit-state)
@@ -150,12 +151,12 @@
 ;;; 与 unexpected（ESP 已有 limine.conf 的 UKI 痕迹却缺脚本）。
 
 (define (deploy-uki! target)
-  (let ((deploy (string-append target "/boot/deploy-uki")))
+  (let ((deploy (string-append target %uki-deploy-script-path)))
     (cond
       ((file-exists? deploy)
-       (invoke deploy target "/efi")   ; ESP 固定挂 /efi（model 固定事实）
+       (invoke deploy target %esp-mount-point)   ; ESP 固定挂载点（boot/layout）
        (format #t "deploy-uki executed (~a)~%" deploy))
-      ((file-exists? (string-append target "/efi/limine.conf"))
+      ((file-exists? (string-append target %esp-mount-point "/limine.conf"))
        (error "UKI bootloader deployed (ESP has limine.conf) but deploy-uki script is missing"
               deploy))
       (else

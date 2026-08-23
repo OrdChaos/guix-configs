@@ -19,7 +19,9 @@
 (define-module (guixcfg boot initrd)
                #:use-module (guixcfg storage model)
                #:use-module (guixcfg storage root-generation)
-               #:use-module (guixcfg boot tpm-unlock)      ; tpm-unlock-in-initrd（经 kind）
+               ;; tpm-unlock 经 mapped-device-kind 的 modules 字段进 initrd
+               ;; （见 (guixcfg system file-systems)），config 侧无直接引用
+               #:use-module (guixcfg utils module-closure) ; guixcfg-module-select?
                #:use-module (gnu system linux-initrd)      ; expression->initrd、flat-linux-module-directory
                #:use-module (gnu system mapped-devices)    ; mapped-device-kind-open
                #:use-module (gnu system file-systems)      ; file-system->spec
@@ -54,7 +56,7 @@
   #~(begin
      (let* ((top      #$%btrfs-top-path)
             (staging  #$%staging-root-path)
-            (mapper   #$(string-append "/dev/mapper/" %luks-mapper-name))
+            (mapper   #$%luks-mapper-path)
             (btrfs    (string-append #$btrfs-progs/static "/bin/btrfs"))
             (state-path
              (state-file-path (string-append top "/@persist-system"))))
@@ -158,8 +160,6 @@
           (with-imported-modules
            ;; raw-initrd 的模块集 + 我们的纯模型（其闭包含
            ;; (guixcfg storage model) 与 (guix records)）。
-           ;; 注意 source-module-closure 的默认 select? 只收 (guix …)/(gnu …)
-           ;; 模块，(guixcfg …) 会被过滤掉，必须自定义。
            (source-module-closure '((gnu build linux-boot)
                                     (guix build utils)
                                     (guix build bournish)
@@ -170,9 +170,7 @@
                                     (guixcfg boot tpm-unlock)
                                     (guixcfg security tpm2 tpm2-tools)
                                     (srfi srfi-1))   ; 与 runtime use-modules 对应
-                                  #:select? (lambda (name)
-                                              (or (guix-module-name? name)
-                                                  (eq? (car name) 'guixcfg))))
+                                  #:select? guixcfg-module-select?)
            #~(begin
               ;; 顶层 use-modules：宏（如 LUKS open gexp 里的 match）
               ;; 只在顶层展开生效，mapped-device 所需模块必须列在这里。
