@@ -3,8 +3,9 @@
 
 (define-module (guixcfg system common)
                #:use-module (gnu services)         ; service
-               #:use-module (gnu services desktop) ; elogind-service-type、polkit-wheel-service
+               #:use-module (gnu services desktop) ; elogind-service-type、elogind-configuration、polkit-wheel-service
                #:use-module (gnu services dbus)    ; polkit-service-type（polkitd 的 authority）
+               #:use-module (virelith packages elogind) ; elogind-compat（257.16）
                #:use-module (guixcfg system substitutes) ; nonguix-substitute-service
                #:export (%common-timezone
                          %common-locale
@@ -27,6 +28,17 @@
 ;; XDG_RUNTIME_DIR。它是系统层职责——Home/persistence 都不碰 runtime
 ;; 目录。所有 host 共享这一层；%base-services 不含 elogind，这里显式补充。
 ;;
+;; elogind 来自 virelith channel 的 elogind-compat（257.16）：
+;; pinned Guix master 的 elogind 停留在 255.22；virelith 继承官方
+;; elogind 的依赖与构建逻辑，只覆盖 source（version/tag 前缀/commit/
+;; hash），ABI 向后兼容（SONAME libelogind.so.0 不变）。channel 源在
+;; reconfigure / tests/run-tests.scm 时已加入 load path，直接 import
+;; (virelith packages elogind) 即可（elogind-service-type 各 extension
+;; 消费 elogind-configuration 的 elogind 字段，无需其他改动）。
+;; 注意：257 系列 D-Bus activation 仍走 shepherd wrapper（elogind 的
+;; org.freedesktop.login1.service Exec 由 elogind-dbus-service 替换为
+;; shepherd-sync）——拆除 wrapper 属第二步（另行确认后执行）。
+;;
 ;; Nonguix substitute trust（docs/architecture/overview.md（Nonguix
 ;; integration））：guix-daemon 的 additive extension——官方 Guix
 ;; substitutes 保留，追加 official Nonguix substitute URL + signing
@@ -41,7 +53,8 @@
 ;; （apps/polkit-gnome，niri spawn-at-startup + ~/.local/bin wrapper）
 ;; ——不在这里。
 (define %common-services
-  (list (service elogind-service-type)
+  (list (service elogind-service-type (elogind-configuration
+                                       (elogind elogind-compat)))
         (service polkit-service-type)
         polkit-wheel-service
         nonguix-substitute-service))

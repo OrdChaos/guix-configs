@@ -37,9 +37,11 @@
 ;;;   - unix-pam-service（gnu/system/pam.scm:216-290）的 pam_env.so
 ;;;     无参数、只 honor /etc/environment（本机为空，未定义
 ;;;     session-environment）——没有 HOME 规则；
-;;;   - pam_elogind（elogind V255.22 src/login/pam_elogind.c:770,
-;;;     1190-1228）只设 XDG_RUNTIME_DIR/XDG_SESSION_*/XDG_SEAT/
-;;;     XDG_VTNR；
+;;;   - pam_elogind（elogind 257.16 elogind-compat，
+;;;     src/login/pam_elogind.c:814, 1226-1277）只设
+;;;     XDG_RUNTIME_DIR/XDG_SESSION_*/XDG_SEAT/XDG_VTNR（257.16 实测
+;;;     核对：XDG_RUNTIME_DIR 在 814 setenv 与 1231 用户匹配守卫，
+;;;     SESSION_ID/SEAT/VTNR 在 1226-1277；无任何 HOME 设置）；
 ;;;   - Guix 官方 wrapper（gnu/services/base.scm:3715-3729
 ;;;     make-greetd-xdg-user-session-command）只设 XDG_SESSION_TYPE
 ;;;     与 XDG_RUNTIME_DIR（getpwuid($USER)）。
