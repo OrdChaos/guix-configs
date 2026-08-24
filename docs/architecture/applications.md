@@ -264,7 +264,7 @@ tests 的 `add-to-load-path` 本来就拼绝对路径）。
 | 数据 | 去向 |
 |---|---|
 | 可由 repo 确定性重建？ | → Guix Home / System（derived state） |
-| 上游只提供滚动 URL、无固定版本地址的应用数据资源？ | → `(guixcfg utils online-file)` 构建期在线数据（可选 sha256；#f 时 cache-first，仓库不追踪上游更新） |
+| 上游只提供滚动 URL、无固定版本地址的应用数据资源？ | → `(guixcfg utils online-file)` 构建期在线数据（可选 sha256；`#f` 时 cache-first，仓库不追踪上游更新；`#:refresh #t` 每次构建重新下载、跟随上游更新，失败时回退本地缓存） |
 | 应用产生、需保留、要求标准 HOME/XDG/FHS 路径？ | → `/persist/data-app` + bind projection |
 | 用户自己创建/拥有的数据？ | → `/persist/data-home` |
 | 大体积、可重新取得、程序主动访问固定路径？ | → `/persist/data-nobackup`（direct access） |

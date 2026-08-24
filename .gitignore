@@ -25,3 +25,7 @@ result-*
 # 见 docs/architecture/secrets.md。这里兜底拦截误放进来的明文私钥。
 secrets/**/*.key
 secrets/**/identity*
+
+# ── 其他 ───────────────────────────────────────────────────
+.vscode/
+.zcode/

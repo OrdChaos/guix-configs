@@ -32,6 +32,12 @@ interactive-session-ready（core readiness join barrier）
      │                └─ niri config spawn：polkit-gnome、fcitx5、
      │                     noctalia（兼 notification daemon）、
      │                     xsettingsd-session（X11 XSETTINGS）
+     │
+     │   注销语义：niri 由 Home Shepherd 监管（respawn 默认开），
+     │   合成器退出 ≠ 会话结束——注销必须终止登录会话本身。
+     │   noctalia 的 niri 注销经包 patch（apps/noctalia-git）改走
+     │   loginctl terminate-session（elogind）：整个 login session
+     │   收尾 → 回 agreety。
      └─ mingetty（tty2-6，同样 gated by interactive-session-ready——
          desktop 故障时 fallback tty 仍可登录）
 ```

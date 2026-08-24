@@ -1,4 +1,19 @@
-;;; Noctalia（noctalia-git channel 包）。
+;;; Noctalia（noctalia-git channel 包 + 本仓库 patch）。
+;;;
+;;; 本地 patch（niri 注销 = 终止登录会话，2026-08-24）：上游
+;;; compositor_platform.cpp 对 niri 的 requestSessionExit 走 niri IPC
+;;; Quit（只退合成器）——上游隐含假设 niri 是会话主进程（niri 退出
+;;; 即注销）。本仓库 niri 由 Guix Home Shepherd 监管且 respawn 默认
+;;; 开启（pinned gnu/services/shepherd.scm），进程退出即被重拉，
+;;; 注销变成"重启"。patch 把 niri 分支改为同文件已有的
+;;; requestLoginSessionExit()（loginctl terminate-session
+;;; $XDG_SESSION_ID——elogind 终止整个登录会话：home shepherd 及其
+;;; 全部服务收尾 → greetd worker 回收 → 回 agreety）。
+;;; loginctl 由 elogind 包提供且已在系统 profile
+;;; （elogind-service-type 经 profile-service-type 贡献，
+;;; "Provide the 'loginctl' command"——pinned desktop.scm），会话
+;;; PATH 可见，无需额外安装。上游 niri 分支写法漂移时 patch 报错
+;;; （fail loud）。
 ;;;
 ;;; 配置模型（seed-once，docs/architecture/persistence.md
 ;;; （seed-once）；本任务决策记录）：
@@ -38,15 +53,53 @@
                #:use-module (gnu home services)        ; home-xdg-configuration-files-service-type
                #:use-module (gnu services)             ; simple-service
                #:use-module (guix gexp)                ; local-file
+               #:use-module (guix packages)            ; package/inherit、package-source
+               #:use-module (guix utils)               ; substitute-keyword-arguments
                #:use-module (guix records)
                #:use-module (guixcfg apps model)       ; application
                #:use-module (guixcfg system application-persistence) ; application-persistence-rule
-               #:export (%noctalia-git))
+               #:export (%noctalia-git
+                         %noctalia-niri-logout-patch-pattern)) ; 测试漂移守卫
+
+;; niri 注销 patch：精确匹配上游唯一一行（pinned noctalia d8ba5a01
+;; compositor_platform.cpp:1550——全文件仅此一处），替换后原调用变
+;; if(false) dead code（保持 C++ 语法完整），真实路径走
+;; requestLoginSessionExit()。
+(define %noctalia-niri-logout-patch-pattern
+  "return m_runtimeRegistry->niri\\(\\)\\.requestAction\\(")
+
+(define %noctalia-niri-logout-patch-replacement
+  (string-append
+   "return requestLoginSessionExit(); "
+   "/* guixcfg: niri Quit respawns under Home Shepherd; terminate the "
+   "login session instead. Dead upstream call: */ "
+   "if (false) return m_runtimeRegistry->niri().requestAction("))
+
+(define noctalia-git/fixed
+  (package/inherit noctalia-git
+    (arguments
+     (substitute-keyword-arguments (package-arguments noctalia-git)
+       ((#:phases phases)
+        #~(modify-phases #$phases
+            (add-after 'unpack 'niri-logout-terminates-login-session
+              (lambda _
+                ;; substitute* 由包自带 #:modules 的 (guix build utils)
+                ;; 提供（同 ghostty/fixed）。
+                (substitute* "src/compositors/compositor_platform.cpp"
+                  ((#$%noctalia-niri-logout-patch-pattern)
+                   #$%noctalia-niri-logout-patch-replacement))
+                ;; substitute* 无匹配时静默通过——patch 漂移必须
+                ;; fail loud。
+                (unless (zero? (system* "grep" "-q"
+                                        "guixcfg: niri Quit respawns"
+                                        "src/compositors/compositor_platform.cpp"))
+                  (error "noctalia niri logout patch did not apply (upstream drift)"
+                         "src/compositors/compositor_platform.cpp"))))))))))
 
 (define %noctalia-git
   (application
    (name 'noctalia-git)
-   (home-packages (list noctalia-git))                 ; 用户 profile 包（service 自动贡献的不要重复）
+   (home-packages (list noctalia-git/fixed))           ; 用户 profile 包（service 自动贡献的不要重复）
    (home-services
     (list (simple-service 'noctalia-palettes
                           home-xdg-configuration-files-service-type

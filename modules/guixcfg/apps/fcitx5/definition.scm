@@ -19,7 +19,8 @@
 ;;; （内容原地更新、无固定历史版本 URL），fixed-output 的 sha256
 ;;; 会随时失效，不适合作为频道包。本单元经 (guixcfg utils
 ;;; online-file) 把它声明为构建期在线数据（不检验 sha256、
-;;; cache-first——仓库不追踪上游更新），作为 declarative occupant
+;;; #:refresh #t——每次 reconfigure 重新下载、跟随上游更新，失败
+;;; 时回退本地缓存），作为 declarative occupant
 ;;; 落在 rime 用户目录（与仓库分发的配置文件同等级；Rime 资源解析
 ;;; user dir 优先于 shared dir，频道侧若仍带旧副本则被其覆盖）。
 ;;;
@@ -89,8 +90,9 @@
                #:export (%fcitx5))
 
 ;; 万象语法模型 LTS 地址：滚动资源（内容原地更新、无固定历史版本
-;; URL），不检验 sha256；cache-first 语义见 (guixcfg utils
-;; online-file) 头部。显式刷新 = 删除 cache 后重新 build。
+;; URL），不检验 sha256；#:refresh #t 每次 reconfigure 重新下载、
+;; 跟随上游更新，下载失败（无网络/请求错误）时回退本地缓存。
+;; 语义细节见 (guixcfg utils online-file) 头部。
 (define %wanxiang-gram-url
   "https://github.com/amzxyz/RIME-LMDG/releases/download/LTS/wanxiang-lts-zh-hans.gram")
 
@@ -125,11 +127,14 @@
                              ,(local-file "rime_ice.custom.yaml"
                                           "fcitx5-rime-ice-custom.yaml"))
                             ;; 万象语法模型本体（构建期在线数据；
-                            ;; 见文件头与 (guixcfg utils online-file)）。
+                            ;; #:refresh #t——每次 reconfigure 重新
+                            ;; 下载、失败回退缓存；见文件头与
+                            ;; (guixcfg utils online-file)）。
                             (".local/share/fcitx5/rime/wanxiang-lts-zh-hans.gram"
                              ,(online-file "wanxiang-lts-zh-hans.gram"
                                            %wanxiang-gram-url
-                                           #:sha256 #f))))
+                                           #:sha256 #f
+                                           #:refresh #t))))
           ;; 会话环境（home-environment-variables 共享 sink 的
           ;; native extension——polkit-gnome PATH 同款模式）。
           (simple-service 'fcitx5-env
