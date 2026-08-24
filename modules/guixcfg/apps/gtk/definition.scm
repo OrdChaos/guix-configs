@@ -13,22 +13,40 @@
 ;;;   - Noctalia 只生成 gtk-{3,4}/noctalia.css（runtime derived
 ;;;     artifact：palette + template → noctalia.css；不持久化；
 ;;;     删除后下次 template apply 自动重建）——它永不写 gtk.css；
-;;;   - settings.ini 是 Light fallback（声明默认 mode = light）；
-;;;     运行时 Light/Dark 不改写 settings.ini——GTK4/libadwaita 走
-;;;     portal color-scheme（见下），GTK3 经 GSettings gtk-theme
-;;;     （dconf 是 runtime derived state，不是 source of truth；
-;;;     每次登录由 apps/xsettingsd 的 session wrapper 按声明默认
-;;;     reconcile）。
+;;;   - settings.ini 是 Light fallback（声明默认 mode = light）——
+;;;     但注意 settings.ini 只是【部分通道】的 source（2026-08 pinned
+;;;     源码审计）：
+;;;       * GTK3 on Wayland 对 translated 键（gtk-theme-name、
+;;;         icon/cursor/font 等）完全不看 settings.ini——直读
+;;;         GSettings org.gnome.desktop.interface（gtk+-3.24.51
+;;;         gdk/wayland/gdkscreen-wayland.c translations[]）；
+;;;       * GTK4 on Wayland 在 portal 可用时经 portal Settings 读同
+;;;         一组键（gtk-4.22.1 gdk/gdk.c：portal 可用即用，
+;;;         非仅 sandbox）；portal gnome backend 读 dconf；
+;;;       * settings.ini 的实际消费者：GTK4 无 portal 时的 fallback、
+;;;         Qt 的 gtk3 platform theme（noctalia 经它读图标主题）；
+;;;       * X11/XWayland：XSETTINGS（apps/xsettingsd）。
+;;;     因此权威下发点 = appearance-sync 写 dconf（runtime derived
+;;;     state，不是 source of truth；每次登录由 apps/xsettingsd 的
+;;;     session wrapper 按声明默认 reconcile，Noctalia mode 切换时经
+;;;     post-hook 重写）；settings.ini 保留为无 portal/dconf 环境的
+;;;     fallback，运行时永不改写。
 ;;;
 ;;; appearance-sync（~/.local/bin，runtime mode 同步工具，不是
 ;;; 配置权威）：light|dark →
-;;;   1. GSettings org.gnome.desktop.interface color-scheme=
-;;;      prefer-<mode>、gtk-theme=<adw-gtk3|adw-gtk3-dark>
-;;;      （gsettings → dconf → xdg-desktop-portal-gnome 的
-;;;      Settings backend → org.freedesktop.appearance →
-;;;      GTK4/libadwaita；链路上每一环均已 pinned 核实：
-;;;      niri-portals.conf default=gnome;gtk、gnome.portal 含
-;;;      Settings、XDG_CURRENT_DESKTOP=niri 由 home-niri 设置）；
+;;;   1. GSettings org.gnome.desktop.interface 全量键：
+;;;      color-scheme=prefer-<mode>、gtk-theme=<adw-gtk3|
+;;;      adw-gtk3-dark>（随 mode），icon-theme、cursor-theme、
+;;;      cursor-size、font-name（静态，不随 mode）——dconf 是
+;;;      runtime derived state，每次登录从声明 reconcile；
+;;;   2. 原子重建 $XDG_RUNTIME_DIR/guixcfg/xsettingsd.conf
+;;;      （tmp+rename；XSETTINGS 键语法经 pinned xsettingsd 1.0.2
+;;;      config_parser 核实：字符串带引号、整数裸写）；
+;;;   3. 读 pidfile SIGHUP 当前会话的 xsettingsd（pinned 1.0.2
+;;;      settings_manager.cc：SIGHUP → select EINTR → reload；
+;;;      精确 PID，禁止 killall）。
+;;;   调用方：xsettingsd-session wrapper（登录 reconcile）与
+;;;   Noctalia template post-hook（mode 切换）。
 ;;;   2. 原子重建 $XDG_RUNTIME_DIR/guixcfg/xsettingsd.conf
 ;;;      （tmp+rename；XSETTINGS 键语法经 pinned xsettingsd 1.0.2
 ;;;      config_parser 核实：字符串带引号、整数裸写）；
@@ -120,7 +138,10 @@
         (cond ((string=? mode "light") #$%appearance-gtk-theme-light)
               ((string=? mode "dark") #$%appearance-gtk-theme-dark)
               (else (usage))))
-      ;; 1. GSettings（runtime derived state）。无 session bus /
+      ;; 1. GSettings org.gnome.desktop.interface 全量键（GTK3
+      ;;    on Wayland 直读 GSettings；GTK4 经 portal Settings 读同一
+      ;;    组——pinned 审计见文件头）。color-scheme/gtk-theme 随
+      ;;    mode，icon/cursor/font 不随 mode。无 session bus /
       ;;    schema 缺失时只警告不中断——xsettingsd 部分仍须完成。
       (for-each
        (lambda (pair)
@@ -136,7 +157,11 @@
                   (format (current-error-port)
                           "appearance-sync: cannot execute gsettings~%"))))
        (list (cons "color-scheme" (string-append "prefer-" mode))
-             (cons "gtk-theme" theme)))
+             (cons "gtk-theme" theme)
+             (cons "icon-theme" #$%appearance-icon-theme)
+             (cons "cursor-theme" #$%appearance-cursor-theme)
+             (cons "cursor-size" (number->string #$%appearance-cursor-size))
+             (cons "font-name" #$%appearance-ui-font)))
       ;; 2. 重建 runtime xsettingsd 配置（tmp+rename 原子替换）。
       (define runtime-dir (getenv "XDG_RUNTIME_DIR"))
       (when (or (not runtime-dir) (string=? runtime-dir ""))

@@ -117,24 +117,49 @@
 
 (cleanup!)
 ;; program-file 的 store 文件名带 hash 前缀——PATH 解析需要精确
-;; 命令名，建 bin 目录放同名 symlink。
+;; 命令名，建 bin 目录放同名 symlink。另放一个假 gsettings：把
+;; 调用参数追加记录到 $XDG_RUNTIME_DIR/guixcfg/gsettings.log，
+;; 用于断言 appearance-sync 写出的完整 GSettings 键集合。
 (define %test-bin (string-append %tmp-root "/bin"))
-(mkdir-p %test-bin)
-(symlink %sync-bin (string-append %test-bin "/appearance-sync"))
+(define (setup-test-bin!)
+  (mkdir-p %test-bin)
+  (symlink %sync-bin (string-append %test-bin "/appearance-sync"))
+  (call-with-output-file (string-append %test-bin "/gsettings")
+    (lambda (p)
+      (display "#!/bin/sh\n" p)
+      (display "mkdir -p \"$XDG_RUNTIME_DIR/guixcfg\"\n" p)
+      (display "echo \"$@\" >> \"$XDG_RUNTIME_DIR/guixcfg/gsettings.log\"\n" p)
+      (display "exit 0\n" p)))
+  (chmod (string-append %test-bin "/gsettings") #o755))
+(setup-test-bin!)
 
 (define (run-sync . args)
   "在隔离环境执行 appearance-sync：XDG_RUNTIME_DIR=tmp，PATH 只有
-测试 bin 目录（无 gsettings——走 warn-and-continue 降级路径）。"
+测试 bin 目录（含假 gsettings 记录器）。"
   (let ((rt (string-append %tmp-root "/runtime")))
     (mkdir-p rt)
     (setenv "XDG_RUNTIME_DIR" rt)
     (setenv "PATH" %test-bin)
     (apply system* %sync-bin args)))
 
+(define (gsettings-log)
+  (let ((f (string-append %tmp-root "/runtime/guixcfg/gsettings.log")))
+    (if (file-exists? f) (read-file f) "")))
+
+;; 降级路径：PATH 无 gsettings——warn-and-continue，exit 0。
+(define %empty-bin (string-append %tmp-root "/empty-bin"))
+(mkdir-p %empty-bin)
+(let ((rt (string-append %tmp-root "/runtime")))
+  (mkdir-p rt)
+  (setenv "XDG_RUNTIME_DIR" rt)
+  (setenv "PATH" %empty-bin)
+  (test-equal "sync: degraded path (no gsettings) exits 0"
+              0 (status:exit-val (system* %sync-bin "light"))))
+
 (test-equal "sync: no args exits 2" 2 (status:exit-val (run-sync)))
 (test-equal "sync: bad mode exits 2" 2 (status:exit-val (run-sync "blue")))
 
-(test-equal "sync: light exits 0 without gsettings" 0
+(test-equal "sync: light exits 0" 0
             (status:exit-val (run-sync "light")))
 (define %light-conf
   (read-file (string-append %tmp-root "/runtime/guixcfg/xsettingsd.conf")))
@@ -145,12 +170,27 @@
                   (string-contains %light-conf "Gtk/CursorThemeSize 24")
                   (string-contains %light-conf "Gtk/FontName \"Sans Serif 11\"")))
 
+;; GSettings 全量键（GTK3-on-Wayland 直读 GSettings；GTK4 经 portal
+;; 读同一组——这是图标/光标/字体/主题的实际下发通道）。
+(test-assert "sync: light writes full GSettings key set"
+             (let ((log (gsettings-log)))
+               (and (string-contains log "set org.gnome.desktop.interface color-scheme prefer-light")
+                    (string-contains log "set org.gnome.desktop.interface gtk-theme adw-gtk3")
+                    (string-contains log "set org.gnome.desktop.interface icon-theme Fluent-light")
+                    (string-contains log "set org.gnome.desktop.interface cursor-theme Fluent-dark-cursors")
+                    (string-contains log "set org.gnome.desktop.interface cursor-size 24")
+                    (string-contains log "set org.gnome.desktop.interface font-name Sans Serif 11"))))
+
 (test-equal "sync: dark exits 0" 0 (status:exit-val (run-sync "dark")))
 (test-assert "sync: dark flips Net/ThemeName"
              (string-contains
               (read-file (string-append %tmp-root
                                         "/runtime/guixcfg/xsettingsd.conf"))
               "Net/ThemeName \"adw-gtk3-dark\""))
+(test-assert "sync: dark writes dark GSettings keys"
+             (let ((log (gsettings-log)))
+               (and (string-contains log "color-scheme prefer-dark")
+                    (string-contains log "gtk-theme adw-gtk3-dark"))))
 
 ;; pidfile SIGHUP：fork 一个 sleep 子进程作为受控目标——SIGHUP 的
 ;; 默认动作是终止，子进程死亡即证明信号精确送达（非 killall）。
@@ -186,9 +226,8 @@
 (define %wrapper-bin (materialize %xsettingsd-session-wrapper))
 
 (cleanup!)
-;; cleanup 删掉了 %tmp-root（含 %test-bin symlink）——重建。
-(mkdir-p %test-bin)
-(symlink %sync-bin (string-append %test-bin "/appearance-sync"))
+;; cleanup 删掉了 %tmp-root（含 %test-bin 内容）——重建。
+(setup-test-bin!)
 (let ((rt (string-append %tmp-root "/runtime")))
   (mkdir-p rt)
   (setenv "XDG_RUNTIME_DIR" rt)
