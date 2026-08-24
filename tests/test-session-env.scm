@@ -4,7 +4,9 @@
 ;;; 覆盖（composition invariants——capability owner 回归 pinned
 ;;; Guix 官方 Home services）：
 ;;;   OFF1 Home 含官方 D-Bus service
-;;;   OFF2 Home 含官方 Niri service
+;;;   OFF2 Home 含 niri session service（官方 home-niri-service-type
+;;;        的薄 fork：respawn? #f + 注销 wrapper，apps/niri/
+;;;        definition.scm 决策记录）
 ;;;   OFF3 Home 含官方 PipeWire service
 ;;;   OFF4 无 private dbus-run-session owner（custom wrapper 已删）
 ;;;   OFF5 无 custom HOME setter
@@ -24,10 +26,11 @@
 (use-modules (guixcfg hosts vm)
              (guixcfg home user)
              (guixcfg apps model)       ; applications-home-packages（旧 (guixcfg home packages) 已删）
+             (guixcfg apps niri definition) ; home-niri-session-service-type
              (gnu home)
              (gnu home services)
              (gnu home services desktop) ; home-dbus-service-type
-             (gnu home services niri)    ; home-niri-service-type
+             (gnu home services shepherd) ; shepherd-service-respawn?
              (gnu home services sound)   ; home-pipewire-service-type
              (gnu services)
              (gnu services guix)         ; guix-home-service-type
@@ -48,15 +51,38 @@
 
 (test-begin "session-env")
 
-;; ── OFF1/2/3：官方 Home services 存在 ─────────────────────
+;; ── OFF1/2/3：Home services 存在 ───────────────────────────
 (test-assert "OFF1: Home contains official D-Bus service"
              (home-service? home-dbus-service-type))
 
-(test-assert "OFF2: Home contains official Niri service"
-             (home-service? home-niri-service-type))
+;; OFF2：自定义 home-niri-session（官方薄 fork）——niri 退出不再
+;; respawn（注销语义），wrapper 结束登录会话（apps/niri 决策记录）。
+(test-assert "OFF2: Home contains niri session service"
+             (home-service? home-niri-session-service-type))
 
 (test-assert "OFF3: Home contains official PipeWire service"
              (home-service? home-pipewire-service-type))
+
+;; ── OFF2b：niri service 的注销 lifecycle 固定 ──────────────
+(define %niri-shepherd-service
+  (find (lambda (svc) (eq? 'niri (shepherd-service-canonical-name svc)))
+        (home-shepherd-configuration-services
+         (service-value
+          (fold-services (home-environment-services %guix-home)
+                         #:target-type home-shepherd-service-type)))))
+
+(test-assert "OFF2b: niri service does not respawn (exit = logout)"
+             (not (shepherd-service-respawn? %niri-shepherd-service)))
+
+(test-assert "OFF2b: niri wrapper terminates the login session (source)"
+             ;; wrapper 用 $XDG_SESSION_ID（不硬编码 session id）；
+             ;; stop 先写 guard marker（herd stop/reconfigure 不注销）。
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/apps/niri/definition.scm"
+                       (lambda (p) (read-string p)))))
+               (and (string-contains s "terminate-session")
+                    (string-contains s "XDG_SESSION_ID")
+                    (string-contains s "niri-logout-guard"))))
 
 ;; ── OFF4/5/6：custom wrapper 已删除 ────────────────────────
 (test-assert "OFF4: no private dbus-run-session owner in desktop.scm"

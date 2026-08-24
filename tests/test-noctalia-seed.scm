@@ -5,17 +5,12 @@
 
 (use-modules (gnu services)          ; service-kind、service-value、service-type-name
              (guix records)
-             (guix store)            ; open-connection
-             (guix monads)           ; run-with-store
-             (guix gexp)             ; lower-object
-             (guix packages)         ; package-source
-             (noctalia)              ; noctalia-git（patch 守卫）
+             (noctalia)              ; noctalia-git
              (guixcfg apps model)
              (guixcfg apps registry)
              (guixcfg apps noctalia-git definition)
              (guixcfg system application-persistence)
              (ice-9 rdelim)      ; read-string
-             (ice-9 regex)       ; string-match
              (srfi srfi-1)       ; count、any
              (srfi srfi-64))
 
@@ -120,22 +115,5 @@
                   (string-contains %palette-text "\"light\"")))
 (test-assert "palette carries Material tokens (mPrimary etc.)"
              (string-contains %palette-text "\"mPrimary\""))
-
-;; ── 5. niri 注销 patch 漂移守卫（pinned 上游源码锚点）─────────
-;; patch 锚定 compositor_platform.cpp 的唯一一行 niri Quit 调用；
-;; 上游改写该行后 patch 会静默失效——这里固定锚点必须仍存在（且
-;; 同文件确有 requestLoginSessionExit 可调）。
-(define %store (open-connection))
-(define %noctalia-src
-  (run-with-store %store (lower-object (package-source noctalia-git))))
-(define %platform-text
-  (read-file (string-append
-              %noctalia-src "/src/compositors/compositor_platform.cpp")))
-
-(test-assert "niri logout patch anchor matches pinned upstream"
-             (string-match %noctalia-niri-logout-patch-pattern
-                           %platform-text))
-(test-assert "pinned upstream provides requestLoginSessionExit"
-             (string-contains %platform-text "requestLoginSessionExit"))
 
 (test-end "noctalia-seed")
