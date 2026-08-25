@@ -332,6 +332,28 @@
                          (service-type-name (service-kind svc))))
                   (operating-system-services %os)))
 
+;; ── D9：guix-daemon 本地构建 tmpdir 声明（common services；
+;;     2026-08-25：/tmp 7.7GB tmpfs 装不下内核编译 ~11GB 中间产物，
+;;     显式 TMPDIR=/var/tmp——pinned guix-configuration tmpdir 字段；
+;;     注意 guix-tmpdir accessor 未被上游导出（base.scm #:export
+;;     遗漏），经 module-ref 访问）──
+(define (os-guix-config)
+  "折叠 %os 的 guix-service-type 配置。"
+  (service-value
+   (fold-services (operating-system-services %os)
+                  #:target-type guix-service-type)))
+
+(define %guix-tmpdir
+  (module-ref (resolve-module '(gnu services base)) 'guix-tmpdir))
+
+(test-assert "D9: guix-daemon tmpdir is declared as /var/tmp"
+             (string=? "/var/tmp" (%guix-tmpdir (os-guix-config))))
+
+(test-assert "D9: guix-service-type explicitly declared in %common-services"
+             (any (lambda (svc)
+                    (eq? (service-kind svc) guix-service-type))
+                  %common-services))
+
 ;; ── NV1：NVIDIA adapter 默认 disabled/identity ─────────────
 (test-assert "NV1: NVIDIA adapter disabled by default"
              (not %nvidia-adapter-enabled?))

@@ -25,8 +25,8 @@ OFFICIAL；项目 invariant 需要 → THIN ADAPTER / KEEP（custom）。
 | TPM PCR7 unlock | guixcfg custom（KEEP） | — | `boot/tpm-unlock.scm` + initrd + tpm2-tools | PCR7-only policy；initrd 组合 |
 | UKI / Secure Boot / Limine | guixcfg custom（KEEP） | — | `boot/uki.scm`/`uki-bootloader.scm`/`limine-menu.scm` | A/B deployment、签名、Normal/Recovery 菜单 |
 | Custom initrd | guixcfg custom（KEEP） | raw-initrd 骨架（`gnu system linux-initrd`） | `boot/initrd.scm`（ephemeral-root-initrd + microcode composition） | LUKS/TPM/root-generation 选择需在 pre-mount 顺序中 |
-| Kernel platform | guixcfg adapter（KEEP） | Nonguix `linux`/`linux-firmware`/`microcode-initrd` | `system/kernel-platform.scm` | exact pinned kernel + firmware + Intel microcode |
-| Nonguix substitute trust | guixcfg adapter | official Nonguix substitute service | `system/substitutes.scm`（guix-extension） | 唯一 URL/key source + transition bootstrap |
+| Kernel platform | guixcfg adapter（KEEP） | Nonguix `linux-7.2`/`linux-firmware`/`microcode-initrd` | `system/kernel-platform.scm` | exact pinned kernel + firmware + Intel microcode |
+| Nonguix substitute trust | guixcfg removed（2026-08-25） | — | — | 第三方 substitute（substitutes.nonguix.org）已移除；nonguix 包本地编译（回归：tests/test-substitutes.scm T-S1..T-S6） |
 | atomic-file helper | guixcfg custom（KEEP） | Guix 官方 helper 无 parent-dir fsync | `utils/atomic-file.scm` | crash-durable 语义（fsync file + parent） |
 | Home pivot cleanup | guixcfg shim（NARROW） | 上游 symlink-manager 无 stale pivot 处理（pinned 实测） | `home/pivot.scm`（保守判定 + unlink） | removal condition：上游修复后删 |
 | NVIDIA proprietary | guixcfg adapter（disabled） | — | `system/graphics/nvidia.scm` | 未来 seam；kernel module/KMS/blacklist/PRIME/nvda/Secure Boot signing 边界 |

@@ -92,7 +92,12 @@
                                                           (inherit config)
                                                           (shepherd-requirement
                                                            (append (mingetty-configuration-shepherd-requirement config)
-                                                                   '(interactive-session-ready)))))))
+                                                                   '(interactive-session-ready)))))
+                                  ;; guix-daemon 实例由 %common-services 显式
+                                  ;; 声明（tmpdir=/var/tmp，本地构建空间政策，
+                                  ;; 2026-08-25）——移除 %base-services 的默认
+                                  ;; 实例，避免同类型双实例（fold 报错）。
+                                  (delete guix-service-type)))
           (no-tty1 (remove (lambda (svc)
                              (and (eq? (service-kind svc) mingetty-service-type)
                                   (string=? (mingetty-configuration-tty

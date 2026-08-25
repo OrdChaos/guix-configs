@@ -5,16 +5,20 @@
 
 ## 1. 构建安全（最高优先级）
 
-- **Linux kernel 本地编译 = 异常**：本项目 kernel 是 Nonguix standard
-  Linux（exact pinned derivation），官方 substitute 已证明存在。任何命令
-  （build / test / repl probe）意外触发 `linux-7.1.8` 本地编译
-  （cc1/make/vmlinux 进程树、sustained 高 CPU）→ **立即终止**：
-  1. 识别进程树（顶层 client → daemon connection worker → builder）
-  2. 终止 top-level client（我的进程）
-  3. worker 属 guix-daemon 用户（root），我无权限时请用户以 root
-     `systemctl restart guix-daemon`（受控重启清空构建队列）或精确 kill
-  4. 诊断（URL？key？daemon？derivation 被改？缓存缺 exact build？）
-  5. 修复后以安全方式重试
+- **Linux kernel 本地编译分两类**（2026-08-25 起，第三方 substitute
+  已移除——substitutes.nonguix.org 不再被配置引用，nonguix 包
+  kernel/firmware/microcode 一律本地编译）：
+  - **预期编译**（用户/任务明确授权，如 kernel 升级、安装流程）：允许，
+    用受控并行度（`--cores` 低值），完成后 store 缓存复用；
+  - **意外触发**（build / test / repl probe 在未授权路径触发
+    `linux-7.2` 本地编译：cc1/make/vmlinux 进程树、sustained 高 CPU）
+    → **立即终止**：
+    1. 识别进程树（顶层 client → daemon connection worker → builder）
+    2. 终止 top-level client（我的进程）
+    3. worker 属 guix-daemon 用户（root），我无权限时请用户以 root
+       `systemctl restart guix-daemon`（受控重启清空构建队列）或精确 kill
+    4. 诊断（URL？key？daemon？derivation 被改？缓存缺 exact build？）
+    5. 修复后以安全方式重试
 - 禁止 `pkill guix/make/cc1` 无差别杀；禁止杀 guix-daemon（除非证明无法
   恢复）；禁止 `guix gc` / 删 store / reboot 作为中止手段。
 - **网络问题一律重试/轮询**：Guix 下载器对 GitHub release-assets 有 10
@@ -23,17 +27,17 @@
 
 ## 2. Substitute / probe 方法
 
-- **substitute availability 判断必须用 `guix build --dry-run`**（显式
-  `--substitute-urls` 含 nonguix），**不要用 raw repl 的
-  `(package-derivation ...)`**——graft 默认开启时它会因
-  `non-self-references` 查询 output 而**真实触发 build**（已实测）。
+- **substitute availability 判断必须用 `guix build --dry-run`**，
+  **不要用 raw repl 的 `(package-derivation ...)`**——graft 默认开启时
+  它会因 `non-self-references` 查询 output 而**真实触发 build**（已实测）。
 - `guix build --dry-run` 安全是因为 CLI 注册了 build-handler（请求被
   累积不执行）。
+- **第三方 substitute 已移除（2026-08-25）**：nonguix 包无 substitute，
+  dry-run 对它们总是 `would be built`——输出 store 路径 = 已在本地
+  store（缓存），否则需要本地编译（预期，见 §1）；官方 guix 包仍走
+  bordeaux/ci 默认 substitute。
 - 大包（kernel、toolchain、浏览器类）dry-run 意外显示 `will be built`
   时先停止诊断，不默认编完。
-- 首次 transition / fresh install：先 `guix archive --authorize
-  < nonguix-key.pub` + 显式 `--substitute-urls`（见 installation.md
-  阶段 4.5/5）。
 
 ## 3. Generated Guile runtime 规则（boot/login 关键路径）
 

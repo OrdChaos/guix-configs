@@ -84,9 +84,13 @@ works"——Level 3 才证明后者。
 ```bash
 guix time-machine -C channels.lock.scm -- build --dry-run \
   -L "$PWD/modules" \
-  --substitute-urls='https://ci.guix.gnu.org https://bordeaux.guix.gnu.org https://substitutes.nonguix.org' \
   -e '(@ (guixcfg system kernel-platform) %kernel)'
 ```
+
+注意：第三方 substitute（substitutes.nonguix.org）已移除
+（2026-08-25）——nonguix 包（kernel/firmware/microcode）没有
+substitute，dry-run 对它们总是显示 `would be built`；输出 store
+路径 = 产物已在本地 store（缓存），否则需要本地编译。
 
 **为什么 raw `(package-derivation %store PKG)` 不安全**（pinned
 Guix 94a84f9 实测，graft A/B probe）：graft 默认开启（`%graft?`）时，

@@ -3,10 +3,10 @@
 
 (define-module (guixcfg system common)
                #:use-module (gnu services)         ; service
+               #:use-module (gnu services base)    ; guix-service-type、guix-configuration
                #:use-module (gnu services desktop) ; elogind-service-type、elogind-configuration、polkit-wheel-service
                #:use-module (gnu services dbus)    ; polkit-service-type（polkitd 的 authority）
                #:use-module (virelith packages elogind) ; elogind-compat（257.16）
-               #:use-module (guixcfg system substitutes) ; nonguix-substitute-service
                #:export (%common-timezone
                          %common-locale
                          %common-services))
@@ -52,9 +52,19 @@
 ;; allow）。graphical authentication agent（polkit-gnome）属于用户会话
 ;; （apps/polkit-gnome，niri spawn-at-startup + ~/.local/bin wrapper）
 ;; ——不在这里。
+;;
+;; 第三方 substitute（substitutes.nonguix.org）已移除（2026-08-25）：
+;; guix-daemon 只信任官方 Guix substitute（bordeaux/ci，guix-service-
+;; type 默认），nonguix 包（linux-7.2/firmware/microcode）一律本地编译。
+;; 本地编译空间：显式声明 guix-daemon TMPDIR=/var/tmp（pinned
+;; guix-configuration 的 tmpdir 字段 → shepherd 服务环境 TMPDIR=；
+;; 默认 /tmp 是 7.7GB tmpfs，装不下内核编译的 ~11GB 中间产物——
+;; 2026-08-25 实测 -j8/-j2 均 ENOSPC）。主机（Arch systemd daemon）
+;; 由 /etc/systemd/system/guix-daemon.service 的 Environment 单独配置。
 (define %common-services
-  (list (service elogind-service-type (elogind-configuration
+  (list (service guix-service-type
+                 (guix-configuration (tmpdir "/var/tmp")))
+        (service elogind-service-type (elogind-configuration
                                        (elogind elogind-compat)))
         (service polkit-service-type)
-        polkit-wheel-service
-        nonguix-substitute-service))
+        polkit-wheel-service))

@@ -62,40 +62,31 @@ guix time-machine -C channels.lock.scm -- \
 （`-L "$PWD/modules"` 必需：工具自身不带 load path，缺了报
 `no code for module (guixcfg storage model)`——2026-08 实测。）
 
-## 阶段 4.5：Nonguix substitute bootstrap（首次 transition 必需）
+## 阶段 4.5：Nonguix 包本地构建预检（首次 transition 必需）
 
-本项目的 runtime kernel 是 Nonguix standard Linux
-（docs/architecture/overview.md（Nonguix integration））。**当前
-LiveCD/旧 daemon 只知道官方 Guix substitute**（bordeaux/ci）——
-不 bootstrap 的话 `system init` 会在本地全量编译 kernel（数十分钟、
-tmpfs 可能不够）。目标 installed 系统的 guix-daemon 配置（
-`guix-service-type` 的 additive extension，
-modules/guixcfg/system/substitutes.scm）**不会 retroactively 改变
-当前已运行的 daemon**，因此首次 transition 必须显式 bootstrap：
+本项目的 runtime kernel 是 Nonguix standard Linux 7.2
+（docs/architecture/overview.md（Nonguix integration））。**第三方
+substitute（substitutes.nonguix.org）已移除（2026-08-25 决策）**——
+nonguix 包（kernel/firmware/microcode）一律本地编译：`system init`
+会本地全量编译 kernel（数十分钟；编译产物进 store，之后复用）。
 
-```bash
-# 1. 授权官方 Nonguix signing public key（当前 daemon 的 ACL；
-#    key 是公开信任材料，canonical 副本在仓库：
-#    modules/guixcfg/system/nonguix-key.pub）
-guix archive --authorize < modules/guixcfg/system/nonguix-key.pub
-
-# 2. system init 时显式提供 substitute URLs（pinned Nonguix README
-#    的官方 bootstrap 方法；之后 installed daemon 已声明式配置，
-#    不再需要）
-GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
-  guix time-machine -C channels.lock.scm -- system init \
-  --substitute-urls='https://ci.guix.gnu.org https://bordeaux.guix.gnu.org https://substitutes.nonguix.org' \
-  -L "$PWD/modules" modules/guixcfg/hosts/vm.scm /mnt
-```
+**构建临时目录**：仓库系统的 guix-daemon 已显式声明
+`TMPDIR=/var/tmp`（%common-services 的 guix-configuration tmpdir
+字段；默认 /tmp 是 7.7GB tmpfs，装不下内核编译 ~11GB 中间产物——
+2026-08-25 实测）。**主机**（Arch systemd daemon）需单独配置：
+`/etc/systemd/system/guix-daemon.service` 的 Environment 行加
+`TMPDIR=/var/tmp` 后 `systemctl daemon-reload && systemctl
+restart guix-daemon`。
 
 **昂贵构建预检**（development/testing.md）：`system init` 前先对
-exact kernel 做 substitute-aware dry-run——kernel 必须显示为
-download，而不是 will be built：
+exact kernel 做 dry-run，确认产物已在 store（或接受本地编译时长）：
 
 ```bash
 guix time-machine -C channels.lock.scm -- build --dry-run \
   -L "$PWD/modules" -e '(@ (guixcfg system kernel-platform) %kernel)'
 ```
+
+输出为 store 路径 = 已缓存；输出 `would be built` = 需要本地编译。
 
 ## 阶段 5：安装 stable S 到 persist
 
@@ -118,7 +109,6 @@ install -m 600 /run/guixcfg-age/stable-identity \
 ```bash
 GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
   guix time-machine -C channels.lock.scm -- system init \
-  --substitute-urls='https://ci.guix.gnu.org https://bordeaux.guix.gnu.org https://substitutes.nonguix.org' \
   -L "$PWD/modules" modules/guixcfg/hosts/vm.scm /mnt
 ```
 

@@ -11,7 +11,6 @@
 
 (use-modules (gnu system)
              (guix store)
-             (guixcfg system substitutes) ; %transition-substitute-urls
              (guix monads)
              (guix derivations)
              (guix gexp)
@@ -25,13 +24,6 @@
 (test-runner-current (test-runner-simple))
 
 (define %store (open-connection))
-
-;; 显式 bootstrap substitute URLs（宿主 daemon 尚未配置 Nonguix
-;; substitute；经 per-connection set-build-options 传入，让测试的
-;; build 请求命中官方 Nonguix substitute 而不是本地编译 kernel——
-;; 与 CLI 的 --substitute-urls 等价；%transition-substitute-urls 的
-;; 唯一定义在 (guixcfg system substitutes)）。
-(set-build-options %store #:substitute-urls %transition-substitute-urls)
 
 ;; 本轮测试明文标记（secret 内容本身，不出现在任何 store 产物中）
 (define %sentinel-system "GUIXCFG_SECRET_SENTINEL_SYSTEM_9f4e2b1a")
