@@ -2,22 +2,12 @@
        (name 'guix)
        (url "https://codeberg.org/guix/guix.git")
        (branch "master")
-       (commit "086bc58fa1e561e1c0ac162c5bed28afc417f123")
+       (commit "493c225aecb9fb4b98c64b9fa952502174be840a")
        (introduction
         (make-channel-introduction
          "9edb3f66fd807b096b48283debdcddccfea34bad"
          (openpgp-fingerprint
           "BBB0 2DDF 2CEA F6A8 0D1D  E643 A2A0 6DF2 A33A 54FA"))))
-      (channel
-       (name 'nonguix)
-       (url "https://gitlab.com/nonguix/nonguix")
-       (branch "master")
-       (commit "caa8c0b4646b993537be13c9bc819b3df68ab9b2")
-       (introduction
-        (make-channel-introduction
-         "897c1a470da759236cc11798f4e0a5f7d4d59fbc"
-         (openpgp-fingerprint
-          "2A39 3FFF 68F4 EF7A 3D29  12AF 6F51 20A0 22FB B2D5"))))
       (channel
        (name 'rosenthal)
        (url "https://codeberg.org/hako/rosenthal.git")
@@ -32,7 +22,7 @@
        (name 'virelith)
        (url "https://github.com/ordchaos/virelith.git")
        (branch "master")
-       (commit "e7fc78fb95a6213c8a27a833e95c3d524a797dce")
+       (commit "d233d134153b4af1e9fd92e2ff00ca38449a8969")
        (introduction
         (make-channel-introduction
          "cae11b77a64f281cc9ab45e20567e59efc37e96b"
@@ -42,7 +32,7 @@
        (name 'saayix)
        (url "https://codeberg.org/look/saayix")
        (branch "main")
-       (commit "81b9366a784eb9c91956078244b98543eabd5521")
+       (commit "663966eb6d9c491174dfd67d2eadf1fca3f1577b")
        (introduction
         (make-channel-introduction
          "12540f593092e9a177eb8a974a57bb4892327752"
@@ -52,4 +42,14 @@
        (name 'noctalia)
        (url "https://github.com/noctalia-dev/noctalia")
        (branch "main")
-       (commit "a4324409f4f07001d33fbf902be49377ee6b62e2")))
+       (commit "e6846db9ab4e6e4c107c4c5072cde9223d6a58c5"))
+      (channel
+       (name 'nonguix)
+       (url "https://gitlab.com/nonguix/nonguix")
+       (branch "master")
+       (commit "caa8c0b4646b993537be13c9bc819b3df68ab9b2")
+       (introduction
+        (make-channel-introduction
+         "897c1a470da759236cc11798f4e0a5f7d4d59fbc"
+         (openpgp-fingerprint
+          "2A39 3FFF 68F4 EF7A 3D29  12AF 6F51 20A0 22FB B2D5")))))
