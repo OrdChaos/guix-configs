@@ -1,5 +1,10 @@
 ;;; Kernel platform 的唯一 authoritative 定义（M1：Linux-libre →
-;;; Nonguix standard Linux，docs/architecture/boot.md（Kernel platform））。
+;;; Nonguix standard Linux，docs/architecture/boot.md（Kernel platform）；
+;;; 2026-08-25：%kernel 升到 nonguix linux-7.2——第三方 substitute
+;;; （substitutes.nonguix.org）已从配置移除（system/substitutes.scm
+;;; 删除），nonguix 包一律本地编译；7.2 的 derivation 与 guix 官方
+;;; `linux' 相同（同一 linux-libre-7.2 corrupt 产物），本地编译一次
+;;; 后 store 缓存）。
 ;;;
 ;;; one fact, one authoritative definition：
 ;;;   - %kernel：系统 runtime kernel（VM/laptop 都消费它；host 不得各自
@@ -14,7 +19,7 @@
 ;;;     绝不替换——docs/architecture/boot.md（Microcode））。
 ;;;
 ;;; API 以 channels.lock.scm 锁定的 Nonguix revision（653504e）为准：
-;;;   - (nongnu packages linux)：linux（= linux-7.1）、linux-firmware、
+;;;   - (nongnu packages linux)：linux-7.2（= %kernel）、linux-firmware、
 ;;;     intel-microcode；
 ;;;   - (nongnu system linux-initrd)：microcode-initrd——接受 #:initrd
 ;;;     参数（我们的 initrd builder），#:allow-other-keys 把框架的
@@ -22,7 +27,7 @@
 ;;;     custom initrd。
 
 (define-module (guixcfg system kernel-platform)
-               #:use-module (nongnu packages linux)        ; linux、linux-firmware、intel-microcode
+               #:use-module (nongnu packages linux)        ; linux-7.2、linux-firmware、intel-microcode
                #:use-module (nongnu system linux-initrd)   ; microcode-initrd
                #:use-module (guixcfg boot initrd)          ; ephemeral-root-initrd
                #:export (%kernel
@@ -30,10 +35,10 @@
                          %kernel-microcode-packages
                          microcode-ephemeral-initrd))
 
-;; 系统 runtime kernel：Nonguix standard Linux（pinned revision 的
-;; `linux' = linux-7.1，corrupt-linux 包装——含非自由 blob 的
+;; 系统 runtime kernel：Nonguix standard Linux 7.2（pinned revision
+;; 的 `linux-7.2' = corrupt-linux linux-libre-7.2——含非自由 blob 的
 ;; unmodified upstream kernel）。这是唯一权威 kernel 定义。
-(define %kernel linux)
+(define %kernel linux-7.2)
 
 ;; 完整 linux-firmware（generic firmware ecosystem；NVIDIA proprietary
 ;; driver 属于后续 graphics phase，不在此处）。

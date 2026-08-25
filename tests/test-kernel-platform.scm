@@ -30,7 +30,7 @@
              (guix packages)              ; package-name
              (guix gexp)                  ; file-append-base/suffix、program-file?
              (gnu system)                 ; operating-system-*
-             (nongnu packages linux)      ; linux、intel-microcode（nonguix）
+             (nongnu packages linux)      ; linux-7.2、intel-microcode（nonguix）
              (nongnu system linux-initrd) ; microcode-initrd
              (ice-9 rdelim)
              (srfi srfi-1)
@@ -80,8 +80,8 @@
 (test-begin "kernel-platform")
 
 ;; ── K1：authoritative kernel selection ──────────────────────
-(test-assert "K1: %kernel is the Nonguix standard linux package"
-             (and (eq? %kernel linux)
+(test-assert "K1: %kernel is the Nonguix standard linux 7.2 package"
+             (and (eq? %kernel linux-7.2)
                   (string=? (package-name %kernel) "linux")
                   (not (string-contains (package-name %kernel) "libre"))))
 
