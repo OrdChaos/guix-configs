@@ -11,7 +11,8 @@
 ;;; 立即 respawn，注销退化为"重启合成器"。本模块 fork 官方 service
 ;;; 只改 lifecycle：
 ;;;   - respawn? #f：niri 退出 = 桌面会话结束，不重启；
-;;;   - start：bash -l -c wrapper——niri 正常退出（含 crash）后
+;;;   - start：Guile 原生 wrapper（program-file，AGENT.md §3）——
+;;;     fork+exec niri --session，niri 正常退出（含 crash）后
 ;;;     `loginctl terminate-session $XDG_SESSION_ID` 结束当前登录
 ;;;     会话，greetd 观察到会话结束 → 回 greeter；
 ;;;   - stop：先写 guard marker 再杀进程组（make-kill-destructor
@@ -50,49 +51,75 @@
                #:use-module (gnu home services)      ; home-shepherd-service-type
                #:use-module (gnu home services desktop) ; home-dbus-service-type
                #:use-module (gnu home services shepherd) ; shepherd-service
-               #:use-module (gnu packages bash)      ; bash（wrapper 命令）
                #:use-module (gnu packages freedesktop) ; xdg-desktop-portal*
                #:use-module (gnu packages glib)      ; dbus
                #:use-module (gnu packages gnome)     ; xdg-desktop-portal-gnome
                #:use-module (gnu packages window-management) ; niri
                #:use-module (gnu packages xorg)      ; xwayland-satellite
                #:use-module (gnu services)           ; service、service-type
-               #:use-module (guix gexp)              ; local-file、gexp
+               #:use-module (guix gexp)              ; local-file、gexp、program-file
                #:use-module (guix records)
                #:use-module (guixcfg apps model)
                #:export (%niri
+                         %niri-session-wrapper ; 测试（test-runtime-exec NI1 真实执行）
                          home-niri-session-service-type))
 
 ;; guard marker 路径：$XDG_RUNTIME_DIR 下（Home Shepherd 必有；fallback
-;; 与 wrapper 的 bash 侧一致用 /tmp，仅防御）。运行期求值（shepherd
-;; 进程内 getenv）——不能构建期拼接。
+;; 用 /tmp，仅防御）。运行期求值（shepherd 进程内 getenv）——不能
+;; 构建期拼接。
 (define %niri-logout-guard
   #~(string-append (or (getenv "XDG_RUNTIME_DIR") "/tmp")
                    "/niri-logout-guard"))
 
-;; bash -l -c 脚本：niri --session 退出后（任何原因）结束当前登录
-;; 会话。guard marker 区分 shepherd 主动 stop（herd stop / home
-;; reconfigure 的 restart / shutdown）与 niri 自退：stop 路径先写
-;; marker 再杀进程组（见 stop），wrapper 看到 marker 只退出不注销。
-;; start 时先清理残留 marker（上次 stop 竞态遗留）。terminate-session
-;; 失败（session 已被清理等）只记日志、不阻塞退出——benign。
-(define %niri-session-wrapper-command
-  "guard=\"${XDG_RUNTIME_DIR:-/tmp}/niri-logout-guard\"
-rm -f \"$guard\"
-niri --session
-status=$?
-if [ -e \"$guard\" ]; then
-    # shepherd 主动 stop：只退出，不结束登录会话
-    rm -f \"$guard\"
-    exit \"$status\"
-fi
-if [ -n \"${XDG_SESSION_ID:-}\" ]; then
-    loginctl terminate-session \"$XDG_SESSION_ID\" \\
-        || echo \"niri session: loginctl terminate-session failed (status $?)\" >&2
-else
-    echo \"niri session: XDG_SESSION_ID unset, cannot terminate session\" >&2
-fi
-exit \"$status\"")
+;; niri 会话 wrapper（Guile 原生，非 bash 字符串——AGENT.md §3）：
+;; fork+exec niri --session（绝对路径，不依赖 PATH），niri 退出后
+;; （任何原因）结束当前登录会话。guard marker 区分 shepherd 主动
+;; stop（herd stop / home reconfigure 的 restart / shutdown）与 niri
+;; 自退：stop 路径先写 marker 再杀进程组（见 service stop），wrapper
+;; 看到 marker 只退出不注销。start 时先清理残留 marker（上次 stop
+;; 竞态遗留）。terminate-session 失败（session 已被清理等）只记
+;; 日志、不阻塞退出——benign。退出码保留 niri 的（信号退出按
+;; bash $? 语义 128+signal）。
+(define %niri-session-wrapper
+  (program-file
+   "niri-session"
+   #~(begin
+       ;; 全部 binding 均为 Guile core（status:exit-val/term-sig 是
+       ;; libguile 内建导出，无需 (ice-9 posix)——program-file 的
+       ;; load path 不含 guile 模块树，非 core import 会失败）。
+       (define guard #$%niri-logout-guard)
+       ;; 清理上次 stop 竞态遗留的 guard marker。
+       (when (file-exists? guard)
+         (delete-file guard))
+       (let ((pid (primitive-fork)))
+         (if (zero? pid)
+             ;; child：exec niri（file-append 绝对路径）。
+             (execl #$(file-append niri "/bin/niri") "niri" "--session")
+             (let* ((status (cdr (waitpid pid)))
+                    (code (if (status:term-sig status)
+                              (+ 128 (status:term-sig status))
+                              (status:exit-val status))))
+               (if (file-exists? guard)
+                   ;; shepherd 主动 stop：只退出，不结束登录会话。
+                   (delete-file guard)
+                   (let ((session-id (getenv "XDG_SESSION_ID")))
+                     (if session-id
+                         (catch 'system-error
+                           (lambda ()
+                             (let ((r (system* "loginctl"
+                                               "terminate-session"
+                                               session-id)))
+                               (unless (zero? r)
+                                 (format (current-error-port)
+                                         "niri session: loginctl terminate-session failed (status ~a)~%"
+                                         r))))
+                           (lambda args
+                             (format (current-error-port)
+                                     "niri session: loginctl terminate-session failed: ~a~%"
+                                     (caddr args))))
+                         (format (current-error-port)
+                                 "niri session: XDG_SESSION_ID unset, cannot terminate session~%"))))
+               (exit code)))))))
 
 (define (home-niri-session-shepherd-service config)
   "Return a shepherd service that runs Niri; on Niri exit the login
@@ -107,8 +134,7 @@ logout lifecycle: respawn? #f + wrapper that runs
          (requirement '(dbus))
          (respawn? #f)
          (start #~(make-forkexec-constructor
-                   (list #$(file-append bash "/bin/bash") "-l"
-                         "-c" #$%niri-session-wrapper-command)
+                   (list #$%niri-session-wrapper)
                    #:environment-variables
                    (append (list "DESKTOP_SESSION=niri"
                                  "XDG_CURRENT_DESKTOP=niri"

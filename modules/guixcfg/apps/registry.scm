@@ -39,6 +39,12 @@
                #:use-module (guixcfg apps fcitx5 definition)
                #:use-module (guixcfg apps gtk definition)
                #:use-module (guixcfg apps xsettingsd definition)
+               #:use-module (guixcfg apps amberol definition)
+               #:use-module (guixcfg apps decibels definition)
+               #:use-module (guixcfg apps celluloid definition)
+               #:use-module (guixcfg apps loupe definition)
+               #:use-module (guixcfg apps gnome-text-editor definition)
+               #:use-module (guixcfg apps gnome-characters definition)
                #:export (%applications))
 
 (define %applications
@@ -72,7 +78,16 @@
         %ssh
         %fcitx5
         %gtk
-        %xsettingsd))
+        %xsettingsd
+        ;; GNOME 轻量应用（GTK4/libadwaita；闭包审计无完整 GNOME
+        ;; 桌面组件——apps/gnome-characters 的 gnome-desktop 是
+        ;; 库依赖，见其 definition 头注释）。
+        %amberol
+        %decibels
+        %celluloid
+        %loupe
+        %gnome-text-editor
+        %gnome-characters))
 
 ;; 完整性检查：启用集合的名字必须唯一（fail fast，加载即报错）。
 (define %application-names (map application-name %applications))

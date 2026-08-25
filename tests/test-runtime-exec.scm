@@ -46,6 +46,7 @@
              (guixcfg system accounts)    ; account-databases-activation/verify
              (guixcfg system application-persistence) ; AP1 activation ownership
              (guixcfg services ephemeral-root) ; EP: ephemeral-root-confirm-program
+             (guixcfg apps niri definition)  ; NI1: %niri-session-wrapper
              (guixcfg storage root-generation) ; EP: root-state、state->alist、read-state
              (gnu system accounts)     ; user-account、user-group
              (guixcfg system readiness)
@@ -819,5 +820,52 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
                  (file-exists?
                   (string-append root "/var/guix/gcroots/guixcfg/last-good-system")))
     (false-if-exception (delete-file-recursively root))))
+
+;; ── NI1：niri session wrapper（apps/niri，Guile 原生）真实执行 ──
+;; boot/login 关键路径 generated program（AGENT.md §3）：真实构建并
+;; 在隔离 root 里执行 %niri-session-wrapper——
+;;   - 可执行性（无 unbound-variable）；
+;;   - 主路径行为：本环境无 seat/display，niri 快速失败退出，wrapper
+;;     继续 → 无 guard → XDG_SESSION_ID unset → 记日志 → 以 niri
+;;     的退出码退出（保留 status，不吞错误）。
+;; guard 分支（shepherd 主动 stop 竞态）由 OFF2b 源断言 + VM 验收覆盖。
+(define %niri-wrapper-program
+  (build-thing %niri-session-wrapper))
+
+(define (run-niri-wrapper fake-root)
+  "在隔离 root 里执行 niri wrapper（清 XDG_*/HOME 环境保证确定性），
+返回 (exit-code . output)。"
+  (let ((script
+         (string-append
+          "timeout 60 unshare --user --map-root-user --map-users=auto "
+          "--map-groups=auto --mount --pid --fork sh -c '"
+          ;; env 必须包住整条链（只作用于 mount 会让宿主环境泄漏）；
+          ;; 内层用双引号，且 $? 必须转义（\\$?）——双引号内的字面
+          ;; $? 会在解析时被提前展开为 0（shell 语义，实测）。
+          "env -u XDG_SESSION_ID -u XDG_RUNTIME_DIR -u HOME sh -c \""
+          "mount --bind /gnu/store " fake-root "/gnu/store; "
+          "chroot " fake-root " " %guile
+          " --no-auto-compile " %niri-wrapper-program
+          " 2>&1; echo EXIT:\\$?\"'")))
+    (let* ((pipe (open-input-pipe script))
+           (out (get-string-all pipe)))
+      (close-pipe pipe)
+      (let ((m (string-match "EXIT:([0-9]+)" out)))
+        (cons (and m (string->number (match:substring m 1)))
+              out)))))
+
+(let* ((root (string-append (or (getenv "TMPDIR") "/tmp")
+                            "/guixcfg-niri-" (number->string (getpid))))
+       (res (begin (mkdir-p (string-append root "/gnu/store"))
+                   (run-niri-wrapper root)))
+       (code (car res))
+       (out (cdr res)))
+  (test-assert "NI1: wrapper runs without unbound-variable"
+               (not (string-contains out "Unbound variable")))
+  (test-assert "NI1: niri fails without seat/display (wrapper keeps non-zero exit)"
+               (and code (not (zero? code))))
+  (test-assert "NI1: wrapper logs XDG_SESSION_ID unset (no blind termination)"
+               (string-contains out "XDG_SESSION_ID unset"))
+  (false-if-exception (delete-file-recursively root)))
 
 (test-end "runtime-exec")
