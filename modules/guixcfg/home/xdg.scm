@@ -17,7 +17,7 @@
                #:use-module (gnu home services xdg)  ; home-xdg-mime-applications-*、home-xdg-user-directories-service-type
                #:use-module (gnu services)           ; simple-service、service
                #:use-module (guixcfg apps google-chrome-stable definition)
-               #:use-module (guixcfg apps decibels definition)
+               #:use-module (guixcfg apps amberol definition)
                #:use-module (guixcfg apps celluloid definition)
                #:use-module (guixcfg apps loupe definition)
                #:use-module (guixcfg apps gnome-text-editor definition)
@@ -72,10 +72,8 @@
     "x-scheme-handler/rtmp" "x-scheme-handler/rtp"
     "x-scheme-handler/rtsp"))
 
-;; 音频 → Decibels（音频文件播放器；包声明的 audio/* 集 + canonical
-;; 补集 audio/flac|ogg|opus|aac|mp4|x-matroska——gstreamer 后端
-;; 全部可播）。Amberol 是音乐库播放器，不抢占文件关联（仍出现在
-;; Open With）。
+;; 音频 → Amberol（包声明的 audio/* 集 + canonical 补集
+;; audio/flac|ogg|opus|aac|mp4|x-matroska——gstreamer 后端全部可播）。
 (define %audio-default-mime-types
   '("audio/mpeg" "audio/wav" "audio/x-wav" "audio/x-aac"
     "audio/aac" "audio/x-aiff" "audio/x-ape" "audio/x-flac"
@@ -98,7 +96,7 @@
 (define %xdg-default-applications
   (append (mime-defaults %image-default-mime-types %loupe-desktop-entry)
           (mime-defaults %video-default-mime-types %celluloid-desktop-entry)
-          (mime-defaults %audio-default-mime-types %decibels-desktop-entry)
+          (mime-defaults %audio-default-mime-types %amberol-desktop-entry)
           (mime-defaults %text-default-mime-types
                          %gnome-text-editor-desktop-entry)
           (map (lambda (mime)

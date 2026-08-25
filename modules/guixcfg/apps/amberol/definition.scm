@@ -8,10 +8,9 @@
 ;;; 实测：io.bassi.Amberol.desktop，Exec=amberol %U）。
 ;;;
 ;;; 角色边界（docs/architecture/applications.md）：
-;;;   - 音乐库播放器（library/queue 模型），不是文件关联的默认
-;;;     音频播放器——默认音频文件策略归 decibels
-;;;     （guixcfg home xdg 单一默认；本模块只导出 desktop entry
-;;;     纯数据常量供策略层消费，不自行决定默认应用）；
+;;;   - 音乐播放器，同时是默认音频文件关联（guixcfg home xdg
+;;;     单一默认；本模块只导出 desktop entry 纯数据常量供策略层
+;;;     消费，不自行决定默认应用）；
 ;;;   - 无 persistence rule：播放状态/库是用户数据层关注，
 ;;;     amberol 无跨会话必须保留的 mutable state（无草稿类数据）。
 ;;;
