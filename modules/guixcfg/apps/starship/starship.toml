@@ -1,10 +1,10 @@
-palette = fluent-blue
+palette = fluent
 
 [character]
 success_symbol = '[➜](bold green)'
 error_symbol = '[➜](bold red)'
 
-[palettes.fluent-blue]
+[palettes.fluent]
 # Standard colors
 blue      = "#356f9c"
 red       = "#b64c57"
