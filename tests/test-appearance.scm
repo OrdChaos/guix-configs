@@ -75,11 +75,11 @@
   "从 APP 的 home-files/xdg-config 贡献中取 TARGET 的 file-like。"
   (let loop ((svcs (application-home-services app)))
     (if (null? svcs)
-        #f
-        (let ((entry (assoc target (service-value (car svcs)))))
-          (if entry
-              (cadr entry)
-              (loop (cdr svcs)))))))
+      #f
+      (let ((entry (assoc target (service-value (car svcs)))))
+        (if entry
+          (cadr entry)
+          (loop (cdr svcs)))))))
 
 (define %gtk3-ini (lower-text (home-files-entry %gtk "gtk-3.0/settings.ini")))
 (define %gtk4-ini (lower-text (home-files-entry %gtk "gtk-4.0/settings.ini")))
@@ -102,7 +102,7 @@
                          (or (string-contains %gtk3-ini bad)
                              (string-contains %gtk4-ini bad)))
                        '("gtk-xft-" "gtk-im-module"
-                         "gtk-application-prefer-dark-theme"))))
+                                    "gtk-application-prefer-dark-theme"))))
 
 (test-equal "gtk.css is exactly the noctalia.css import"
             "@import url(\"noctalia.css\");\n"
@@ -125,11 +125,11 @@
   (mkdir-p %test-bin)
   (symlink %sync-bin (string-append %test-bin "/appearance-sync"))
   (call-with-output-file (string-append %test-bin "/gsettings")
-    (lambda (p)
-      (display "#!/bin/sh\n" p)
-      (display "mkdir -p \"$XDG_RUNTIME_DIR/guixcfg\"\n" p)
-      (display "echo \"$@\" >> \"$XDG_RUNTIME_DIR/guixcfg/gsettings.log\"\n" p)
-      (display "exit 0\n" p)))
+                         (lambda (p)
+                           (display "#!/bin/sh\n" p)
+                           (display "mkdir -p \"$XDG_RUNTIME_DIR/guixcfg\"\n" p)
+                           (display "echo \"$@\" >> \"$XDG_RUNTIME_DIR/guixcfg/gsettings.log\"\n" p)
+                           (display "exit 0\n" p)))
   (chmod (string-append %test-bin "/gsettings") #o755))
 (setup-test-bin!)
 
@@ -200,17 +200,17 @@
   (sleep 300)
   (primitive-exit 0))
 (call-with-output-file (string-append %tmp-root "/runtime/guixcfg/xsettingsd.pid")
-  (lambda (port) (display %child-pid port)))
+                       (lambda (port) (display %child-pid port)))
 (run-sync "light")
 (define %child-reaped
   (let loop ((tries 50))
     (let ((w (waitpid %child-pid WNOHANG)))
       (cond ((= (car w) %child-pid) w)
-            ((zero? tries)
-             (kill %child-pid SIGTERM)
-             (waitpid %child-pid)
-             #f)
-            (else (usleep 100000) (loop (- tries 1)))))))
+        ((zero? tries)
+         (kill %child-pid SIGTERM)
+         (waitpid %child-pid)
+         #f)
+        (else (usleep 100000) (loop (- tries 1)))))))
 (test-assert "sync: SIGHUP terminates pidfile target (precise reload)"
              %child-reaped)
 (test-equal "sync: terminating signal is SIGHUP" SIGHUP
@@ -218,7 +218,7 @@
 
 ;; 死 PID（stale pidfile）不报错。
 (call-with-output-file (string-append %tmp-root "/runtime/guixcfg/xsettingsd.pid")
-  (lambda (port) (display %child-pid port))) ; 上面子进程已死
+                       (lambda (port) (display %child-pid port))) ; 上面子进程已死
 (test-equal "sync: stale pidfile tolerated" 0
             (status:exit-val (run-sync "light")))
 
@@ -276,7 +276,7 @@
 (cleanup!)
 (for-each (lambda (pair)
             (if (cdr pair)
-                (setenv (car pair) (cdr pair))
-                (unsetenv (car pair))))
+              (setenv (car pair) (cdr pair))
+              (unsetenv (car pair))))
           %saved-env)
 (test-end "appearance")

@@ -63,7 +63,7 @@
 (test-assert "T-S2: no module contains the third-party substitute URL"
              (every (lambda (file)
                       (let ((s (call-with-input-file file
-                                                    (lambda (p) (read-string p)))))
+                                                     (lambda (p) (read-string p)))))
                         (not (string-contains s %nonguix-substitute-url))))
                     %scm-files))
 
@@ -74,7 +74,7 @@
 (test-assert "T-S3: no module imports the removed substitutes module"
              (every (lambda (file)
                       (let ((s (call-with-input-file file
-                                                    (lambda (p) (read-string p)))))
+                                                     (lambda (p) (read-string p)))))
                         (not (string-contains s
                                               "(guixcfg system substitutes)"))))
                     %scm-files))

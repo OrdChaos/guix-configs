@@ -69,7 +69,7 @@
       (let ((dir (string-append runtime-dir "/guixcfg")))
         (catch 'system-error (lambda () (mkdir dir)) (lambda (key . rest) #t))
         (call-with-output-file (string-append dir "/xsettingsd.pid")
-          (lambda (port) (display (getpid) port))))
+                               (lambda (port) (display (getpid) port))))
       (execl #$(file-append xsettingsd "/bin/xsettingsd")
              "xsettingsd" "-c"
              (string-append runtime-dir "/guixcfg/xsettingsd.conf")))))

@@ -31,22 +31,22 @@
 
 (define ghostty/fixed
   (package/inherit ghostty
-    (arguments
-     (substitute-keyword-arguments (package-arguments ghostty)
-       ((#:phases phases)
-        #~(modify-phases #$phases
-            (add-after 'install 'fix-freedesktop-exec-paths
-              (lambda _
-                ;; substitute* 由包自带 #:modules 的 (guix build utils) 提供。
-                (let ((exe (string-append #$output "/bin/ghostty")))
-                  (substitute*
-                   (list (string-append
-                          #$output
-                          "/share/applications/com.mitchellh.ghostty.desktop")
-                         (string-append
-                          #$output
-                          "/share/dbus-1/services/com.mitchellh.ghostty.service"))
-                   (("\\./bin/ghostty") exe)))))))))))
+                   (arguments
+                    (substitute-keyword-arguments (package-arguments ghostty)
+                                                  ((#:phases phases)
+                                                   #~(modify-phases #$phases
+                                                                    (add-after 'install 'fix-freedesktop-exec-paths
+                                                                               (lambda _
+                                                                                 ;; substitute* 由包自带 #:modules 的 (guix build utils) 提供。
+                                                                                 (let ((exe (string-append #$output "/bin/ghostty")))
+                                                                                   (substitute*
+                                                                                    (list (string-append
+                                                                                           #$output
+                                                                                           "/share/applications/com.mitchellh.ghostty.desktop")
+                                                                                          (string-append
+                                                                                           #$output
+                                                                                           "/share/dbus-1/services/com.mitchellh.ghostty.service"))
+                                                                                    (("\\./bin/ghostty") exe)))))))))))
 
 (define %ghostty
   (application

@@ -84,42 +84,42 @@
   (program-file
    "niri-session"
    #~(begin
-       ;; 全部 binding 均为 Guile core（status:exit-val/term-sig 是
-       ;; libguile 内建导出，无需 (ice-9 posix)——program-file 的
-       ;; load path 不含 guile 模块树，非 core import 会失败）。
-       (define guard #$%niri-logout-guard)
-       ;; 清理上次 stop 竞态遗留的 guard marker。
-       (when (file-exists? guard)
-         (delete-file guard))
-       (let ((pid (primitive-fork)))
-         (if (zero? pid)
-             ;; child：exec niri（file-append 绝对路径）。
-             (execl #$(file-append niri "/bin/niri") "niri" "--session")
-             (let* ((status (cdr (waitpid pid)))
-                    (code (if (status:term-sig status)
-                              (+ 128 (status:term-sig status))
-                              (status:exit-val status))))
-               (if (file-exists? guard)
-                   ;; shepherd 主动 stop：只退出，不结束登录会话。
-                   (delete-file guard)
-                   (let ((session-id (getenv "XDG_SESSION_ID")))
-                     (if session-id
-                         (catch 'system-error
-                           (lambda ()
-                             (let ((r (system* "loginctl"
-                                               "terminate-session"
-                                               session-id)))
-                               (unless (zero? r)
-                                 (format (current-error-port)
-                                         "niri session: loginctl terminate-session failed (status ~a)~%"
-                                         r))))
-                           (lambda args
-                             (format (current-error-port)
-                                     "niri session: loginctl terminate-session failed: ~a~%"
-                                     (caddr args))))
-                         (format (current-error-port)
-                                 "niri session: XDG_SESSION_ID unset, cannot terminate session~%"))))
-               (exit code)))))))
+      ;; 全部 binding 均为 Guile core（status:exit-val/term-sig 是
+      ;; libguile 内建导出，无需 (ice-9 posix)——program-file 的
+      ;; load path 不含 guile 模块树，非 core import 会失败）。
+      (define guard #$%niri-logout-guard)
+      ;; 清理上次 stop 竞态遗留的 guard marker。
+      (when (file-exists? guard)
+        (delete-file guard))
+      (let ((pid (primitive-fork)))
+        (if (zero? pid)
+          ;; child：exec niri（file-append 绝对路径）。
+          (execl #$(file-append niri "/bin/niri") "niri" "--session")
+          (let* ((status (cdr (waitpid pid)))
+                 (code (if (status:term-sig status)
+                         (+ 128 (status:term-sig status))
+                         (status:exit-val status))))
+            (if (file-exists? guard)
+              ;; shepherd 主动 stop：只退出，不结束登录会话。
+              (delete-file guard)
+              (let ((session-id (getenv "XDG_SESSION_ID")))
+                (if session-id
+                  (catch 'system-error
+                    (lambda ()
+                      (let ((r (system* "loginctl"
+                                        "terminate-session"
+                                        session-id)))
+                        (unless (zero? r)
+                          (format (current-error-port)
+                                  "niri session: loginctl terminate-session failed (status ~a)~%"
+                                  r))))
+                    (lambda args
+                      (format (current-error-port)
+                              "niri session: loginctl terminate-session failed: ~a~%"
+                              (caddr args))))
+                  (format (current-error-port)
+                          "niri session: XDG_SESSION_ID unset, cannot terminate session~%"))))
+            (exit code)))))))
 
 (define (home-niri-session-shepherd-service config)
   "Return a shepherd service that runs Niri; on Niri exit the login

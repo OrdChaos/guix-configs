@@ -45,6 +45,7 @@
                #:use-module (guixcfg apps gnome-text-editor definition)
                #:use-module (guixcfg apps gnome-characters definition)
                #:use-module (guixcfg apps vscode definition)
+               #:use-module (guixcfg apps nushell definition)
                #:export (%applications))
 
 (define %applications
@@ -89,7 +90,8 @@
         %gnome-characters
         ;; VS Code：自建 virelith channel 的官方二进制包
         ;; （(virelith packages vscode)，chromium-binary-build-system）。
-        %vscode))
+        %vscode
+        %nushell))
 
 ;; 完整性检查：启用集合的名字必须唯一（fail fast，加载即报错）。
 (define %application-names (map application-name %applications))

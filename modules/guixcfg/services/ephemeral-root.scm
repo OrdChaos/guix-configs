@@ -91,20 +91,20 @@ last-good 时跳过 promote——登录路径每次图形登录都会触发本�
            (and alist
                 (let ((lg (assq-ref alist 'last-good)))
                   (if (and (list? lg) (assq 'generation lg))
-                      (assq-ref lg 'generation)
-                      lg)))))
+                    (assq-ref lg 'generation)
+                    lg)))))
        ;; 部署成功 ≠ 启动成功 ≠ 登录可用：promote Recovery
        ;; candidate（验证 identity → GC root → artifact → 菜单）并
        ;; 记录 Boot State 的 last-good（Guix 轴，最终 commit）。
        (let ((n (current-system-generation)))
          (cond
-          ((not n)
-           (format #t "boot-state: cannot determine current Guix generation; skipping~%"))
-          ((equal? n (recorded-last-good-generation))
-           (format #t "boot-state: Guix generation ~a already last-good; skipping~%" n))
-          (else
-           (promote-recovery! #$%esp-mount-point n (current-kernel-command-line))
-           (format #t "boot-state: Guix generation ~a confirmed as last-good~%" n))))))))
+           ((not n)
+            (format #t "boot-state: cannot determine current Guix generation; skipping~%"))
+           ((equal? n (recorded-last-good-generation))
+            (format #t "boot-state: Guix generation ~a already last-good; skipping~%" n))
+           (else
+            (promote-recovery! #$%esp-mount-point n (current-kernel-command-line))
+            (format #t "boot-state: Guix generation ~a confirmed as last-good~%" n))))))))
 
 (define (ephemeral-root-cleanup-program keep)
   "KEEP 是保留的旧 root generation 数量（host policy）。"
@@ -171,19 +171,19 @@ last-good 时跳过 promote——登录路径每次图形登录都会触发本�
                          (transformer
                           (lambda (pam)
                             (if (string=? (pam-service-name pam) "greetd")
-                                (pam-service
-                                 (inherit pam)
-                                 (session
-                                  (append
-                                   (pam-service-session pam)
-                                   (list
-                                    (pam-entry
-                                     (control "optional")
-                                     (module "pam_exec.so")
-                                     (arguments
-                                      (list
-                                       (ephemeral-root-confirm-program))))))))
-                                pam)))))))
+                              (pam-service
+                               (inherit pam)
+                               (session
+                                (append
+                                 (pam-service-session pam)
+                                 (list
+                                  (pam-entry
+                                   (control "optional")
+                                   (module "pam_exec.so")
+                                   (arguments
+                                    (list
+                                     (ephemeral-root-confirm-program))))))))
+                              pam)))))))
 
 (define* (one-shot-program-service name program documentation
                                    #:key (requirement '(user-processes)))

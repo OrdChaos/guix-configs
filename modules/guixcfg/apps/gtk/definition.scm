@@ -95,9 +95,9 @@
    (string-append
     "[Settings]\n"
     (apply string-append
-           (map (lambda (pair)
-                  (string-append (car pair) "=" (cdr pair) "\n"))
-                entries)))))
+      (map (lambda (pair)
+             (string-append (car pair) "=" (cdr pair) "\n"))
+           entries)))))
 
 ;; GTK3：含 adw-gtk3 主题（静态 Light fallback；运行时切换经
 ;; GSettings，不改写本文件）。
@@ -136,8 +136,8 @@
       (define mode (cadr args))
       (define theme
         (cond ((string=? mode "light") #$%appearance-gtk-theme-light)
-              ((string=? mode "dark") #$%appearance-gtk-theme-dark)
-              (else (usage))))
+          ((string=? mode "dark") #$%appearance-gtk-theme-dark)
+          (else (usage))))
       ;; 1. GSettings org.gnome.desktop.interface 全量键（GTK3
       ;;    on Wayland 直读 GSettings；GTK4 经 portal Settings 读同一
       ;;    组——pinned 审计见文件头）。color-scheme/gtk-theme 随
@@ -146,16 +146,16 @@
       (for-each
        (lambda (pair)
          (catch 'system-error
-                (lambda ()
-                  (unless (zero? (system* "gsettings" "set"
-                                          "org.gnome.desktop.interface"
-                                          (car pair) (cdr pair)))
-                    (format (current-error-port)
-                            "appearance-sync: gsettings set ~a failed~%"
-                            (car pair))))
-                (lambda (key . rest)
-                  (format (current-error-port)
-                          "appearance-sync: cannot execute gsettings~%"))))
+           (lambda ()
+             (unless (zero? (system* "gsettings" "set"
+                                     "org.gnome.desktop.interface"
+                                     (car pair) (cdr pair)))
+               (format (current-error-port)
+                       "appearance-sync: gsettings set ~a failed~%"
+                       (car pair))))
+           (lambda (key . rest)
+             (format (current-error-port)
+                     "appearance-sync: cannot execute gsettings~%"))))
        (list (cons "color-scheme" (string-append "prefer-" mode))
              (cons "gtk-theme" theme)
              (cons "icon-theme" #$%appearance-icon-theme)
@@ -172,19 +172,19 @@
       (define config (string-append dir "/xsettingsd.conf"))
       (catch 'system-error (lambda () (mkdir dir)) (lambda (key . rest) #t))
       (call-with-output-file (string-append config ".tmp")
-        (lambda (port)
-          (for-each
-           (lambda (line) (display line port) (newline port))
-           (list
-            (string-append "Net/ThemeName \"" theme "\"")
-            (string-append "Net/IconThemeName \""
-                           #$%appearance-icon-theme "\"")
-            (string-append "Gtk/CursorThemeName \""
-                           #$%appearance-cursor-theme "\"")
-            (string-append "Gtk/CursorThemeSize "
-                           (number->string #$%appearance-cursor-size))
-            (string-append "Gtk/FontName \"" #$%appearance-ui-font "\"")))
-          (fsync port)))
+                             (lambda (port)
+                               (for-each
+                                (lambda (line) (display line port) (newline port))
+                                (list
+                                 (string-append "Net/ThemeName \"" theme "\"")
+                                 (string-append "Net/IconThemeName \""
+                                                #$%appearance-icon-theme "\"")
+                                 (string-append "Gtk/CursorThemeName \""
+                                                #$%appearance-cursor-theme "\"")
+                                 (string-append "Gtk/CursorThemeSize "
+                                                (number->string #$%appearance-cursor-size))
+                                 (string-append "Gtk/FontName \"" #$%appearance-ui-font "\"")))
+                               (fsync port)))
       (rename-file (string-append config ".tmp") config)
       ;; 3. SIGHUP 当前会话 xsettingsd（pidfile 精确寻址；进程已死
       ;;    或无 pidfile 时跳过——session 起点 reconcile 即此形）。
@@ -193,8 +193,8 @@
           (let ((pid (call-with-input-file pid-file read)))
             (when (integer? pid)
               (catch 'system-error
-                     (lambda () (kill pid SIGHUP))
-                     (lambda (key . rest) #t)))))))))
+                (lambda () (kill pid SIGHUP))
+                (lambda (key . rest) #t)))))))))
 
 (define %gtk
   (application

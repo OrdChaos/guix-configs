@@ -74,12 +74,12 @@
                          fetch-url-refresh))
 
 (define-record-type <online-file>
-  (%online-file name url sha256 refresh)
-  online-file?
-  (name    online-file-name)     ; string：store 内文件名 / cache 键
-  (url     online-file-url)      ; string：下载地址
-  (sha256  online-file-sha256)   ; #f 或 nix-base32 字符串
-  (refresh online-file-refresh)) ; boolean：每次 lowering 重新下载
+                    (%online-file name url sha256 refresh)
+                    online-file?
+                    (name    online-file-name)     ; string：store 内文件名 / cache 键
+                    (url     online-file-url)      ; string：下载地址
+                    (sha256  online-file-sha256)   ; #f 或 nix-base32 字符串
+                    (refresh online-file-refresh)) ; boolean：每次 lowering 重新下载
 
 (define %online-cache-directory
   ;; 下载缓存目录（参数化以便测试注入临时目录）。
@@ -109,7 +109,7 @@
          (url-sidecar (string-append cache ".url"))
          (cached-url (and (file-exists? url-sidecar)
                           (call-with-input-file url-sidecar
-                            get-string-all))))
+                                                get-string-all))))
     (and (file-exists? cache)
          (string? cached-url)
          (string=? (string-trim-right cached-url) url))))
@@ -124,13 +124,13 @@
   (let ((cache (cache-path name)))
     (mkdir-p (%online-cache-directory))
     (call-with-output-file cache
-      (lambda (port) (put-bytevector port bytes)))
+                           (lambda (port) (put-bytevector port bytes)))
     (call-with-output-file (string-append cache ".url")
-      (lambda (port) (display url port) (newline port)))
+                           (lambda (port) (display url port) (newline port)))
     (call-with-output-file (string-append cache ".sha256")
-      (lambda (port)
-        (format port "~a~%"
-                (bytevector->nix-base32-string (sha256 bytes)))))))
+                           (lambda (port)
+                             (format port "~a~%"
+                                     (bytevector->nix-base32-string (sha256 bytes)))))))
 
 (define (fetch-url-cached name url)
   "cache-first 取 URL 内容（名为 NAME），返回 bytevector。
@@ -138,22 +138,22 @@ cache 命中（文件存在且 .url sidecar 匹配）直接复用，不访问网
 未命中时经 (%online-fetcher) 下载，写 cache + .url/.sha256
 sidecar 后返回。"
   (if (cache-valid? name url)
-      (read-cached name)
-      (begin
-        (format (current-error-port)
-                "online-file: fetching ~a (no valid cache at ~a)~%"
-                url (cache-path name))
-        (let ((bytes ((%online-fetcher) url)))
-          (write-cache! name url bytes)
-          bytes))))
+    (read-cached name)
+    (begin
+     (format (current-error-port)
+             "online-file: fetching ~a (no valid cache at ~a)~%"
+             url (cache-path name))
+     (let ((bytes ((%online-fetcher) url)))
+       (write-cache! name url bytes)
+       bytes))))
 
 (define (error-detail err)
   ;; 提取失败原因用于 stderr 警告：&http-get-error 给出可读原因与
   ;; 状态码，其余 condition 打印对象表示（保持 English ASCII）。
   (if (http-get-error? err)
-      (format #f "~a (code ~a)" (http-get-error-reason err)
-              (http-get-error-code err))
-      (object->string err)))
+    (format #f "~a (code ~a)" (http-get-error-reason err)
+            (http-get-error-code err))
+    (object->string err)))
 
 (define (fetch-url-refresh name url)
   "refresh 模式：总是经 (%online-fetcher) 重新下载（名为 NAME），
@@ -161,38 +161,38 @@ sidecar 后返回。"
 时若存在有效缓存则回退缓存（stderr 警告，失败原因保留可见），
 否则透传原错误（fail fast——AGENT.md §1：重试 = 重跑同一命令）。"
   (guard (err (#t
-               (let ((cached (and (cache-valid? name url)
-                                  (read-cached name))))
-                 (if cached
-                     (begin
-                       (format (current-error-port)
-                               "online-file: fetch failed (~a); using cached copy at ~a~%"
-                               (error-detail err) (cache-path name))
-                       cached)
-                     (raise err)))))
-    (let ((bytes ((%online-fetcher) url)))
-      (write-cache! name url bytes)
-      bytes)))
+                (let ((cached (and (cache-valid? name url)
+                                   (read-cached name))))
+                  (if cached
+                    (begin
+                     (format (current-error-port)
+                             "online-file: fetch failed (~a); using cached copy at ~a~%"
+                             (error-detail err) (cache-path name))
+                     cached)
+                    (raise err)))))
+         (let ((bytes ((%online-fetcher) url)))
+           (write-cache! name url bytes)
+           bytes)))
 
 (define-gexp-compiler (online-file-compiler (file <online-file>)
                                             system target)
-  ;; lowering 期在客户端进程执行（有网络）。sha256 给定：fixed-
-  ;; output derivation（与频道相同的机制，daemon 下载并校验）；
-  ;; 为 #f：refresh #t 时每次重新下载（失败回退有效缓存），否则
-  ;; cache-first，然后 binary-file 进 store。
-  (let ((name (online-file-name file))
-        (url (online-file-url file))
-        (hash (online-file-sha256 file))
-        (refresh (online-file-refresh file)))
-    (if hash
-        (url-fetch url 'sha256 (nix-base32-string->bytevector hash) name
-                   #:system system)
-        (binary-file name (if refresh
-                              (fetch-url-refresh name url)
-                              (fetch-url-cached name url))))))
+                      ;; lowering 期在客户端进程执行（有网络）。sha256 给定：fixed-
+                      ;; output derivation（与频道相同的机制，daemon 下载并校验）；
+                      ;; 为 #f：refresh #t 时每次重新下载（失败回退有效缓存），否则
+                      ;; cache-first，然后 binary-file 进 store。
+                      (let ((name (online-file-name file))
+                            (url (online-file-url file))
+                            (hash (online-file-sha256 file))
+                            (refresh (online-file-refresh file)))
+                        (if hash
+                          (url-fetch url 'sha256 (nix-base32-string->bytevector hash) name
+                                     #:system system)
+                          (binary-file name (if refresh
+                                              (fetch-url-refresh name url)
+                                              (fetch-url-cached name url))))))
 
 (define* (online-file name url #:key (sha256 #f) (refresh #f))
-  "声明一个构建期在线数据 file-like：NAME 是 store 内文件名，URL
+         "声明一个构建期在线数据 file-like：NAME 是 store 内文件名，URL
 是下载地址。SHA256 为 nix-base32 字符串时走 fixed-output
 derivation（与频道机制相同，daemon 下载并校验）；为 #f 时默认走
 cache-first 本地缓存（仓库不追踪上游更新；刷新 = 删除 cache 后
@@ -201,10 +201,10 @@ cache-first 本地缓存（仓库不追踪上游更新；刷新 = 删除 cache �
 （fixed-output 的哈希本身就是 pin）。可用于 home-files /
 home-xdg-configuration-files 等任何接受 file-like 的位置。
 只在 lowering 期取网，构造与求值不触发下载。"
-  (unless (or (not sha256) (string? sha256))
-    (error "online-file: sha256 must be #f or a nix-base32 string"
-           name sha256))
-  (when (and sha256 refresh)
-    (error "online-file: #:refresh is meaningless with a pinned #:sha256"
-           name url))
-  (%online-file name url sha256 refresh))
+         (unless (or (not sha256) (string? sha256))
+           (error "online-file: sha256 must be #f or a nix-base32 string"
+                  name sha256))
+         (when (and sha256 refresh)
+           (error "online-file: #:refresh is meaningless with a pinned #:sha256"
+                  name url))
+         (%online-file name url sha256 refresh))

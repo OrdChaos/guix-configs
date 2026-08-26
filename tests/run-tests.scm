@@ -113,6 +113,7 @@
                "tests/test-niri-config.scm"
                "tests/test-home.scm"
                "tests/test-application-persistence.scm"
+               "tests/test-nushell.scm"
                "tests/test-seed-once.scm"
                "tests/test-noctalia-seed.scm"
                "tests/test-source-hygiene.scm"

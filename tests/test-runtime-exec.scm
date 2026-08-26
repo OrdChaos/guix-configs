@@ -721,16 +721,16 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
     ;; cmdline（current-kernel-command-line 只 read）。
     (mkdir-p (string-append dir "/proc"))
     (call-with-output-file (string-append dir "/proc/cmdline")
-      (lambda (p) (display "BOOT_IMAGE=/vmlinuz root=/dev/mapper/test rootmode=normal\n" p)))
+                           (lambda (p) (display "BOOT_IMAGE=/vmlinuz root=/dev/mapper/test rootmode=normal\n" p)))
     (call-with-output-file
-        (string-append dir "/persist/system/root-generations/state.scm")
-      (lambda (p)
-        (write (state->alist (root-state (next-generation 2)
-                                         (current-generation 1)
-                                         (last-good-generation #f)
-                                         (boot-status status)))
-               p)
-        (newline p)))
+     (string-append dir "/persist/system/root-generations/state.scm")
+     (lambda (p)
+       (write (state->alist (root-state (next-generation 2)
+                                        (current-generation 1)
+                                        (last-good-generation #f)
+                                        (boot-status status)))
+              p)
+       (newline p)))
     (symlink %confirm-program (string-append dir "/run/current-system"))
     (symlink %confirm-program
              (string-append dir "/var/guix/profiles/system-42-link"))
@@ -739,9 +739,9 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
 (define (run-confirm root pam-type)
   "fake root 内执行 confirm 程序（PAM_TYPE 按需注入），返回 exit code。"
   (dynamic-wind
-    (lambda () (if pam-type (setenv "PAM_TYPE" pam-type) (unsetenv "PAM_TYPE")))
-    (lambda () (run-in-root %confirm-program root))
-    (lambda () (unsetenv "PAM_TYPE"))))
+   (lambda () (if pam-type (setenv "PAM_TYPE" pam-type) (unsetenv "PAM_TYPE")))
+   (lambda () (run-in-root %confirm-program root))
+   (lambda () (unsetenv "PAM_TYPE"))))
 
 (define (ephemeral-state root)
   (read-state (string-append root "/persist/system/root-generations/state.scm")))
@@ -749,13 +749,13 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
 (define (write-boot-state-file root generation)
   "写一份 v2 boot-state（last-good generation = GENERATION）。"
   (call-with-output-file (string-append root "/persist/system/boot-states.scm")
-    (lambda (p)
-      (write `((format-version . 2)
-               (last-good . ((generation . ,generation)
-                             (system . "/gnu/store/fake")
-                             (command-line . "root=/dev/fake"))))
-             p)
-      (newline p))))
+                         (lambda (p)
+                           (write `((format-version . 2)
+                                    (last-good . ((generation . ,generation)
+                                                  (system . "/gnu/store/fake")
+                                                  (command-line . "root=/dev/fake"))))
+                                  p)
+                           (newline p))))
 
 ;; EP1：无 PAM_TYPE（人工/测试调用）+ trying → root 轴确认 + Guix 轴
 ;; promote（无 candidate → artifact/menu 按其语义跳过，boot-state 与
