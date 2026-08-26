@@ -15,6 +15,18 @@
 # No other preferences are declared yet (no aliases/prompt/theme).
 
 $env.config.history.path = ($env.HOME | path join ".local/state/nushell")
+$env.config.show_banner = false
+
+# Theme
+use std/config light-theme
+use ./theme.nu *
+$env.config.color_config = (
+    light-theme
+    | merge $nu_theme
+)
+$env.LS_COLORS = (ls-colors)
+$env.config.ls.use_ls_colors = true
+
 
 # starship
 mkdir ($nu.data-dir | path join "vendor/autoload")

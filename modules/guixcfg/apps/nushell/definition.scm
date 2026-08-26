@@ -122,6 +122,8 @@ backed 链接；用户直接 plugin add 修改默认 $nu.plugin-path 会因只�
                              ,(local-file "config.nu" "nushell-config.nu"))
                             ("nushell/env.nu"
                              ,(local-file "env.nu" "nushell-env.nu"))
+                            ("nushell/theme.nu"
+                             ,(local-file "theme.nu" "nushell-theme.nu"))
                             ("nushell/plugin.msgpackz"
                              ,(nushell-plugin-registry))))))
    (persistence
