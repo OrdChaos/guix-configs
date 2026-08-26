@@ -105,7 +105,7 @@ export const nu_theme = {
     }
 
     shape_external_resolved: {
-        fg: $palette.cyan
+        fg: $palette.green
         attr: b
     }
 
@@ -142,7 +142,7 @@ export const nu_theme = {
 
     # Nushell built-in commands
     shape_internalcall: {
-        fg: $palette.blue
+        fg: $palette.green
         attr: b
     }
 
