@@ -1,5 +1,6 @@
 {
     "extensions.autoUpdate": false,
+    "extensions.autoCheckUpdates": false,
     "update.mode": "none",
     "workbench.colorTheme": "Nord Light Brighter"
 }

@@ -114,6 +114,7 @@
                "tests/test-home.scm"
                "tests/test-application-persistence.scm"
                "tests/test-nushell.scm"
+               "tests/test-vscode-extensions.scm"
                "tests/test-seed-once.scm"
                "tests/test-noctalia-seed.scm"
                "tests/test-source-hygiene.scm"
@@ -131,6 +132,7 @@
                "tests/test-secrets.scm"
                "tests/test-accounts.scm"
                "tests/test-runtime-exec.scm"
+               "tests/test-resolvconf-bootstrap.scm"
                "tests/test-store-leakage.scm"
                "tests/test-readiness.scm")))
  (lambda ()
