@@ -26,7 +26,7 @@ $env.config.color_config = (
 )
 $env.LS_COLORS = (ls-colors)
 $env.config.ls.use_ls_colors = true
-
+$env.config.highlight_resolved_externals = true
 
 # starship
 mkdir ($nu.data-dir | path join "vendor/autoload")

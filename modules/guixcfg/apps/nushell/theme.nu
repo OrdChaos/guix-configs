@@ -100,6 +100,11 @@ export const nu_theme = {
 
     # External commands: git, cargo, guix, ...
     shape_external: {
+        fg: $palette.red
+        attr: b
+    }
+
+    shape_external_resolved: {
         fg: $palette.cyan
         attr: b
     }
