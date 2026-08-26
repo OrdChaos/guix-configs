@@ -80,18 +80,14 @@
         %fcitx5
         %gtk
         %xsettingsd
-        ;; GNOME 轻量应用（GTK4/libadwaita；闭包审计无完整 GNOME
-        ;; 桌面组件——apps/gnome-characters 的 gnome-desktop 是
-        ;; 库依赖，见其 definition 头注释）。
         %amberol
         %celluloid
         %loupe
         %gnome-text-editor
         %gnome-characters
-        ;; VS Code：自建 virelith channel 的官方二进制包
-        ;; （(virelith packages vscode)，chromium-binary-build-system）。
         %vscode
-        %nushell))
+        %nushell
+        %starship))
 
 ;; 完整性检查：启用集合的名字必须唯一（fail fast，加载即报错）。
 (define %application-names (map application-name %applications))
