@@ -1,0 +1,12 @@
+// VS Code runtime arguments (argv.json) — repository-owned.
+// Policy: VS Code binary updates come from the Guix channel
+// (settings.json: update.mode=none, extensions.autoUpdate=false);
+// no Electron flags are declared until a real runtime need exists
+// (no --no-sandbox, no GPU flags).
+// Crash reporting is disabled explicitly: VS Code's own
+// updateCrashReporterEnablement rewrites this file at startup when the
+// key is absent — declaring it prevents that runtime write (and the
+// file is a read-only store link).
+{
+    "enable-crash-reporter": false
+}
