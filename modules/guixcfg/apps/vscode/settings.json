@@ -1,4 +1,5 @@
 {
+    "telemetry.telemetryLevel": "off",
     "update.mode": "none",
     "workbench.colorTheme": "Nord Light Brighter"
 }
