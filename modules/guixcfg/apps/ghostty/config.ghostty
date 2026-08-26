@@ -1,3 +1,5 @@
+command = nu
+
 theme = noctalia
 
 keybind = performable:ctrl+c=copy_to_clipboard

@@ -3,6 +3,7 @@
 (define-module (guixcfg apps starship definition)
                #:use-module (gnu packages shellutils) ; starship
                #:use-module (gnu home services)
+               #:use-module (guix gexp)              ; local-file
                #:use-module (guix records)
                #:use-module (guixcfg apps model)
                #:use-module (guixcfg system application-persistence)
