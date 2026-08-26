@@ -188,6 +188,56 @@
                   (file-exists? (string-append %laptop-config-dir "/common.kdl"))
                   (file-exists? (string-append %laptop-config-dir "/host.kdl"))))
 
+;; ── 10. niri portal backend policy（niri-portals.conf）────────
+;; FileChooser 显式 gtk：gnome 后端在非 GNOME 桌面（niri）降级
+;; settings-only，其 .portal 声明的 FileChooser 会挡住主进程的
+;; last-resort gtk fallback（2026-08-26 实测 loupe "对象上没有
+;; 接口"）。default 保持 Niri upstream 的 gnome;gtk；Secret 保持
+;; gnome-keyring。文件落在 ~/.config/xdg-desktop-portal/
+;; niri-portals.conf（XDG_CURRENT_DESKTOP=niri 时最高优先级）。
+(define %niri-portals-file-like
+  ;; xdg service value 条目是 (target file-like) 两元素列表；
+  ;; assoc-ref 返回 cdr = (file-like) 单元素列表。
+  (car (assoc-ref
+        (service-value
+         (find (lambda (s)
+                 (eq? 'niri-xdg-config
+                      (service-type-name (service-kind s))))
+               (application-home-services %niri)))
+        "xdg-desktop-portal/niri-portals.conf")))
+
+(define %niri-portals-text
+  (let* ((store (open-connection))
+         (out (run-with-store store
+                              (lower-object %niri-portals-file-like))))
+    ;; plain-file lower 直接得到 store 路径字符串（无 derivation）。
+    (read-file (if (string? out)
+                   out
+                   (begin
+                     (build-derivations store (list out))
+                     (derivation->output-path out))))))
+
+(test-assert "niri-portals.conf is declared in niri xdg config"
+             (and %niri-portals-file-like #t))
+
+(test-assert "niri-portals.conf default stays gnome;gtk"
+             (string-contains %niri-portals-text
+                              "default=gnome;gtk;"))
+
+(test-assert "niri-portals.conf FileChooser is explicitly gtk"
+             (string-contains %niri-portals-text
+                              "org.freedesktop.impl.portal.FileChooser=gtk;"))
+
+(test-assert "niri-portals.conf Secret stays gnome-keyring"
+             (string-contains %niri-portals-text
+                              "org.freedesktop.impl.portal.Secret=gnome-keyring;"))
+
+(test-assert "niri-portals.conf keeps ScreenCast on gnome (default chain)"
+             ;; 没有把 default 收窄为 gtk——ScreenCast/Screenshot
+             ;; 继续由 default=gnome;gtk; 的 gnome 优先承担。
+             (not (string-contains %niri-portals-text
+                                   "default=gtk")))
+
 (test-assert "VM config dir contains config.kdl + common.kdl, no host.kdl"
              (and (file-exists? (string-append %vm-config-dir "/config.kdl"))
                   (file-exists? (string-append %vm-config-dir "/common.kdl"))

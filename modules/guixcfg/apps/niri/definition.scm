@@ -190,7 +190,16 @@ session when Niri exits so that greetd returns to the greeter.")
                           `(("niri/config.kdl"
                              ,(local-file "config.kdl" "niri-config.kdl"))
                             ("niri/common.kdl"
-                             ,(local-file "common.kdl" "niri-common.kdl"))))))
+                             ,(local-file "common.kdl" "niri-common.kdl"))
+                            ;; portal backend policy（colocate 独立文件
+                            ;; niri-portals.conf；内容与理由见该文件头
+                            ;; 注释）。落在 ~/.config/xdg-desktop-portal/
+                            ;; niri-portals.conf——XDG_CURRENT_DESKTOP=
+                            ;; niri 时最高优先级，$XDG_CONFIG_HOME 优先于
+                            ;; $XDG_DATA_DIRS。
+                            ("xdg-desktop-portal/niri-portals.conf"
+                             ,(local-file "niri-portals.conf"
+                                          "niri-portals.conf"))))))
    ;; 可选配置变体（application-owned）：'laptop 携带机器事实
    ;; （DRM 选择、固定内屏输出），解析安装为 ~/.config/niri/host.kdl
    ;; ——target 是完整 ~/.config 相对路径，与 application name 无

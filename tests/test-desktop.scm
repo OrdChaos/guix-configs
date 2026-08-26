@@ -461,12 +461,15 @@
               'polkit-configuration-actions))
 
 (test-assert "PK2: polkit action/rules contributions come only from elogind
-+ upstream wheel admin rule (no custom rules)"
++ upstream wheel admin rule + NetworkManager (no custom rules)"
              (let* ((folded (fold-services (operating-system-services %os)
                                            #:target-type polkit-service-type))
                     (actions (%polkit-configuration-actions
                               (service-value folded))))
-               (= 2 (length actions))))
+               ;; 3 = elogind + polkit-wheel + NetworkManager（NM 的
+               ;; polkit actions——2026-08-25 VM 网络换 NetworkManager
+               ;; 引入，Guix 官方 service 自带，非仓库 custom rules）。
+               (= 3 (length actions))))
 
 (test-assert "PK2: upstream polkit-wheel admin identity is used"
              (any (lambda (svc)

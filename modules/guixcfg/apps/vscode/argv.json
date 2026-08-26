@@ -8,5 +8,7 @@
 // key is absent — declaring it prevents that runtime write (and the
 // file is a read-only store link).
 {
-    "enable-crash-reporter": false
+    "enable-crash-reporter": false,
+    "password-store": "gnome-libsecret",
+    "locale": "zh-cn"
 }
