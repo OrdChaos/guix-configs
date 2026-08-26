@@ -1,0 +1,44 @@
+palette = fluent-blue
+
+[character]
+success_symbol = '[➜](bold green)'
+error_symbol = '[➜](bold red)'
+
+[palettes.fluent-blue]
+# Standard colors
+blue      = "#356f9c"
+red       = "#b64c57"
+green     = "#4e7751"
+yellow    = "#8a6421"
+cyan      = "#327c8f"
+magenta   = "#665f96"
+white     = "#5b6975"
+black     = "#2a343d"
+
+# Extended palette (Catppuccin-compatible names)
+rosewater = "#9c7429"
+flamingo  = "#c95b65"
+pink      = "#7c75ad"
+mauve     = "#665f96"
+maroon    = "#c95b65"
+peach     = "#9c7429"
+teal      = "#327c8f"
+sky       = "#4a98a9"
+sapphire  = "#5795c1"
+lavender  = "#7c75ad"
+
+# Text shades
+text      = "#202930"
+subtext1  = "#5b6975"
+subtext0  = "#6d7a85"
+
+# Surface shades
+overlay2  = "#6d7a85"
+overlay1  = "#6d7a85"
+overlay0  = "#2a343d"
+surface2  = "#2a343d"
+surface1  = "#2a343d"
+surface0  = "#f7f8f9"
+base      = "#f7f8f9"
+mantle    = "#f7f8f9"
+crust     = "#f7f8f9"
