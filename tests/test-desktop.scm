@@ -81,6 +81,8 @@
   (@ (gnu services base) greetd-user-session-xdg-session-type))
 (define greetd-user-session-xdg-env?
   (@ (gnu services base) greetd-user-session-xdg-env?))
+(define greetd-source-profile?
+  (@ (gnu services base) greetd-source-profile?))
 
 (define %guix-store-dir
   ;; store 中 pinned Guix channel 源（channel 内容是内容寻址的：
@@ -122,6 +124,20 @@
                     (any (lambda (tc)
                            (string=? "1" (greetd-terminal-vt tc)))
                          (greetd-terminals cfg)))))
+
+;; D1b：greetd 会话不得在官方 wrapper 之前 source profiles——
+;; pam_elogind 写 XDG_SESSION_TYPE=tty，greetd source_profile=true
+;; 会让 ~/.profile（on-first-login → Home Shepherd → 会话 dbus）先
+;; 于 wrapper 运行，会话总线/portal 后端继承 tty → gnome 后端
+;; settings-only（FileChooser 不可用，loupe "no interface"）。
+;; 契约：source-profile? #f，profile 改由 bash -l 自行 source
+;; （desktop.scm 头注释 "source-profile? #f" 审计）。
+(test-assert "D1b: greetd session does not pre-source profiles (XDG_SESSION_TYPE reaches dbus)"
+             (let* ((cfg (service-value (os-service greetd-service-type)))
+                    (tc (find (lambda (tc)
+                                (string=? "1" (greetd-terminal-vt tc)))
+                              (greetd-terminals cfg))))
+               (not (greetd-source-profile? tc))))
 
 ;; ── D2：greetd gated by interactive-session-ready ──────────
 (test-assert "D2: greetd tty1 requires interactive-session-ready"

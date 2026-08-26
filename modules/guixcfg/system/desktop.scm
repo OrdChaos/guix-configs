@@ -18,6 +18,30 @@
 ;;;     官方 Home D-Bus / Home Niri / Home PipeWire——不再有 custom
 ;;;     session wrapper，见 upstream-boundaries.md）。
 ;;;
+;;; ── source-profile? #f（XDG_SESSION_TYPE 契约，2026-08-26）──
+;;; pam_elogind 在 PAM envlist 里写 XDG_SESSION_TYPE=tty（pinned
+;;; elogind pam_elogind.c:1247 update_environment）——PAM 只知道
+;;; tty 会话，不知道未来的 Wayland。官方 greetd wrapper
+;;; （make-greetd-xdg-user-session-command）把该值改写为
+;;; (xdg-session-type "wayland")，其设计意图是"会话开始前生效"。
+;;; 但 greetd 默认 source_profile = true 会先跑
+;;;   sh -c ". /etc/profile; . $HOME/.profile; exec <wrapper>"
+;;; （pinned greetd 0.10.3 worker.rs:239-241）——~/.profile 里的
+;;; Guix Home on-first-login 在 wrapper 之前启动 Home Shepherd 与
+;;; 会话 dbus-daemon，因此 Shepherd/dbus/所有 dbus 激活服务
+;;; （xdg-desktop-portal 及其后端）继承 XDG_SESSION_TYPE=tty，
+;;; wrapper 的 wayland 只到达 bash 本身。后果（VM 实测 2026-08-26）：
+;;; xdg-desktop-portal-gnome 的 gxdp_init_gtk 要求 session type
+;;; 为 wayland/x11，遇 tty 即 "Non-compatible display server,
+;;; exposing settings only." → FileChooser 接口不导出 → 前端
+;;; default=gnome;gtk 链选中 gnome 后端却无接口（loupe "no
+;;; interface on object"）。修复：source-profile? #f——wrapper 先
+;;; 生效，profile 改由 bash -l（login shell）自行 source（/etc/
+;;; profile 与 ~/.bash_profile 行为不变，用户会话环境与原先等价）；
+;;; greeter（agreety）不依赖 profile（全部绝对 store 路径，LANG/
+;;; TERM/XDG_RUNTIME_DIR 来自 PAM）。契约测试：tests/test-desktop.scm
+;;; "D1b: greetd session does not pre-source profiles"。
+;;;
 ;;; 无 autologin：greetd 走 agreety（内置最小 greeter）+ 既有 account
 ;;; DB / PAM；空密码禁用（allow-empty-passwords? #f）。
 ;;;
@@ -84,6 +108,13 @@
                ;; interactive-session-ready 已过（与 tty2 mingetty
                ;; 同一 invariant）。
                (extra-shepherd-requirement '(interactive-session-ready))
+               ;; greetd 默认 source_profile=true 会在 wrapper 之前
+               ;; source ~/.profile（启动 Home Shepherd/dbus），使
+               ;; 官方 wrapper 的 XDG_SESSION_TYPE=wayland 无法到达
+               ;; 会话总线 → portal 后端 settings-only（见文件头
+               ;; "source-profile? #f" 契约审计）。#f 后 wrapper 先
+               ;; 生效，profile 由 bash -l 自行 source。
+               (source-profile? #f)
                ;; 官方 greeter 模式：agreety 提示符 + -c 指向认证后
                ;; 的 user-session（bash -l login session，Wayland XDG
                ;; 环境），由 Guix Home 接管用户桌面生命周期（Home

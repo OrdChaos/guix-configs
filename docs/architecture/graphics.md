@@ -19,6 +19,11 @@ interactive-session-ready（core readiness join barrier）
      │        upstream 设置）→ /run/user/$UID（elogind）
      │        → execve(session, PAM envlist)——greeter 的
      │        HOME=/var/empty 不可能被继承（execve 整体替换环境）
+     │        ——greetd 配置 source-profile? #f：worker 直接 exec
+     │        wrapper，不预 source profiles（否则 ~/.profile 的
+     │        on-first-login 先于 wrapper 运行，PAM 的
+     │        XDG_SESSION_TYPE=tty 进入 Shepherd/会话 dbus → portal
+     │        gnome 后端 settings-only；详见 desktop.scm 头注释）
      │      → greetd-user-session（官方 wrapper：只设置
      │        XDG_SESSION_TYPE / XDG_RUNTIME_DIR；bash -l）
      │      → ~/.bash_profile（Guix Home 生成）

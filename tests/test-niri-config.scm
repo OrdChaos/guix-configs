@@ -189,12 +189,19 @@
                   (file-exists? (string-append %laptop-config-dir "/host.kdl"))))
 
 ;; ── 10. niri portal backend policy（niri-portals.conf）────────
-;; FileChooser 显式 gtk：gnome 后端在非 GNOME 桌面（niri）降级
-;; settings-only，其 .portal 声明的 FileChooser 会挡住主进程的
-;; last-resort gtk fallback（2026-08-26 实测 loupe "对象上没有
-;; 接口"）。default 保持 Niri upstream 的 gnome;gtk；Secret 保持
-;; gnome-keyring。文件落在 ~/.config/xdg-desktop-portal/
-;; niri-portals.conf（XDG_CURRENT_DESKTOP=niri 时最高优先级）。
+;; FileChooser 不覆盖、走 default=gnome;gtk 的 gnome 后端：
+;; xdg-desktop-portal-gnome 把 FileChooser 委托给 Nautilus（对话框
+;; present 前设置 xdg-foreign 父窗口 → niri 浮窗）。此前
+;; FileChooser=gtk 的 loupe "对象上没有接口"根因是会话环境
+;; XDG_SESSION_TYPE=tty（greetd source_profile=true 让
+;; on-first-login/会话 dbus 先于官方 wrapper 的 wayland 生效，
+;; gnome 后端 settings-only）——根因已由系统层 desktop.scm
+;; source-profile? #f 修复（tests/test-desktop.scm D1b）；gtk 后端
+;; 的 GTK3 对话框父窗口晚于映射，niri 初始分类看不到父窗口 →
+;; 平铺成整列，因此不再显式 gtk。default 保持 Niri upstream 的
+;; gnome;gtk；Secret 保持 gnome-keyring。文件落在
+;; ~/.config/xdg-desktop-portal/niri-portals.conf
+;; （XDG_CURRENT_DESKTOP=niri 时最高优先级）。
 (define %niri-portals-file-like
   ;; xdg service value 条目是 (target file-like) 两元素列表；
   ;; assoc-ref 返回 cdr = (file-like) 单元素列表。
@@ -224,9 +231,13 @@
              (string-contains %niri-portals-text
                               "default=gnome;gtk;"))
 
-(test-assert "niri-portals.conf FileChooser is explicitly gtk"
-             (string-contains %niri-portals-text
-                              "org.freedesktop.impl.portal.FileChooser=gtk;"))
+(test-assert "niri-portals.conf FileChooser is NOT overridden to gtk"
+             ;; gnome 后端 → Nautilus 委托链（present 前设父窗口，
+             ;; niri 正常浮窗）；gtk 覆盖只在 XDG_SESSION_TYPE=tty
+             ;; 根因（desktop.scm D1b）存在时是权宜，且其 GTK3 对话框
+             ;; 会平铺成整列。根因修复后不再需要。
+             (not (string-contains %niri-portals-text
+                                   "org.freedesktop.impl.portal.FileChooser=gtk;")))
 
 (test-assert "niri-portals.conf Secret stays gnome-keyring"
              (string-contains %niri-portals-text
