@@ -46,6 +46,7 @@
                #:use-module (guixcfg apps gnome-characters definition)
                #:use-module (guixcfg apps vscode definition)
                #:use-module (guixcfg apps nushell definition)
+               #:use-module (guixcfg apps starship definition)
                #:export (%applications))
 
 (define %applications
