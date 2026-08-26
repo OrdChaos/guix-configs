@@ -109,7 +109,7 @@ export const nu_theme = {
         attr: b
     }
 
-    shape_externalarg: $palette.green
+    shape_externalarg: $palette.text
 
     shape_filepath: $palette.blue
 
@@ -118,10 +118,7 @@ export const nu_theme = {
         attr: b
     }
 
-    shape_float: {
-        fg: $palette.lavender
-        attr: b
-    }
+    shape_float: $palette.lavender
 
     # Parse errors
     shape_garbage: {
@@ -135,10 +132,7 @@ export const nu_theme = {
         attr: b
     }
 
-    shape_int: {
-        fg: $palette.mauve
-        attr: b
-    }
+    shape_int: $palette.mauve
 
     # Nushell built-in commands
     shape_internalcall: {
@@ -172,11 +166,10 @@ export const nu_theme = {
         attr: b
     }
 
-    shape_string: $palette.green
+    shape_string: $palette.cyan
 
     shape_string_interpolation: {
-        fg: $palette.cyan
-        attr: b
+        fg: $palette.teal
     }
 
     shape_table: {
@@ -184,7 +177,7 @@ export const nu_theme = {
         attr: b
     }
 
-    shape_variable: $palette.mauve
+    shape_variable: $palette.lavender
 }
 
 # Convert "#rrggbb" to an LS_COLORS truecolor foreground sequence.
