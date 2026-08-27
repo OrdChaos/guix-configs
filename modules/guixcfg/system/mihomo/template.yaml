@@ -49,7 +49,11 @@ rules:
   - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
   - IP-CIDR,169.254.0.0/16,DIRECT,no-resolve
   - IP-CIDR,224.0.0.0/4,DIRECT,no-resolve
-  - IP-CIDR6,fc00::/7,DIRECT,no-resolve
   - IP-CIDR6,fe80::/10,DIRECT,no-resolve
   - IP-CIDR6,::1/128,DIRECT,no-resolve
+  # SmartDNS 固定 upstream 直连：不绕经代理节点（IP 规则最可靠；
+  # upstream 是 IP literal，无 hostname bootstrap——与
+  # (guixcfg system dns smartdns) 的 %smartdns-config-file 保持一致）。
+  - IP-CIDR,223.5.5.5/32,DIRECT,no-resolve
+  - IP-CIDR,119.29.29.29/32,DIRECT,no-resolve
   - MATCH,PROXY

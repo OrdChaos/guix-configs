@@ -110,6 +110,7 @@
                "tests/test-substitutes.scm"
                "tests/test-desktop.scm"
                "tests/test-mihomo.scm"
+               "tests/test-smartdns.scm"
                "tests/test-session-env.scm"
                "tests/test-apps.scm"
                "tests/test-selection.scm"
@@ -134,7 +135,6 @@
                "tests/test-secrets.scm"
                "tests/test-accounts.scm"
                "tests/test-runtime-exec.scm"
-               "tests/test-resolvconf-bootstrap.scm"
                "tests/test-store-leakage.scm"
                "tests/test-readiness.scm")))
  (lambda ()

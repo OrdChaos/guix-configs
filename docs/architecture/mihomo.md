@@ -14,8 +14,9 @@ Guix / Shepherd
        ├── proxy runtime（原生 http proxy-provider）
        └── Clash external-controller（127.0.0.1:9090，secret 置空）
 
-系统 DNS（Phase 1 不动）
-  └── NetworkManager → openresolv(resolvconf) → /etc/resolv.conf
+系统 DNS（Phase 2：docs/architecture/dns.md）
+  └── /etc/resolv.conf（静态 127.0.0.1）→ SmartDNS → 固定 upstream
+      DHCP DNS 由 openresolv 产出为 /run metadata（v1 不消费）
 
 Noctalia Mihomo Control
   └── 仅经 Clash REST API 控制运行中的 Mihomo
@@ -120,9 +121,9 @@ controller 可读取配置的安全路径。
 
 ## Phase 1 边界（NON-GOALS）
 
-- 不动 NetworkManager / openresolv / `/etc/resolv.conf`；
-- `dns-hijack: []` 显式置空（Mihomo 默认 `0.0.0.0:53`，必须显式关）；
-- 不启用 fake-ip；不做 SmartDNS；不做 DNS 分流；
+- Mihomo 不做 DNS（`dns-hijack: []` 显式置空、无 dns 段、无
+  fake-ip）——system DNS 归 SmartDNS（docs/architecture/dns.md）；
+- SmartDNS 固定 upstream 经模板内 `DIRECT,no-resolve` 规则直连；
 - 不做 Mihomo self-update（binary 归 Guix）；
 - 不引入 geosite/geoip 规则系统（规则集为最小基础集）。
 

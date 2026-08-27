@@ -65,3 +65,11 @@ Level 1-4 测试，这三个文件可删。
   microcode revision 验收属 laptop phase）。
 - Mihomo / Flatpak 应用管理（docs 已规划，未实现）。
 
+
+### SmartDNS（Phase 2 v1 已落地 ownership；剩余见 dns.md）
+
+- 已做：静态 /etc/resolv.conf → SmartDNS → 固定 upstream；DHCP DNS
+  metadata（/run/resolvconf/resolv.conf）由 openresolv 产出、v1 不消费；
+  resolvconf-bootstrap 退役。
+- 未来：DHCP DNS 作为 SmartDNS 附加 upstream 组（hook 产出 + config
+  再生成 + SIGHUP）；cache 持久化（如需要）。
