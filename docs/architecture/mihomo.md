@@ -124,6 +124,9 @@ controller 可读取配置的安全路径。
 - Mihomo 不做 DNS（`dns-hijack: []` 显式置空、无 dns 段、无
   fake-ip）——system DNS 归 SmartDNS（docs/architecture/dns.md）；
 - SmartDNS 固定 upstream 经模板内 `DIRECT,no-resolve` 规则直连；
+- `ipv6: false`：机场节点全是 v4，TUN 捕获的 v6 流量经节点无法到达
+  目标 v6 地址（节点自身无 v6，VM 实测 bordeaux/github AAAA 秒断）；
+  关闭后系统 v6 走原生路径绕过 Mihomo（v4-only 机场的取舍）；
 - 不做 Mihomo self-update（binary 归 Guix）；
 - 不引入 geosite/geoip 规则系统（规则集为最小基础集）。
 

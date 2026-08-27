@@ -172,6 +172,8 @@
                   (string-contains (template-text) "auto-redirect: true")
                   (string-contains (template-text)
                                    "auto-detect-interface: true")))
+(test-assert "M10: ipv6 disabled (v4-only airport nodes cannot reach v6)"
+             (string-contains (template-text) "ipv6: false"))
 
 ;; ── M11：service graph ──────────────────────────────────────
 (define %mihomo-service-instance

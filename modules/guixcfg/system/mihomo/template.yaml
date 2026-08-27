@@ -12,7 +12,11 @@
 
 mode: rule
 log-level: info
-ipv6: true
+# IPv6 关闭：机场节点全部是 v4（trojan），TUN 捕获 v6 流量映射给
+# 节点后节点自身无 v6、连不上目标 v6 地址（bordeaux/github AAAA
+# 秒断——VM 实测 "curl -6 bordeaux" 000/0.000s 而 -4 正常）。
+# 关闭后系统 v6 流量走原生路径绕过 Mihomo（v4-only 机场的取舍）。
+ipv6: false
 external-controller: 127.0.0.1:9090
 secret: ""
 tun:
