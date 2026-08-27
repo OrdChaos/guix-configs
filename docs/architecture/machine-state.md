@@ -78,14 +78,14 @@ path DSL。
 
 ## 与 host secret 的区别（重要）
 
-| | `secrets/hosts/<host>/*.age` | `/persist/system/state/...` |
+| | `<模块>/secrets/*.age`（与引用者同置） | `/persist/system/state/...` |
 |---|---|---|
 | authority | **repository** | **machine** |
 | 来源 | declarative ciphertext → system generation → runtime plaintext | 本机运行期产生的 mutable state |
 | 生命周期 | 随 repository 声明 | 独立于 repository 持久 |
-| 例子 | laptop-specific declarative VPN credential | GUI 连接 Wi-Fi 后 NM 自己保存的 profile/password |
+| 例子 | mihomo 订阅 URL（system/mihomo/secrets/） | GUI 连接 Wi-Fi 后 NM 自己保存的 profile/password |
 
-**`secrets/hosts/laptop/wifi.age` 不应成为"记住用户在 GUI 中连接过
+**declarative Wi-Fi credential 不应成为"记住用户在 GUI 中连接过
 哪些 Wi-Fi"的常规机制**——日常 GUI-generated Wi-Fi configuration
 属于 machine-owned mutable state；只有明确要 declaratively provision
 某个网络时，才进入 encrypted declarative-secret 模型。

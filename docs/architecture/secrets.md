@@ -22,7 +22,7 @@ modules/guixcfg/apps/<app>/...（公开配置与 definition colocate）
 ### age 加密整文件
 
 ```text
-secrets/.../*.age 或 apps/<app>/secrets/*.age
+<模块>/secrets/*.age（密文与引用者同置，见下方 taxonomy）
         ↓ build（ciphertext 允许进 store）
 /gnu/store/<hash>-secret.age
         +
@@ -45,40 +45,47 @@ deployment target = 解密后给谁 / 放在哪里（scope：system / user）
 `target scope = user`——位于 `apps/openssh/secrets/...`，而不是因为
 target 是 user 就放进 `secrets/user/`。
 
-**Repository ownership taxonomy（mechanism centralized）**：
+**Repository ownership taxonomy（唯一规则：密文与引用者同置）**：
 
 ```text
-单一 app owner       → apps/<app>/secrets/*.age（由该 app 的
+app 密文             → apps/<app>/secrets/*.age（该 app 的
                        definition.scm 声明；source-relative local-file）
-host owner           → secrets/hosts/<host>/*.age（repository 声明、
-                       运行期部署，但其存在理由属于某一 host，又无
-                       更自然 application owner；如 laptop VPN
-                       credential——不是 machine-generated state）
-共享（多 consumer）  → secrets/shared/
-真正系统全局语义     → secrets/system/（不是所有 "system target" 都
-                       机械放这里）
-bootstrap            → secrets/bootstrap/（建立 machine identity）
-install / recovery   → secrets/install/（安装、provisioning、恢复工具）
-recipients           → secrets/recipients/（recipient/公钥元数据）
+系统组件密文         → modules/guixcfg/<域>/<组件>/secrets/*.age
+                       （如 mihomo：system/mihomo/secrets/
+                       mihomo-subscription.url.age，decl 由
+                       (guixcfg system mihomo service) 导出；
+                       单份密文、所有设备共用——无 host 层）
+机制自身密钥         → modules/guixcfg/security/secrets/age/
+                       {stable.agepub, stable-identity.age}
+                       （age 机制唯一读写者；repo-root 相对路径）
+install / recovery   → modules/guixcfg/security/secrets/
+                       luks-recovery.age（credential-source 唯一
+                       生产消费者）
+user 域 provisioning → modules/guixcfg/users/secrets/
+                       user-password.hash.age
+测试 sentinel         → tests/fixtures/secrets/*.age（测试域；VM
+                       测试机装配经 repository-file 组合）
 ```
 
-> `secrets/user/` 已移除：它不是 repository ownership category
-> （user 只是 deployment target）。VM test secrets 的 owner 是 VM
-> host → `secrets/hosts/vm/`（test-user.age 的 target 是 user，
-> owner 仍是 host）。
+> 已取消的层：`secrets/hosts/<host>`（host-owned 层）、顶层
+> `secrets/` 目录。`system/user` 是 deployment target/scope，不是
+> repository ownership 类别；`hosts/vm-secrets.scm` 这类 host
+> inventory 模块不再存在——密文各归引用者。
 
 generic publisher（`(guixcfg security secrets)`）不知道任何具体
 inventory；`secret-decl-source` 是 **file-like**（ciphertext 由
-caller 解析——app-local 用 source-relative `local-file`，top-level
-集中 secrets 用唯一 resolver `(guixcfg utils repository-source)`）。
-host-owned inventory 放在 host 模块附近（如
-`(guixcfg hosts vm-secrets)` 的 `%vm-secrets`），不混入 generic
-security mechanism。
+调用者解析——模块内密文用 source-relative `local-file`；tests/
+fixtures 密文由 VM 测试机装配经唯一 repo-root resolver
+`(guixcfg utils repository-source)` 引用）。inventory 声明在各
+引用者模块（app definition / 系统组件模块 / VM 装配点），不混入
+generic security mechanism。
 
-bootstrap/install/recipients 属于 **tooling plane**（repo-relative
-CLI input → tools/secrets.scm / credential provisioning → 安装/
-bootstrap/recovery）——**不转换成 secret-decl**，不进
-store/publisher（它们不是 system-generation runtime secret）。
+bootstrap/recipients 属于 **tooling plane**（repo-relative CLI
+input → tools/secrets.scm 的 age lifecycle）——**不转换成
+secret-decl**，不进 store/publisher（它们不是 system-generation
+runtime secret）；install（luks-recovery / user-password.hash）由
+provisioning 流程消费（credential-source / provision-password），
+同样不成为 runtime secret-decl。
 
 ### 可变应用状态
 
@@ -163,8 +170,8 @@ passphrase 加密的 stable private identity（见下）。
 
 ### 长期安全边界（roadmap）
 
-`secrets/bootstrap/stable-identity.age`（passphrase 加密私钥）位于
-public repo，给攻击者离线尝试 master passphrase 的目标。长期选择：
+`modules/guixcfg/security/secrets/age/stable-identity.age`（passphrase
+加密私钥）位于 public repo，给攻击者离线尝试 master passphrase 的目标。长期选择：
 public repo 只含 recipient + ciphertext、private identity 另存密码
 管理器；或维持现状但 master passphrase 必须高熵、独立于登录密码。
 不擅自迁移（见 development/roadmap.md）。
@@ -172,7 +179,8 @@ public repo 只含 recipient + ciphertext、private identity 另存密码
 ## 用户密码：credential 三层模型
 
 ```text
-secrets/install/user-password.hash.age（加密 provisioning source）
+modules/guixcfg/users/secrets/user-password.hash.age（加密
+provisioning source）
     ↓ 安装期 unlock S 解密
 /persist/system/accounts/<user>/password.hash（persistent verifier，
     root 0600；normal boot 唯一读取的 credential input）
@@ -186,7 +194,8 @@ decrypt age、不访问 repo ciphertext。hash 不进 store/argv/log。
 
 ## LUKS recovery passphrase 的 install secret 消费（--luks-secret）
 
-`secrets/install/luks-recovery.age`（age-encrypted LUKS recovery
+`modules/guixcfg/security/secrets/luks-recovery.age`（age-encrypted
+LUKS recovery
 passphrase）由两个 CLI 入口消费，来源解析统一走
 `(guixcfg security credential-source)`（唯一实现；second
 implementation 一律改为调用它）：

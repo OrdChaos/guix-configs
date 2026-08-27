@@ -50,7 +50,8 @@
    (shell (file-append bash "/bin/bash"))
    (home-directory "/home/ordchaos")
    (comment "A dragon who controls the Synfield.")
-   ;; 密码 hash 是 install secret（secrets/install/user-password.hash.age），
+   ;; 密码 hash 是 install secret（colocate users/secrets/，
+   ;; 见本目录 user-password.hash.age），
    ;; 由 installer 在 LUKS 建立后注入目标系统 shadow；这里只保留逻辑名。
    (password-secret 'primary-user-password)))
 

@@ -173,10 +173,10 @@ bind-directory only；machine-owned only；root ownership）。
 
 与 application persistence 的区别：后者是 `/persist/data-app` →
 HOME-relative consumer；machine state 是 `/persist/system/state` →
-**absolute system consumer**。与 host secret 的区别：
-`secrets/hosts/<host>` 是 repository authority（declarative
-ciphertext）；`/persist/system/state` 是 machine authority（本机
-产生的 mutable state，独立于 repository）。
+**absolute system consumer**。与 declarative secret 的区别：
+`<模块>/secrets/*.age`（与引用者同置）是 repository authority
+（declarative ciphertext）；`/persist/system/state` 是 machine
+authority（本机产生的 mutable state，独立于 repository）。
 
 当前无真实 production rule（NetworkManager 只作 canonical example，
 未启用——见 machine-state.md）。

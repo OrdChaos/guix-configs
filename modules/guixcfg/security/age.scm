@@ -54,8 +54,8 @@
   (make-parameter (string-append (%installed-identity-dir) "/identity")))
 
 ;; 仓库内相对路径（以 repo 根为基准；工具/测试传 root 参数）。
-(define %stable-recipient-rel "secrets/recipients/stable.agepub")
-(define %stable-identity-rel "secrets/bootstrap/stable-identity.age")
+(define %stable-recipient-rel "modules/guixcfg/security/secrets/age/stable.agepub")
+(define %stable-identity-rel "modules/guixcfg/security/secrets/age/stable-identity.age")
 
 (define (recipient-format? s)
   "S 是否符合 age1... 公钥 recipient 形态（bech32）。"
@@ -149,9 +149,10 @@
 ;;; lifecycle
 
 (define (age-init! root passphrase)
-  "首次生成 stable identity S：公钥写 ROOT/secrets/recipients/
-stable.agepub；PASSPHRASE 加密的私钥写 ROOT/secrets/bootstrap/
-stable-identity.age。默认拒绝覆盖已有 identity。明文 S 只在内存与
+  "首次生成 stable identity S：公钥写 ROOT/modules/guixcfg/
+security/secrets/age/stable.agepub；PASSPHRASE 加密的私钥写
+ROOT/modules/guixcfg/security/secrets/age/stable-identity.age。默认
+拒绝覆盖已有 identity。明文 S 只在内存与
 /run 0600 临时文件间存在。返回公钥 recipient。"
   (let ((pub-file (string-append root "/" %stable-recipient-rel))
         (enc-file (string-append root "/" %stable-identity-rel)))

@@ -37,7 +37,7 @@ guix shell -m manifests/installer.scm -- \
 
 # apply：destructive 确认输入完整设备路径；LUKS passphrase 两种来源
 #  交互：默认两次确认
-#  --luks-secret：从 stable S 解密 secrets/install/luks-recovery.age
+#  --luks-secret：从 stable S 解密 modules/guixcfg/security/secrets/luks-recovery.age
 guix shell -m manifests/installer.scm -- \
   guix repl tools/disk-install.scm -- apply vm /dev/vda --luks-secret
 ```
@@ -122,7 +122,7 @@ GUIXCFG_ACCOUNTS_DIR=/mnt/persist/system/accounts \
   guix time-machine -C channels.lock.scm -- \
   shell -m manifests/secrets.scm -- \
   guile -L "$PWD/modules" -s tools/secrets.scm provision-password ordchaos \
-  secrets/install/user-password.hash.age
+  modules/guixcfg/users/secrets/user-password.hash.age
 ```
 
 验证：`/mnt/persist/system/accounts/ordchaos/password.hash`，root 0600。
@@ -213,7 +213,7 @@ guix repl tools/tpm2-enroll.scm -- enroll --noninteractive      # stdin 直读
 ```
 
 - `--luks-secret`：与 disk-install 的 apply 同一来源——stable S 解密
-  `secrets/install/luks-recovery.age`（需先 `secrets unlock`；
+  `modules/guixcfg/security/secrets/luks-recovery.age`（需先 `secrets unlock`；
   安装流程见阶段 1）。runtime identity 缺失或解密失败立即中止，
   不会回退到交互输入；plaintext 不进 argv/env/log/store。
 - `--noninteractive`：从 stdin 直读一行（脚本/自动化注入）。

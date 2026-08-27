@@ -148,7 +148,7 @@ password（docs/architecture/boot.md（TPM2））。"
 LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值；
 它只存在于本次 apply session（不进 plan、不落盘、不进 argv/env）。
 PASSPHRASE-READER 默认交互读取；也可是 age secret reader（installer
-用 --luks-secret 时经 stable S 解密 secrets/install/luks-recovery.age，
+用 --luks-secret 时经 stable S 解密 modules/guixcfg/security/secrets/luks-recovery.age，
 见 tools/secrets.scm 与 docs/architecture/secrets.md）——两种来源共用 stdin 语义。"
          (let ((passphrase! (make-luks-passphrase-source passphrase-reader)))
            (catch #t

@@ -199,8 +199,9 @@ docs/reference/repository-layout.md；本节省略版开发约束：
   Git checkout。
 - app-local static source 用 source-relative `local-file`
   （`(local-file "config.kdl")` 按所在文件目录解析）；禁止重新散布
-  跨层 `../../../files/...`。top-level secrets 引用只能走
-  `(guixcfg utils repository-source)` 的唯一 resolver。
+  跨层 `../../../files/...`。模块内密文走 source-relative
+  `local-file`；tests/fixtures 密文（测试域）由 VM 测试机装配经
+  `(guixcfg utils repository-source)` 的唯一 resolver 引用。
   **前提：构建/部署入口的 `-L` 必须绝对路径**（`-L "$PWD/modules"`）——
   local-file 的目录解析延迟到 lowering，相对 load-path 条目会让
   解析退化为裸文件名并报 canonicalize-path 错（2026-08 实测）。
@@ -229,10 +230,10 @@ docs/reference/repository-layout.md；本节省略版开发约束：
   .seed-provided` 记录；机制 `(guixcfg utils seed-once)`）。
   seed-once != declarative management：禁止改写成"每次同步默认
   配置"。
-- app-private encrypted secrets colocate（apps/<app>/secrets/）；
-  system/shared/install/bootstrap secrets 集中（top-level
-  secrets/）；generic security mechanism 不知道具体 application
-  inventory。
+- 密文与引用者同置：app 密文 apps/<app>/secrets/、系统组件密文
+  modules/guixcfg/<域>/<组件>/secrets/、测试 sentinel
+  tests/fixtures/secrets/（无 host-owned 层、无顶层 secrets/ 目录）；
+  generic security mechanism 不知道具体 inventory。
 - `/persist/data-nobackup` 是 direct-access bulk/reacquirable
   storage，不参加 app persistence bind registry；当前不建立 backup
   framework（backup 是未来独立 concern）。
@@ -285,11 +286,12 @@ docs/architecture/storage.md；本节省略版：
   不 catch-and-ignore 解密错误。composition 在 host assembly 按
   domain 分区，generic publisher 只做 mechanism。
 - **`user/system` deployment target 不等于 repository ownership**：
-  单一 app owner 的 ciphertext colocate 到 `apps/<app>/secrets/`；
-  host/shared/system/bootstrap/install/recipient 按真实
-  owner/lifecycle 分类到 top-level `secrets/` 对应子目录（不存在
-  `secrets/user` 类别——user 只是 target）；generic secrets
-  mechanism 不理解 inventory。
+  密文与引用者同置（唯一规则）：app → `apps/<app>/secrets/`；
+  系统组件 → `modules/guixcfg/<域>/<组件>/secrets/`；机制自身密钥
+  → `modules/guixcfg/security/secrets/age/`；测试 sentinel →
+  `tests/fixtures/secrets/`。不存在 host-owned 层与顶层
+  `secrets/` 目录（`system/user` 是 deployment target，不是
+  ownership 类别）；generic secrets mechanism 不理解 inventory。
 - **本机运行期产生的 daemon/system mutable state**（必须跨
   ephemeral-root 保留的）属于 `/persist/system`（machine-state
   persistence mechanism，`/persist/system/state`），**不属于**

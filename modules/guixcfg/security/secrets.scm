@@ -328,6 +328,8 @@ not block interactive login.")
 ;;; ────────────────────────────────────────────────────────────
 ;;; 本模块不包含具体机器/应用 secret inventory（ownership 分布：
 ;;; docs/architecture/secrets.md、AGENT.md §Application layer）。
-;;; VM 的 inventory 在 (guixcfg hosts vm-secrets)；未来单一 app
-;;; owner 的密文 colocate 到 apps/<app>/secrets/ 并由该 app 的
-;;; definition.scm 声明。
+;;; inventory 与引用者同置（VM 测试 sentinel 由 (guixcfg hosts vm)
+;;; 的 %vm-test-secrets 声明；mihomo 密文由 (guixcfg system mihomo
+;;; service) 的 %mihomo-secrets 声明；app 密文由该 app 的
+;;; definition.scm 声明——无 host-owned 层，见
+;;; docs/architecture/secrets.md）。

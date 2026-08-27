@@ -25,16 +25,19 @@
                #:use-module (guixcfg users user)       ; %primary-user（结构事实权威源）
                #:use-module (guixcfg home user)        ; %guix-home（挂入 system）
                #:use-module (guixcfg security secrets)  ; runtime secrets 部署机制
+               #:use-module (guixcfg utils repository-source) ; repository-file（VM 测试 sentinel 密文）
                #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
                #:use-module (guixcfg apps model)      ; applications-secrets、applications-persistence
                #:use-module (guixcfg system application-persistence) ; application persistence generic executor
                #:use-module (guixcfg system mount-metadata) ; gvfs-mount-metadata-service
                #:use-module (guixcfg system resolvconf) ; resolvconf-bootstrap-service（DNS boot init）
-               #:use-module (guixcfg hosts vm-secrets)  ; VM secret inventory（host-owned）
+               #:use-module (guixcfg system mihomo service) ; mihomo-service（透明代理）
+               #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
+
                #:use-module (gnu services guix)        ; guix-home-service-type
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:use-module (srfi srfi-1)              ; remove
-               #:export (%vm-storage-policy %vm-services %os))
+               #:export (%vm-storage-policy %vm-services %vm-test-secrets %os))
 
 ;; 保留 host 模块原有导出名；实际 policy 放在纯存储模块中，避免早期
 ;; disk-install 为取 policy 而加载完整 OS/UKI/channel 依赖。
@@ -49,6 +52,27 @@
 (define %vm-users
   (list (primary-user-account)))
 
+;; VM 测试机的 secrets 机制 sentinel（不是 host-owned secret 层——
+;; 只是这台测试机要部署的测试密文；密文归 tests/fixtures/secrets/，
+;; 经 repository-file（仓库根相对）解析。laptop 等真实 host 不需要。
+(define %vm-test-secrets
+  (list (secret-decl
+         (name 'test-system)
+         (scope 'system)
+         (domain 'login-critical)
+         (source (repository-file "tests/fixtures/secrets/test-system.age"))
+         (target-name "test-system")
+         (owner-user "root")
+         (mode #o400))
+        (secret-decl
+         (name 'test-user)
+         (scope 'user)
+         (domain 'login-critical)
+         (source (repository-file "tests/fixtures/secrets/test-user.age"))
+         (target-name "test-user")
+         (owner-user (user-profile-name %primary-user))
+         (mode #o600))))
+
 ;; HOME persistence bind mounts（user data + app state；单一定义，
 ;; %vm-services 的 gvfs-mount-metadata 服务与 file-systems 字段共用）。
 (define %persistent-mount-file-systems
@@ -57,6 +81,13 @@
           (application-persistence-file-systems
            (applications-persistence %applications)
            (user-profile-name %primary-user))))
+
+;; Mihomo providers 的 machine-state bind（root-owned system state；
+;; 与 HOME persistence 不同层，单独成表）。backing/consumer 0700 由
+;; mihomo activation 强制（modules/guixcfg/system/mihomo/service.scm）。
+(define %mihomo-machine-state-file-systems
+  (machine-state-persistence-file-systems
+   (list %mihomo-providers-persistence-rule)))
 
 (define %vm-services
   (append
@@ -92,7 +123,12 @@
     ;; GVfs 桌面 metadata（x-gvfs-hide/x-gvfs-trash → utab）：
     ;; 在 file-systems 挂载后注入，让 GIO 对 HOME persistence
     ;; bind mounts 隐藏挂载并允许 mount-local trash。
-    (gvfs-mount-metadata-service %persistent-mount-file-systems))
+    (gvfs-mount-metadata-service %persistent-mount-file-systems)
+    ;; Mihomo 系统透明代理（Phase 1，docs/architecture/mihomo.md）：
+    ;; Shepherd 独占生命周期；runtime config 由 materializer 合成
+    ;; （secret URL 不进 store）；providers 经 machine-state bind
+    ;; 持久化。DNS/NetworkManager/resolv.conf 完全不动。
+    (mihomo-service))
    ;; 无状态根的用户态服务：登录确认（last-good promote 挂在 greetd
    ;; PAM session open——成功图形登录后）与旧 generation 清理
    ;; （docs/architecture/storage.md，Root generation 一节）。
@@ -150,19 +186,30 @@
          (application-persistence-service
           (applications-persistence %applications)
           (user-profile-name %primary-user))
+         ;; machine-state persistence（root-owned system state；
+         ;; 当前唯一 consumer：mihomo providers。bind 见
+         ;; %mihomo-machine-state-file-systems）
+         (machine-state-persistence-service
+          (list %mihomo-providers-persistence-rule))
          ;; 声明式 runtime secrets（boot 时 root 解密；docs/
          ;; architecture/secrets.md）。composition root = host assembly：
-         ;;   applications-secrets（registry 聚合） + host-owned
-         ;;   %vm-secrets → 按 readiness domain 分区 → 两个 generic
-         ;;   publisher 实例（login-critical / ordinary 独立 transaction
-         ;;   与 capability；ordinary 不 gate login）。
+         ;;   %vm-test-secrets（本测试机的机制 sentinel） +
+         ;;   %mihomo-secrets（mihomo 模块持有，所有设备共用） +
+         ;;   applications-secrets（registry 聚合）→ 按 readiness
+         ;;   domain 分区 → 两个 generic publisher 实例（login-critical /
+         ;;   ordinary 独立 transaction 与 capability；ordinary 不 gate
+         ;;   login）。
          (secrets-deploy-service
           (login-critical-secrets
-           (append %vm-secrets (applications-secrets %applications)))
+           (append %vm-test-secrets
+                   %mihomo-secrets
+                   (applications-secrets %applications)))
           (user-profile-name %primary-user))
          (secrets-ordinary-deploy-service
           (ordinary-secrets
-           (append %vm-secrets (applications-secrets %applications)))
+           (append %vm-test-secrets
+                   %mihomo-secrets
+                   (applications-secrets %applications)))
           (user-profile-name %primary-user))
          ;; account databases 投影（唯一 writer，含 persistent credential
          ;; 内联注入）之后的只读验证：account-state-ready 的 provision 端。
@@ -218,8 +265,10 @@
    ;; （composition，custom initrd 仍是 authoritative payload）。
    (initrd microcode-ephemeral-initrd)
    (file-systems (append (system-file-systems %ephemeral-root-file-system)
-                         ;; selected user persistence（bind mounts，login 前就位）
+                         ;; selected user persistence（bind mounts，登录前就位）
                          %persistent-mount-file-systems
+                         ;; machine-state binds（root-owned；mihomo providers）
+                         %mihomo-machine-state-file-systems
                          %base-file-systems))
    
    (swap-devices %swap-spaces)

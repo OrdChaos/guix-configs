@@ -74,7 +74,7 @@ host: vm, laptop~%"))
     (display-plan (storage-plan policy device))))
 
 (define (cmd-apply host device use-luks-secret?)
-  "USE-LUKS-SECRET? 时 LUKS passphrase 来自 secrets/install/
+  "USE-LUKS-SECRET? 时 LUKS passphrase 来自 modules/guixcfg/security/secrets/
 luks-recovery.age（需先 secrets unlock；master password 只解锁一次
 stable S，安装过程复用 /run 中的临时 S）；否则交互读取。来源解析
 统一走 credential-source（与 tpm2-enroll 共享同一 resolver）。"

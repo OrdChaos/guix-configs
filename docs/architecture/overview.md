@@ -72,10 +72,11 @@ Can repo deterministically rebuild it?
             → Guix Home/System
 
         encrypted declarative runtime secret
-            single app owner      → apps/<app>/secrets
-            host owner            → secrets/hosts/<host>
-            shared                → secrets/shared
-            true system owner     → secrets/system
+            app 密文       → apps/<app>/secrets
+            系统组件密文   → modules/guixcfg/<域>/<组件>/secrets
+            机制自身密钥   → modules/guixcfg/security/secrets/age
+            测试 sentinel  → tests/fixtures/secrets
+            （无 host 层——密文与引用者同置）
 
     no
         user-owned data           → /persist/data-home

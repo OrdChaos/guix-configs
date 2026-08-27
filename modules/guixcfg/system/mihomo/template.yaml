@@ -1,0 +1,55 @@
+# Mihomo Phase 1 base config template（repository authority，
+# docs/architecture/mihomo.md）。
+#
+# subscription URL 占位符由 mihomo-config materializer 在 boot 时替换，
+# 合成结果写入 /run/mihomo/config.yaml（root 0600）经 -f 交给 Mihomo。
+# 本模板【不可直接运行】——占位符不是合法 URL（materializer 的
+# fail-closed 契约：占位符必须恰好出现一次，缺失/重复即失败）。
+#
+# Phase 1 边界：不接管 DNS（无 dns 段、dns-hijack 显式置空）、
+# 不启用 fake-ip、不启用 self-update（binary 归 Guix）、controller
+# 仅 loopback（secret 置空是单用户 loopback-only 部署的明确选择）。
+
+mode: rule
+log-level: info
+ipv6: true
+external-controller: 127.0.0.1:9090
+secret: ""
+tun:
+  enable: true
+  stack: mixed
+  device: mihomo0
+  dns-hijack: []
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+proxy-providers:
+  airport:
+    type: http
+    url: "@@MIHOMO_SUBSCRIPTION_URL@@"
+    path: ./providers/airport.yaml
+    interval: 3600
+    # 订阅刷新直连：不依赖当前代理组/节点可用性（VM 实测：默认走
+    # tunnel 规则时节点全挂会导致订阅无法刷新）。Mihomo 原生维护
+    # interval 调度、provider cache 与 controller refresh API。
+    proxy: DIRECT
+    health-check:
+      enable: true
+      interval: 600
+      lazy: true
+      url: https://www.gstatic.com/generate_204
+proxy-groups:
+  - name: PROXY
+    type: select
+    use: [airport]
+rules:
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,169.254.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,224.0.0.0/4,DIRECT,no-resolve
+  - IP-CIDR6,fc00::/7,DIRECT,no-resolve
+  - IP-CIDR6,fe80::/10,DIRECT,no-resolve
+  - IP-CIDR6,::1/128,DIRECT,no-resolve
+  - MATCH,PROXY

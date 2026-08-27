@@ -255,9 +255,9 @@ pinned Guix 事实（94a84f9 `guix/gexp.scm`）：`local-file` 是宏，
 tests 的 `add-to-load-path` 本来就拼绝对路径）。
 
 `(guixcfg utils repository-source)` 的 `repository-file` 只用于
-**top-level repository/global resources**（如 `secrets/hosts/...`、
-`secrets/shared/...`——taxonomy 见 secrets.md），
-不替代 ordinary app-local `local-file`。
+**仓库根相对资源**（如测试 sentinel `tests/fixtures/secrets/...`
+由 VM 测试机装配引用——taxonomy 见 secrets.md），不替代 ordinary
+模块内 source-relative `local-file`。
 
 ## Data ownership 决策表
 
@@ -306,11 +306,13 @@ Same directory contains declarative + mutable files
 ## Secret ownership
 
 ```text
-single app owner      → apps/<app>/secrets/*.age（definition 声明）
-multiple consumers    → top-level secrets/shared/
-machine/system        → top-level secrets/system/、secrets/hosts/<host>/；
-                          machine identity/state → /persist/system（machine-state）
-install/bootstrap     → top-level secrets/install/、secrets/bootstrap/
+app 密文          → apps/<app>/secrets/*.age（definition 声明）
+系统组件密文      → modules/guixcfg/<域>/<组件>/secrets/*.age
+机制自身密钥      → modules/guixcfg/security/secrets/age/
+install/recovery  → modules/guixcfg/security/secrets/、users/secrets/
+测试 sentinel     → tests/fixtures/secrets/*.age
+machine identity/state → /persist/system（machine-state）
+（无 host 层——密文与引用者同置；taxonomy 见 secrets.md）
 ```
 
 generic `security/secrets.scm` 只做机制（解密/发布/事务）——

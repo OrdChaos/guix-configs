@@ -15,7 +15,7 @@
              (guix derivations)
              (guix gexp)
              (guixcfg security secrets)
-             (guixcfg hosts vm-secrets)   ; %vm-secrets（host-owned inventory）
+             (guixcfg hosts vm)            ; %vm-test-secrets（VM 测试机 sentinel）
              (guixcfg system accounts)
              (ice-9 rdelim)
              (srfi srfi-13)
@@ -57,7 +57,7 @@
   (build-text
    (gexp->file "leak-check-deploy"
                (program-file-gexp
-                (secrets-deploy-program %vm-secrets "user")))))
+                (secrets-deploy-program %vm-test-secrets "user")))))
 (test-assert "secrets deploy script clean" (no-leak? deploy-text))
 
 (define verify-text
@@ -77,6 +77,6 @@
 ;; 4. ciphertext 本身允许进 store——但密文形态不含明文标记
 ;;    （反面验证：ciphertext 在 closure 中是被允许的）。
 (test-assert "ciphertext may enter store (armored age, no plaintext)"
-             (no-leak? (file-text "secrets/hosts/vm/test-system.age")))
+             (no-leak? (file-text "tests/fixtures/secrets/test-system.age")))
 
 (test-end "store-leakage")

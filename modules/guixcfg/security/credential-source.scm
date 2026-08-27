@@ -26,7 +26,7 @@
 ;; repo 根运行）。age-encrypted LUKS recovery secret，--luks-secret
 ;; 的 canonical 数据源。parameter 供测试覆盖（host 单测不写 repo）。
 (define %luks-recovery-secret-rel
-  (make-parameter "secrets/install/luks-recovery.age"))
+  (make-parameter "modules/guixcfg/security/secrets/luks-recovery.age"))
 
 (define (resolve-luks-passphrase-source source)
   "SOURCE 是互斥的 LUKS passphrase 来源之一：

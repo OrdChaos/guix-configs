@@ -165,7 +165,8 @@ keyslot 再发布，绝不先删旧；recovery keyslot 永不触碰。
 recovery 密码来源三选一（互斥；`enroll`/`replace` 都支持，
 `status`/`preflight` 拒绝）：
 - 交互读取（默认，tty 关闭回显）；
-- `--luks-secret`：stable S 解密 `secrets/install/luks-recovery.age`
+- `--luks-secret`：stable S 解密
+  `modules/guixcfg/security/secrets/luks-recovery.age`
   （需先 `secrets unlock`；identity 缺失或解密失败立即中止，不静默
   回退交互；plaintext 不进 argv/env/log/store）；
 - `--noninteractive`：stdin 直读一行。

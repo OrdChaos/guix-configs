@@ -5,11 +5,12 @@
 
 (use-modules (guix store)
              (guix monads)
+             (guix derivations)          ; build-derivations
              (gnu services)
              (gnu services shepherd)
              (guix gexp)
              (guixcfg security secrets)
-             (guixcfg hosts vm-secrets)   ; %vm-secrets（host-owned inventory）
+             (guixcfg hosts vm)            ; %vm-test-secrets（VM 测试机 sentinel）
              (guixcfg users user)         ; %primary-user（owner 权威来源）
              (guixcfg utils repository-source) ; 仓库根唯一 resolver
              (guixcfg apps model)          ; applications-secrets（聚合，无 system consumer）
@@ -25,12 +26,12 @@
 
 (test-begin "secrets")
 
-;; 声明结构（inventory 在 host-owned 模块，generic 机制不含 %vm-secrets）
-(test-assert "generic secrets module no longer exports %vm-secrets"
+;; 声明结构（sentinel 由 VM 装配点声明，generic 机制不含 inventory）
+(test-assert "generic secrets module does not own the VM sentinel inventory"
              (not (module-defined? (resolve-module '(guixcfg security secrets))
-                                   '%vm-secrets)))
-(define sys-secret (car %vm-secrets))
-(define usr-secret (cadr %vm-secrets))
+                                   '%vm-test-secrets)))
+(define sys-secret (car %vm-test-secrets))
+(define usr-secret (cadr %vm-test-secrets))
 
 (test-equal "system secret scope" 'system (secret-decl-scope sys-secret))
 (test-equal "user secret scope" 'user (secret-decl-scope usr-secret))
@@ -44,44 +45,45 @@
 ;; layout）且解析到仓库中的 ciphertext
 (test-assert "secret sources are file-like local-file objects"
              (every (lambda (d) (local-file? (secret-decl-source d)))
-                    %vm-secrets))
+                    %vm-test-secrets))
 (test-assert "secret sources resolve to existing ciphertext files"
              (every (lambda (d)
                       (file-exists? (local-file-absolute-file-name
                                      (secret-decl-source d))))
-                    %vm-secrets))
+                    %vm-test-secrets))
 
 ;; repository-source 唯一 resolver（AGENT.md：top-level secrets 引用
 ;; 只能走它；source-relative，不依赖 shell CWD）
 (test-assert "repository-file resolves to repo-root ciphertext"
-             (let ((lf (repository-file "secrets/hosts/vm/test-system.age")))
+             (let ((lf (repository-file "tests/fixtures/secrets/test-system.age")))
                (and (local-file? lf)
-                    (string-suffix? "/secrets/hosts/vm/test-system.age"
+                    (string-suffix? "/tests/fixtures/secrets/test-system.age"
                                     (local-file-absolute-file-name lf))
                     (file-exists? (local-file-absolute-file-name lf)))))
 ;; ── Secret ownership（repository ownership ≠ deployment target）──
-;; VM test secrets：owner = VM host（secrets/hosts/vm/），尽管
-;; test-user 的 deployment target 是 user（scope 'user）。
-(test-assert "vm test secrets live under secrets/hosts/vm/"
+;; VM 测试 sentinel：密文归 tests/fixtures/secrets/（测试域），由 VM
+;; 装配点声明；test-user 的 deployment target 是 user（scope 'user），
+;; 但仓库侧不存在 host-owned secret 层。
+(test-assert "vm test sentinel ciphertexts live under tests/fixtures/secrets/"
              (every (lambda (d)
                       (string-contains
                        (local-file-absolute-file-name (secret-decl-source d))
-                       "/secrets/hosts/vm/"))
-                    %vm-secrets))
+                       "/tests/fixtures/secrets/"))
+                    %vm-test-secrets))
 
-(test-assert "user-target secret is host-owned in repository"
+(test-assert "user-target sentinel is declared by the VM assembly"
              (let ((lf (secret-decl-source usr-secret)))
                (and (eq? 'user (secret-decl-scope usr-secret))
                     (string-contains
                      (local-file-absolute-file-name lf)
-                     "/secrets/hosts/vm/"))))
+                     "/tests/fixtures/secrets/"))))
 
-(test-assert "no repository ownership contract under secrets/user"
+(test-assert "no host-owned secret layer remains (no secrets/hosts)"
              (every (lambda (d)
                       (not (string-contains
                             (local-file-absolute-file-name (secret-decl-source d))
-                            "/secrets/user/")))
-                    %vm-secrets))
+                            "/secrets/hosts/")))
+                    %vm-test-secrets))
 
 (test-assert "application secrets are all ordinary (never login-critical)"
              (every (lambda (d) (eq? 'ordinary (secret-decl-domain d)))
@@ -153,7 +155,7 @@
              (let ((svcs (service-value
                           (secrets-ordinary-deploy-service
                            (ordinary-secrets
-                            (append %vm-secrets
+                            (append %vm-test-secrets
                                     (applications-secrets %applications)))
                            "user"))))
                (and (pair? svcs)
@@ -178,9 +180,9 @@
                         (lambda (k . a) #t)))
                     '("" "/abs" "a/../b" ".." "a/..")))
 (test-assert "repository-file tolerates ./ prefix (normalized)"
-             (let ((lf (repository-file "./secrets/hosts/vm/test-system.age")))
+             (let ((lf (repository-file "./tests/fixtures/secrets/test-system.age")))
                (and (local-file? lf)
-                    (string-suffix? "/secrets/hosts/vm/test-system.age"
+                    (string-suffix? "/tests/fixtures/secrets/test-system.age"
                                     (local-file-absolute-file-name lf))
                     (file-exists? (local-file-absolute-file-name lf)))))
 
@@ -197,7 +199,7 @@
                  (runtime-secret-target
                   (secret-decl (name 'x) (scope 'install)
                                (domain 'login-critical)
-                               (source (local-file "secrets/install/x.age"))
+                               (source (local-file "tests/fixtures/secrets/x.age"))
                                (target-name "x"))
                   "user")
                  #f)
@@ -205,7 +207,7 @@
 
 ;; 服务构造：one-shot、file-systems 依赖、provision
 (define deploy-shepherd
-  (car (service-value (secrets-deploy-service %vm-secrets "user"))))
+  (car (service-value (secrets-deploy-service %vm-test-secrets "user"))))
 (test-assert "deploy service one-shot"
              (shepherd-service-one-shot? deploy-shepherd))
 (test-assert "deploy service requires persistent-state-ready"
@@ -247,7 +249,7 @@
    (build-script
     (gexp->file "guixcfg-secrets-deploy-test"
                 (program-file-gexp
-                 (secrets-deploy-program %vm-secrets "user"))))
+                 (secrets-deploy-program %vm-test-secrets "user"))))
    (lambda (p) (read-string p))))
 
 (test-assert "deploy script runs age with installed identity"

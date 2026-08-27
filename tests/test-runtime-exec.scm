@@ -30,6 +30,10 @@
 ;;; EP1-EP4 覆盖 ephemeral-root-confirm（登录期 last-good promote）：
 ;;;   PAM_TYPE 门（close_session 不动）、trying→ok 确认、boot-state
 ;;;   幂等跳过与过期 promote。
+;;; MC1-MC3 覆盖 mihomo-config materializer（boot 期 config 合成）：
+;;;   成功路径（合成内容 + 0600/0700 权限）、坏 secret fail closed、
+;;;   secret 缺失 fail closed。秘密 URL 不进 argv/environment（程序
+;;;   只读文件）；成功日志只报输出路径。
 
 (add-to-load-path (string-append (getcwd) "/modules"))
 
@@ -43,6 +47,7 @@
              (gnu services shepherd)
              (guixcfg security secrets)
              (guixcfg system accounts)    ; account-databases-activation/verify
+             (guixcfg system mihomo service) ; MC: mihomo-config-program
              (guixcfg system application-persistence) ; AP1 activation ownership
              (guixcfg services ephemeral-root) ; EP: ephemeral-root-confirm-program
              (guixcfg apps niri definition)  ; NI1: %niri-session-wrapper
@@ -381,7 +386,7 @@ $6$salt$faketesthash:!:20682::::::\n"
 
 ;; 构建带 test secret 的 deploy artifact：ciphertext 用 local-file 引用
 ;; 测试期文件（随 artifact 进 closure，类似 production 的
-;; %vm-secrets source）。
+;; %vm-test-secrets source）。
 (define %deploy-with-secret
   (build-thing
    (secrets-deploy-program
@@ -858,6 +863,70 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
                (and code (not (zero? code))))
   (test-assert "NI1: wrapper logs XDG_SESSION_ID unset (no blind termination)"
                (string-contains out "XDG_SESSION_ID unset"))
+  (false-if-exception (delete-file-recursively root)))
+
+;; ── mihomo-config materializer：真实执行 ────────────────────
+;; 生成程序在隔离 root 里跑：secret 文件预置于
+;; /run/guixcfg-secrets-ordinary/system/，模板来自 store（bind）。
+;; 验证合成内容、目录/文件权限、以及坏 secret / 缺 secret 的
+;; fail-closed 路径（不产半成品 config）。
+(define %mihomo-config-program
+  (build-thing (mihomo-config-program)))
+
+(define (make-mihomo-fake-root secret-content)
+  "fake root：/run + secret 路径（parent 0700、文件 0400，模拟
+secrets ordinary deploy 的产物形态）。"
+  (let ((dir (string-append (or (getenv "TMPDIR") "/tmp")
+                            "/guixcfg-mihomo-" (number->string (getpid))
+                            "-" (number->string (random 100000)))))
+    (mkdir dir)
+    (mkdir (string-append dir "/gnu"))
+    (mkdir (string-append dir "/gnu/store"))
+    (let ((secret-dir (string-append dir
+                                     "/run/guixcfg-secrets-ordinary/system")))
+      (mkdir-p secret-dir)
+      (chmod (string-append dir "/run/guixcfg-secrets-ordinary") #o700)
+      (chmod (string-append dir "/run/guixcfg-secrets-ordinary/system") #o700)
+      (call-with-output-file (string-append secret-dir "/mihomo-subscription.url")
+                             (lambda (p) (display secret-content p)))
+      (chmod (string-append secret-dir "/mihomo-subscription.url") #o400))
+    dir))
+
+(let* ((root (make-mihomo-fake-root
+              "https://example.invalid/sub?token=test\n"))
+       (code (run-in-root %mihomo-config-program root))
+       (config (string-append root "/run/mihomo/config.yaml")))
+  (test-assert "MC1: materializer executes without unbound-variable"
+               (and code (zero? code)))
+  (test-assert "MC1: composed config exists with substituted URL"
+               (and (file-exists? config)
+                    (string-contains
+                     (call-with-input-file config get-string-all)
+                     "https://example.invalid/sub?token=test")))
+  (test-assert "MC1: runtime dir 0700, config 0600"
+               (and (eq? (stat:mode (stat (string-append root "/run/mihomo")))
+                         #o40700)
+                    (eq? (stat:mode (stat config)) #o100600)))
+  (false-if-exception (delete-file-recursively root)))
+
+(let* ((root (make-mihomo-fake-root
+              ;; 尾换行剥离后仍含 LF → fail closed。
+              "https://example.invalid/a\nb\n"))
+       (code (run-in-root %mihomo-config-program root)))
+  (test-assert "MC2: bad secret (embedded LF) fails closed, no config written"
+               (and code (not (zero? code))
+                    (not (file-exists?
+                          (string-append root "/run/mihomo/config.yaml")))))
+  (false-if-exception (delete-file-recursively root)))
+
+(let* ((root (make-mihomo-fake-root "https://example.invalid/x\n"))
+       (_ (delete-file (string-append root
+                                      "/run/guixcfg-secrets-ordinary/system/mihomo-subscription.url")))
+       (code (run-in-root %mihomo-config-program root)))
+  (test-assert "MC3: missing secret file fails closed"
+               (and code (not (zero? code))
+                    (not (file-exists?
+                          (string-append root "/run/mihomo/config.yaml")))))
   (false-if-exception (delete-file-recursively root)))
 
 (test-end "runtime-exec")

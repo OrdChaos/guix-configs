@@ -7,7 +7,8 @@ roadmap（Git history 就是历史）。
 
 ### stable identity offline-attack boundary
 
-`secrets/bootstrap/stable-identity.age`（passphrase 加密私钥）位于
+`modules/guixcfg/security/secrets/age/stable-identity.age`
+（passphrase 加密私钥）位于
 public repo，给攻击者离线尝试 master passphrase 的目标。长期选择：
 public repo 只含 recipient + ciphertext、private identity 另存密码
 管理器/离线备份；或维持现状但 master passphrase 必须高熵、独立于
@@ -27,7 +28,9 @@ application 单元（registry 条目 + 包）尚未入仓库——包进入 sess
 PATH 前，无包机器（VM）上这些启动/按键会运行期失败（仅通知，不
 影响配置合法性）：
 
-- `clash-verge`（proxy GUI）
+- ~~`clash-verge`（proxy GUI）~~ → 已由 Mihomo 系统服务取代
+  （`(guixcfg system mihomo service)`，docs/architecture/mihomo.md；GUI 控制
+  经 Noctalia Mihomo Control 走 Clash API）
 - binds 引用的 `missioncenter` / `playerctl` / `orca`
   （Guix 官方包名核对后入 registry）
 

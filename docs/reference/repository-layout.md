@@ -26,7 +26,9 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
   services/            用户态 one-shot 服务（ephemeral-root）
   storage/             磁盘/子卷/generation 纯模型 + 安装器
   system/              OS 组装、readiness、accounts、ssh、
-                       user-persistence、application-persistence
+                       user-persistence、application-persistence、
+                       mihomo/（系统透明代理 service/config/template，
+                       docs/architecture/mihomo.md）
   users/               用户结构事实
   utils/               跨领域原语（atomic-file / process / spawn /
                        repository-source / home-path / mountinfo /
@@ -35,14 +37,14 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
 tools/                 命令行工具（disk-install、secrets、secure-boot、reconfigure、
                        tpm2-enroll、历史 E2E harness）
 templates/            新组件模板（application/definition.scm）
-secrets/              age 密文（明文永不入库；repository ownership
-                      taxonomy：bootstrap/ install/ recipients/
-                      hosts/<host>/ shared/ system/——app-private 在
-                      apps/<app>/secrets/；无 secrets/user 类别；
+secrets 密文          密文与引用者同置：apps/<app>/secrets/、
+                      modules/guixcfg/<域>/<组件>/secrets/、
+                      tests/fixtures/secrets/（测试 sentinel）；
+                      无 host-owned 层、无顶层 secrets/ 目录；
                       machine-generated state 不在此，在
                       /persist/system/state；readiness domain
                       （login-critical/ordinary）是 secret-decl 属性，
-                      不改变 repository 布局）
+                      不改变 repository 布局
 tests/                测试（run-tests.scm 入口 + 各主题 test-*.scm）
 docs/                 文档（本目录；application layer 见
                       architecture/applications.md +

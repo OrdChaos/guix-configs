@@ -39,10 +39,12 @@
 (define %nonguix-store-dir (channel-store-dir 'nonguix))
 (define %virelith-store-dir (channel-store-dir 'virelith))
 (define %saayix-store-dir (channel-store-dir 'saayix))
+(define %rosenthal-store-dir (channel-store-dir 'rosenthal))
 
 (add-to-load-path %nonguix-store-dir)
 (add-to-load-path %virelith-store-dir)
 (add-to-load-path %saayix-store-dir)
+(add-to-load-path %rosenthal-store-dir)
 
 ;; 必须先设置 runner，再加载测试文件：
 ;; SRFI-64 的计数器都记录在“当前 runner”上。
@@ -107,6 +109,7 @@
                "tests/test-kernel-platform.scm"
                "tests/test-substitutes.scm"
                "tests/test-desktop.scm"
+               "tests/test-mihomo.scm"
                "tests/test-session-env.scm"
                "tests/test-apps.scm"
                "tests/test-selection.scm"

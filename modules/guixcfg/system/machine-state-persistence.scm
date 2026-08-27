@@ -13,9 +13,9 @@
 ;;;   machine-state-persistence：/persist/system/state → absolute system
 ;;;   consumer（root-owned）
 ;;;
-;;; 与 host secret 的区别（docs/architecture/secrets.md）：
-;;;   secrets/hosts/<host>：repository 是 authority（declarative
-;;;   ciphertext → runtime plaintext）
+;;; 与 declarative secret 的区别（docs/architecture/secrets.md）：
+;;;   <模块>/secrets/*.age（与引用者同置）：repository 是 authority
+;;;   （declarative ciphertext → runtime plaintext）
 ;;;   /persist/system/state：machine 是 authority（本机产生的 mutable
 ;;;   state，独立于 repository 持久）
 ;;;

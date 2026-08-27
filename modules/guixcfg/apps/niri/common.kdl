@@ -18,10 +18,11 @@
 //   - gnome-keyring-daemon --start：Home Shepherd 的
 //     gnome-keyring-session 服务是 keyring daemon 唯一 owner；
 //   - xrdb -merge ~/.Xresources：原配置硬编码 HOME 绝对路径，且
-//     仓库无 .Xresources 归属。
-// 待办（roadmap）：clash-verge 的应用单元尚未入仓库——spawn
-// 保留（图形会话组件），对应包加入 session PATH 前该启动项会在
-// 无包机器上失败。
+//     仓库无 .Xresources 归属；
+//   - clash-verge（proxy GUI）：Mihomo 已作为系统级透明代理由
+//     Guix System + Shepherd 独占生命周期（(guixcfg system mihomo service)，
+//     docs/architecture/mihomo.md）；GUI 控制经 Noctalia Mihomo
+//     Control 走 Clash API，不在 niri 启动 clash-verge。
 
 debug {
     honor-xdg-activation-with-invalid-serial
@@ -668,8 +669,3 @@ spawn-at-startup "noctalia"
 // 声明默认 mode reconcile runtime 外观状态，再 exec xsettingsd
 // -c $XDG_RUNTIME_DIR/guixcfg/xsettingsd.conf。
 spawn-at-startup "xsettingsd-session"
-
-// 以下图形会话组件来自原主机配置；对应应用单元尚未入仓库
-// （roadmap：clash-verge）——包进入 session PATH 前，无包机器
-// （VM）上这些启动会失败（仅运行期通知，不影响配置合法性）。
-spawn-at-startup "clash-verge"          // proxy GUI
