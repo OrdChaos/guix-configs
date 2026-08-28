@@ -22,7 +22,7 @@
        (name 'rosenthal)
        (url "https://codeberg.org/hako/rosenthal.git")
        (branch "trunk")
-       (commit "21391bab6e38561488bd807493da1035a85c24cb")
+       (commit "c6361f6e7b087a48eda47f32981cfda70c9fa424")
        (introduction
         (make-channel-introduction
          "7677db76330121a901604dfbad19077893865f35"
@@ -32,7 +32,7 @@
        (name 'virelith)
        (url "https://github.com/ordchaos/virelith.git")
        (branch "master")
-       (commit "aac377d844c62efdf55fafa15a3c0dd6f434eeb4")
+       (commit "dbcf9a02045daf7d7d5456a42971bebf34cf29be")
        (introduction
         (make-channel-introduction
          "cae11b77a64f281cc9ab45e20567e59efc37e96b"
@@ -47,9 +47,4 @@
         (make-channel-introduction
          "12540f593092e9a177eb8a974a57bb4892327752"
          (openpgp-fingerprint
-          "3FFA 7335 973E 0A49 47FC  0A8C 38D5 96BE 07D3 34AB"))))
-      (channel
-       (name 'noctalia)
-       (url "https://github.com/noctalia-dev/noctalia")
-       (branch "main")
-       (commit "67addbd529cfd9db30c9d0ee6e08d5f6836c9e1a")))
+          "3FFA 7335 973E 0A49 47FC  0A8C 38D5 96BE 07D3 34AB")))))

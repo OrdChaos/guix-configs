@@ -34,6 +34,7 @@
                #:use-module (guixcfg system dns ownership) ; system-dns-etc-service（DNS ownership）
                #:use-module (guixcfg system dns smartdns) ; smartdns-service（system resolver）
                #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
+               #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind + 系统集成
 
                #:use-module (gnu services guix)        ; guix-home-service-type
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
@@ -90,6 +91,14 @@
 (define %mihomo-machine-state-file-systems
   (machine-state-persistence-file-systems
    (list %mihomo-data-persistence-rule)))
+
+;; Noctalia Greeter state dir（sync.toml / 同步 wallpaper / output
+;; 状态）的 machine-state bind（greeter-owned system state；
+;; backing/consumer 0750 + greeter:greeter 由 noctalia-greeter
+;; activation 强制——modules/guixcfg/system/noctalia-greeter.scm）。
+(define %noctalia-greeter-machine-state-file-systems
+  (machine-state-persistence-file-systems
+   (list %noctalia-greeter-persistence-rule)))
 
 (define %vm-services
   (append
@@ -183,10 +192,22 @@
           (applications-persistence %applications)
           (user-profile-name %primary-user))
          ;; machine-state persistence（root-owned system state；
-         ;; 当前唯一 consumer：mihomo 数据目录。bind 见
-         ;; %mihomo-machine-state-file-systems）
+         ;; consumers：mihomo 数据目录、noctalia-greeter state dir。
+         ;; bind 见 %mihomo-machine-state-file-systems 与
+         ;; %noctalia-greeter-machine-state-file-systems）
          (machine-state-persistence-service
-          (list %mihomo-data-persistence-rule))
+          (list %mihomo-data-persistence-rule
+                %noctalia-greeter-persistence-rule))
+         ;; noctalia-greeter persistence backing 的 owner/mode
+         ;; （bind 权限来源：backing 两侧 0750 greeter:greeter；
+         ;; consumer 侧由 channel service 的 activation 负责——
+         ;; modules/guixcfg/system/noctalia-greeter.scm 头部职责
+         ;; 划分）。activation 先于 file-systems 挂载（pinned Guix
+         ;; 行为），与 channel activation 无顺序冲突（两侧幂等、
+         ;; 只修 owner/mode、不触碰内容）。
+         (simple-service 'noctalia-greeter-backing-ownership
+                         activation-service-type
+                         (noctalia-greeter-backing-ownership-activation))
          ;; 声明式 runtime secrets（boot 时 root 解密；docs/
          ;; architecture/secrets.md）。composition root = host assembly：
          ;;   %vm-test-secrets（本测试机的机制 sentinel） +
@@ -263,8 +284,10 @@
    (file-systems (append (system-file-systems %ephemeral-root-file-system)
                          ;; selected user persistence（bind mounts，登录前就位）
                          %persistent-mount-file-systems
-                         ;; machine-state binds（root-owned；mihomo providers）
+                         ;; machine-state binds（root-owned：mihomo providers；
+                         ;; greeter-owned：noctalia-greeter state）
                          %mihomo-machine-state-file-systems
+                         %noctalia-greeter-machine-state-file-systems
                          %base-file-systems))
    
    (swap-devices %swap-spaces)

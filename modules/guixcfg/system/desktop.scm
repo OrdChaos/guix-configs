@@ -7,43 +7,49 @@
 ;;;     ├─ greetd（tty1，requirement 含 interactive-session-ready）
 ;;;     └─ mingetty fallback（tty2，同样 gated——core readiness 失败
 ;;;        时两条路径都不绕过 barrier；desktop 失败时 tty2 仍可用）
-;;;   greetd → default_session = agreety greeter（greeter 用户，
-;;;     HOME=/var/empty 是 greeter 专用 home）→ 用户认证 →
-;;;     IPC StartSession（cmd = 下方 greetd-user-session，env = '()）
+;;;   greetd → default_session = greetd-noctalia-session（channel
+;;;     helper wrapper；greeter 用户，HOME=/var/empty）→ wrapper 以
+;;;     真实 store 路径为 argv0 exec upstream noctalia-greeter-
+;;;     session（$0 相对前缀语义保留）→ noctalia-greeter-compositor
+;;;     （自带 wlroots compositor，不套 Sway/Cage）→ noctalia-greeter
+;;;     UI → 用户认证（greetd PAM）→ IPC StartSession：
+;;;       cmd = 会话 .desktop 的 Exec（niri.desktop =
+;;;       <store>/bin/bash -l，见 (guixcfg system noctalia-greeter)）
+;;;       env = XDG_SESSION_TYPE=wayland / XDG_CURRENT_DESKTOP /
+;;;       XDG_SESSION_DESKTOP（greeter 发送，sessionStartEnvironment）
 ;;;     → greetd session worker（root）：PAM → getpwnam(认证用户)
-;;;     → HOME/USER/LOGNAME/SHELL = passwd entry（greetd upstream
-;;;     设置，非 PAM 非 wrapper）→ execve(session, PAM envlist)
-;;;     → greetd-user-session（官方 wrapper，只设置 XDG_*）→ bash -l
+;;;     → HOME/USER/LOGNAME/SHELL = passwd entry → execve(/bin/sh
+;;;     -c "exec bash -l", PAM envlist + IPC env) → bash -l
 ;;;     → Guix Home（bash_profile → on-first-login → Home Shepherd →
-;;;     官方 Home D-Bus / Home Niri / Home PipeWire——不再有 custom
-;;;     session wrapper，见 upstream-boundaries.md）。
+;;;     官方 Home D-Bus / Home Niri / Home PipeWire）。
 ;;;
-;;; ── source-profile? #f（XDG_SESSION_TYPE 契约，2026-08-26）──
-;;; pam_elogind 在 PAM envlist 里写 XDG_SESSION_TYPE=tty（pinned
-;;; elogind pam_elogind.c:1247 update_environment）——PAM 只知道
-;;; tty 会话，不知道未来的 Wayland。官方 greetd wrapper
-;;; （make-greetd-xdg-user-session-command）把该值改写为
-;;; (xdg-session-type "wayland")，其设计意图是"会话开始前生效"。
-;;; 但 greetd 默认 source_profile = true 会先跑
-;;;   sh -c ". /etc/profile; . $HOME/.profile; exec <wrapper>"
-;;; （pinned greetd 0.10.3 worker.rs:239-241）——~/.profile 里的
-;;; Guix Home on-first-login 在 wrapper 之前启动 Home Shepherd 与
-;;; 会话 dbus-daemon，因此 Shepherd/dbus/所有 dbus 激活服务
-;;; （xdg-desktop-portal 及其后端）继承 XDG_SESSION_TYPE=tty，
-;;; wrapper 的 wayland 只到达 bash 本身。后果（VM 实测 2026-08-26）：
-;;; xdg-desktop-portal-gnome 的 gxdp_init_gtk 要求 session type
-;;; 为 wayland/x11，遇 tty 即 "Non-compatible display server,
-;;; exposing settings only." → FileChooser 接口不导出 → 前端
-;;; default=gnome;gtk 链选中 gnome 后端却无接口（loupe "no
-;;; interface on object"）。修复：source-profile? #f——wrapper 先
-;;; 生效，profile 改由 bash -l（login shell）自行 source（/etc/
-;;; profile 与 ~/.bash_profile 行为不变，用户会话环境与原先等价）；
-;;; greeter（agreety）不依赖 profile（全部绝对 store 路径，LANG/
-;;; TERM/XDG_RUNTIME_DIR 来自 PAM）。契约测试：tests/test-desktop.scm
-;;; "D1b: greetd session does not pre-source profiles"。
+;;; ── greeter 运行时环境（channel service，2026-08-28 迁移）──
+;;; greeter 会话经 worker execve 整体替换环境，envvec = PAM envlist
+;;; （无 PATH——pam_env 无参数只 honor /etc/environment）。upstream
+;;; session script 与 greeter 的 power actions 在运行时从 PATH 解析
+;;; 命令——该环境现由 virelith channel 的 greetd-noctalia-session
+;;; helper 提供（确定性 PATH：coreutils/dbus/elogind；XDG_DATA_DIRS
+;;; 指向 system profile share；并以真实 script 路径为 argv0 exec，
+;;; 保留 upstream 的 $0 相对前缀语义）。配置仓库不 wrap、不复制、
+;;; 不补 env。polkit policy / system profile 注入 / state directory
+;;; owner/mode 由 channel 的 noctalia-greeter-service-type 负责；
+;;; 本仓库保留 greetd 接线、niri 会话发现数据与 machine-state
+;;; persistence（见 (guixcfg system noctalia-greeter) 头部）。
 ;;;
-;;; 无 autologin：greetd 走 agreety（内置最小 greeter）+ 既有 account
-;;; DB / PAM；空密码禁用（allow-empty-passwords? #f）。
+;;; ── XDG_SESSION_TYPE 契约（2026-08-28，greeter 切换）──
+;;; 旧链（agreety）里 pam_elogind 在 PAM envlist 写
+;;; XDG_SESSION_TYPE=tty（PAM 只知道 tty 会话），官方 greetd
+;;; wrapper（make-greetd-xdg-user-session-command）负责改写 wayland，
+;;; 因此 source-profile? #f 保证 wrapper 先于 profile 生效。
+;;; noctalia-greeter 原生接管该职责：StartSession 的 env 经
+;;; worker.rs 在 pam.open_session **之前** putenv 进 PAM env（pinned
+;;; greetd 0.10.3 worker.rs:220-226 env.iter().chain(prepared_env)），
+;;; pam_elogind（257.16 pam_elogind.c:1024 getenv_harder）读到
+;;; XDG_SESSION_TYPE=wayland → 按 wayland 注册会话并原值回写
+;;; （pam_misc_setenv read_only=0，1244 update_environment）——
+;;; envlist 里 wayland 从会话开始就在，profile 顺序不再影响
+;;; portal 后端。source-profile? #f 保持：profile 由 bash -l
+;;; 自行 source（/etc/profile 与 ~/.bash_profile 行为不变）。
 ;;;
 ;;; ── HOME provenance（exact pinned source audit，2026-08-18）──
 ;;; 用户会话的 HOME 由 greetd 0.10.3 本身设置，契约如下：
@@ -55,8 +61,9 @@
 ;;;     fork+setuid（:245-255）后 execve("/bin/sh","-c",
 ;;;     "exec <session>", envvec)（:267-276）——execve 整体替换环境，
 ;;;     greeter（HOME=/var/empty）的进程环境【不可能】被继承；
-;;;   - agreety/src/main.rs:107-110：StartSession 只发 cmd + env='()'
-;;;     （greeter 配置 env，非进程环境）——IPC 无泄漏通道。
+;;;   - noctalia-greeter 经 IPC 只发 cmd + sessionStartEnvironment
+;;;     （XDG_SESSION_TYPE/CURRENT_DESKTOP/SESSION_DESKTOP）——
+;;;     IPC 无其他泄漏通道（greetd_client.cpp requestStartSession）。
 ;;; PAM 与 Guix 侧都不设置 HOME：
 ;;;   - unix-pam-service（gnu/system/pam.scm:216-290）的 pam_env.so
 ;;;     无参数、只 honor /etc/environment（本机为空，未定义
@@ -68,34 +75,34 @@
 ;;;     SESSION_ID/SEAT/VTNR 在 1226-1277；无任何 HOME 设置）；
 ;;;   - Guix 官方 wrapper（gnu/services/base.scm:3715-3729
 ;;;     make-greetd-xdg-user-session-command）只设 XDG_SESSION_TYPE
-;;;     与 XDG_RUNTIME_DIR（getpwuid($USER)）。
+;;;     与 XDG_RUNTIME_DIR（getpwuid($USER)）——本仓库已不再使用
+;;;     该 wrapper（greeter 原生提供 XDG env，见上）。
 ;;; 测试固定见 tests/test-desktop.scm "HOME provenance" 组。
 
 (define-module (guixcfg system desktop)
                #:use-module (gnu services)            ; service
                #:use-module (gnu services base)       ; greetd-service-type、greetd-configuration、greetd-terminal-configuration
-               #:use-module (gnu packages bash)      ; bash（greetd-user-session command）
-               #:use-module (guix gexp)               ; file-append
+               #:use-module (virelith services noctalia-greeter) ; noctalia-greeter-service-type、noctalia-greeter-configuration、greetd-noctalia-session
+               #:use-module (guixcfg system noctalia-greeter) ; %noctalia-greeter-state-dir、noctalia-greeter-session-profile-service
                #:export (desktop-services))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; greetd：tty1，gated by interactive-session-ready，agreety
-;;; greeter（greetd 内置，最小 frontend），无 autologin。
+;;; greetd：tty1，gated by interactive-session-ready，
+;;; noctalia-greeter greeter（channel helper 启动），无 autologin。
 ;;;
-;;; 认证后的用户会话【交给 pinned Guix 官方模型】（docs/architecture/
-;;; upstream-boundaries.md）：default-session-command 语义 = greeter
-;;; （greetd config.toml："The default session, also known as the
-;;; greeter"；Guix 默认值即 (greetd-agreety-session)——
-;;; gnu/services/base.scm:4275-4276；Guix 手册 doc/guix.texi
-;;; "greetd-service-type"）——必须用 greetd-agreety-session 包装
-;;; user-session，它编译为 agreety-wrapper：
-;;;   execl agreety agreety -c <greetd-user-session>
-;;; （base.scm:3762-3776 greetd-agreety-session-compiler）。
-;;; 若把 greetd-user-session 直接放在 default-session-command，greetd
-;;; 会把它当作【greeter】以 greeter 用户无认证运行（server.rs
-;;; greet()→start_greeter→authenticate=false）——没有登录提示符，
-;;; HOME = greeter 的 /var/empty。用户认证后会话由 agreety 经 IPC
-;;; 以认证用户启动（见头注释 HOME provenance）。
+;;; default-session-command 语义 = greeter（greetd config.toml：
+;;; "The default session, also known as the greeter"）。入口是
+;;; virelith channel 的 greetd-noctalia-session helper：它为
+;;; greeter 会话提供确定性 PATH/XDG_DATA_DIRS，并以真实
+;;; noctalia-greeter-session 的 store 路径为 argv0 exec（upstream
+;;; 以 dirname "$0" 相对定位同 prefix 的 compositor/greeter——
+;;; 配置仓库不直接 file-append、不 wrap、不复制）。greetd 0.10.3
+;;; start_greeter 把 command 作为单个 argv 交给 sh -c exec
+;;; （config 无空格 store 路径安全）。
+;;;
+;;; 用户认证后的会话不再经 agreety wrapper：greeter 自己经 greetd
+;;; IPC 发送 .desktop Exec + XDG env（见文件头登录链与
+;;; (guixcfg system noctalia-greeter) 的会话发现数据）。
 (define (greetd-login-service)
   (service greetd-service-type
            (greetd-configuration
@@ -108,31 +115,34 @@
                ;; interactive-session-ready 已过（与 tty2 mingetty
                ;; 同一 invariant）。
                (extra-shepherd-requirement '(interactive-session-ready))
-               ;; greetd 默认 source_profile=true 会在 wrapper 之前
-               ;; source ~/.profile（启动 Home Shepherd/dbus），使
-               ;; 官方 wrapper 的 XDG_SESSION_TYPE=wayland 无法到达
-               ;; 会话总线 → portal 后端 settings-only（见文件头
-               ;; "source-profile? #f" 契约审计）。#f 后 wrapper 先
-               ;; 生效，profile 由 bash -l 自行 source。
+               ;; source-profile? #f：用户会话 profile 单次 source
+               ;; 语义见文件头 "XDG_SESSION_TYPE 契约" 审计
+               ;; （greeter 原生提供 wayland env，profile 改由
+               ;; bash -l 自行 source）。greeter 自身的环境由
+               ;; channel helper 提供，与本开关无关——不因 helper
+               ;; 自带 env 而改动 profile policy。
                (source-profile? #f)
-               ;; 官方 greeter 模式：agreety 提示符 + -c 指向认证后
-               ;; 的 user-session（bash -l login session，Wayland XDG
-               ;; 环境），由 Guix Home 接管用户桌面生命周期（Home
-               ;; Shepherd 启动 D-Bus/Niri/PipeWire——
-               ;; docs/architecture/upstream-boundaries.md）。
+               ;; Noctalia Greeter 的 greetd entry point（channel
+               ;; helper wrapper，非裸 upstream script；greeter 以
+               ;; greetd 的 greeter 用户无认证运行——start_greeter
+               ;; authenticate=false，HOME=/var/empty）。
                (default-session-command
-                (greetd-agreety-session
-                 (command
-                  (greetd-user-session
-                   (command (file-append bash "/bin/bash"))
-                   (command-args '("-l"))
-                   (xdg-session-type "wayland")
-                   (xdg-env? #t)))))))))))
+                (greetd-noctalia-session))))))))
 
 (define desktop-services
-  ;; M2 Wayland desktop 系统层服务（greetd + niri session）。
-  ;; 用户会话内的服务（PipeWire、notification、polkit agent 等）由
-  ;; niri config 的 spawn-at-startup 以用户身份启动（单一 owner =
-  ;; niri session，见 modules/guixcfg/apps/niri/config.kdl 与
+  ;; M2 Wayland desktop 系统层服务。Noctalia Greeter 的通用系统
+  ;; 集成（polkit policy / system profile / state directory）由
+  ;; virelith channel 的 noctalia-greeter-service-type 提供——
+  ;; state-directory 显式绑定本仓库的机器策略路径（persistence
+  ;; rule consumer 同源，避免双份字面量漂移）。用户会话内的服务
+  ;; （PipeWire、notification、polkit agent 等）由 niri config 的
+  ;; spawn-at-startup 以用户身份启动（单一 owner = niri session，
+  ;; 见 modules/guixcfg/apps/niri/config.kdl 与
   ;; docs/architecture/graphics.md）。
-  (list (greetd-login-service)))
+  (list (greetd-login-service)
+        (service noctalia-greeter-service-type
+                 (noctalia-greeter-configuration
+                  (state-directory %noctalia-greeter-state-dir)))
+        ;; repo-owned 登录会话发现数据（niri.desktop）→ system
+        ;; profile（greeter 的会话发现路径）。
+        (noctalia-greeter-session-profile-service)))

@@ -51,7 +51,22 @@ login authentication（greetd/PAM）与 keyring unlocking（本服务）完全
   identity 声明**（`polkit.addAdminRule(unix-group:wheel)`），不是
   blanket allow。wheel 是既有 account 语义（`users/user.scm`）。
 - **本仓库不写自定义 `/etc/polkit-1/rules.d`**（测试断言唯一
-  rules/actions 贡献 = elogind + polkit-wheel）。
+  rules/actions 贡献 = elogind + polkit-wheel + NetworkManager +
+  noctalia-greeter——全部经官方 service extension 组合，非仓库
+  custom rules/手工 symlink）。
+- **noctalia-greeter**（2026-08-28 迁移）：channel package 自带
+  `share/polkit-1/actions/`
+  `org.noctalia.greeter.apply-appearance.policy`，由 virelith
+  channel 的 `noctalia-greeter-service-type` 经官方
+  `polkit-service-type` extension 暴露（elogind 同款组合；配置
+  仓库不再手工扩展 polkit）——Noctalia Shell 的
+  **Settings → Security → Noctalia Greeter → Sync** 链：staging →
+  `pkexec noctalia-greeter-apply-appearance`（action 授权
+  auth_admin，polkit-gnome agent 出密码框）→ root 合并
+  sync.toml / 安装壁纸到 `/var/lib/noctalia-greeter/`。package
+  由 channel service 注入 system profile，Shell 的 Sync 可用性
+  检测先查 PATH（resolveProgramPath commandExists 优先于 FHS
+  路径）。
 - `polkit-gnome`（apps/polkit-gnome）是 **graphical session agent**：
   niri `spawn-at-startup "polkit-gnome-authentication-agent-1"` 启动
   一次、会话结束自然结束。agent 二进制在 libexec（不在 PATH，无 FHS

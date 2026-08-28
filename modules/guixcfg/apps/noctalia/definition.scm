@@ -1,4 +1,12 @@
-;;; Noctalia（noctalia-git channel 包 + 本仓库配置）。
+;;; Noctalia application unit（virelith channel 固定版本 package +
+;;; 本仓库配置）。
+;;;
+;;; 包来源（2026-08-28 切换）：virelith channel 的
+;;; (virelith packages noctalia) `noctalia`——上游 tag v5.0.0-beta.10
+;;; 的 release 打包；version/commit/hash 由 channel package 层固定，
+;;; 配置仓库只消费 `noctalia`，不 pin upstream、不复制 definition。
+;;; 此前经官方 noctalia channel 的 `noctalia-git`（跟随 main）提供；
+;;; 切换后该 channel 已从 channels.scm 移除（无其他消费者）。
 ;;;
 ;;; 注销 lifecycle（2026-08-24 决策记录）：Noctalia 上游 Logout =
 ;;; niri IPC Quit（只退合成器）——由 apps/niri 的 home-niri-session
@@ -35,29 +43,30 @@
 ;;; niri 集成：~/.config/niri/noctalia.kdl 由 Noctalia 运行时生成
 ;;; （唯一 owner = Noctalia），与 seed 模型无关（见 apps/niri）。
 ;;;
-;;; GTK 动态配色（任务七边界）：templates/gtk{3,4}.css 是 pinned
-;;; Noctalia 内置模板的 vendored 副本（stock post-hook apply.sh 含
-;;; gtk.css mutation——store symlink 缺 import 时会 rm 重建——不用）；
-;;; 经 home-files 发布为 ~/.config/noctalia/templates/，由 seed 的
+;;; GTK 动态配色（任务七边界）：templates/gtk{3,4}.css 是 channel
+;;; 固定版本（v5.0.0-beta.10）Noctalia 内置模板的 vendored 副本
+;;; （stock post-hook apply.sh 含 gtk.css mutation——store symlink
+;;; 缺 import 时会 rm 重建——不用）；经 home-files 发布为
+;;; ~/.config/noctalia/templates/，由 seed 的
 ;;; [theme.templates.user.gtk{3,4}] 引用，只生成
 ;;; gtk-{3,4}/noctalia.css；post-hook 是窄职责的 appearance-sync
 ;;; （apps/gtk）。内置 gtk3/gtk4 template 在 seed 的 builtin_ids 中
 ;;; 已移除（双 hook owner 禁令同 §7）。
 
-(define-module (guixcfg apps noctalia-git definition)
-               #:use-module (noctalia)                 ; noctalia-git
+(define-module (guixcfg apps noctalia definition)
+               #:use-module (virelith packages noctalia) ; noctalia（固定版本）
                #:use-module (gnu home services)        ; home-files-service-type
                #:use-module (gnu services)             ; simple-service
                #:use-module (guix gexp)                ; local-file
                #:use-module (guix records)
                #:use-module (guixcfg apps model)       ; application
                #:use-module (guixcfg system application-persistence) ; application-persistence-rule
-               #:export (%noctalia-git))
+               #:export (%noctalia))
 
-(define %noctalia-git
+(define %noctalia
   (application
-   (name 'noctalia-git)
-   (home-packages (list noctalia-git))                 ; 用户 profile 包（service 自动贡献的不要重复）
+   (name 'noctalia)
+   (home-packages (list noctalia))                 ; 用户 profile 包（service 自动贡献的不要重复）
    (home-services
     (list (simple-service 'noctalia-palettes
                           home-files-service-type

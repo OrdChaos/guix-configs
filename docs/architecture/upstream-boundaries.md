@@ -13,7 +13,7 @@ OFFICIAL；项目 invariant 需要 → THIN ADAPTER / KEEP（custom）。
 | Niri user lifecycle | Guix Home official | `home-niri-service-type`（bash -l -c "exec niri --session"；requirement home-dbus；profile 贡献 dbus/niri/xdg-desktop-portal-*/xwayland-satellite） | — | 官方完整覆盖 |
 | User session D-Bus | Guix Home official | `home-dbus-service-type`（shepherd `dbus`，dbus-daemon --session） | — | 官方完整覆盖；不再有 custom dbus-run-session |
 | PipeWire/WirePlumber | Guix Home official | `home-pipewire-service-type`（pipewire + wireplumber shepherd services + profile + alsa config） | — | 官方完整覆盖；niri 不再 spawn |
-| Greetd login | Guix official | `greetd-service-type` + `greetd-user-session` | `desktop.scm`：`extra-shepherd-requirement '(interactive-session-ready)` + tty1/agreety/allow-empty-passwords? #f | 官方服务；本地只加 readiness gate |
+| Greetd login | Guix official + virelith service | `greetd-service-type` + virelith `noctalia-greeter-service-type` / `greetd-noctalia-session`（greeter 会话 PATH/XDG_DATA_DIRS、polkit、state dir owner/mode 由 channel service 提供） | `desktop.scm`：`extra-shepherd-requirement '(interactive-session-ready)` + tty1 + allow-empty-passwords? #f；greeter 机器策略（machine-state persistence + niri.desktop 会话数据）在 `system/noctalia-greeter.scm` | 官方服务；本地只加 readiness gate 与机器策略 |
 | Login readiness barrier | guixcfg custom | —（官方 shepherd dependency 不是同语义） | `readiness.scm`（persistent-state/account-state/interactive-secrets/home/session-infra/interactive-session-ready + PAM gate） | 项目 capability 模型 |
 | Fallback tty | Guix official | mingetty（tty2-6，gated by interactive-session-ready） | vm.scm（tty1 移除 + gating） | 官方服务 + 本地 gating |
 | Account DB projection | guixcfg custom（KEEP） | 官方 account activation 有历史 runtime 问题 | `accounts.scm`（single-writer passwd/group/shadow + persistent verifier） | persistent root-only hash → ephemeral /etc/shadow 投影；hash 不进 store |
@@ -40,22 +40,27 @@ OFFICIAL；项目 invariant 需要 → THIN ADAPTER / KEEP（custom）。
   name/dir/shell）→ pam.open_session → getenvlist →
   execve("/bin/sh","-c","exec <session>", envvec)——execve 整体替换
   环境，greeter 的 HOME=/var/empty 不可能继承（greetd 0.10.3
-  `src/session/worker.rs:162-216,239-276`；agreety 的 IPC 只传
-  cmd + env='()，`agreety/src/main.rs:107-110`）。**不是** pam_env
+  `src/session/worker.rs:162-216,239-276`；noctalia-greeter 的 IPC
+  只传 cmd + XDG_SESSION_TYPE/CURRENT_DESKTOP/SESSION_DESKTOP，
+  `greetd_client.cpp requestStartSession`）。**不是** pam_env
   （unix-pam-service 的 pam_env.so 无参数、只 honor
   /etc/environment——无 HOME 规则）、**不是** Guix wrapper（官方
   greetd-xdg-user-session-command 只设置 XDG_SESSION_TYPE /
-  XDG_RUNTIME_DIR，`gnu/services/base.scm:3715-3729`）、**不是**
-  custom wrapper 硬编码。契约测试：tests/test-desktop.scm H1-H5。
-- 认证后的用户会话由官方 **greeter 模式** 启动：
-  default-session-command = `greetd-agreety-session`（agreety
-  提示符 + `-c` 指向 `greetd-user-session`，bash -l——Guix 手册
-  guix.texi "greetd-service-type"；默认值即
-  `(greetd-agreety-session)`）。不可把 greetd-user-session 直接放在
+  XDG_RUNTIME_DIR，`gnu/services/base.scm:3715-3729`——已随 agreety
+  移除，XDG env 由 greeter 原生提供）、**不是** custom wrapper
+  硬编码。契约测试：tests/test-desktop.scm G1-G3、H3-H5。
+- 认证后的用户会话由 **greeter 经 greetd IPC** 启动：cmd = 会话
+  .desktop 的 Exec（repo-owned niri.desktop = bash -l，经 system
+  profile 的 wayland-sessions 被发现）+ sessionStartEnvironment。
+  default-session-command = virelith channel 的
+  `greetd-noctalia-session` helper（确定性 env + argv0 保留语义；
+  非裸 upstream script）。不可把裸用户会话命令放在
   default-session-command（greetd 会把它当 greeter 以 greeter 用户
   无认证运行——server.rs greet()→start_greeter）。
-- PATH 由 **Guix Home**（~/.bash_profile → setup-environment）提供
-  Home profile + system profile 命名空间。
+- PATH：用户会话由 **Guix Home**（~/.bash_profile →
+  setup-environment）提供 Home profile + system profile 命名空间；
+  greeter 会话由 channel helper 提供确定性 PATH（coreutils/dbus/
+  elogind）。
 - user session D-Bus 由 **home-dbus-service-type** 提供（唯一 owner）。
 - niri 由 **home-niri-service-type**（Home Shepherd）启动。
 

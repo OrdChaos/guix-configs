@@ -247,7 +247,7 @@
                         read)))
 
 ;; ── 5. noctalia seed：GTK 模板窄 hook 接线 ────────────────
-(define %seed (read-file "modules/guixcfg/apps/noctalia-git/base-settings.toml"))
+(define %seed (read-file "modules/guixcfg/apps/noctalia/base-settings.toml"))
 (test-assert "seed: builtin gtk3/gtk4 removed"
              (not (string-contains %seed "\"gtk3\"")))
 (test-assert "seed: user templates wired with narrow post-hook"

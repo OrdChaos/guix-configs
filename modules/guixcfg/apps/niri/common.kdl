@@ -659,7 +659,7 @@ binds {
 spawn-at-startup "polkit-gnome-authentication-agent-1"
 // 输入法（apps/fcitx5：包、声明式配置、Rime userdb 持久化）。
 spawn-at-startup "fcitx5" "-d"
-// panel / wallpaper / notification daemon（apps/noctalia-git）：
+// panel / wallpaper / notification daemon（apps/noctalia）：
 // org.freedesktop.Notifications 由 Noctalia 持有（pinned
 // notification.enable_daemon 默认 true；mako 已移除，无第二
 // owner——AGENT.md §7 双 owner 禁令）；也是 noctalia.kdl 的

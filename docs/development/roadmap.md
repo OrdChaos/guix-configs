@@ -34,7 +34,7 @@ PATH 前，无包机器（VM）上这些启动/按键会运行期失败（仅通
 - binds 引用的 `missioncenter` / `playerctl` / `orca`
   （Guix 官方包名核对后入 registry）
 
-（已入仓库：noctalia-git、polkit-gnome、nautilus、fcitx5、
+（已入仓库：noctalia、polkit-gnome、nautilus、fcitx5、
 xsettingsd。）
 
 ### 历史 E2E harness（保留、不维护）

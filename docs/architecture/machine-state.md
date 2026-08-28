@@ -73,8 +73,14 @@ path DSL。
 8. backing 创建走系统 activation（先于 file-systems 挂载——pinned
    Guix 行为，与 application-persistence 同一审计）；
 9. 不新增 readiness capability（filesystem topology concern）；
-10. 默认 root ownership（机器状态属 root）；未来真实 daemon 需要
-    owner/group/mode 时按最小 contract 扩展，不建 ACL framework。
+10. 默认 root ownership（机器状态属 root）；真实 daemon 需要
+    owner/group/mode 时，在 backing 与 consumer 两侧强制（bind
+    语义：mount 后 consumer 可见权限 = backing 权限）——现有生产
+    先例：mihomo（root，0700，mihomo activation 两侧强制）、
+    noctalia-greeter（greeter 用户，0750：consumer 侧由 channel
+    service 的 activation 负责，backing 侧由本仓库
+    noctalia-greeter-backing-ownership-activation 负责）；generic
+    层暂不扩展 owner/group/mode 字段，不建 ACL framework。
 
 ## 与 host secret 的区别（重要）
 
@@ -115,3 +121,17 @@ path DSL。
 
 当前状态：**architecture can support it；production rule NOT enabled**
 （generic mechanism + synthetic tests；无真实 NM service/rule）。
+
+## 现有 production rules
+
+- **mihomo**（system/mihomo/service.scm）：providers cache + 选中
+  节点/组状态，root-owned（0700，mihomo activation 强制）。
+- **noctalia-greeter**（system/noctalia-greeter.scm，2026-08-28）：
+  `/persist/system/state/noctalia-greeter` → `/var/lib/noctalia-greeter`
+  ——greeter 的 mutable state（sync.toml、Noctalia Shell Sync 的壁纸、
+  output 状态）。owner/mode 分层：consumer 侧由 virelith channel
+  noctalia-greeter-service-type 的 activation 负责（idempotent、
+  只修 owner/mode 0750、不触碰内容、兼容 bind mount），backing 侧
+  （bind 权限来源）由本仓库的 backing-ownership activation 负责。
+  declarative `greeter.toml` 由 upstream 默认值承担，本仓库不生成
+  （见 graphics.md 登录链）。

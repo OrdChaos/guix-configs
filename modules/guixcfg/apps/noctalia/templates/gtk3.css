@@ -1,5 +1,6 @@
 /*
- * 来源：pinned Noctalia（d8ba5a01）assets/templates/gtk/gtk3.css
+ * 来源：virelith channel 固定版本（v5.0.0-beta.10）Noctalia
+ * assets/templates/gtk/gtk3.css
  * （内置 gtk3/gtk4 template 的声明式 vendored 副本——stock
  * post-hook apply.sh 会改写 gtk.css，不用；hook 边界见
  * apps/gtk/definition.scm 头部）。gtk3 模板只负责生成

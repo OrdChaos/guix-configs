@@ -15,7 +15,7 @@
                #:use-module (guixcfg apps git definition)
                #:use-module (guixcfg apps dbus definition)
                #:use-module (guixcfg apps niri definition)
-               #:use-module (guixcfg apps noctalia-git definition)
+               #:use-module (guixcfg apps noctalia definition)
                #:use-module (guixcfg apps pipewire definition)
                #:use-module (guixcfg apps ghostty definition)
                #:use-module (guixcfg apps nautilus definition)
@@ -56,7 +56,7 @@
         %git
         %dbus
         %niri
-        %noctalia-git
+        %noctalia
         %pipewire
         %ghostty
         %nautilus

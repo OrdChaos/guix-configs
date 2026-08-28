@@ -5,10 +5,10 @@
 
 (use-modules (gnu services)          ; service-kind、service-value、service-type-name
              (guix records)
-             (noctalia)              ; noctalia-git
+             (virelith packages noctalia) ; noctalia（channel 固定版本）
              (guixcfg apps model)
              (guixcfg apps registry)
-             (guixcfg apps noctalia-git definition)
+             (guixcfg apps noctalia definition)
              (guixcfg system application-persistence)
              (ice-9 rdelim)      ; read-string
              (srfi srfi-1)       ; count、any
@@ -22,7 +22,7 @@
   (call-with-input-file p (lambda (port) (read-string port))))
 
 (define %seed-text
-  (read-file "modules/guixcfg/apps/noctalia-git/base-settings.toml"))
+  (read-file "modules/guixcfg/apps/noctalia/base-settings.toml"))
 
 ;; ── 1. seed 内容契约（pinned Noctalia schema 键名）─────────
 (test-assert "seed disables setup wizard"
@@ -59,7 +59,7 @@
              (not (string-contains %seed-text "eDP-")))
 
 ;; ── 2. persistence rule 声明 ────────────────────────────────
-(define rules (applications-persistence (list %noctalia-git)))
+(define rules (applications-persistence (list %noctalia)))
 (test-equal "noctalia declares exactly two persistence rules"
             2 (length rules))
 (define rule
@@ -115,7 +115,7 @@
    (find (lambda (s)
            (eq? 'noctalia-palettes
                 (service-type-name (service-kind s))))
-         (application-home-services %noctalia-git))))
+         (application-home-services %noctalia))))
 
 (test-assert "palettes are declared via home-files (.config prefix)"
              (pair? %noctalia-xdg-value))
@@ -129,12 +129,12 @@
                        (map car %noctalia-xdg-value))))
 (test-assert "registry enables noctalia exactly once"
              (= 1 (count (lambda (a)
-                           (eq? (application-name a) 'noctalia-git))
+                           (eq? (application-name a) 'noctalia))
                          %applications)))
 
 ;; ── 4. fluent-blue.json 是合法 custom palette 形状 ──────────
 (define %palette-text
-  (read-file "modules/guixcfg/apps/noctalia-git/fluent-blue.json"))
+  (read-file "modules/guixcfg/apps/noctalia/fluent-blue.json"))
 (test-assert "palette has dark and light modes"
              (and (string-contains %palette-text "\"dark\"")
                   (string-contains %palette-text "\"light\"")))

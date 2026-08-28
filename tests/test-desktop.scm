@@ -7,8 +7,12 @@
 ;;;   D4 无 autologin（initial-session-user #f）+ 空密码禁用
 ;;;   D5 elogind 仍是唯一 session authority（服务存在）
 ;;;   D6/D7 /run/user 生命周期属 runtime（VM acceptance，见报告）
-;;;   H1-H5 HOME provenance 契约（greetd upstream 从 passwd entry
-;;;       设置 HOME；pam_env 无 HOME 规则；官方 wrapper 只设 XDG_*）
+;;;   G1-G3 noctalia-greeter 集成（default-session-command =
+;;;        channel greetd-noctalia-session helper；noctalia-greeter-
+;;;        service-type 实例化；会话发现数据进 system profile；
+;;;        state dir machine-state bind）
+;;;   H3-H5 HOME provenance 契约（greetd upstream 从 passwd entry
+;;;        设置 HOME；pam_env 无 HOME 规则；官方 wrapper 只设 XDG_*）
 ;;;   NV1 NVIDIA adapter 默认 disabled/identity
 ;;;   NV2 VM OS 无 proprietary NVIDIA 包
 ;;;   NV3 VM kernel args 无 nouveau blacklist
@@ -26,7 +30,10 @@
              (guixcfg system common) ; %common-services（PK1）
              (guixcfg system graphics nvidia)
              (guixcfg system kernel-platform)
+             (guixcfg system machine-state-persistence) ; valid-machine-state-persistence-rule?（G3）
+             (guixcfg system noctalia-greeter) ; %noctalia-greeter-persistence-rule、%noctalia-greeter-state-dir（G1b/G3）
              (guixcfg users user)    ; %primary-user（mount point 推导）
+             (virelith services noctalia-greeter) ; noctalia-greeter-service-type、noctalia-greeter-configuration-state-directory（G1b）
              (gnu services)
              (gnu services base)   ; greetd-service-type、mingetty-service-type
              (gnu services desktop) ; elogind-service-type
@@ -35,6 +42,7 @@
              (gnu system)          ; operating-system-*
              (gnu system file-systems)  ; file-system-device、file-system-mount-point
              (gnu system pam)      ; unix-pam-service、pam-entry-module/arguments
+             (guix gexp)           ; program-file?（G1）
              (guix packages)       ; package-name
              (nongnu packages linux) ; linux（nonguix）
              (guix channels)          ; channel-name、channel-commit（解析 lock）
@@ -254,18 +262,26 @@
 ;;   （src/session/worker.rs:162-216：getpwnam → putenv
 ;;   USER/LOGNAME/HOME/SHELL → getenvlist → execve(/bin/sh -c
 ;;   "exec <session>", envvec)——execve 整体替换环境，greeter 的
-;;   HOME=/var/empty 不可能继承）；agreety 只经 IPC 发 cmd + env='()
-;;   （agreety/src/main.rs:107-110）。
+;;   HOME=/var/empty 不可能继承）；noctalia-greeter 经 IPC 只发
+;;   cmd + sessionStartEnvironment（XDG_SESSION_TYPE/CURRENT_
+;;   DESKTOP/SESSION_DESKTOP——greetd_client.cpp requestStartSession）。
 ;;   这里固定我们配置侧可断言的部分（upstream 部分经 pinned source
 ;;   注释固定）：
-;;   H1 default-session-command 必须是官方 agreety greeter 模式
-;;      （greetd-agreety-session 包装 greetd-user-session）——
-;;      Guix 手册 guix.texi "greetd-service-type"：default session =
-;;      greeter，默认值 (greetd-agreety-session)。若被改成
-;;      greetd-user-session 直接值，greetd 会把它当 greeter 以
-;;      greeter 用户无认证运行（server.rs greet()→start_greeter，
-;;      authenticate=false）——无登录提示符，HOME=/var/empty。
-;;   H2 greeter 的 user-session = bash -l + wayland + xdg-env。
+;;   G1 default-session-command 必须是 virelith channel 的
+;;      greetd-noctalia-session helper（program-file wrapper：确定性
+;;      PATH/XDG_DATA_DIRS，并以真实 noctalia-greeter-session 的
+;;      store 路径为 argv0 exec——$0 相对前缀语义保留；配置仓库
+;;      不直接 file-append、不 wrap、不复制）。若被改成裸用户会话
+;;      命令，greetd 会把它当【greeter】以 greeter 用户无认证运行
+;;      （server.rs greet()→start_greeter，authenticate=false）——
+;;      没有登录提示符，HOME=/var/empty。
+;;   G1b noctalia-greeter-service-type 已实例化（通用集成由
+;;      channel service 提供），state-directory 与本仓库的
+;;      persistence consumer 同源。
+;;   G2 会话发现数据：system profile 携带 repo-owned
+;;      guixcfg-noctalia-greeter-sessions package（niri.desktop，
+;;      Exec=bash -l——Guix Home 拥有用户桌面生命周期；greeter 经
+;;      /run/current-system/sw/share/wayland-sessions 发现）。
 ;;   H3 greetd PAM 栈里 pam_env.so 无参数（只 honor
 ;;      /etc/environment——本机为空；不能设置 HOME）。
 ;;   H4 default session 以 greeter 专用账号运行（用户会话的 HOME
@@ -273,8 +289,8 @@
 ;;   H5 pinned Guix 官方 wrapper（make-greetd-xdg-user-session-
 ;;      command，base.scm:3715-3729）只 setenv XDG_SESSION_TYPE/
 ;;      XDG_RUNTIME_DIR（getpwuid），不 setenv HOME/USER/LOGNAME/
-;;      SHELL（wrapper 会 getenv "USER" 读 greetd 设置的用户名来查
-;;      passwd——只读不算 setenv）。
+;;      SHELL——本仓库已不用该 wrapper（greeter 原生提供 XDG env），
+;;      审计保留作为 HOME provenance 契约的 upstream 证据。
 
 (define (tty1-terminal)
   "tty1 greetd terminal 配置记录。"
@@ -282,19 +298,69 @@
     (find (lambda (tc) (string=? "1" (greetd-terminal-vt tc)))
           (greetd-terminals cfg))))
 
-(test-assert "H1: default-session-command is agreety greeter wrapping user-session"
+(test-assert "G1: default-session-command is the channel greetd-noctalia-session helper"
              (let ((cmd (greetd-default-session-command (tty1-terminal))))
-               (greetd-agreety-session? cmd)))
+               ;; channel helper = program-file wrapper（非裸
+               ;; file-append 直接启动 upstream script；wrapper 以
+               ;; 真实 script 路径为 argv0 exec——$0 语义保留）。
+               (and (program-file? cmd)
+                    (not (greetd-agreety-session? cmd)))))
 
-(test-assert "H2: greeter user-session is bash -l wayland with xdg-env"
-             (let* ((cmd (greetd-default-session-command (tty1-terminal)))
-                    (s (greetd-agreety-session-command cmd)))
-               (and (greetd-agreety-session? cmd)
-                    (greetd-user-session? s)
-                    (equal? (greetd-user-session-command-args s) '("-l"))
-                    (string=? "wayland"
-                              (greetd-user-session-xdg-session-type s))
-                    (greetd-user-session-xdg-env? s))))
+(test-assert "G1: helper is the noctalia-greeter-session wrapper (channel entry point)"
+             ;; helper 内部以真实 script 路径为 argv0 exec 属 channel
+             ;; 实现（构建产物中验证）；配置侧断言入口身份 = channel
+             ;; wrapper，而非裸 file-append / agreety。
+             (let ((cmd (greetd-default-session-command (tty1-terminal))))
+               (and (program-file? cmd)
+                    (string-contains (program-file-name cmd)
+                                     "noctalia-greeter-session"))))
+
+(test-assert "G1b: noctalia-greeter-service-type instantiated (channel integration)"
+             (let ((cfg (os-service noctalia-greeter-service-type)))
+               (and cfg #t)))
+
+(test-assert "G1b: service state-directory matches the persistence consumer"
+             (let ((cfg (service-value (os-service noctalia-greeter-service-type))))
+               (string=? %noctalia-greeter-state-dir
+                         (noctalia-greeter-configuration-state-directory cfg))))
+
+(test-assert "G2: system profile carries the repo-owned session data package"
+             (let* ((folded (fold-services (operating-system-services %os)
+                                           #:target-type profile-service-type))
+                    (packages (service-value folded)))
+               (member "guixcfg-noctalia-greeter-sessions"
+                       (map package-name packages))))
+
+(test-assert "G2: noctalia-greeter package is in the system profile (shell Sync detection via PATH)"
+             (let* ((folded (fold-services (operating-system-services %os)
+                                           #:target-type profile-service-type))
+                    (packages (service-value folded)))
+               (member "noctalia-greeter" (map package-name packages))))
+
+(test-assert "G2: session data declares niri via the Guix Home login shell (bash -l)"
+             ;; 会话 .desktop 在 repo-owned package 的 builder 里生成；
+             ;; 断言声明层：Exec = bash -l（Guix Home 拥有用户桌面
+             ;; 生命周期，同旧 greetd-user-session 契约），Name=niri
+             ;; 是会话选择器标签（greeter.toml [session] default 匹配）。
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/system/noctalia-greeter.scm"
+                       (lambda (p) (read-string p)))))
+               (and (string-contains s "Name=niri")
+                    (string-contains s "file-append bash")
+                    (string-contains s "Exec=~a -l"))))
+
+(test-assert "G3: noctalia-greeter state dir is machine-state persisted"
+             (any (lambda (fs)
+                    (and (string=? "/persist/system/state/noctalia-greeter"
+                                   (file-system-device fs))
+                         (string=?
+                          "/var/lib/noctalia-greeter"
+                          (file-system-mount-point fs))))
+                  (operating-system-file-systems %os)))
+
+(test-assert "G3: greeter persistence rule passes machine-state validation"
+             (valid-machine-state-persistence-rule?
+              %noctalia-greeter-persistence-rule))
 
 (test-assert "H3: greetd PAM pam_env.so has no arguments (cannot set HOME)"
              (let* ((pam (unix-pam-service "greetd"
@@ -477,15 +543,19 @@
               'polkit-configuration-actions))
 
 (test-assert "PK2: polkit action/rules contributions come only from elogind
-+ upstream wheel admin rule + NetworkManager (no custom rules)"
++ upstream wheel admin rule + NetworkManager + noctalia-greeter (no custom rules)"
              (let* ((folded (fold-services (operating-system-services %os)
                                            #:target-type polkit-service-type))
                     (actions (%polkit-configuration-actions
                               (service-value folded))))
-               ;; 3 = elogind + polkit-wheel + NetworkManager（NM 的
+               ;; 4 = elogind + polkit-wheel + NetworkManager（NM 的
                ;; polkit actions——2026-08-25 VM 网络换 NetworkManager
-               ;; 引入，Guix 官方 service 自带，非仓库 custom rules）。
-               (= 3 (length actions))))
+               ;; 引入，Guix 官方 service 自带，非仓库 custom rules）
+               ;; + noctalia-greeter（channel package 自带
+               ;; org.noctalia.greeter.apply-appearance policy，经官方
+               ;; polkit-service-type extension 暴露——elogind 同款
+               ;; 组合，非手工 symlink/复制 policy）。
+               (= 4 (length actions))))
 
 (test-assert "PK2: upstream polkit-wheel admin identity is used"
              (any (lambda (svc)

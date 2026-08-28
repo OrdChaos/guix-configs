@@ -9,15 +9,16 @@
 #   - seed-once != declarative management：不要把它改写成"每次同步
 #     默认配置"。
 #
-# 键名依据 pinned Noctalia example.toml / config schema
-# （settings.toml 是 overrides 格式，与 declarative config 同 schema）。
-# 未列出的项保持 Noctalia 内置默认值。
+# 键名依据 virelith channel 固定版本（v5.0.0-beta.10）Noctalia 的
+# example.toml / config schema（settings.toml 是 overrides 格式，
+# 与 declarative config 同 schema）。未列出的项保持 Noctalia 内置
+# 默认值。bump 版本时对照新 schema 重新核对本文件。
 #
 # 可移植性规则：seed 不得含用户绝对路径（用 ~/）、机器专属输出
 # （显示器名等）、运行时产生的状态（wallpaper.last、widget 实例
 # ID）——它不是任何一台机器 live settings.toml 的快照。
 
-# 当前 schema config version（pinned source
+# 当前 schema config version（channel 固定版本 v5.0.0-beta.10
 # src/config/config_migrations.cpp：kPluginAutoUpdateModeMigrationVersion
 # = 13）：避免首启时 Noctalia 对无版本 overrides 表执行迁移回写。
 config_version = 13

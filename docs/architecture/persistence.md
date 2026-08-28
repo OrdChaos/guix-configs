@@ -112,7 +112,7 @@ source)` 两元素列表；source 为 file-like），语义是"只负责创建�
 - **seed-once != declarative management**：seed 之后 repository 对
   该文件零写入，后续 reconfigure/seed 更新都不影响已初始化目标；
 - 实现：`(guixcfg utils seed-once)`（状态机）+ application
-  persistence activation 接线；生产 consumer：noctalia-git
+  persistence activation 接线；生产 consumer：noctalia
   （`.local/state/noctalia/settings.toml` 初始配置）。
 
 production consumers：
