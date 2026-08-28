@@ -1,10 +1,12 @@
 ;;; Nushell application 结构测试：virelith package 来源、声明式 XDG
-;;; 配置（config.nu / env.nu / plugin.msgpackz）、构建期生成的 plugin
-;;; registry、persistence 边界（仅 state/history，无 registry 持久化）。
+;;; 配置（config.nu / env.nu / theme.nu / plugin.msgpackz）、构建期生成
+;;; 的 plugin registry、persistence 边界（仅 state/history，无
+;;; registry 持久化）。
 ;;;
 ;;; 覆盖：
 ;;;   N1  %nushell 安装 virelith 的 nushell@0.115.1（非官方旧版）
-;;;   N2  XDG config 恰好包含 config.nu / env.nu / plugin.msgpackz
+;;;   N2  XDG config 恰好包含 config.nu / env.nu / theme.nu /
+;;;       plugin.msgpackz
 ;;;   N3  plugin.msgpackz 是 build-generated file-like（computed-file），
 ;;;       不是仓库静态文件
 ;;;   N4  persistence 只有 state rule（.local/state/nushell）；无
@@ -56,13 +58,14 @@
 (define %nushell-xdg-files
   (map car (service-value %nushell-xdg-service)))
 
-(test-assert "N2: xdg config contains config.nu/env.nu/plugin.msgpackz"
+(test-assert "N2: xdg config contains config.nu/env.nu/theme.nu/plugin.msgpackz"
              (and (member "nushell/config.nu" %nushell-xdg-files)
                   (member "nushell/env.nu" %nushell-xdg-files)
+                  (member "nushell/theme.nu" %nushell-xdg-files)
                   (member "nushell/plugin.msgpackz" %nushell-xdg-files)))
 
-(test-equal "N2: xdg config is exactly the three declarative files"
-            3 (length %nushell-xdg-files))
+(test-equal "N2: xdg config is exactly the four declarative files"
+            4 (length %nushell-xdg-files))
 
 ;; ── N3：plugin.msgpackz 是构建期生成物 ─────────────────────
 ;; xdg service value 条目是 (target file-like) 两元素列表。

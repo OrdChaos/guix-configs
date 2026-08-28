@@ -7,23 +7,23 @@
 ;;;     FCITX_ADDON_DIRS 与 GUIX_GTK2/3_IM_MODULE_FILE——co-install
 ;;;     进同一 profile 即自动完成 addon 与 GTK immodule 接线，无需
 ;;;     手工环境变量；
-;;;   - Virelith (virelith packages fcitx5)：fcitx5-rime-virelith
+;;;   - Virelith (virelith packages fcitx5 / rime)：fcitx5-rime-virelith
 ;;;     （闭包内含 librime-virelith（合并 lua+octagram 插件）与
-;;;     rime-data-virelith（雾凇 schema/dict/lua/opencc）；
+;;;     rime-data-virelith（雾凇 schema/dict/lua/opencc；
 ;;;     RIME_DATA_DIR 编译期指向该 immutable shared data）、
-;;;     fcitx5-fluentlight-theme（FluentLight / FluentLight-solid）。
+;;;     fcitx5-fluentlight-theme（FluentLight / FluentLight-solid）、
+;;;     rime-data-wanxiang（万象语法模型快照包——见文件头下段）。
 ;;;     不显式安装 librime-virelith/rime-ice/rime-data-virelith——
 ;;;     闭包已含。
 ;;;
-;;; 万象 .gram 模型本体**不**来自频道包：上游 LTS 是滚动地址
-;;; （内容原地更新、无固定历史版本 URL），fixed-output 的 sha256
-;;; 会随时失效，不适合作为频道包。本单元经 (guixcfg utils
-;;; online-file) 把它声明为构建期在线数据（不检验 sha256、
-;;; #:refresh #f——cache-first，只在无有效缓存时下载一次，之后
-;;; reconfigure 复用缓存、不跟随上游滚动更新；显式刷新 = 删除
-;;; online-data 缓存后重新 build），作为 declarative occupant
-;;; 落在 rime 用户目录（与仓库分发的配置文件同等级；Rime 资源解析
-;;; user dir 优先于 shared dir，频道侧若仍带旧副本则被其覆盖）。
+;;; 万象 .gram 模型本体来自 Virelith 的 rime-data-wanxiang（快照
+;;; 包）：上游 LTS 是滚动地址（内容原地更新、无固定历史版本 URL），
+;;; fixed-output 的 sha256 会随时失效，因此 Virelith 以版本化
+;;; snapshot release（RIME-LMDG.snapshot，tag = 快照时间戳，asset
+;;; 按 tag immutable）pin 住模型——version 与快照 tag 同步升级，
+;;; sha256 稳定。本单元经 file-append 把它作为 declarative
+;;; occupant 落在 rime 用户目录（与仓库分发的配置文件同等级；
+;;; Rime 资源解析 user dir 优先于 shared dir）。
 ;;;
 ;;; 生命周期：单一 owner = niri session（apps/niri/common.kdl 的
 ;;; spawn-at-startup "fcitx5" "-d"；会话内长期进程禁止第二 owner
@@ -47,9 +47,9 @@
 ;;;     在旁边写 build/、user.yaml 等互不干扰；
 ;;;   - 不把频道 shared data（cn_dicts/lua/opencc 等版本化内容）
 ;;;     复制或 symlink 进 HOME——RIME_DATA_DIR 已由
-;;;     fcitx5-rime-virelith 提供。唯一例外是万象 .gram：它不是
-;;;     版本化 shared data 而是滚动资源，由 online-file 以
-;;;     declarative occupant 形式放进用户目录（见文件头上段）。
+;;;     fcitx5-rime-virelith 提供。唯一例外是万象 .gram：
+;;;     频道单独打包为 rime-data-wanxiang（不进 RIME_DATA_DIR），
+;;;     由本单元经 file-append 放进用户目录（见文件头上段）。
 ;;;
 ;;; 持久化边界（ephemeral HOME；docs/architecture/persistence.md
 ;;; 决策树 Preferred 2——mutable subdirectory）：
@@ -85,18 +85,10 @@
                #:use-module (guix gexp)              ; local-file
                #:use-module (guix records)
                #:use-module (virelith packages fcitx5) ; fcitx5-rime-virelith、fcitx5-fluentlight-theme
+               #:use-module (virelith packages rime) ; rime-data-wanxiang
                #:use-module (guixcfg apps model)
                #:use-module (guixcfg system application-persistence)
-               #:use-module (guixcfg utils online-file) ; online-file（构建期在线数据）
                #:export (%fcitx5))
-
-;; 万象语法模型 LTS 地址：滚动资源（内容原地更新、无固定历史版本
-;; URL），不检验 sha256；#:refresh #f（cache-first 默认）——只在无
-;; 有效缓存时下载一次，之后 reconfigure 一律复用缓存、不再跟随
-;; 上游滚动更新（显式刷新 = 删除 online-data 缓存后重新 build）。
-;; 语义细节见 (guixcfg utils online-file) 头部。
-(define %wanxiang-gram-url
-  "https://github.com/amzxyz/RIME-LMDG/releases/download/LTS/wanxiang-lts-zh-hans.gram")
 
 (define %fcitx5
   (application
@@ -128,15 +120,12 @@
                             (".local/share/fcitx5/rime/rime_ice.custom.yaml"
                              ,(local-file "rime_ice.custom.yaml"
                                           "fcitx5-rime-ice-custom.yaml"))
-                            ;; 万象语法模型本体（构建期在线数据；
-                            ;; #:refresh #f——cache-first，成功一次
-                            ;; 后不再重新下载；见文件头与
-                            ;; (guixcfg utils online-file)）。
+                            ;; 万象语法模型本体（Virelith 快照包
+                            ;; rime-data-wanxiang，sha256 pinned；
+                            ;; 见文件头）。
                             (".local/share/fcitx5/rime/wanxiang-lts-zh-hans.gram"
-                             ,(online-file "wanxiang-lts-zh-hans.gram"
-                                           %wanxiang-gram-url
-                                           #:sha256 #f
-                                           #:refresh #f))))
+                             ,(file-append rime-data-wanxiang
+                                           "/share/rime-data/wanxiang-lts-zh-hans.gram"))))
           ;; 会话环境（home-environment-variables 共享 sink 的
           ;; native extension——polkit-gnome PATH 同款模式）。
           (simple-service 'fcitx5-env

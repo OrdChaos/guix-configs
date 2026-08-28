@@ -8,7 +8,8 @@
 ;;;        （login authentication 与 keyring unlocking 分离）；
 ;;;   GK3  greetd-greeter 专用 PAM 已删除（其存在理由已消失）；
 ;;;   GK4  persistence 恰好一条：keyrings vault；无整体 .local/share、
-;;;        无 /run/user、无 machine-state；
+;;;        无 /run/user；machine-state 仅 mihomo providers、无
+;;;        keyrings machine-state rule；
 ;;;   GK5  daemon 单一 owner：niri 无 keyring spawn、modules 无
 ;;;        --login/--start、唯一 invocation = 会话 wrapper；
 ;;;   GK7  会话服务契约：Home Shepherd、requirement dbus、one-shot、
@@ -23,6 +24,7 @@
              (guixcfg apps model)
              (guixcfg apps registry)
              (guixcfg system application-persistence) ; rule accessors（GK4）
+             (guixcfg system machine-state-persistence) ; %machine-state-root（GK4）
              (guixcfg security secrets) ; secret-decl accessors、runtime-secret-target（GK8）
              (guixcfg users user)     ; %primary-user（GK8）
              (gnu services)
@@ -172,11 +174,24 @@
                                    (file-system-device fs))))
                   (operating-system-file-systems %os)))
 
-(test-assert "GK4: no machine-state rule wired in %os"
-             (not (any (lambda (svc)
-                         (eq? 'machine-state-persistence
-                              (service-type-name (service-kind svc))))
-                       (operating-system-services %os))))
+;; GK4：keyrings 是 application-persistence，不属 machine-state。
+;; %os 自 mihomo Phase 1 起合法含 machine-state（mihomo providers
+;; bind），断言收紧为：%os 的 machine-state 服务恰好是 mihomo 那
+;; 一个，且任何 machine-state bind 都不得指向 keyrings 路径。
+(test-equal "GK4: machine-state service in %os is exactly the mihomo one"
+            1
+            (count (lambda (svc)
+                     (eq? 'machine-state-persistence
+                          (service-type-name (service-kind svc))))
+                   (operating-system-services %os)))
+
+(test-assert "GK4: no machine-state rule wired for keyrings in %os"
+             (not (any (lambda (fs)
+                         (and (string-prefix? %machine-state-root
+                                              (file-system-device fs))
+                              (string-contains (file-system-mount-point fs)
+                                               "keyrings")))
+                       (operating-system-file-systems %os))))
 
 ;; ── GK5：daemon 单一 owner、无旧 lifecycle ────────────────
 (test-assert "GK5: niri configs have no gnome-keyring spawn"

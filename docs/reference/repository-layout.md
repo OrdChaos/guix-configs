@@ -32,8 +32,7 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
   users/               用户结构事实
   utils/               跨领域原语（atomic-file / process / spawn /
                        repository-source / home-path / mountinfo /
-                       seed-once / paths / module-closure /
-                       online-file）
+                       seed-once / paths / module-closure）
 tools/                 命令行工具（disk-install、secrets、secure-boot、reconfigure、
                        tpm2-enroll、历史 E2E harness）
 templates/            新组件模板（application/definition.scm）

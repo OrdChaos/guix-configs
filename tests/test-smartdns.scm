@@ -58,11 +58,14 @@
 (test-begin "smartdns")
 
 ;; ── S1：smartdns 配置契约 ──────────────────────────────────
-(test-assert "S1: loopback-only binds (UDP+TCP, v4+v6)"
+(test-assert "S1: loopback-only binds (UDP+TCP, v4 only)"
              (and (string-contains %smartdns-text "bind 127.0.0.1:53")
                   (string-contains %smartdns-text "bind-tcp 127.0.0.1:53")
-                  (string-contains %smartdns-text "bind [::1]:53")
-                  (string-contains %smartdns-text "bind-tcp [::1]:53")))
+                  ;; 不绑 [::1]：resolver 是 v4-literal，[::1] 无消费者；
+                  ;; 绑定会使 DNS 服务在 IPv6 被禁用时启动失败
+                  ;; （2026-08-28 VM 实测）。
+                  (not (string-contains %smartdns-text "bind [::1]:53"))
+                  (not (string-contains %smartdns-text "bind-tcp [::1]:53"))))
 (test-assert "S1: never binds wildcard interfaces"
              (not (string-contains %smartdns-text "bind [::]:53")))
 (test-assert "S1: no cache-persist (memory cache only)"

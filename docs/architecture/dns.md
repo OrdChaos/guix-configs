@@ -7,7 +7,8 @@ Applications
     ↓
 /etc/resolv.conf（静态，repo authority：nameserver 127.0.0.1）
     ↓
-127.0.0.1:53 / [::1]:53
+127.0.0.1:53（SmartDNS 刻意不绑 [::1]——v4-literal resolver 无 v6
+消费者，且 [::1] bind 会在 IPv6 被禁用时让整个 DNS 服务启动失败）
     ↓
 SmartDNS（唯一 system resolver：cache / upstream selection / policy）
     ↓
