@@ -53,7 +53,7 @@
 | D11 | resolvconf-bootstrap 退役 | 静态 resolv.conf 由 etc-service 每 boot 重建，无需 openresolv -u 接管 | — |
 | D12 | 订阅密文与引用者同置（mihomo/secrets/），domain ordinary | secret taxonomy（secrets.md）；订阅不可用只影响刷新，节点仍可从本地 cache 工作 | 解密失败不阻塞登录、只降级订阅刷新 |
 | D13 | 配置合成 fail-closed：placeholder 恰好一次、严格 YAML 转义、残留 CR/LF/NUL 拒绝 | 订阅 URL 是唯一 secret 注入点，坏输入必须失败而非产出可运行错配置 | 物化失败 → mihomo 起不来（显式失败优于静默错） |
-| D14 | machine-state 只持久化 providers cache（bind-directory，root-owned） | 订阅拉取结果要跨 ephemeral root 保留；不持久化任何 config（config 是 repo authority） | 单目录 bind，不扩权 |
+| D14 | machine-state 持久化整个 mihomo 数据目录（`/var/lib/clash`：providers cache + cache.db 选中节点/组状态，bind-directory，root-owned） | 订阅拉取结果与节点选择都是 machine-owned mutable state，重启后都要保留（2026-08-28：只持久化 providers 时选中节点每 boot 重置） | 单目录 bind，不扩权 |
 | D15 | controller loopback-only、无 secret | 控制面只给本机运维，不进网络面 | 需要本机 shell 才能换节点/刷新 |
 
 ---
@@ -77,7 +77,7 @@
 | 模板 | `modules/guixcfg/system/mihomo/template.yaml` | TUN（mixed stack、auto-route/auto-redirect/auto-detect-interface、`dns-hijack: []`）、`ipv6: false`；规则 = 私网/loopback/ULA DIRECT + 上游 `IP-CIDR,<upstream>/32,DIRECT,no-resolve`（D4 自举）+ `MATCH,PROXY`；provider：原生 http、`interval: 3600`、lazy health-check、`proxy: DIRECT`（D7）；`@@MIHOMO_SUBSCRIPTION_URL@@` 占位符恰好一次 |
 | 配置合成 | `modules/guixcfg/system/mihomo/config.scm` | `compose-mihomo-config`：模板 + `/run` 明文订阅 URL；尾 LF/CRLF 规整、严格双引号转义、CR/LF/NUL 残留 fail-closed（D13） |
 | 服务装配 | `modules/guixcfg/system/mihomo/service.scm` | `%mihomo-data-directory`（`/var/lib/clash`）、`mihomo-config-program`（物化器，one-shot `mihomo-config-ready`）、daemon `mihomo -d /var/lib/clash -f /run/mihomo/config.yaml`（requirement：loopback/networking/config-ready）、`mihomo-activation`、clash 系统账户、`%mihomo-secrets`（ordinary secret-decl） |
-| 机器状态 | `modules/guixcfg/system/mihomo/service.scm` + `modules/guixcfg/system/machine-state-persistence.scm` | `%mihomo-providers-persistence-rule`：`/persist/system/state/<backing>` → bind → `/var/lib/clash/providers` |
+| 机器状态 | `modules/guixcfg/system/mihomo/service.scm` + `modules/guixcfg/system/machine-state-persistence.scm` | `%mihomo-data-persistence-rule`：`/persist/system/state/mihomo/clash` → bind → `/var/lib/clash`（整个 `-d`：providers cache + cache.db 选中节点/组） |
 | Secret 链 | `modules/guixcfg/system/mihomo/secrets/mihomo-subscription.url.age` | 真实密文；age stable identity（`/persist/system/keys/age/identity`）→ ordinary 域 deploy → `/run/guixcfg-secrets-ordinary/system/mihomo-subscription.url`（0600）→ 物化器读取合成；URL 明文不进 git/store，只出现在 /run 与 root-only 日志 |
 
 ### 3.3 运行时产物与生命周期
@@ -165,4 +165,4 @@ smartdns/订阅/流量**天然直连**——所以 TUN off 不是"断网"，而�
 - `dns.md`：DNS ownership 分文件（决策 D1-D4、D10-D11 细节）；
 - `mihomo.md`：代理分文件（D5-D9、D13-D15 细节、Phase 1 边界）；
 - `secrets.md`：age secret 机制与订阅 secret 链（D12）；
-- `machine-state.md`：providers cache 持久化机制（D14）。
+- `machine-state.md`：mihomo 数据目录持久化机制（D14）。

@@ -51,7 +51,7 @@
                #:export (%mihomo-data-directory
                          %mihomo-log-file
                          %mihomo-template-file
-                         %mihomo-providers-persistence-rule
+                         %mihomo-data-persistence-rule
                          mihomo-config-program
                          mihomo-config-shepherd-service
                          mihomo-daemon-shepherd-service
@@ -83,16 +83,19 @@
          (owner-user "root")
          (mode #o400))))
 
-;; providers 的 machine-state 持久化（不整体 persist /var/lib/clash）：
-;; /persist/system/state/mihomo/providers → bind → /var/lib/clash/providers。
+;; mihomo 数据目录的 machine-state 持久化（整个 -d，不拆分）：
+;; /persist/system/state/mihomo/clash → bind → /var/lib/clash。
+;; 覆盖 providers cache（订阅节点列表）与 cache.db（选中节点/组
+;; 状态）——两者都是 machine-owned mutable state，重启后都应保留
+;; （2026-08-28：只持久化 providers 时，选中节点每 boot 重置）。
 ;; backing 与 consumer 的 0700 由 mihomo-activation 强制（generic
-;; mechanism 只 mkdir 0755；Mihomo 会以 0644 写 provider cache 文件，
+;; mechanism 只 mkdir 0755；Mihomo 以 0644 写 provider cache 文件，
 ;; 隔离靠不可遍历的 0700 parent——用户设计契约）。
-(define %mihomo-providers-persistence-rule
+(define %mihomo-data-persistence-rule
   (machine-state-persistence-rule
-   (name 'mihomo-providers)
-   (backing "mihomo/providers")
-   (consumer "/var/lib/clash/providers")))
+   (name 'mihomo-data)
+   (backing "mihomo/clash")
+   (consumer "/var/lib/clash")))
 
 ;; ────────────────────────────────────────────────────────────
 ;; runtime config materializer（只做 config composition，不下载订阅）

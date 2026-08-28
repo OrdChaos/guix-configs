@@ -230,16 +230,16 @@
                                  (user-group-system? g)))
                           accounts)
                     #t)))
-(test-assert "M12: providers machine-state rule is valid"
+(test-assert "M12: data dir machine-state rule is valid"
              (valid-machine-state-persistence-rule?
-              %mihomo-providers-persistence-rule))
-(test-assert "M12: providers rule targets /var/lib/clash/providers"
+              %mihomo-data-persistence-rule))
+(test-assert "M12: data rule targets the whole /var/lib/clash data dir"
              (and (string=? (machine-state-persistence-rule-backing
-                             %mihomo-providers-persistence-rule)
-                            "mihomo/providers")
+                             %mihomo-data-persistence-rule)
+                            "mihomo/clash")
                   (string=? (machine-state-persistence-rule-consumer
-                             %mihomo-providers-persistence-rule)
-                            "/var/lib/clash/providers")))
+                             %mihomo-data-persistence-rule)
+                            "/var/lib/clash")))
 
 ;; ── M13：subscription secret 归 mihomo 模块（无 host 层）─────
 (test-assert "M13: subscription secret declared by the mihomo module"

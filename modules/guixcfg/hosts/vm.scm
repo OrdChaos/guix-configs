@@ -83,12 +83,13 @@
            (applications-persistence %applications)
            (user-profile-name %primary-user))))
 
-;; Mihomo providers 的 machine-state bind（root-owned system state；
+;; Mihomo 数据目录（providers cache + 选中节点/组状态）的 machine-state
+;; bind（root-owned system state；
 ;; 与 HOME persistence 不同层，单独成表）。backing/consumer 0700 由
 ;; mihomo activation 强制（modules/guixcfg/system/mihomo/service.scm）。
 (define %mihomo-machine-state-file-systems
   (machine-state-persistence-file-systems
-   (list %mihomo-providers-persistence-rule)))
+   (list %mihomo-data-persistence-rule)))
 
 (define %vm-services
   (append
@@ -120,8 +121,8 @@
     (gvfs-mount-metadata-service %persistent-mount-file-systems)
     ;; Mihomo 系统透明代理（Phase 1，docs/architecture/mihomo.md）：
     ;; Shepherd 独占生命周期；runtime config 由 materializer 合成
-    ;; （secret URL 不进 store）；providers 经 machine-state bind
-    ;; 持久化。不做 DNS（dns-hijack []）；SmartDNS upstream 经
+    ;; （secret URL 不进 store）；数据目录（providers cache +
+    ;; 选中节点/组状态）经 machine-state bind 持久化。不做 DNS（dns-hijack []）；SmartDNS upstream 经
     ;; 模板内 DIRECT 规则直连（不绕经节点）。
     (mihomo-service))
    ;; 无状态根的用户态服务：登录确认（last-good promote 挂在 greetd
@@ -182,10 +183,10 @@
           (applications-persistence %applications)
           (user-profile-name %primary-user))
          ;; machine-state persistence（root-owned system state；
-         ;; 当前唯一 consumer：mihomo providers。bind 见
+         ;; 当前唯一 consumer：mihomo 数据目录。bind 见
          ;; %mihomo-machine-state-file-systems）
          (machine-state-persistence-service
-          (list %mihomo-providers-persistence-rule))
+          (list %mihomo-data-persistence-rule))
          ;; 声明式 runtime secrets（boot 时 root 解密；docs/
          ;; architecture/secrets.md）。composition root = host assembly：
          ;;   %vm-test-secrets（本测试机的机制 sentinel） +

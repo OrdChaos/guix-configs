@@ -76,17 +76,20 @@ boot 时序：activation（数据目录/backing 0700）→ file-systems
 | `/run/mihomo/` | runtime | root 0700（materializer 创建） |
 | `/run/mihomo/config.yaml` | runtime | 模板+URL 合成，root 0600，原子写 |
 | `/var/lib/clash/providers/airport.yaml` | persistent（machine-state bind） | Mihomo 自维护 provider cache（0644，靠 0700 目录隔离） |
-| `/var/lib/clash/cache.db` | ephemeral | profile.store-selected（默认 true）落盘点（VM 实测：启动即创建于 `-d/cache.db`，含 selected proxy/subscription-info/ETag——全部 reacquirable）。**Phase 1 不持久化**：位于 `-d` 根（不可子目录化），而 machine-state 机制只支持 bind-directory（single-file bind 不是仓库标准机制，AGENT.md §12）；选择状态每 boot 重置，可由 Noctalia 重新选择 |
-| `/var/lib/clash/`（除 providers 外） | ephemeral | 不持久化；config.yaml 不存在于 -d（`-f` 指定） |
+| `/var/lib/clash/cache.db` | persistent（machine-state bind） | profile.store-selected（默认 true）落盘点（VM 实测：`-d/cache.db`，含 selected proxy/subscription-info/ETag）——**选中节点/组状态跨 boot 保留**（2026-08-28 起整体 bind `-d`，见下） |
+| `/var/lib/clash/`（除 providers、cache.db 外） | persistent（同上） | 随 `-d` 整体 bind；config.yaml 不存在于 -d（`-f` 指定） |
 | `/var/log/mihomo.log` | ephemeral | shepherd log-file，root 0640 |
 
-machine-state rule：`/persist/system/state/mihomo/providers` →
-bind → `/var/lib/clash/providers`。**backing 与 consumer 均由
-mihomo activation 强制 0700**（generic mechanism 只建 0755 目录；
-Mihomo 以 0644 写 provider cache 文件，隔离靠不可遍历的 parent）。
-不整体 bind `/var/lib/clash`。首次真实运行后再审计 `-d` 下的其它
-状态文件（如 profile.store-selected 对应的 cache/state 路径），
-按需增加精确 persistence——不预先持久化整个目录。
+machine-state rule：`/persist/system/state/mihomo/clash` →
+bind → `/var/lib/clash`（**整个 -d 数据目录**）。**backing 与
+consumer 均由 mihomo activation 强制 0700**（generic mechanism 只
+建 0755 目录；Mihomo 以 0644 写 provider cache 文件，隔离靠不可
+遍历的 parent）。整体 bind 的理由：providers cache 与 cache.db
+（选中节点/组状态）都是 machine-owned mutable state，都应在重启
+后保留；machine-state 只支持 bind-directory（single-file bind 不是
+仓库标准机制，AGENT.md §12），`-d` 整体 bind 是覆盖两者的最小
+单一规则（2026-08-28：此前只 bind providers 时选中节点每 boot
+重置）。
 
 ## secret 数据流与边界（诚实声明）
 
