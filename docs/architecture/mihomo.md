@@ -141,9 +141,9 @@ controller 可读取配置的安全路径。
 `modules/guixcfg/system/mihomo/template.yaml`（public authority）：
 
 - 占位符 `@@MIHOMO_SUBSCRIPTION_URL@@` 恰好一次，模板不可直接运行；
-- provider：`type: http`、**不设 `proxy: DIRECT`**（订阅刷新走规则
-  路由 MATCH→PROXY，经节点出口；宿主侧直连出站不稳定——实测
-  api.wd-purple.com 直连被 EOF 掐断、明文 53 被 fake-ip DNS 劫持）、
+- provider：`type: http`、`proxy: DIRECT`（订阅刷新不依赖代理组/
+  节点可用性；可行性前提——节点域名解析经 SmartDNS 直连上游自举 +
+  宿主直连出站可信，2026-08-28 实测直连拉取成功）、
   `interval: 3600`（秒；省略则无周期刷新）、health-check lazy；
 - 规则：loopback/private/local → DIRECT；SmartDNS 上游 → DIRECT
   （自举必需，见上）；其余 → PROXY；

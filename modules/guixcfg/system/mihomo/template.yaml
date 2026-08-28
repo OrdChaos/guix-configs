@@ -33,12 +33,12 @@ proxy-providers:
     url: "@@MIHOMO_SUBSCRIPTION_URL@@"
     path: ./providers/airport.yaml
     interval: 3600
-    # 订阅刷新走规则路由（MATCH→PROXY，经节点出口）：宿主侧网络对
-    # 直连出站连接不稳定（实测 api.wd-purple.com 直连被 EOF 掐断、
-    # 明文 53 被 fake-ip DNS 劫持），经节点才能拿到完整响应。不显式
-    # 设 proxy=DIRECT——节点全挂时刷新失败可接受（provider 有
-    # cache-first，换活节点后经 controller refresh API 恢复）。
-    # Mihomo 原生维护 interval 调度、provider cache 与 refresh API。
+    # 订阅刷新直连（proxy: DIRECT）：不依赖代理组/节点可用性——节点
+    # 全挂时刷新照常。可直连的前提：节点域名解析经 SmartDNS 直连
+    # 上游（见 rules 段的自举注释），且宿主直连出站可信（实测
+    # api.wd-purple.com 直连拉取成功，updatedAt 更新；早前 EOF 是
+    # 宿主侧残留 clash 所致，已恢复）。
+    proxy: DIRECT
     health-check:
       enable: true
       interval: 600

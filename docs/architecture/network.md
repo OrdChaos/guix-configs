@@ -46,7 +46,7 @@
 | D4 | **上游查询直连**（模板含上游 `DIRECT,no-resolve` 规则） | **自举必需**：机场节点服务器是域名（oss-cn-*.toshiba-nvme.com），mihomo 拨号前经系统 DNS（SmartDNS）解析节点域名；上游若走节点 = 解析死锁（2026-08-28 重启后实测：SERVFAIL → all proxies timeout）。附带 DNS 不随节点存亡、TUN off 时退化为直连机器 | 直连 AliDNS 对被封域名仍被 GFW 污染——被封域名的解析+连接本来只有代理能救，接受为直连语义的固有边界 |
 | D5 | mihomo 不做客户端 DNS：`dns-hijack: []`、无 dns 段、**全系统语义无 fake-ip** | DNS 归 SmartDNS 单一 owner；fake-ip 会制造"解析成功但连接失败"的不可审计态 | mihomo 自身解析（节点域名）经系统 DNS——正是 D4 直连的自举链条 |
 | D6 | `ipv6: false`：TUN 不捕获 v6 | 机场节点全是 v4，TUN 承载 v6 也送不到目标（实测 AAAA 目标经节点秒断）；v6 归系统原生路径 | 不承诺 v6 代理；笔记本上行有 v6 时 v6 直连绕过代理（泄露面，知情接受）；VM（SLIRP 无 v6）上 v6-only 服务不可达（快速失败） |
-| D7 | 订阅刷新走规则路由（**不设 `proxy: DIRECT`**） | 宿主直连出站不稳（实测 api.wd-purple.com 直连 EOF 掐断）；经节点才能拿到完整响应 | 节点全挂时刷新失败——provider 有 cache-first，换活节点后经 refresh API 恢复 |
+| D7 | 订阅刷新直连（`proxy: DIRECT`） | 刷新不依赖代理组/节点可用性——节点全挂时订阅照常更新。可行性：节点域名解析经 SmartDNS 直连上游（D4 自举）+ 宿主直连出站可信（2026-08-28 实测直连拉取成功；早前 EOF 是宿主残留 clash 所致） | 宿主直连出站不稳时刷新失败（cache-first 兜底，换节点/修宿主后经 refresh API 恢复） |
 | D8 | **TUN 是唯一流量入口**：无 mixed-port、无 HTTP_PROXY 系统代理语义 | 单入口 = 可审计、无静默旁路；透明代理下应用零配置 | TUN off = 无显式回退口（干净宿主下自动退化为直连机器，见 §7；不提供"半代理"中间态） |
 | D9 | 节点选择是**运行时偏好**，repo 只声明 select 组 | 节点健康随机场变化，不是 declarative 事实 | 重启/换节点后选择持久化于 `/var/lib/clash` 缓存；repo 不 pin 节点 |
 | D10 | DHCP DNS 不丢弃也不使用：openresolv 输出重定向到 `/run/resolvconf/resolv.conf` 作为 metadata | "未来 DHCP DNS 作为上游"的 seam；不消费 = 不引入不确定性 | metadata 暂无消费者 |
@@ -74,7 +74,7 @@
 
 | 组件 | 位置 | 实现要点 |
 |---|---|---|
-| 模板 | `modules/guixcfg/system/mihomo/template.yaml` | TUN（mixed stack、auto-route/auto-redirect/auto-detect-interface、`dns-hijack: []`）、`ipv6: false`；规则 = 私网/loopback/ULA DIRECT + 上游 `IP-CIDR,<upstream>/32,DIRECT,no-resolve`（D4 自举）+ `MATCH,PROXY`；provider：原生 http、`interval: 3600`、lazy health-check、无 `proxy: DIRECT`（D7）；`@@MIHOMO_SUBSCRIPTION_URL@@` 占位符恰好一次 |
+| 模板 | `modules/guixcfg/system/mihomo/template.yaml` | TUN（mixed stack、auto-route/auto-redirect/auto-detect-interface、`dns-hijack: []`）、`ipv6: false`；规则 = 私网/loopback/ULA DIRECT + 上游 `IP-CIDR,<upstream>/32,DIRECT,no-resolve`（D4 自举）+ `MATCH,PROXY`；provider：原生 http、`interval: 3600`、lazy health-check、`proxy: DIRECT`（D7）；`@@MIHOMO_SUBSCRIPTION_URL@@` 占位符恰好一次 |
 | 配置合成 | `modules/guixcfg/system/mihomo/config.scm` | `compose-mihomo-config`：模板 + `/run` 明文订阅 URL；尾 LF/CRLF 规整、严格双引号转义、CR/LF/NUL 残留 fail-closed（D13） |
 | 服务装配 | `modules/guixcfg/system/mihomo/service.scm` | `%mihomo-data-directory`（`/var/lib/clash`）、`mihomo-config-program`（物化器，one-shot `mihomo-config-ready`）、daemon `mihomo -d /var/lib/clash -f /run/mihomo/config.yaml`（requirement：loopback/networking/config-ready）、`mihomo-activation`、clash 系统账户、`%mihomo-secrets`（ordinary secret-decl） |
 | 机器状态 | `modules/guixcfg/system/mihomo/service.scm` + `modules/guixcfg/system/machine-state-persistence.scm` | `%mihomo-providers-persistence-rule`：`/persist/system/state/<backing>` → bind → `/var/lib/clash/providers` |
@@ -92,7 +92,7 @@
 ### 3.4 测试锁定（tests/）
 
 - `test-smartdns.scm` S1-S7：绑定面（无 ::1、无通配）、静态 resolv.conf、resolvconf 重定向、service graph、bootstrap 退役、**上游 DIRECT 规则存在（自举必需）**、公开配置无 secret 面；
-- `test-mihomo.scm` M1-M13：合成 fail-closed 矩阵、转义、占位符唯一性、无 fake-ip/dns 段、controller loopback、**provider 无 `proxy: DIRECT`**、TUN 参数、`ipv6: false`、daemon 参数与 requirement、machine-state rule、secret decl。
+- `test-mihomo.scm` M1-M13：合成 fail-closed 矩阵、转义、占位符唯一性、无 fake-ip/dns 段、controller loopback、**provider `proxy: DIRECT`**、TUN 参数、`ipv6: false`、daemon 参数与 requirement、machine-state rule、secret decl。
 
 ---
 
@@ -103,7 +103,7 @@
 | 应用 DNS | app → nscd → smartdns → **直连上游**（DIRECT 规则） | bordeaux → `185.233.100.56` 真 A + `2a0c:e300::56` 真 AAAA |
 | 节点域名解析 | mihomo → 系统 DNS（smartdns）→ 直连上游 → 真答案 → 拨号节点 | 自举链条（D4）；曾因上游走节点而 SERVFAIL 死锁 |
 | 应用 HTTPS | app → TUN → 规则 → 节点 | github/bordeaux/ci.guix/codeberg 全 200 |
-| 订阅刷新 | mihomo → MATCH→PROXY → 节点 → api.wd-purple.com | `updatedAt` 更新、无 EOF |
+| 订阅刷新 | mihomo → DIRECT（宿主直连）→ api.wd-purple.com | `updatedAt` 更新、无 EOF |
 | 节点健康检查 | 节点 → gstatic generate_204（lazy） | 全节点延迟可查 |
 | 本地流量 | loopback/私网规则 DIRECT | 不经过任何外部 |
 
@@ -135,8 +135,8 @@
 
 | 模式 | DNS | 应用流量 | 订阅刷新 | 结论 |
 |---|---|---|---|---|
-| TUN on + 节点活 | ✓ 直连上游（未封域名真答案；被封域名污染） | 经节点 | 经节点 | 全功能（被封域名仅直连解析被污染） |
-| TUN on + 节点死 | ✓ 直连（自举链断裂：节点域名解析仍通） | ✗ | ✗ | 换活节点恢复业务流量 |
+| TUN on + 节点活 | ✓ 直连上游（未封域名真答案；被封域名污染） | 经节点 | ✓ 直连（proxy: DIRECT） | 全功能（被封域名仅直连解析被污染） |
+| TUN on + 节点死 | ✓ 直连（自举链断裂：节点域名解析仍通） | ✗ | ✓ 直连（刷新不依赖节点） | 换活节点恢复业务流量 |
 | TUN off + 宿主干净 | ✓ 直连上游（未封域名真答案） | ✓ 直连（无代理） | ✓ 直连 | **退化为普通直连机器，正常运转** |
 | TUN off + 宿主不干净 | ✗ 假 IP 污染 | 部分 EOF | ✗ | 宿主问题 |
 
