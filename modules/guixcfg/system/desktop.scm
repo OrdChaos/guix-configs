@@ -126,8 +126,23 @@
                ;; helper wrapper，非裸 upstream script；greeter 以
                ;; greetd 的 greeter 用户无认证运行——start_greeter
                ;; authenticate=false，HOME=/var/empty）。
+               ;;
+               ;; ── 诊断实验（A/B，勿永久化，勿当正式配置）──
+               ;; 双鼠标指针排查：仅对 Greeter 会话关闭 wlroots
+               ;; hardware cursor（WLR_NO_HARDWARE_CURSORS=1），
+               ;; 验证指针倒置/幽灵 cursor 是否来自 DRM/KMS hardware
+               ;; cursor plane。变量只经 channel helper 的
+               ;; extra-environment 注入 greeter 链（helper → session
+               ;; script → compositor），setenv 发生在 helper 默认
+               ;; PATH/XDG_DATA_DIRS 之后（追加，不替换）；用户会话
+               ;; 环境由 greetd worker 以 PAM envlist 整体重建，
+               ;; greeter 进程环境不可能继承——niri 完全不受影响。
+               ;; 实验结论明确前不得扩展该变量作用域或改其他
+               ;; cursor/wlroots 参数（单一自变量）。
                (default-session-command
-                (greetd-noctalia-session))))))))
+                (greetd-noctalia-session
+                 #:extra-environment
+                 '(("WLR_NO_HARDWARE_CURSORS" . "1"))))))))))
 
 (define desktop-services
   ;; M2 Wayland desktop 系统层服务。Noctalia Greeter 的通用系统

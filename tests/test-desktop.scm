@@ -11,6 +11,8 @@
 ;;;        channel greetd-noctalia-session helper；noctalia-greeter-
 ;;;        service-type 实例化；会话发现数据进 system profile；
 ;;;        state dir machine-state bind）
+;;;   E1 双 cursor 诊断实验变量作用域（WLR_NO_HARDWARE_CURSORS
+;;;        只允许出现在 greeter 调用点；A/B 实验断言，非 invariant）
 ;;;   H3-H5 HOME provenance 契约（greetd upstream 从 passwd entry
 ;;;        设置 HOME；pam_env 无 HOME 规则；官方 wrapper 只设 XDG_*）
 ;;;   NV1 NVIDIA adapter 默认 disabled/identity
@@ -361,6 +363,29 @@
 (test-assert "G3: greeter persistence rule passes machine-state validation"
              (valid-machine-state-persistence-rule?
               %noctalia-greeter-persistence-rule))
+
+;; ── E1：双 cursor 诊断实验变量作用域（A/B，非长期 invariant）──
+;; WLR_NO_HARDWARE_CURSORS 只能出现在 greetd-noctalia-session 调用
+;; 点（system/desktop.scm）；不得进入 home/niri/session-environment/
+;; PAM/其他系统模块——实验要求严格单一自变量（Greeter OFF、niri
+;; 原样）。这是本次诊断实验的作用域断言；实验结论落地后可随变量
+;; 一起删除，不代表该变量必须永久存在。
+(test-assert "E1: WLR_NO_HARDWARE_CURSORS declared only at the greeter call site"
+             (let ((files (find-files "modules/guixcfg" "\\.scm$")))
+               (and (any (lambda (f)
+                           (and (string-contains f "system/desktop.scm")
+                                (string-contains
+                                 (call-with-input-file f
+                                                       (lambda (p) (read-string p)))
+                                 "WLR_NO_HARDWARE_CURSORS")))
+                         files)
+                    (every (lambda (f)
+                             (or (not (string-contains
+                                       (call-with-input-file f
+                                                             (lambda (p) (read-string p)))
+                                       "WLR_NO_HARDWARE_CURSORS"))
+                                 (string-contains f "system/desktop.scm")))
+                           files))))
 
 (test-assert "H3: greetd PAM pam_env.so has no arguments (cannot set HOME)"
              (let* ((pam (unix-pam-service "greetd"
