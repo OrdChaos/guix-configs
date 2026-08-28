@@ -149,12 +149,14 @@
                ;; （草稿正文 drafts/<uuid> 与草稿映射 session.gvariant
                ;; 同目录原子单元——只持久化 drafts/ 会被 restore 的
                ;; delete_unused_worker 当作无引用草稿删除；
-               ;; apps/gnome-text-editor/definition.scm 头注释审计）。
+               ;; apps/gnome-text-editor/definition.scm 头注释审计）、
+               ;; noctalia 的用户插件目录（app-private，目录级 bind）。
                (every (lambda (c)
                         (or (not (string-prefix? ".local/share/" c))
                             (member c '(".local/share/keyrings"
                                         ".local/share/fcitx5/rime/rime_ice.userdb"
-                                        ".local/share/gnome-text-editor"))))
+                                        ".local/share/gnome-text-editor"
+                                        ".local/share/noctalia/plugins"))))
                       consumers)))
 
 (test-assert "GK4: no /run/user persistence anywhere"

@@ -16,7 +16,7 @@
 ;;; channel/package 层职责）。
 ;;;
 ;;; 配置与持久化边界（2026-08-25 决策，三层）：
-;;;   仓库管理（repo-owned，home-xdg-configuration-files 单向声明式；
+;;;   仓库管理（repo-owned，home-files 单向声明式，.config 前缀；
 ;;;   不持久化、不做启动复制/退出回写、VS Code 运行时改写失败属
 ;;;   预期——声明式边界）：
 ;;;     ~/.config/Code/User/settings.json      —— 最小集合（见下）；
@@ -73,7 +73,7 @@
 ;;; Exec 参数提供；portal 由 niri 会话提供。
 
 (define-module (guixcfg apps vscode definition)
-               #:use-module (gnu home services)      ; home-xdg-configuration-files-service-type
+               #:use-module (gnu home services)      ; home-files-service-type
                #:use-module (gnu services)           ; simple-service
                #:use-module (guix gexp)              ; local-file
                #:use-module (guix records)
@@ -94,15 +94,14 @@
    (home-packages (list vscode))
    (home-services
     (list (simple-service 'vscode-user-config
-                          home-xdg-configuration-files-service-type
-                          `(("Code/User/settings.json"
+                          home-files-service-type
+                          `((".config/Code/User/settings.json"
                              ,(local-file "settings.json" "vscode-settings.json"))
-                            ("Code/User/keybindings.json"
+                            (".config/Code/User/keybindings.json"
                              ,(local-file "keybindings.json"
                                           "vscode-keybindings.json"))))
-          ;; ~/.vscode/argv.json 不在 XDG .config 下——走 home-files
-          ;; （.config 外 HOME dotfile 的既有通道；apps/model 校验
-          ;; 只拒绝 .config 目标）。
+          ;; ~/.vscode/argv.json 不在 XDG .config 下——同样走
+          ;; home-files（HOME dotfile 通道）。
           (simple-service 'vscode-argv-json
                           home-files-service-type
                           `((".vscode/argv.json"

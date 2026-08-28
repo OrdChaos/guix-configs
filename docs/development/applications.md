@@ -60,9 +60,9 @@ apps/foo/
    (name 'foo)
    (home-packages (list foo))
    (home-services
-    (list (simple-service 'foo-xdg-config
-                          home-xdg-configuration-files-service-type
-                          `(("foo/config.toml"
+    (list (simple-service 'foo-config
+                          home-files-service-type
+                          `((".config/foo/config.toml"
                              ,(local-file "config.toml"))))))))
 ```
 
@@ -72,37 +72,30 @@ Guix 语义）——不需要 `../../../files/...`，不依赖 shell CWD。
 `#:use-module (gnu home services)`。
 
 **共享 sink 用 extension，不用完整实例**：多个 app 都可能贡献
-`home-xdg-configuration-files` / `home-files` 等 target——每个 app
+`home-files` 等 target——每个 app
 用 `simple-service` 贡献 extension value（canonical target 由
-Guix 自动实例化）；**不要** `(service home-xdg-configuration-files-
-service-type ...)` 创建第二个完整实例（ambiguous-target-service）。
+Guix 自动实例化）；**不要** `(service home-files-service-type ...)`
+创建第二个完整实例（ambiguous-target-service）。
 唯一类型的独立 service（如 `home-niri-service-type`）保持直接
 `(service ...)`。aggregator 只 concatenation，不做 same-kind
 merge（`service-type-extend` 不是 base-value merger）。
 
-**文件归属 service 选择规则**：pinned Guix 里
-`home-xdg-configuration-files-service-type` 就是
-`home-files-service-type` 的 `.config/` 前缀 extension——两者是
-"通用 sink + XDG 特化"的分层，不是两个等价选择。选择标准：
+**文件归属 service 选择规则**（2026-08 规则反转）：pinned Guix 已把
+`home-xdg-configuration-files-service-type` 标记 deprecated（其语义
+本就是 `home-files-service-type` 的 `.config/` 前缀包装）——仓库
+**全部统一走 `home-files-service-type`**：
 
-- `~/.config` 下的文件**一律**经 `home-xdg-configuration-files-
-  service-type`（target 写 config 相对路径，如 `mpv/mpv.conf`）；
+- `~/.config` 下的文件：target 显式写 `.config/` 前缀（如
+  `.config/mpv/mpv.conf`）；
 - XDG 约定覆盖不到的 HOME dotfile（`.ssh/*`、`.gitconfig`、
-  `.local/bin/*` 等）才用 `home-files-service-type`（target 写 HOME
-  相对路径，如 `.gitconfig`）。
+  `.local/bin/*` 等）：target 写 HOME 相对路径（如 `.gitconfig`）。
 
-禁止用 home-files 写 `~/.config/*`（与 xdg service 的职责重复），
-也禁止把 XDG 覆盖范围外的路径塞进 xdg service。现有先例：config
-系（ghostty/niri/mpv/noctalia）全走 xdg service；非 config dotfile
-（git 的 `.gitconfig`、ssh 的 `.ssh/*`、polkit-gnome 的
-`.local/bin`）全走 home-files——零交叉。**本规则已机制化**：
-`(guixcfg apps model)` 的 `applications-home-services` 在聚合时
-校验每个 app 的 home-files 贡献，target 落在 `~/.config`（含深层）
-立即报错（fail fast，错误消息含 app 名与违规 target，见
-`tests/test-apps.scm`）。注意 variant/selection
-机制（E9）构建在 xdg service 上：variant 文件只能落 `~/.config`；
-需要 per-host 的 `.ssh/*` 或 `.gitconfig` 变体时是已知边界，须先
-扩展 selection resolver。
+同一通道、无特化层、无交叉；`.config` 只是普通前缀。现有先例：全部
+app（ghostty/niri/mpv/noctalia/fcitx5/gtk/vscode/nushell/starship/
+gnupg 等）统一 home-files；variant selection（apps/selection.scm）
+解析时加 `.config/` 前缀。variant/selection 机制（E9）因此也只落
+`~/.config`：需要 per-host 的 `.ssh/*` 或 `.gitconfig` 变体时是已知
+边界，须先扩展 selection resolver。
 
 ## E4. Official Home service
 
@@ -305,9 +298,9 @@ host 组装 home 时传入：
 机制语义（`(guixcfg apps selection)` +
 `(guixcfg apps model)` 的 variant 声明）：
 
-- target 原样作为目标路径经 `home-xdg-configuration-files-service-type`
-  安装到 `~/.config/<target>`；与 application name 无耦合（不假设
-  "应用名 = 配置目录名"）；
+- target 原样作为目标路径经 `home-files-service-type` 以
+  `~/.config/<target>` 安装（解析时加 `.config/` 前缀）；与
+  application name 无耦合（不假设 "应用名 = 配置目录名"）；
 - source 文件保持原生格式（KDL/TOML/...），Scheme 不解析内容；
 - application（owner）必须已启用（registry 校验，fail fast）；
 - variant 必须由该 application 声明（错误消息含 application +

@@ -14,6 +14,6 @@
    (name 'starship)
    (home-packages (list starship))
    (home-services
-    (list (simple-service 'starship-xdg-config
-                          home-xdg-configuration-files-service-type
-                          `(("starship.toml" ,(local-file "starship.toml" "starship-config.toml"))))))))
+    (list (simple-service 'starship-config
+                          home-files-service-type
+                          `((".config/starship.toml" ,(local-file "starship.toml" "starship-config.toml"))))))))

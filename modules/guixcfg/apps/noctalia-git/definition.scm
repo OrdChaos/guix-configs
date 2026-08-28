@@ -20,8 +20,10 @@
 ;;;
 ;;; 明确不做：Guix 长期声明式管理 ~/.config/noctalia/config.toml
 ;;; （双配置源——settings 唯一来源是 seed + app 自管）；不持久化
-;;; ~/.cache/noctalia、~/.local/share/noctalia（独立 XDG 数据类别，
-;;; 另行评估）。唯一例外：
+;;; ~/.cache/noctalia、~/.local/share/noctalia 整体。例外：
+;;; ~/.local/share/noctalia/plugins/ 持久化（app-private 插件目录，
+;;; 用户运行时安装的插件跨 ephemeral HOME 保留，目录级 bind，不
+;;; 做文件白名单）。其余唯一例外：
 ;;; ~/.config/noctalia/palettes/ 是**静态素材**（custom palette，
 ;;; 非 settings 配置；pinned Noctalia src/theme/custom_palettes.cpp
 ;;; 读取 configDir()/palettes/*.json）——repo-owned 声明式安装，
@@ -36,7 +38,7 @@
 ;;; GTK 动态配色（任务七边界）：templates/gtk{3,4}.css 是 pinned
 ;;; Noctalia 内置模板的 vendored 副本（stock post-hook apply.sh 含
 ;;; gtk.css mutation——store symlink 缺 import 时会 rm 重建——不用）；
-;;; 经 xdg-config 发布为 ~/.config/noctalia/templates/，由 seed 的
+;;; 经 home-files 发布为 ~/.config/noctalia/templates/，由 seed 的
 ;;; [theme.templates.user.gtk{3,4}] 引用，只生成
 ;;; gtk-{3,4}/noctalia.css；post-hook 是窄职责的 appearance-sync
 ;;; （apps/gtk）。内置 gtk3/gtk4 template 在 seed 的 builtin_ids 中
@@ -44,7 +46,7 @@
 
 (define-module (guixcfg apps noctalia-git definition)
                #:use-module (noctalia)                 ; noctalia-git
-               #:use-module (gnu home services)        ; home-xdg-configuration-files-service-type
+               #:use-module (gnu home services)        ; home-files-service-type
                #:use-module (gnu services)             ; simple-service
                #:use-module (guix gexp)                ; local-file
                #:use-module (guix records)
@@ -58,18 +60,18 @@
    (home-packages (list noctalia-git))                 ; 用户 profile 包（service 自动贡献的不要重复）
    (home-services
     (list (simple-service 'noctalia-palettes
-                          home-xdg-configuration-files-service-type
-                          `(("noctalia/palettes/fluent-blue.json"
+                          home-files-service-type
+                          `((".config/noctalia/palettes/fluent-blue.json"
                              ,(local-file "fluent-blue.json"
                                           "noctalia-fluent-blue.json"))))
           ;; GTK 动态配色模板（vendored；user template 的
           ;; input_path——见头部 GTK 段）。
           (simple-service 'noctalia-gtk-templates
-                          home-xdg-configuration-files-service-type
-                          `(("noctalia/templates/gtk3.css"
+                          home-files-service-type
+                          `((".config/noctalia/templates/gtk3.css"
                              ,(local-file "templates/gtk3.css"
                                           "noctalia-gtk3.css"))
-                            ("noctalia/templates/gtk4.css"
+                            (".config/noctalia/templates/gtk4.css"
                              ,(local-file "templates/gtk4.css"
                                           "noctalia-gtk4.css"))))))
    (persistence
@@ -81,4 +83,11 @@
            (lifecycle 'application-owned)
            ;; seed-once：首次初始化 settings.toml；此后 repo 永不触碰。
            (seeds `(("settings.toml"
-                     ,(local-file "base-settings.toml" "noctalia-base-settings.toml")))))))))
+                     ,(local-file "base-settings.toml" "noctalia-base-settings.toml")))))
+          ;; 用户运行时安装的插件（app-private，跨 boot 保留）。
+          (application-persistence-rule
+           (name 'plugins)
+           (backing "noctalia/plugins")             ; persistence root 下相对路径
+           (consumer ".local/share/noctalia/plugins") ; HOME 相对（app-private 插件目录）
+           (exposure 'bind-directory)
+           (lifecycle 'application-owned))))))

@@ -3,7 +3,7 @@
 ;;; mode 同步工具）。
 ;;;
 ;;; Ownership（每个最终静态文件恰好一个 publisher；任务二）：
-;;;   - 静态声明（repo-owned，home-xdg-configuration-files）：
+;;;   - 静态声明（repo-owned，home-files，.config 前缀）：
 ;;;     gtk-3.0/{settings.ini,gtk.css} 与 gtk-4.0/{settings.ini,
 ;;;     gtk.css}。两个 gtk.css 只有一行 @import noctalia.css——
 ;;;     GTK 相对 import 按 CSS 文件所在目录解析；文本与 Noctalia
@@ -207,11 +207,11 @@
                         (list glib "bin")))
    (home-services
     (list (simple-service 'gtk-appearance-config
-                          home-xdg-configuration-files-service-type
-                          `(("gtk-3.0/settings.ini" ,%gtk3-settings)
-                            ("gtk-3.0/gtk.css" ,%gtk-css-import)
-                            ("gtk-4.0/settings.ini" ,%gtk4-settings)
-                            ("gtk-4.0/gtk.css" ,%gtk-css-import)))
+                          home-files-service-type
+                          `((".config/gtk-3.0/settings.ini" ,%gtk3-settings)
+                            (".config/gtk-3.0/gtk.css" ,%gtk-css-import)
+                            (".config/gtk-4.0/settings.ini" ,%gtk4-settings)
+                            (".config/gtk-4.0/gtk.css" ,%gtk-css-import)))
           (simple-service 'gtk-appearance-sync-tool
                           home-files-service-type
                           `((".local/bin/appearance-sync"

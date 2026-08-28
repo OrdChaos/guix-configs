@@ -12,7 +12,7 @@
              (guix gexp)              ; plain-file、local-file
              (guix records)
              (gnu home)              ; home-environment
-             (gnu home services)     ; home-xdg-configuration-files-service-type
+             (gnu home services)     ; home-files-service-type
              (gnu services)          ; simple-service、service-kind、service-value
              (guixcfg apps model)
              (guixcfg apps registry) ; %applications（校验权威）
@@ -111,13 +111,13 @@
 
 (test-assert "laptop selection resolves to exactly one service"
              (= 1 (length laptop-svcs)))
-(test-assert "resolved service extends home-xdg-configuration-files"
+(test-assert "resolved service extends home-files (with .config prefix)"
              (eq? (service-extension-target
                    (car (service-type-extensions (service-kind (car laptop-svcs)))))
-                  home-xdg-configuration-files-service-type))
-(test-assert "resolved contribution is niri/host.kdl with an opaque source"
+                  home-files-service-type))
+(test-assert "resolved contribution is .config/niri/host.kdl with an opaque source"
              (let ((entry (car (service-value (car laptop-svcs)))))
-               (and (string=? "niri/host.kdl" (car entry))
+               (and (string=? ".config/niri/host.kdl" (car entry))
                     (file-like? (cadr entry)))))
 
 ;; ── empty selection：无贡献（VM 语义）────────────────────────
@@ -237,8 +237,8 @@
 
 (test-assert "single variant may contribute multiple files"
              (let ((paths (map car (service-value (car multi-svcs)))))
-               (and (member "multi/a.conf" paths)
-                    (member "multi/b.conf" paths))))
+               (and (member ".config/multi/a.conf" paths)
+                    (member ".config/multi/b.conf" paths))))
 
 ;; ── 冲突语义：同一最终 target path 只能有一个 owner ─────────
 (define %conflict-app-a
@@ -317,8 +317,8 @@
                                  (variant 'dual)))
                           #:apps (list %multi-file-app))))
                (let ((paths (map car (service-value (car svcs)))))
-                 (and (member "multi/a.conf" paths)
-                      (member "multi/b.conf" paths)))))
+                 (and (member ".config/multi/a.conf" paths)
+                      (member ".config/multi/b.conf" paths)))))
 
 ;; ── lower：variant 文件安装到正确 XDG 路径且内容保真 ─────────
 (define (lower-home services)
@@ -363,8 +363,8 @@
                            (variant 'base)))
                     #:apps (list %synthetic-app))
                    (list (simple-service 'app-own-config
-                                         home-xdg-configuration-files-service-type
-                                         `(("synthetic/config.ini"
+                                         home-files-service-type
+                                         `((".config/synthetic/config.ini"
                                             ,(plain-file "own.ini" "own")))))))
                  #f)
                (lambda (key . args)

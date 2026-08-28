@@ -10,7 +10,7 @@
              (ice-9 rdelim)           ; read-string
              (guixcfg apps model)
              (gnu home)              ; home-environment
-             (gnu home services)     ; home-files-service-type、home-xdg-configuration-files-service-type
+             (gnu home services)     ; home-files-service-type
              (gnu home services shells) ; home-bash-service-type
              (gnu services)
              (gnu packages base)     ; hello（sample record 用）
@@ -67,44 +67,21 @@
              (equal? (applications-home-services (list app-a app-b))
                      (applications-home-services (list app-a app-b))))
 
-;; ── home-files 目标归属校验（~/.config 必须走 xdg service）────
-(define bad-config-app
+;; ── home-files 目标（.config 与 HOME dotfile 同一通道）────────
+;; 2026-08 规则反转：~/.config 目标一律经 home-files-service-type
+;; 显式带 ".config/" 前缀（xdg service 已 deprecated，见 model.scm）。
+(define dotfile-app
   (application
-   (name 'bad-config)
+   (name 'dotfile)
    (home-services
-    (list (service home-files-service-type '((".config/foo" . 1)))))))
+    (list (service home-files-service-type '((".config/app/a.conf" . 1)
+                                             (".ssh/config" . 2)
+                                             (".gitconfig" . 3)))))))
 
-(define bad-config-exact-app
-  (application
-   (name 'bad-config-exact)
-   (home-services
-    (list (service home-files-service-type '((".config" . 1)))))))
-
-(define good-dotfile-app
-  (application
-   (name 'good-dotfile)
-   (home-services
-    (list (service home-files-service-type '((".ssh/config" . 1)
-                                             (".gitconfig" . 2)))))))
-
-(test-assert "home-files target under ~/.config/ rejected (fail fast)"
-             (catch #t
-               (lambda ()
-                 (applications-home-services (list bad-config-app))
-                 #f)
-               (lambda (k . a) #t)))
-
-(test-assert "home-files exact ~/.config target rejected"
-             (catch #t
-               (lambda ()
-                 (applications-home-services (list bad-config-exact-app))
-                 #f)
-               (lambda (k . a) #t)))
-
-(test-equal "non-config dotfile targets still aggregate"
-            2 (length (service-value
+(test-equal "home-files targets aggregate (.config and dotfiles alike)"
+            3 (length (service-value
                        (car (applications-home-services
-                             (list good-dotfile-app))))))
+                             (list dotfile-app))))))
 
 ;; ── service-type-extend 不是 generic same-kind merger ────────
 (define-record-type* <synthetic-config> synthetic-config make-synthetic-config
@@ -158,37 +135,37 @@
                       (not (string-contains body "service-type-compose"))
                       (not (string-contains body "merge"))))))
 
-;; ── 多路 XDG extension：lower 成功且全部贡献在场（合成 fixture）─
-(define synthetic-xdg-app
+;; ── 多路 home-files extension：lower 成功且全部贡献在场（合成 fixture）─
+(define synthetic-config-app
   (application
-   (name 'synthetic-xdg)
+   (name 'synthetic-config)
    (home-services
-    (list (simple-service 'synthetic-xdg-config
-                          home-xdg-configuration-files-service-type
-                          `(("synthetic/config.ini"
+    (list (simple-service 'synthetic-config-files
+                          home-files-service-type
+                          `((".config/synthetic/config.ini"
                              ,(plain-file "synthetic.ini" "x=1"))))))))
 
-(define synthetic-xdg-app-2
+(define synthetic-config-app-2
   (application
-   (name 'synthetic-xdg-2)
+   (name 'synthetic-config-2)
    (home-services
-    (list (simple-service 'synthetic-xdg-config-2
-                          home-xdg-configuration-files-service-type
-                          `(("synthetic/other.ini"
+    (list (simple-service 'synthetic-config-files-2
+                          home-files-service-type
+                          `((".config/synthetic/other.ini"
                              ,(plain-file "other.ini" "y=2"))))))))
 
 (define %composed-home
   (home-environment
    (packages '())
    (services (applications-home-services
-              (list synthetic-xdg-app synthetic-xdg-app-2)))))
+              (list synthetic-config-app synthetic-config-app-2)))))
 
 (define %store (open-connection))
 (define %composed-drv (run-with-store %store (lower-object %composed-home)))
 (build-derivations %store (list %composed-drv))
 (define %composed-out (derivation->output-path %composed-drv))
 
-(test-assert "multi-way XDG composition lowers without ambiguous target"
+(test-assert "multi-way home-files composition lowers without ambiguous target"
              (and %composed-out
                   (file-exists? %composed-out)))
 

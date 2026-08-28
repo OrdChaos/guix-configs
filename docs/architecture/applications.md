@@ -86,7 +86,8 @@ source 位置**：
 `application-configuration-selections->home-services` 解析：
 selection → lookup application（registry）→ lookup 声明 variant →
 resolve files → 校验 target → 冲突检测 → 聚合为
-`home-xdg-configuration-files-service-type` 的 native extension。
+`home-files-service-type` 的 native extension（target 加 `.config/`
+前缀）。
 
 **封装不变量**：改变 variant 背后的文件或目标路径（如
 `niri/host.kdl` → `niri/device.kdl`，或一个文件拆成多个）**不需要
@@ -173,21 +174,21 @@ system services/extensions / persistence / secrets。但：
 
 > **Applications do not merge Guix service values.**
 
-共享 Home sink（`home-xdg-configuration-files`、`home-files`、
-environment variables 等——多个 app 都可能贡献的 target）必须经
-Guix **native service-extension 机制**贡献：
+共享 Home sink（`home-files`、environment variables 等——多个 app
+都可能贡献的 target）必须经 Guix **native service-extension 机制**
+贡献：
 
 ```scheme
 (simple-service
- 'mpv-xdg-config
- home-xdg-configuration-files-service-type
- `(("mpv/mpv.conf" ,(local-file "mpv.conf"))))
+ 'mpv-config
+ home-files-service-type
+ `((".config/mpv/mpv.conf" ,(local-file "mpv.conf"))))
 ```
 
 而不是：
 
 ```scheme
-(service home-xdg-configuration-files-service-type ...)
+(service home-files-service-type ...)
 ```
 
 原因：canonical target 实例由 `instantiate-missing-services`

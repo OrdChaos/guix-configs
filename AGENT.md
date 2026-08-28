@@ -244,8 +244,8 @@ docs/reference/repository-layout.md；本节省略版开发约束：
   override / fixpoint / 自动发现 / 继承）。
 - **Application aggregators concatenate Guix service contributions;
   they do not merge same-kind service instances.** 多个 application
-  贡献共享 service type（home-xdg-configuration-files、home-files、
-  env vars 等）时，用 Guix native service-extension 机制
+  贡献共享 service type（home-files、env vars 等）时，用 Guix
+  native service-extension 机制
   （`simple-service` / `service-extension`），不手工调用
   `service-type-extend`。`service-type-extend` 组合 base service
   value 与 composed extension value——不是 generic base-value

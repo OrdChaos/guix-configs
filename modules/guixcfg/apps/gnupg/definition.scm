@@ -138,8 +138,8 @@
            (list (cons "GNUPGHOME" %gnupg-home-dir)))
           (simple-service
            'gnupg-signing-config
-           home-xdg-configuration-files-service-type
-           `(("git/signing" ,%gnupg-git-signing-file)))
+           home-files-service-type
+           `((".config/git/signing" ,%gnupg-git-signing-file)))
           (simple-service
            'gnupg-session
            home-shepherd-service-type

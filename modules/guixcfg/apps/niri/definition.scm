@@ -42,7 +42,7 @@
 ;;;   noctalia.kdl 运行时由 Noctalia 生成（唯一 owner = Noctalia；
 ;;;                本模块不安装、不声明）
 ;;;
-;;; 经官方 home-xdg-configuration-files-service-type 以 source-
+;;; 经 home-files-service-type（.config 前缀）以 source-
 ;;; relative local-file 声明（pinned Guix local-file 宏按出现处
 ;;; source directory 解析）——derived state，每次 fresh root/Home
 ;;; activation 恢复；不持久化、app 不是第二 authority。
@@ -181,15 +181,15 @@ session when Niri exits so that greetd returns to the greeter.")
    (name 'niri)
    (home-services
     (list (service home-niri-session-service-type)
-          ;; 共享 sink（home-xdg-configuration-files）经 Guix native
-          ;; extension 贡献（simple-service → target；canonical target
-          ;; 由 instantiate-missing-services 以 default '() 自动实例化
+          ;; 共享 sink（home-files）经 Guix native extension 贡献
+          ;; （simple-service → target；canonical target 由
+          ;; instantiate-missing-services 以 default '() 自动实例化
           ;; ——见 AGENT.md §15 / docs/architecture/applications.md）。
-          (simple-service 'niri-xdg-config
-                          home-xdg-configuration-files-service-type
-                          `(("niri/config.kdl"
+          (simple-service 'niri-config
+                          home-files-service-type
+                          `((".config/niri/config.kdl"
                              ,(local-file "config.kdl" "niri-config.kdl"))
-                            ("niri/common.kdl"
+                            (".config/niri/common.kdl"
                              ,(local-file "common.kdl" "niri-common.kdl"))
                             ;; portal backend policy（colocate 独立文件
                             ;; niri-portals.conf；内容与理由见该文件头
@@ -197,7 +197,7 @@ session when Niri exits so that greetd returns to the greeter.")
                             ;; niri-portals.conf——XDG_CURRENT_DESKTOP=
                             ;; niri 时最高优先级，$XDG_CONFIG_HOME 优先于
                             ;; $XDG_DATA_DIRS。
-                            ("xdg-desktop-portal/niri-portals.conf"
+                            (".config/xdg-desktop-portal/niri-portals.conf"
                              ,(local-file "niri-portals.conf"
                                           "niri-portals.conf"))))))
    ;; 可选配置变体（application-owned）：'laptop 携带机器事实

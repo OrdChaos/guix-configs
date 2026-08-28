@@ -60,19 +60,22 @@
 
 ;; ── 2. persistence rule 声明 ────────────────────────────────
 (define rules (applications-persistence (list %noctalia-git)))
-(test-equal "noctalia declares exactly one persistence rule"
-            1 (length rules))
-(define rule (car rules))
-(test-equal "consumer is the whole state dir (no file whitelist)"
+(test-equal "noctalia declares exactly two persistence rules"
+            2 (length rules))
+(define rule
+  (find (lambda (r)
+          (eq? 'state (application-persistence-rule-name r)))
+        rules))
+(test-equal "state: consumer is the whole state dir (no file whitelist)"
             ".local/state/noctalia"
             (application-persistence-rule-consumer rule))
-(test-equal "backing is relative under /persist/data-app"
+(test-equal "state: backing is relative under /persist/data-app"
             "noctalia/state"
             (application-persistence-rule-backing rule))
-(test-equal "exposure is directory bind"
+(test-equal "state: exposure is directory bind"
             'bind-directory
             (application-persistence-rule-exposure rule))
-(test-equal "lifecycle is application-owned"
+(test-equal "state: lifecycle is application-owned"
             'application-owned
             (application-persistence-rule-lifecycle rule))
 (test-assert "rule seeds settings.toml"
@@ -84,6 +87,28 @@
 (test-assert "seeded rule passes validation"
              (valid-application-persistence-rule? rule))
 
+;; plugins：用户运行时安装的插件目录（app-private，跨 boot 保留）。
+(define plugins-rule
+  (find (lambda (r)
+          (eq? 'plugins (application-persistence-rule-name r)))
+        rules))
+(test-equal "plugins: consumer is the app-private plugins dir"
+            ".local/share/noctalia/plugins"
+            (application-persistence-rule-consumer plugins-rule))
+(test-equal "plugins: backing is relative under /persist/data-app"
+            "noctalia/plugins"
+            (application-persistence-rule-backing plugins-rule))
+(test-equal "plugins: exposure is directory bind"
+            'bind-directory
+            (application-persistence-rule-exposure plugins-rule))
+(test-equal "plugins: lifecycle is application-owned"
+            'application-owned
+            (application-persistence-rule-lifecycle plugins-rule))
+(test-assert "plugins rule has no seeds (runtime-only content)"
+             (null? (application-persistence-rule-seeds plugins-rule)))
+(test-assert "plugins rule passes validation"
+             (valid-application-persistence-rule? plugins-rule))
+
 ;; ── 3. 无第二配置源：不声明 settings；palettes 是静态素材例外 ─
 (define %noctalia-xdg-value
   (service-value
@@ -92,12 +117,12 @@
                 (service-type-name (service-kind s))))
          (application-home-services %noctalia-git))))
 
-(test-assert "palettes are declared via home-xdg-configuration-files"
+(test-assert "palettes are declared via home-files (.config prefix)"
              (pair? %noctalia-xdg-value))
-(test-assert "fluent-blue palette installed under noctalia/palettes"
-             (assoc "noctalia/palettes/fluent-blue.json" %noctalia-xdg-value))
+(test-assert "fluent-blue palette installed under .config/noctalia/palettes"
+             (assoc ".config/noctalia/palettes/fluent-blue.json" %noctalia-xdg-value))
 (test-assert "no declarative settings config (no second config source)"
-             (not (assoc "noctalia/config.toml" %noctalia-xdg-value)))
+             (not (assoc ".config/noctalia/config.toml" %noctalia-xdg-value)))
 (test-assert "no other .config/noctalia toml files declared"
              (not (any (lambda (target)
                          (string-suffix? ".toml" target))

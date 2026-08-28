@@ -2,7 +2,7 @@
        (name 'guix)
        (url "https://codeberg.org/guix/guix.git")
        (branch "master")
-       (commit "b59762fdb07df176f0ec922ff76c761528c9ff5c")
+       (commit "df854574b0e2ec021dcd94cd3784b51c2ba7e4c2")
        (introduction
         (make-channel-introduction
          "9edb3f66fd807b096b48283debdcddccfea34bad"
@@ -12,7 +12,7 @@
        (name 'nonguix)
        (url "https://gitlab.com/nonguix/nonguix")
        (branch "master")
-       (commit "c15e19cdbdfdfddacdae865741809af4fa86a665")
+       (commit "caa8c0b4646b993537be13c9bc819b3df68ab9b2")
        (introduction
         (make-channel-introduction
          "897c1a470da759236cc11798f4e0a5f7d4d59fbc"
@@ -22,7 +22,7 @@
        (name 'rosenthal)
        (url "https://codeberg.org/hako/rosenthal.git")
        (branch "trunk")
-       (commit "c6361f6e7b087a48eda47f32981cfda70c9fa424")
+       (commit "21391bab6e38561488bd807493da1035a85c24cb")
        (introduction
         (make-channel-introduction
          "7677db76330121a901604dfbad19077893865f35"
@@ -52,4 +52,4 @@
        (name 'noctalia)
        (url "https://github.com/noctalia-dev/noctalia")
        (branch "main")
-       (commit "ee3583b7187b59b2506c5f05d991779aa14c8617")))
+       (commit "67addbd529cfd9db30c9d0ee6e08d5f6836c9e1a")))

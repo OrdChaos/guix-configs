@@ -11,7 +11,7 @@
              (guix gexp)              ; plain-file
              (guix build utils)       ; find-files
              (gnu home)              ; home-environment
-             (gnu home services)     ; home-xdg-configuration-files-service-type
+             (gnu home services)     ; home-files-service-type
              (gnu services)          ; service-kind、service-value
              (guixcfg apps model)
              (guixcfg apps niri definition)
@@ -114,25 +114,25 @@
 (test-assert "niri application installs no noctalia.kdl"
              (let ((value (service-value
                            (find (lambda (s)
-                                   (eq? 'niri-xdg-config
+                                   (eq? 'niri-config
                                         (service-type-name (service-kind s))))
                                  (application-home-services %niri)))))
-               (not (assoc "niri/noctalia.kdl" value))))
+               (not (assoc ".config/niri/noctalia.kdl" value))))
 
 ;; ── 7. niri application 贡献：config.kdl + common.kdl ───────
-(define %niri-xdg-value
+(define %niri-config-value
   (service-value
    (find (lambda (s)
-           (eq? 'niri-xdg-config
+           (eq? 'niri-config
                 (service-type-name (service-kind s))))
          (application-home-services %niri))))
 
 (test-assert "niri application installs config.kdl"
-             (assoc "niri/config.kdl" %niri-xdg-value))
+             (assoc ".config/niri/config.kdl" %niri-config-value))
 (test-assert "niri application installs common.kdl"
-             (assoc "niri/common.kdl" %niri-xdg-value))
+             (assoc ".config/niri/common.kdl" %niri-config-value))
 (test-assert "niri application installs no host.kdl (variant-resolved)"
-             (not (assoc "niri/host.kdl" %niri-xdg-value)))
+             (not (assoc ".config/niri/host.kdl" %niri-config-value)))
 
 ;; ── 8. host 层组合：laptop 只做 logical selection，generic
 ;;     resolver 把 niri 'laptop variant 解析进 home ───────────
@@ -155,14 +155,14 @@
 
 ;; ── 9. lower 验证：laptop 与 VM 的最终配置目录 ──────────────
 (define (lower-xdg-home selection-services)
-  "lower 含 niri-xdg-config + SELECTION-SERVICES（resolver 输出）的
+  "lower 含 niri-config + SELECTION-SERVICES（resolver 输出）的
 合成 home（无包，只装配置文件），返回输出目录。"
   (let* ((store (open-connection))
          (home (home-environment
                 (packages '())
                 (services (append selection-services
                                   (list (find (lambda (s)
-                                                (eq? 'niri-xdg-config
+                                                (eq? 'niri-config
                                                      (service-type-name
                                                       (service-kind s))))
                                               (application-home-services
@@ -203,15 +203,15 @@
 ;; ~/.config/xdg-desktop-portal/niri-portals.conf
 ;; （XDG_CURRENT_DESKTOP=niri 时最高优先级）。
 (define %niri-portals-file-like
-  ;; xdg service value 条目是 (target file-like) 两元素列表；
+  ;; home-files service value 条目是 (target file-like) 两元素列表；
   ;; assoc-ref 返回 cdr = (file-like) 单元素列表。
   (car (assoc-ref
         (service-value
          (find (lambda (s)
-                 (eq? 'niri-xdg-config
+                 (eq? 'niri-config
                       (service-type-name (service-kind s))))
                (application-home-services %niri)))
-        "xdg-desktop-portal/niri-portals.conf")))
+        ".config/xdg-desktop-portal/niri-portals.conf")))
 
 (define %niri-portals-text
   (let* ((store (open-connection))
@@ -224,7 +224,7 @@
                      (build-derivations store (list out))
                      (derivation->output-path out))))))
 
-(test-assert "niri-portals.conf is declared in niri xdg config"
+(test-assert "niri-portals.conf is declared in niri home-files config"
              (and %niri-portals-file-like #t))
 
 (test-assert "niri-portals.conf default stays gnome;gtk"

@@ -1,5 +1,8 @@
 # System DNS ownership（Phase 2）
 
+> 全链路横切总结（与 mihomo 的协作语义、设计决策表、降级矩阵、
+> 运维手册）见 `network.md`；本文件只讲 DNS 分领域细节。
+
 ## 目标链
 
 ```

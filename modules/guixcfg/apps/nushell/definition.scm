@@ -22,7 +22,7 @@
 ;;;
 ;;; 配置/持久化边界（2026-08-25 决策；plugin registry 2026-08-26
 ;;; 改为构建期声明式生成）：
-;;;   仓库分发（声明式，home-xdg-configuration-files）：
+;;;   仓库分发（声明式，home-files，.config 前缀）：
 ;;;     ~/.config/nushell/config.nu      —— history 重定向到
 ;;;       ~/.local/state/nushell/history.txt（$env.HOME 运行时拼接，
 ;;;       不硬编码用户名），使 ~/.config/nushell/ 保持纯声明式；
@@ -48,7 +48,7 @@
 ;;; 路径，无需搜索路径）。
 
 (define-module (guixcfg apps nushell definition)
-               #:use-module (gnu home services)      ; home-xdg-configuration-files-service-type
+               #:use-module (gnu home services)      ; home-files-service-type
                #:use-module (gnu services)           ; simple-service
                #:use-module (guix gexp)              ; local-file、file-append、computed-file
                #:use-module (guix records)
@@ -116,15 +116,15 @@ backed 链接；用户直接 plugin add 修改默认 $nu.plugin-path 会因只�
    (name 'nushell)
    (home-packages (list nushell))
    (home-services
-    (list (simple-service 'nushell-xdg-config
-                          home-xdg-configuration-files-service-type
-                          `(("nushell/config.nu"
+    (list (simple-service 'nushell-config
+                          home-files-service-type
+                          `((".config/nushell/config.nu"
                              ,(local-file "config.nu" "nushell-config.nu"))
-                            ("nushell/env.nu"
+                            (".config/nushell/env.nu"
                              ,(local-file "env.nu" "nushell-env.nu"))
-                            ("nushell/theme.nu"
+                            (".config/nushell/theme.nu"
                              ,(local-file "theme.nu" "nushell-theme.nu"))
-                            ("nushell/plugin.msgpackz"
+                            (".config/nushell/plugin.msgpackz"
                              ,(nushell-plugin-registry))))))
    (persistence
     (list (application-persistence-rule

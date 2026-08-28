@@ -72,7 +72,7 @@
     (derivation->output-path drv)))
 
 (define (home-files-entry app target)
-  "从 APP 的 home-files/xdg-config 贡献中取 TARGET 的 file-like。"
+  "从 APP 的 home-files 贡献中取 TARGET 的 file-like。"
   (let loop ((svcs (application-home-services app)))
     (if (null? svcs)
       #f
@@ -81,9 +81,9 @@
           (cadr entry)
           (loop (cdr svcs)))))))
 
-(define %gtk3-ini (lower-text (home-files-entry %gtk "gtk-3.0/settings.ini")))
-(define %gtk4-ini (lower-text (home-files-entry %gtk "gtk-4.0/settings.ini")))
-(define %gtk-css  (lower-text (home-files-entry %gtk "gtk-3.0/gtk.css")))
+(define %gtk3-ini (lower-text (home-files-entry %gtk ".config/gtk-3.0/settings.ini")))
+(define %gtk4-ini (lower-text (home-files-entry %gtk ".config/gtk-4.0/settings.ini")))
+(define %gtk-css  (lower-text (home-files-entry %gtk ".config/gtk-3.0/gtk.css")))
 
 (test-assert "gtk3 settings: theme/icon/cursor/size/font"
              (and (string-contains %gtk3-ini "gtk-theme-name=adw-gtk3")

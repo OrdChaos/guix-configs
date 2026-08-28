@@ -18,7 +18,7 @@
 
 (define-module (guixcfg apps mpv definition)
                #:use-module (gnu packages video)      ; mpv
-               #:use-module (gnu home services)      ; home-xdg-configuration-files-service-type
+               #:use-module (gnu home services)      ; home-files-service-type
                #:use-module (gnu services)           ; service
                #:use-module (guix gexp)              ; local-file
                #:use-module (guix records)
@@ -31,10 +31,10 @@
    (name 'mpv)
    (home-packages (list mpv))
    (home-services
-    (list (simple-service 'mpv-xdg-config
-                          home-xdg-configuration-files-service-type
-                          `(("mpv/mpv.conf" ,(local-file "mpv.conf" "mpv-mpv.conf"))
-                            ("mpv/input.conf" ,(local-file "input.conf" "mpv-input.conf"))))))
+    (list (simple-service 'mpv-config
+                          home-files-service-type
+                          `((".config/mpv/mpv.conf" ,(local-file "mpv.conf" "mpv-mpv.conf"))
+                            (".config/mpv/input.conf" ,(local-file "input.conf" "mpv-input.conf"))))))
    (persistence
     (list (application-persistence-rule
            (name 'state)

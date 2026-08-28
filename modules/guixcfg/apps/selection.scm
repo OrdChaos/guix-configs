@@ -7,8 +7,8 @@
 ;;;                   （<application-configuration-variant>，model.scm）
 ;;;   host/profile    只做 logical selection——按 application 名 +
 ;;;                   logical variant 名选择，不接触文件/路径
-;;;   generic 层      解析 selection → 校验 → 聚合为
-;;;                   home-xdg-configuration-files 贡献
+;;;   generic 层      解析 selection → 校验 → 聚合为 home-files
+;;;                   贡献（target 加 ".config/" 前缀）
 ;;;
 ;;; <application-configuration-selection> 只携带：
 ;;;   application   symbol：registry 中的应用名（启用唯一权威）
@@ -24,7 +24,7 @@
 ;;; 兜底报错——本模块不重复实现另一套冲突系统。
 
 (define-module (guixcfg apps selection)
-               #:use-module (gnu home services) ; home-xdg-configuration-files-service-type
+               #:use-module (gnu home services) ; home-files-service-type
                #:use-module (gnu services)      ; simple-service
                #:use-module (guix gexp)         ; local-file?、local-file-name
                #:use-module (guix records)
@@ -103,9 +103,10 @@ such configuration variant"
 (define* (application-configuration-selections->home-services selections
                                                               #:key (apps %applications))
          "把 SELECTIONS（<application-configuration-selection> 列表）解析为
-home-xdg-configuration-files-service-type 的 extension 贡献（返回
-service 列表，供 home assembly 直接 append）。APPS 默认是 registry
-的 %applications（启用唯一权威）；可参数化注入（测试/组合）。
+home-files-service-type 的 extension 贡献（target 加 \".config/\"
+前缀；返回 service 列表，供 home assembly 直接 append）。APPS 默认
+是 registry 的 %applications（启用唯一权威）；可参数化注入（测试/
+组合）。
 
 流程：selection → lookup application（registry）→ lookup 声明
 variant → resolve files → 校验 target → 冲突检测 → 聚合。
@@ -153,10 +154,12 @@ path (one owner per final path)"
              ;; 共享 sink 经 native extension 贡献（AGENT.md §12：不创建
              ;; 第二个完整服务实例；canonical target 由
              ;; instantiate-missing-services 自动实例化）。条目形态为两元素
-             ;; 列表 (target source)——与仓库其它 xdg-config 贡献一致
-             ;; （quasiquote 列表形态；home-files 的 assert-no-duplicates
-             ;; 只匹配该形态）。
+             ;; 列表 (target source)——variant 声明的 target 是 ~/.config
+             ;; 相对路径，聚合时加 ".config/" 前缀（与仓库其它
+             ;; home-files 贡献一致；quasiquote 列表形态；home-files
+             ;; 的 assert-no-duplicates 只匹配该形态）。
              (list (simple-service 'application-configuration-files
-                                   home-xdg-configuration-files-service-type
-                                   (map (lambda (e) (list (car e) (cadr e)))
+                                   home-files-service-type
+                                   (map (lambda (e) (list (string-append ".config/" (car e))
+                                                          (cadr e)))
                                         entries))))))

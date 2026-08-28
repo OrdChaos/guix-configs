@@ -20,7 +20,7 @@
              (guixcfg apps model)       ; application-home-packages 等
              (guix gexp)                ; computed-file?
              (guix records)
-             (gnu home services)        ; home-xdg-configuration-files-service-type
+             (gnu home services)        ; home-files-service-type
              (gnu services)             ; service-kind、service-value
              (guix packages)             ; package-name、package-location
              (guix diagnostics)          ; location->string（location-file 未导出）
@@ -45,39 +45,39 @@
                                             "virelith"))))))
 
 ;; ── N2：XDG config 集合 ─────────────────────────────────────
-;; simple-service 的 kind 是包装 type（extension 指向 xdg type）——
-;; 按 test-home.scm 模式经 service-extension-target 识别。
-(define %nushell-xdg-service
+;; simple-service 的 kind 是包装 type（extension 指向 home-files
+;; type）——按 test-home.scm 模式经 service-extension-target 识别。
+(define %nushell-config-service
   (find (lambda (s)
           (any (lambda (ext)
                  (eq? (service-extension-target ext)
-                      home-xdg-configuration-files-service-type))
+                      home-files-service-type))
                (service-type-extensions (service-kind s))))
         (application-home-services %nushell)))
 
-(define %nushell-xdg-files
-  (map car (service-value %nushell-xdg-service)))
+(define %nushell-config-files
+  (map car (service-value %nushell-config-service)))
 
 (test-assert "N2: xdg config contains config.nu/env.nu/theme.nu/plugin.msgpackz"
-             (and (member "nushell/config.nu" %nushell-xdg-files)
-                  (member "nushell/env.nu" %nushell-xdg-files)
-                  (member "nushell/theme.nu" %nushell-xdg-files)
-                  (member "nushell/plugin.msgpackz" %nushell-xdg-files)))
+             (and (member ".config/nushell/config.nu" %nushell-config-files)
+                  (member ".config/nushell/env.nu" %nushell-config-files)
+                  (member ".config/nushell/theme.nu" %nushell-config-files)
+                  (member ".config/nushell/plugin.msgpackz" %nushell-config-files)))
 
 (test-equal "N2: xdg config is exactly the four declarative files"
-            4 (length %nushell-xdg-files))
+            4 (length %nushell-config-files))
 
 ;; ── N3：plugin.msgpackz 是构建期生成物 ─────────────────────
-;; xdg service value 条目是 (target file-like) 两元素列表。
-(define %nushell-xdg-sources
-  (map cadr (service-value %nushell-xdg-service)))
+;; home-files service value 条目是 (target file-like) 两元素列表。
+(define %nushell-config-sources
+  (map cadr (service-value %nushell-config-service)))
 
 (test-assert "N3: plugin.msgpackz source is a computed-file"
              (any (lambda (src)
                     (and (computed-file? src)
                          (string-contains (computed-file-name src)
                                           "plugin-registry")))
-                  %nushell-xdg-sources))
+                  %nushell-config-sources))
 
 (test-assert "N3: config.nu/env.nu are local-file (static), not generated"
              (every (lambda (src)
@@ -85,7 +85,7 @@
                           (and (computed-file? src)
                                (string-contains (computed-file-name src)
                                                 "plugin-registry"))))
-                    %nushell-xdg-sources))
+                    %nushell-config-sources))
 
 ;; ── N4：persistence 边界 ────────────────────────────────────
 (test-assert "N4: persistence is exactly the state/history rule"

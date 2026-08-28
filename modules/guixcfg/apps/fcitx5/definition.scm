@@ -33,7 +33,7 @@
 ;;;
 ;;; 声明式配置 ownership（docs/architecture/persistence.md）：
 ;;;   - ~/.config/fcitx5/config、profile、conf/classicui.conf、
-;;;     conf/rime.conf：repo-owned（home-xdg-configuration-files）。
+;;;     conf/rime.conf：repo-owned（home-files，.config 前缀）。
 ;;;     只声明相对默认值的刻意改动（Super+Space 切换键、
 ;;;     ShareInputState=No + rime InputState=All 组合、主题/字体/
 ;;;     分数缩放），行为基线是 Arch 实机验证过的习惯。
@@ -97,16 +97,16 @@
                         fcitx5-rime-virelith fcitx5-fluentlight-theme))
    (home-services
     (list ;; 声明式 Fcitx5 配置（~/.config/fcitx5/**）。
-          (simple-service 'fcitx5-xdg-config
-                          home-xdg-configuration-files-service-type
-                          `(("fcitx5/config"
+          (simple-service 'fcitx5-config
+                          home-files-service-type
+                          `((".config/fcitx5/config"
                              ,(local-file "config" "fcitx5-config"))
-                            ("fcitx5/profile"
+                            (".config/fcitx5/profile"
                              ,(local-file "profile" "fcitx5-profile"))
-                            ("fcitx5/conf/classicui.conf"
+                            (".config/fcitx5/conf/classicui.conf"
                              ,(local-file "classicui.conf"
                                           "fcitx5-classicui.conf"))
-                            ("fcitx5/conf/rime.conf"
+                            (".config/fcitx5/conf/rime.conf"
                              ,(local-file "rime.conf"
                                           "fcitx5-rime-addon.conf"))))
           ;; 声明式 Rime 用户配置（~/.local/share/fcitx5/rime/——

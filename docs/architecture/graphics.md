@@ -64,7 +64,7 @@ interactive-session-ready（core readiness join barrier）
 - **user session D-Bus**：home-dbus-service-type 唯一 owner（不再有
   custom dbus-run-session）。
 - **niri config**：`~/.config/niri/` 由 Home 声明式生成
-  （home-xdg-configuration-files-service-type）——derived state，不
+  （home-files-service-type，`.config/` 前缀）——derived state，不
   持久化、app 不是第二 authority。配置树（apps/niri/）：
   - `config.kdl`（app-owned，薄入口）：`include "common.kdl"` +
     `include "host.kdl" optional=true` + `include "noctalia.kdl"

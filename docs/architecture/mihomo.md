@@ -1,5 +1,8 @@
 # Mihomo 系统透明代理（Phase 1）
 
+> 全链路横切总结（与 DNS 的协作语义、设计决策表、降级矩阵、
+> 运维手册）见 `network.md`；本文件只讲代理分领域细节。
+
 Mihomo 作为系统级透明代理，由 Guix System + Shepherd 独占生命周期。
 binary 唯一 owner 是 Rosenthal channel 的 `mihomo` package（pin
 1.19.30，`(rosenthal packages networking)`，build tag `with_gvisor`）。
