@@ -33,10 +33,12 @@ proxy-providers:
     url: "@@MIHOMO_SUBSCRIPTION_URL@@"
     path: ./providers/airport.yaml
     interval: 3600
-    # 订阅刷新直连：不依赖当前代理组/节点可用性（VM 实测：默认走
-    # tunnel 规则时节点全挂会导致订阅无法刷新）。Mihomo 原生维护
-    # interval 调度、provider cache 与 controller refresh API。
-    proxy: DIRECT
+    # 订阅刷新走规则路由（MATCH→PROXY，经节点出口）：宿主侧网络对
+    # 直连出站连接不稳定（实测 api.wd-purple.com 直连被 EOF 掐断、
+    # 明文 53 被 fake-ip DNS 劫持），经节点才能拿到完整响应。不显式
+    # 设 proxy=DIRECT——节点全挂时刷新失败可接受（provider 有
+    # cache-first，换活节点后经 controller refresh API 恢复）。
+    # Mihomo 原生维护 interval 调度、provider cache 与 refresh API。
     health-check:
       enable: true
       interval: 600
@@ -56,9 +58,9 @@ rules:
   - IP-CIDR6,fc00::/7,DIRECT,no-resolve
   - IP-CIDR6,fe80::/10,DIRECT,no-resolve
   - IP-CIDR6,::1/128,DIRECT,no-resolve
-  # SmartDNS 固定 upstream 直连：不绕经代理节点（IP 规则最可靠；
-  # upstream 是 IP literal，无 hostname bootstrap——与
-  # (guixcfg system dns smartdns) 的 %smartdns-config-file 保持一致）。
-  - IP-CIDR,223.5.5.5/32,DIRECT,no-resolve
-  - IP-CIDR,119.29.29.29/32,DIRECT,no-resolve
+  # 刻意不为 SmartDNS 上游（223.5.5.5/119.29.29.29）加 DIRECT 规则：
+  # 宿主侧/路由器对明文 53 端口全局劫持（fake-ip DNS，实测返回
+  # 198.18.x A + fdfe:dcba:9876::x AAAA），直连永远拿到假 IP；
+  # 唯一真实答案来自代理节点的出口 DNS。因此上游查询走 MATCH→PROXY
+  # （节点死亡时 DNS 随之不可用——换活节点即可恢复）。
   - MATCH,PROXY

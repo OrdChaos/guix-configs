@@ -152,11 +152,13 @@
 (test-assert "M8: controller secret explicitly empty"
              (string-contains (template-text) "secret: \"\""))
 
-;; ── M9：provider 原生 http + DIRECT 订阅刷新 ─────────────────
+;; ── M9：provider 原生 http + 订阅刷新走规则路由 ─────────────
 (test-assert "M9: provider is native http type"
              (string-contains (template-text) "type: http"))
-(test-assert "M9: provider refresh dials DIRECT"
-             (string-contains (template-text) "proxy: DIRECT"))
+;; 不设 proxy: DIRECT——订阅刷新经节点出口（宿主侧直连出站不稳定：
+;; EOF 掐断 + fake-ip DNS 劫持，2026-08-28 VM 实测）。
+(test-assert "M9: provider refresh rides the routing rules (no proxy: DIRECT)"
+             (not (string-contains (template-text) "proxy: DIRECT")))
 (test-assert "M9: provider interval declared"
              (string-contains (template-text) "interval: 3600"))
 (test-assert "M9: provider path under data directory"

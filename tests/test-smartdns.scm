@@ -7,7 +7,8 @@
 ;;;   S3 resolvconf.conf 重定向 /run + 非 libc subscriber 全关
 ;;;   S4 service graph：smartdns provision/requirement
 ;;;   S5 resolvconf-bootstrap 退役（服务与 NM requirement 均不存在）
-;;;   S6 mihomo rules 含 SmartDNS upstream DIRECT（两处配置一致）
+;;;   S6 mihomo rules 不含 SmartDNS upstream DIRECT（上游查询走代理，
+;;;      宿主侧 fake-ip DNS 劫持明文 53）
 ;;;   S7 store 无 secret/无网络依赖（配置纯公开文本）
 
 (use-modules (guix store)
@@ -125,11 +126,13 @@
                (not (memq 'resolvconf-bootstrap req))))
 
 ;; ── S6：mihomo rules 与 smartdns upstream 一致 ─────────────
-(test-assert "S6: smartdns upstreams have DIRECT rules in mihomo template"
-             (and (string-contains %mihomo-template-text
-                                   "IP-CIDR,223.5.5.5/32,DIRECT,no-resolve")
-                  (string-contains %mihomo-template-text
-                                   "IP-CIDR,119.29.29.29/32,DIRECT,no-resolve")))
+;; 上游查询必须走代理（MATCH→PROXY）：宿主侧 fake-ip DNS 劫持明文
+;; 53 端口，DIRECT 规则会永远拿到假 IP（2026-08-28 VM 实测）。
+(test-assert "S6: no DIRECT rules for smartdns upstreams (must ride the proxy)"
+             (and (not (string-contains %mihomo-template-text
+                                        "223.5.5.5/32,DIRECT"))
+                  (not (string-contains %mihomo-template-text
+                                        "119.29.29.29/32,DIRECT"))))
 
 ;; ── S7：配置公开、无 store secret 面 ───────────────────────
 (test-assert "S7: no URL/secret-like content in public DNS configs"
