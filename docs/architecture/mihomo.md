@@ -126,9 +126,10 @@ controller 可读取配置的安全路径。
 
 - Mihomo 不做 DNS（`dns-hijack: []` 显式置空、无 dns 段、无
   fake-ip）——system DNS 归 SmartDNS（docs/architecture/dns.md）；
-- SmartDNS 固定 upstream 查询**经代理节点出口**发出——模板刻意不加
-  `DIRECT` 规则：宿主侧/路由器对明文 53 全局劫持（fake-ip DNS），
-  直连永远拿到假 IP（VM 实测，见 docs/architecture/dns.md）；
+- SmartDNS 固定 upstream 查询**直连**（模板含上游 `DIRECT` 规则）——
+  **自举必需**：机场节点服务器是域名，mihomo 拨号前经系统 DNS
+  （SmartDNS）解析节点域名；上游走节点 = 解析死锁（2026-08-28
+  重启后实测 all proxies timeout，SERVFAIL）；
 - `ipv6: false`：机场节点全是 v4，TUN 捕获的 v6 流量经节点无法到达
   目标 v6 地址（节点自身无 v6，VM 实测 bordeaux/github AAAA 秒断）；
   关闭后系统 v6 走原生路径绕过 Mihomo（v4-only 机场的取舍）；
@@ -144,8 +145,8 @@ controller 可读取配置的安全路径。
   路由 MATCH→PROXY，经节点出口；宿主侧直连出站不稳定——实测
   api.wd-purple.com 直连被 EOF 掐断、明文 53 被 fake-ip DNS 劫持）、
   `interval: 3600`（秒；省略则无周期刷新）、health-check lazy；
-- 规则：loopback/private/local → DIRECT，其余（含 SmartDNS 上游
-  查询）→ PROXY；
+- 规则：loopback/private/local → DIRECT；SmartDNS 上游 → DIRECT
+  （自举必需，见上）；其余 → PROXY；
 - secret 的 target-name 契约：`mihomo-subscription.url`（与
   `(guixcfg system mihomo config)` 的 `%mihomo-secret-path` 派生
   一致；decl 由 `(guixcfg system mihomo service)` 的

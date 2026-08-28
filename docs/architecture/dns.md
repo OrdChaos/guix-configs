@@ -15,9 +15,11 @@ Applications
     ↓
 SmartDNS（唯一 system resolver：cache / upstream selection / policy）
     ↓
-固定 explicit upstream（223.5.5.5、119.29.29.29，IP literal）——查询
-**经代理节点出口**发出（见下：宿主侧 fake-ip DNS 劫持明文 53，直连
-只会拿到假 IP）
+固定 explicit upstream（223.5.5.5、119.29.29.29，IP literal）——
+查询**直连**发出（DIRECT 规则）：这是**自举必需**——机场节点服务器
+是域名，mihomo 拨号前经 SmartDNS 解析节点域名；上游若走节点 =
+死锁（2026-08-28 重启后实测 all proxies timeout）。附带：DNS 不随
+节点存亡，TUN off 时退化为直连机器（network.md §7）。
 ```
 
 Mihomo 只负责 TUN / traffic routing / proxy policy——不做 DNS
@@ -31,7 +33,7 @@ Mihomo 只负责 TUN / traffic routing / proxy policy——不做 DNS
 | `/etc/resolvconf.conf` | `(guixcfg system dns ownership)` | 把 openresolv libc subscriber 的输出重定向到 `/run/resolvconf/resolv.conf`；其余 subscriber（named/dnsmasq/unbound/systemd-resolved/…）显式关闭 |
 | DHCP DNS | NetworkManager（经 resolvconf -a） | **不丢弃**：以 `/run/resolvconf/resolv.conf` 的形式保留为 upstream metadata——v1 只产出、SmartDNS 暂不消费；未来"DHCP DNS 作为上游"的 seam |
 | SmartDNS 进程 | `(guixcfg system dns smartdns)`（thin service，Guix smartdns 47 包） | Shepherd 管理；loopback-only 监听；固定 upstream；cache 仅内存 |
-| upstream 出口 | `(guixcfg system mihomo)` 模板 rules | **无 DIRECT 规则**——上游查询走 `MATCH,PROXY`（代理节点出口）。原因：宿主侧/路由器对明文 53 全局劫持（fake-ip DNS，返回 198.18.x / fdfe:dcba:9876::x），直连永远拿假 IP；节点死亡时 DNS 随之不可用，换活节点恢复（2026-08-28 VM 实测） |
+| upstream 出口 | `(guixcfg system mihomo)` 模板 rules | `IP-CIDR,<upstream>/32,DIRECT,no-resolve`——上游直连（自举必需：节点服务器是域名，上游走节点 = 解析死锁；附带 DNS 不随节点存亡，2026-08-28 重启实测） |
 
 ## 数据流（当前真实）
 

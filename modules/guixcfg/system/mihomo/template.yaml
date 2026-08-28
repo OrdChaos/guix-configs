@@ -58,9 +58,13 @@ rules:
   - IP-CIDR6,fc00::/7,DIRECT,no-resolve
   - IP-CIDR6,fe80::/10,DIRECT,no-resolve
   - IP-CIDR6,::1/128,DIRECT,no-resolve
-  # 刻意不为 SmartDNS 上游（223.5.5.5/119.29.29.29）加 DIRECT 规则：
-  # 宿主侧/路由器对明文 53 端口全局劫持（fake-ip DNS，实测返回
-  # 198.18.x A + fdfe:dcba:9876::x AAAA），直连永远拿到假 IP；
-  # 唯一真实答案来自代理节点的出口 DNS。因此上游查询走 MATCH→PROXY
-  # （节点死亡时 DNS 随之不可用——换活节点即可恢复）。
+  # SmartDNS 上游（223.5.5.5/119.29.29.29）必须 DIRECT——这是自举
+  # 必需：机场节点服务器是域名（oss-cn-*.toshiba-nvme.com），mihomo
+  # 拨号节点前要先经系统 DNS（SmartDNS）解析它；若上游查询走
+  # MATCH→PROXY（经节点），解析节点域名又需要节点本身——死锁，
+  # 全部节点 SERVFAIL/timeout（2026-08-28 重启后实测：all proxies
+  # timeout）。直连上游还附带 DNS 不随节点存亡（TUN off 时退化为
+  # 直连机器，见 docs/architecture/network.md §7）。
+  - IP-CIDR,223.5.5.5/32,DIRECT,no-resolve
+  - IP-CIDR,119.29.29.29/32,DIRECT,no-resolve
   - MATCH,PROXY

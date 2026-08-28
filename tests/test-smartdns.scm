@@ -126,13 +126,14 @@
                (not (memq 'resolvconf-bootstrap req))))
 
 ;; ── S6：mihomo rules 与 smartdns upstream 一致 ─────────────
-;; 上游查询必须走代理（MATCH→PROXY）：宿主侧 fake-ip DNS 劫持明文
-;; 53 端口，DIRECT 规则会永远拿到假 IP（2026-08-28 VM 实测）。
-(test-assert "S6: no DIRECT rules for smartdns upstreams (must ride the proxy)"
-             (and (not (string-contains %mihomo-template-text
-                                        "223.5.5.5/32,DIRECT"))
-                  (not (string-contains %mihomo-template-text
-                                        "119.29.29.29/32,DIRECT"))))
+;; 上游必须 DIRECT（自举必需）：机场节点服务器是域名，mihomo 拨号
+;; 前经系统 DNS 解析节点域名；上游走节点 = 死锁（2026-08-28 重启后
+;; 实测 all proxies timeout）。
+(test-assert "S6: smartdns upstreams have DIRECT rules in mihomo template"
+             (and (string-contains %mihomo-template-text
+                                   "IP-CIDR,223.5.5.5/32,DIRECT,no-resolve")
+                  (string-contains %mihomo-template-text
+                                   "IP-CIDR,119.29.29.29/32,DIRECT,no-resolve")))
 
 ;; ── S7：配置公开、无 store secret 面 ───────────────────────
 (test-assert "S7: no URL/secret-like content in public DNS configs"

@@ -18,22 +18,21 @@
 │    ▼                      ▼                                     │
 │  smartdns（唯一系统 resolver）   mihomo 规则引擎                  │
 │    │ 固定上游 223.5.5.5/         │ loopback/私网/ULA → DIRECT    │
-│    │ 119.29.29.29（IP literal）  │ 其余（含 DNS 查询、订阅刷新）  │
-│    │                            │   → MATCH → PROXY[节点]       │
-│    └──── TUN → MATCH→PROXY ────►│                                │
+│    │ 119.29.29.29（IP literal）  │ 上游 DNS 查询 → DIRECT（自举） │
+│    │                            │ 其余 → MATCH → PROXY[节点]    │
+│    └──── 直连（DIRECT 规则） ───►│                                │
 │                                  ▼                               │
 │                           机场节点（v4-only，select 组）          │
 │                                  │                               │
-│              └── 节点出口：干净 DNS 答案 / 代理业务流量 ──┘        │
+│              └── 节点出口：代理业务流量 ──────────────────────────┘
 │                                                                 │
-│  DIRECT 旁路：eth0 → SLIRP/上行 → 公网（仅私网/本地流量使用；      │
-│    公网直连不在设计内——见 §6 宿主侧约束与 §7 降级矩阵）            │
+│  DIRECT 旁路：eth0 → SLIRP/上行 → 公网（上游 DNS 直连 + 私网；   │
+│    其余公网直连不在设计内——见 §6 宿主侧约束与 §7 降级矩阵）       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-一句话语义：**系统只有两个出口——本地流量 DIRECT（仅私网/loopback），
-一切外部流量与真实 DNS 答案都经机场节点；直连公网在设计上不存在，
-节点是唯一真实出口，也是唯一单点故障。**
+一句话语义：**DNS 上游直连（自举必需），业务流量经机场节点；本地
+流量 DIRECT（仅私网/loopback），其余公网直连在设计上不存在。**
 
 ---
 
@@ -44,8 +43,8 @@
 | D1 | `/etc/resolv.conf` 静态 `nameserver 127.0.0.1`，repo 是唯一 writer | 无状态根每 boot 重建 /etc；NM/openresolv 写入不可控；系统只需要一个 resolver | 换上游必须改 repo + reconfigure（有意为之） |
 | D2 | SmartDNS 是唯一系统 resolver，**只绑 127.0.0.1:53，不绑 ::1** | resolver 面是 v4-literal；::1 无消费者却让服务存活依赖 IPv6（实测：IPv6 被禁用时整服务起不来 → DNS 全断） | 本机无 v6 递归入口——AAA A 查询都经 v4 通道，无实际损失 |
 | D3 | 上游固定 IP literal（223.5.5.5 / 119.29.29.29），无 hostname bootstrap | 无解析鸡生蛋问题；上游选择是显式仓库决策 | 无自动选优/无测速（v1 最小集） |
-| D4 | **上游查询走代理节点出口**（模板刻意无 DIRECT 规则） | 双重理由：① 宿主侧 fake-ip DNS 劫持明文 53（实测 198.18.x / fdfe:dcba:9876::x 假答案）；② 干净宿主上直连 AliDNS 对被封域名仍被 GFW 污染——节点出口才能拿到干净答案 | DNS 与节点同生死：节点死亡 → 解析全断（换活节点恢复；TUN off 时查询天然直连，见 §7） |
-| D5 | mihomo 不做 DNS：`dns-hijack: []`、无 dns 段、**全系统语义无 fake-ip** | DNS 归 SmartDNS 单一 owner；fake-ip 会制造"解析成功但连接失败"的不可审计态（今天所有 198.18.x 都是外部污染，本系统从不产出） | 无 fake-ip 抗污染能力——用 D4 的节点路由解决同一问题 |
+| D4 | **上游查询直连**（模板含上游 `DIRECT,no-resolve` 规则） | **自举必需**：机场节点服务器是域名（oss-cn-*.toshiba-nvme.com），mihomo 拨号前经系统 DNS（SmartDNS）解析节点域名；上游若走节点 = 解析死锁（2026-08-28 重启后实测：SERVFAIL → all proxies timeout）。附带 DNS 不随节点存亡、TUN off 时退化为直连机器 | 直连 AliDNS 对被封域名仍被 GFW 污染——被封域名的解析+连接本来只有代理能救，接受为直连语义的固有边界 |
+| D5 | mihomo 不做客户端 DNS：`dns-hijack: []`、无 dns 段、**全系统语义无 fake-ip** | DNS 归 SmartDNS 单一 owner；fake-ip 会制造"解析成功但连接失败"的不可审计态 | mihomo 自身解析（节点域名）经系统 DNS——正是 D4 直连的自举链条 |
 | D6 | `ipv6: false`：TUN 不捕获 v6 | 机场节点全是 v4，TUN 承载 v6 也送不到目标（实测 AAAA 目标经节点秒断）；v6 归系统原生路径 | 不承诺 v6 代理；笔记本上行有 v6 时 v6 直连绕过代理（泄露面，知情接受）；VM（SLIRP 无 v6）上 v6-only 服务不可达（快速失败） |
 | D7 | 订阅刷新走规则路由（**不设 `proxy: DIRECT`**） | 宿主直连出站不稳（实测 api.wd-purple.com 直连 EOF 掐断）；经节点才能拿到完整响应 | 节点全挂时刷新失败——provider 有 cache-first，换活节点后经 refresh API 恢复 |
 | D8 | **TUN 是唯一流量入口**：无 mixed-port、无 HTTP_PROXY 系统代理语义 | 单入口 = 可审计、无静默旁路；透明代理下应用零配置 | TUN off = 无显式回退口（干净宿主下自动退化为直连机器，见 §7；不提供"半代理"中间态） |
@@ -75,7 +74,7 @@
 
 | 组件 | 位置 | 实现要点 |
 |---|---|---|
-| 模板 | `modules/guixcfg/system/mihomo/template.yaml` | TUN（mixed stack、auto-route/auto-redirect/auto-detect-interface、`dns-hijack: []`）、`ipv6: false`；规则 = 私网/loopback/ULA DIRECT + `MATCH,PROXY`（无上游 DIRECT 规则，D4）；provider：原生 http、`interval: 3600`、lazy health-check、无 `proxy: DIRECT`（D7）；`@@MIHOMO_SUBSCRIPTION_URL@@` 占位符恰好一次 |
+| 模板 | `modules/guixcfg/system/mihomo/template.yaml` | TUN（mixed stack、auto-route/auto-redirect/auto-detect-interface、`dns-hijack: []`）、`ipv6: false`；规则 = 私网/loopback/ULA DIRECT + 上游 `IP-CIDR,<upstream>/32,DIRECT,no-resolve`（D4 自举）+ `MATCH,PROXY`；provider：原生 http、`interval: 3600`、lazy health-check、无 `proxy: DIRECT`（D7）；`@@MIHOMO_SUBSCRIPTION_URL@@` 占位符恰好一次 |
 | 配置合成 | `modules/guixcfg/system/mihomo/config.scm` | `compose-mihomo-config`：模板 + `/run` 明文订阅 URL；尾 LF/CRLF 规整、严格双引号转义、CR/LF/NUL 残留 fail-closed（D13） |
 | 服务装配 | `modules/guixcfg/system/mihomo/service.scm` | `%mihomo-data-directory`（`/var/lib/clash`）、`mihomo-config-program`（物化器，one-shot `mihomo-config-ready`）、daemon `mihomo -d /var/lib/clash -f /run/mihomo/config.yaml`（requirement：loopback/networking/config-ready）、`mihomo-activation`、clash 系统账户、`%mihomo-secrets`（ordinary secret-decl） |
 | 机器状态 | `modules/guixcfg/system/mihomo/service.scm` + `modules/guixcfg/system/machine-state-persistence.scm` | `%mihomo-providers-persistence-rule`：`/persist/system/state/<backing>` → bind → `/var/lib/clash/providers` |
@@ -92,7 +91,7 @@
 
 ### 3.4 测试锁定（tests/）
 
-- `test-smartdns.scm` S1-S7：绑定面（无 ::1、无通配）、静态 resolv.conf、resolvconf 重定向、service graph、bootstrap 退役、**上游无 DIRECT 规则**、公开配置无 secret 面；
+- `test-smartdns.scm` S1-S7：绑定面（无 ::1、无通配）、静态 resolv.conf、resolvconf 重定向、service graph、bootstrap 退役、**上游 DIRECT 规则存在（自举必需）**、公开配置无 secret 面；
 - `test-mihomo.scm` M1-M13：合成 fail-closed 矩阵、转义、占位符唯一性、无 fake-ip/dns 段、controller loopback、**provider 无 `proxy: DIRECT`**、TUN 参数、`ipv6: false`、daemon 参数与 requirement、machine-state rule、secret decl。
 
 ---
@@ -101,17 +100,18 @@
 
 | 流量 | 路径（TUN on） | 验证 |
 |---|---|---|
-| 应用 DNS | app → nscd → smartdns → TUN → MATCH→PROXY → 节点 → 上游 | bordeaux → `185.233.100.56` 真 A + `2a0c:e300::56` 真 AAAA |
+| 应用 DNS | app → nscd → smartdns → **直连上游**（DIRECT 规则） | bordeaux → `185.233.100.56` 真 A + `2a0c:e300::56` 真 AAAA |
+| 节点域名解析 | mihomo → 系统 DNS（smartdns）→ 直连上游 → 真答案 → 拨号节点 | 自举链条（D4）；曾因上游走节点而 SERVFAIL 死锁 |
 | 应用 HTTPS | app → TUN → 规则 → 节点 | github/bordeaux/ci.guix/codeberg 全 200 |
 | 订阅刷新 | mihomo → MATCH→PROXY → 节点 → api.wd-purple.com | `updatedAt` 更新、无 EOF |
-| 节点健康检查 | 节点 → gstatic generate_204（lazy） | HK/TW/SG 超时、JP/KR/US 活 |
+| 节点健康检查 | 节点 → gstatic generate_204（lazy） | 全节点延迟可查 |
 | 本地流量 | loopback/私网规则 DIRECT | 不经过任何外部 |
 
 ---
 
 ## 5. v6 语义（D6 展开）
 
-- **解析**：AAAA 照常解析（上游查询经节点，返回真 AAAA）；resolver 入口是 v4-literal。
+- **解析**：AAAA 照常解析（上游直连，返回真 AAAA）；resolver 入口是 v4-literal。
 - **代理**：永不——mihomo 不捕获 v6（`ipv6: false`），v6 流量不进入规则引擎、不受代理策略约束。
 - **连接**：设备上行决定——VM（SLIRP 无全局 v6）v6-only 不可达、快速失败；笔记本原生 v6 直连（绕过代理 = 知情接受的泄露面）。
 - **模板中的 `IP-CIDR6,fc00::/7 等 → DIRECT`**：当前不生效的防御性规则（未来若开 ipv6，本地 v6 段保证直通）。
@@ -120,12 +120,14 @@
 
 ## 6. 宿主侧环境约束（已知事实，非仓库责任）
 
-2026-08-27/28 实测两条：
+2026-08-27/28 实测两条（宿主侧当时的瞬时状态；当前宿主已恢复干净）：
 
-1. **明文 53 全局劫持**：宿主机/路由器侧残留的 clash fake-ip DNS 对一切端口 53 查询代答（`198.18.x` A + `fdfe:dcba:9876::x` AAAA），连宿主机自身的 `getent` 都被污染；"代理全关"后仍生效。
+1. **明文 53 全局劫持**：宿主机/路由器侧残留的 clash fake-ip DNS 对一切端口 53 查询代答（`198.18.x` A + `fdfe:dcba:9876::x` AAAA），连宿主机自身的 `getent` 都被污染。
 2. **直连出站不稳**：订阅 API 直连 TCP 建立后响应被 EOF 掐断。
 
-设计立场：**不把"直连可信"写进任何假设**（D4/D7）——因此两条约束存在时系统照常工作。若宿主侧已恢复干净（用户已确认），设计同样成立且更优（§7 矩阵）。
+设计立场：上游 DNS 直连是**自举必需**（D4），因此宿主侧 53 必须可信
+（宿主代理全关/干净的常态）；上述两条约束若复发，直连 DNS 会被污染
+（§7 矩阵第四行）。
 
 ---
 
@@ -133,8 +135,8 @@
 
 | 模式 | DNS | 应用流量 | 订阅刷新 | 结论 |
 |---|---|---|---|---|
-| TUN on + 节点活 | 经节点（无 GFW 污染） | 经节点 | 经节点 | 全功能 |
-| TUN on + 节点死 | ✗（上游查询走节点出不去） | ✗ | ✗ | 断——换活节点恢复 |
+| TUN on + 节点活 | ✓ 直连上游（未封域名真答案；被封域名污染） | 经节点 | 经节点 | 全功能（被封域名仅直连解析被污染） |
+| TUN on + 节点死 | ✓ 直连（自举链断裂：节点域名解析仍通） | ✗ | ✗ | 换活节点恢复业务流量 |
 | TUN off + 宿主干净 | ✓ 直连上游（未封域名真答案） | ✓ 直连（无代理） | ✓ 直连 | **退化为普通直连机器，正常运转** |
 | TUN off + 宿主不干净 | ✗ 假 IP 污染 | 部分 EOF | ✗ | 宿主问题 |
 
