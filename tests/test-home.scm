@@ -3,7 +3,7 @@
 ;;; 内容（per-app 断言已删除——加应用不应要求改测试）。
 
 (use-modules (guixcfg home user)
-             (guixcfg home fonts)        ; %fonts
+             (guixcfg home fonts)        ; %fonts、%home-fonts-xdg-link-service
              (guixcfg apps model)
              (guixcfg apps registry)
              (gnu home)
@@ -12,8 +12,10 @@
              (gnu home services xdg)    ; home-xdg-mime-applications-service-type
              (gnu services)              ; service-kind、service-type-extensions、service-extension-target
              (gnu services guix)        ; guix-home-service-type
+             (gnu packages fontutils)   ; fontconfig
              (guix packages)          ; package-name
              (srfi srfi-1)
+             (srfi srfi-13)           ; string-prefix?、string-drop
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -72,6 +74,32 @@
                                 home-fontconfig-service-type))
                          (service-type-extensions (service-kind s))))
                   (home-environment-services %guix-home)))
+
+;; XDG 字体链接农场：CEF 环境清洗型渲染进程的唯一可达字体目录
+;; （modules/guixcfg/home/fonts.scm 头部诊断链）。断言服务组合进
+;; %guix-home、覆盖全部字体包、target 均为 .local/share/fonts/
+;; 下以包名命名的目录链接。
+(define %fonts-xdg-link-svc
+  (find (lambda (s)
+          (eq? 'home-fonts-xdg-links
+               (service-type-name (service-kind s))))
+        (home-environment-services %guix-home)))
+
+(test-assert "home fonts xdg link service composed into %guix-home"
+             %fonts-xdg-link-svc)
+
+(test-equal "home fonts xdg links cover every font package"
+            (map package-name (delete fontconfig %fonts))
+            (map (lambda (entry)
+                   (string-drop (car entry)
+                                (string-length ".local/share/fonts/")))
+                 (service-value %fonts-xdg-link-svc)))
+
+(test-assert "home fonts xdg link targets are safe home-relative paths"
+             (every (lambda (entry)
+                      (and (string-prefix? ".local/share/fonts/" (car entry))
+                           (not (string-contains (car entry) ".."))))
+                    (service-value %fonts-xdg-link-svc)))
 
 ;; Guix Home 挂入 system（官方 guix-home-service-type）：home-environment
 ;; 随 system generation 构建，boot 时以用户身份运行其 activate，重建

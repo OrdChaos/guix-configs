@@ -29,7 +29,7 @@
                #:use-module (guixcfg apps registry)
                #:use-module (guixcfg apps selection) ; application-configuration-selections->home-services
                #:use-module (guixcfg home xdg)      ; %xdg-default-apps-service、%xdg-user-dirs-service
-               #:use-module (guixcfg home fonts)    ; %fonts、%fontconfig-service
+               #:use-module (guixcfg home fonts)    ; %fonts、%fontconfig-service、%home-fonts-xdg-link-service
                #:use-module (guixcfg home environment) ; %session-environment-service
                #:use-module (guixcfg home assets)   ; %user-assets-service
                #:export (guix-home
@@ -47,6 +47,7 @@ selection，不知道文件/路径）。"
           (services (append (list %xdg-default-apps-service
                                   %xdg-user-dirs-service
                                   %fontconfig-service
+                                  %home-fonts-xdg-link-service
                                   %session-environment-service
                                   %user-assets-service)
                             (application-configuration-selections->home-services
