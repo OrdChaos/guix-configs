@@ -26,8 +26,9 @@
 ;;;   - vault（~/.local/share/keyrings ⇄ data-app backing）是
 ;;;     application-owned mutable state；runtime sockets
 ;;;     （/run/user/<uid>/keyring）每 session 重建；
-;;;   - 同一用户已有 daemon（control socket 存在，如其他会话先启动）
-;;;     时本服务 no-op 退出——每用户单 daemon。
+;;;   - 每用户单 daemon：control socket 已存在 = 已有活 daemon
+;;;     （AF_UNIX 绑定文件随进程退出由内核删除，存在 ≈ 存活）——
+;;;     本服务 fail loud（长驻 service 绝不 no-op 伪装 running）。
 
 (define-module (guixcfg apps gnome-keyring definition)
                #:use-module (gnu packages gnome)    ; gnome-keyring
@@ -64,7 +65,9 @@
                          (user-profile-name %primary-user)))
 
 ;; 会话 wrapper：检查单 daemon 不变量 → 密码经 stdin 文件重定向注入
-;; （不出现于 argv/env）→ exec foreground daemon（shepherd 追踪 PID）。
+;; （不出现于 argv/env）→ exec foreground daemon（shepherd 以长驻
+;; service 追踪 PID 直到会话结束）。control socket 已存在 = 已有活
+;; daemon → fail loud（绝不 no-op 伪装 running，避免假托管）。
 ;; secret 文件缺失 → 有界等待后重定向失败 → 服务失败（keyring
 ;; 不可用，登录不受影响——ordinary domain）。
 (define %gnome-keyring-session-wrapper
@@ -74,11 +77,19 @@
       (let ((control (string-append (or (getenv "XDG_RUNTIME_DIR") "")
                                     "/keyring/control"))
             (secret #$%gnome-keyring-master-target))
-        ;; 每用户单 daemon：control socket 已存在 = 其他会话已启动
-        ;; daemon（本用户由它服务）→ no-op。
+        ;; 每用户单 daemon：control socket 已存在 = 已有活 daemon
+        ;; （AF_UNIX 绑定文件随持有进程退出由内核删除，存在 ≈ 存活；
+        ;; 正常 session 内只可能由本服务或 D-Bus activation fallback
+        ;; 的 daemon 持有）。长驻 service 若此时成功退出，shepherd
+        ;; 会看到服务立即终止——重新制造“daemon 脱离托管”的假象；
+        ;; 因此 fail loud：明确报错并退出 1，让 shepherd 置 failed。
         (when (and (not (string-null? control))
                    (file-exists? control))
-          (exit 0))
+          (format (current-error-port)
+                  "gnome-keyring-session: control socket ~a already \
+exists; another live daemon owns this session's Secret Service~%"
+                  control)
+          (exit 1))
         ;; master 明文文件依赖：boot 时 ordinary publisher 部署；
         ;; reconfigure 升级期间可能滞后（旧 generation 的 deploy 不含
         ;; 新 secret）——有界等待最多 60 秒自愈，避免启动即失败触发
@@ -112,10 +123,11 @@
                   (documentation
                    "GNOME Keyring Secret Service session daemon: start \
 exactly one daemon and unlock the login keyring with the \
-repository-owned master credential (runtime plaintext under /run).")
+repository-owned master credential (runtime plaintext under /run). \
+Long-running service: Shepherd owns the daemon for the whole session.")
                   (provision '(gnome-keyring-session))
                   (requirement '(dbus)) ; session D-Bus 就绪后启动
-                  (one-shot? #t)        ; daemon 退出 = 会话结束，不 respawn
+                  (respawn? #f) ; daemon 退出 = 会话结束，不 respawn（单 daemon 语义）
                   (modules '((shepherd support))) ; %user-log-dir
                   (start #~(make-forkexec-constructor
                             (list #$%gnome-keyring-session-wrapper)

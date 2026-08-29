@@ -200,7 +200,8 @@ known_hosts will not persist this session~%"
 runtime private key, then materialize ~/.ssh/id_ed25519 as a symlink \
 into /run (plaintext private key never lands on disk or persistence).")
                   (provision '(ssh-session))
-                  (one-shot? #t)        ; 进程退出后不 respawn
+                  (one-shot? #t)        ; 初始化完成后即退出
+                  (respawn? #f)         ; 一次性语义，不 respawn
                   (modules '((shepherd support))) ; %user-log-dir
                   (start #~(make-forkexec-constructor
                             (list #$%ssh-session-wrapper)

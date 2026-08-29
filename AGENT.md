@@ -328,13 +328,15 @@ docs/architecture/storage.md；本节省略版：
   完全分离：PAM 里禁止出现 pam_gnome_keyring（greetd/login/passwd
   都不许有）；`passwd` 不同步 keyring 密码（设计目标）。
 - **Secret Service daemon 的单一 lifecycle owner 是 user-session
-  service**（apps/gnome-keyring 的 Home Shepherd
-  `gnome-keyring-session`）：wrapper 从 /run master 文件经 stdin
-  注入密码（禁止 argv/env/日志出现密码）→
+  服务**（apps/gnome-keyring 的 Home Shepherd
+  `gnome-keyring-session`，**长驻** service 全生命周期托管 daemon、
+  `respawn? #f`——daemon 退出 = 会话结束）：wrapper 从 /run master
+  文件经 stdin 注入密码（禁止 argv/env/日志出现密码）→
   `gnome-keyring-daemon --foreground --unlock --components=secrets`
-  （pinned Model 1）。禁止：PAM --login、niri/Home 旧 --start
-  glue、shell spawn、重复 daemon（每用户单 daemon：control socket
-  已存在则 no-op）。
+  （pinned Model 1；unlock 在 daemon 启动阶段完成）。禁止：PAM
+  --login、niri/Home 旧 --start glue、shell spawn、重复 daemon
+  （每用户单 daemon：control socket 已存在则 **fail loud**——长驻
+  service 绝不 no-op 成功退出伪装 running）。
 - **keyring master secret 是 ordinary/application domain**：解密
   失败绝不阻塞 greetd login（keyring 不可用即可）。不要把它改成
   login-critical。

@@ -12,9 +12,11 @@
 ;;;        keyrings machine-state rule；
 ;;;   GK5  daemon 单一 owner：niri 无 keyring spawn、modules 无
 ;;;        --login/--start、唯一 invocation = 会话 wrapper；
-;;;   GK7  会话服务契约：Home Shepherd、requirement dbus、one-shot、
-;;;        wrapper 用 --foreground --unlock --components=secrets、
-;;;        密码不出现于 argv（无密码字面量参数）；
+;;;   GK7  会话服务契约：Home Shepherd、requirement dbus、长驻
+;;;        （非 one-shot）+ respawn? #f、wrapper 用
+;;;        --foreground --unlock --components=secrets、密码不出现
+;;;        于 argv（无密码字面量参数）、control socket 已存在时
+;;;        fail loud（不 no-op 伪装 running）；
 ;;;   GK8  master credential secret 声明：恰好一条、scope user、
 ;;;        domain ordinary（不阻塞登录）、target/mode/owner 正确、
 ;;;        source 是加密 master.age；
@@ -247,17 +249,37 @@
                                                        "\"/bin/gnome-keyring-daemon\""))
                                     (string-split s #\newline))))))
 
-;; ── GK7：会话服务契约（单一 lifecycle owner）──────────────
+;; ── GK7：会话服务契约（单一 lifecycle owner，长驻托管）─────
 (define %gk-session-svc
   (car (service-value
         (car (application-home-services %gnome-keyring-app)))))
 
-(test-assert "GK7: session service is Home Shepherd, after D-Bus, one-shot"
+(test-assert "GK7: session service is Home Shepherd, after D-Bus, \
+long-running (not one-shot), no respawn"
              (let ((svc %gk-session-svc))
                (and (eq? 'gnome-keyring-session
                          (car (shepherd-service-provision svc)))
                     (equal? '(dbus) (shepherd-service-requirement svc))
-                    (shepherd-service-one-shot? svc))))
+                    ;; 2026-08 迁移：长驻 service 全生命周期托管
+                    ;; daemon（不再 one-shot 假托管）。
+                    (not (shepherd-service-one-shot? svc))
+                    (not (shepherd-service-respawn? svc)))))
+
+(test-assert "GK7: start/stop use forkexec constructor + kill destructor \
+(Shepherd tracks the daemon PID)"
+             (let ((start (object->string (shepherd-service-start %gk-session-svc)))
+                   (stop (object->string (shepherd-service-stop %gk-session-svc))))
+               (and (string-contains start "make-forkexec-constructor")
+                    (string-contains stop "make-kill-destructor"))))
+
+(test-assert "GK7: wrapper fails loud on an existing control socket \
+(no no-op success exit that would fake running)"
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/apps/gnome-keyring/definition.scm"
+                       (lambda (p) (read-string p)))))
+               (and (string-contains s "file-exists? control")
+                    (string-contains s "(exit 1)")
+                    (not (string-contains s "(exit 0)")))))
 
 (test-assert "GK7: wrapper invokes --foreground --unlock --components=secrets
 (pinned Model 1; password via stdin, never argv)"

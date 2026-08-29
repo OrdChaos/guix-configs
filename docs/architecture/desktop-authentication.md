@@ -23,7 +23,7 @@ SECRET SERVICE（repository-owned master credential model）
       （owner=<user>，mode 0400；明文仅存在于 /run——用户明确接受）
       ↓
     Home Shepherd session service（gnome-keyring-session）
-      requirement: session D-Bus
+      requirement: session D-Bus；长驻托管，respawn? #f
       ↓ wrapper：stdin 文件重定向注入密码（无 argv/env）
     gnome-keyring-daemon --foreground --unlock --components=secrets
       ↓ 单一 daemon、启动即解锁/创建 login keyring
@@ -146,15 +146,21 @@ pinned 语义（`gkd-main.c`）：
   失败 → 服务失败（shepherd 状态可见，登录不受影响——ordinary
   domain）。
 
-### 2.4 会话服务（单一 lifecycle owner）
+### 2.4 会话服务（单一 lifecycle owner，长驻托管）
 
 `apps/gnome-keyring` 的 home-services：
 
 - Home Shepherd 服务 `gnome-keyring-session`（requirement `dbus`，
-  one-shot——daemon 退出 = 会话结束，不 respawn）；
-- wrapper（program-file）：检查 control socket（同一用户已有 daemon
-  则 no-op 退出——每用户单 daemon）→ 密码经 stdin 文件重定向 →
-  exec foreground daemon；
+  **长驻**——2026-08 从 one-shot 迁移：shepherd 全生命周期拥有
+  daemon（启动/解锁/运行/退出），`herd status` 显示 running，PID
+  即真实 `gnome-keyring-daemon` PID；`respawn? #f`——daemon 退出 =
+  会话结束，不 respawn，单 daemon 语义）；
+- wrapper（program-file）：检查 control socket（AF_UNIX 绑定文件
+  随持有进程退出由内核删除，存在 ≈ 存活）——已有活 daemon 时
+  **fail loud**（报错并退出 1，shepherd 置 failed）：长驻 service
+  绝不 no-op 成功退出伪装 running（fake ownership）→ 密码经 stdin
+  文件重定向（unlock 仍在 daemon 启动阶段完成）→ exec foreground
+  daemon（PID 稳定，shepherd 直接追踪；SIGTERM 干净退出）；
 - 密码不出现于 argv/env/日志；日志只有 daemon stderr。
 
 D-Bus activation（org.freedesktop.secrets.service 的
@@ -246,18 +252,34 @@ deployment API token 属于前者。
 ## 7. Runtime acceptance（VM manual）
 
 1. greetd 输入用户密码登录：session 成功、elogind session active；
-2. `pgrep -a gnome-keyring-daemon -f`：**恰好一个**
+2. `herd status gnome-keyring-session`：**running**（非
+   stopped(one-shot)）；`herd status gnupg-session`：stopped
+   (one-shot) 且不显示 will be respawned；`herd status gpg-agent`：
+   running（supervised 托管，见 apps/gnupg/definition.scm 头注释）；
+3. `pgrep -a gnome-keyring-daemon -f`：**恰好一个**
    `--foreground --unlock --components=secrets`（无 `--login`、
-   无 `--start`、无第二个 daemon）；
-3. `ls -la /run/user/<uid>/keyring/`：control socket 稳定存在；
-4. `busctl --user list | grep secrets`：org.freedesktop.secrets →
+   无 `--start`、无第二个 daemon）；PID 与 `herd status` 的 running
+   PID 一致；
+4. `ls -la /run/user/<uid>/keyring/`：control socket 稳定存在；
+   `ls -la /run/user/<uid>/gnupg/`：`S.gpg-agent` 由 shepherd
+   endpoint 持有（0700）；
+5. `busctl --user list | grep secrets`：org.freedesktop.secrets →
    该 daemon PID；
-5. store：`guix shell libsecret -- secret-tool store --label=guixcfg-keyring-test guixcfg keyring-test <synthetic>`
-   ——无 keyring 密码提示；
-6. lookup 立即返回；`sleep 180 && pgrep`：daemon 仍在（无 120s
+6. store：`guix shell libsecret -- secret-tool store --label=guixcfg-keyring-test guixcfg keyring-test <synthetic>`
+   ——无 keyring 密码提示；`gpg --list-secret-keys` 正常（agent
+   经 supervised socket 服务）；
+7. lookup 立即返回；`sleep 180 && pgrep`：daemon 仍在（无 120s
    超时问题——本模型无 stub）；
-7. reboot ×3 + logout/login：每次登录后 lookup 直接成功，无需额外
-   keyring 密码；
-8. failure path：临时使 master secret 不可用（不破坏 ciphertext）→
-   greetd login 与 niri 会话正常，keyring 服务 failed/unavailable，
-   登录不受影响。
+8. stop/start：`herd stop gnome-keyring-session` → daemon PID 消失、
+   `herd start` 恢复且 secret-tool 可用；`herd stop gpg-agent` →
+   agent PID 消失、socket 被 destructor 清理、`herd start` 恢复。
+   注意：不要在持有重要桌面状态时做破坏性验证；
+9. reboot ×3 + logout/login：每次登录后 lookup 直接成功，无需额外
+   keyring 密码；logout/reboot 时观察 TTY：若仍出现
+   `handle-termination → service-control → spawn-service-controller
+   → assertion-failed`，保存完整 backtrace（daemon ownership 已
+   修正，下一步单独追 Shepherd teardown race；未复现时只记录
+   "迁移后未复现"，不声称根因已证明）；
+10. failure path：临时使 master secret 不可用（不破坏 ciphertext）→
+    greetd login 与 niri 会话正常，keyring 服务 failed/unavailable，
+    登录不受影响。

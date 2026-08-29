@@ -71,6 +71,7 @@
                          (provision '(persistent-state-ready))
                          (requirement '(file-systems))
                          (one-shot? #t)
+                         (respawn? #f) ; 一次性语义，不 respawn
                          (documentation
                           "Persistent boot-critical state is mounted and \
 available (provides persistent-state-ready).")
@@ -95,6 +96,7 @@ $HOME（不要求 user Shepherd 运行）。"
                          (provision '(home-ready))
                          (requirement (list home-provision))
                          (one-shot? #t)
+                         (respawn? #f) ; 一次性语义，不 respawn
                          (documentation
                           "Home projection for the current system \
 generation is complete (provides home-ready).")
@@ -110,6 +112,7 @@ generation is complete (provides home-ready).")
                          (provision '(session-infra-ready))
                          (requirement '(elogind))
                          (one-shot? #t)
+                         (respawn? #f) ; 一次性语义，不 respawn
                          (documentation
                           "Session infrastructure (elogind/PAM substrate) \
 is ready (provides session-infra-ready).")
@@ -132,6 +135,7 @@ interactive-session-ready 并原子打开 login gate
                          (provision '(interactive-session-ready))
                          (requirement %interactive-session-requirements)
                          (one-shot? #t)
+                         (respawn? #f) ; 一次性语义，不 respawn
                          (documentation
                           "All interactive prerequisites are ready; opens \
 the login gate (provides interactive-session-ready).")

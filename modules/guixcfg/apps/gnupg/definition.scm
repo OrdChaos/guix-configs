@@ -13,8 +13,14 @@
 ;;;     落盘/进 persistence；每 session 由 one-shot 服务重建：
 ;;;     mkdir 0700 → 拷贝 gpg.conf（600）→ 有界等待 secret → 幂等
 ;;;     import 公钥与私钥（gpg --import 已存在 = no-op）；
-;;;   - gpg-agent 生命周期自动跟随 GNUPGHOME（首次使用自 spawn，
-;;;     socket 随 session 消亡），无需 system service；
+;;;   - gpg-agent 由 Home Shepherd 全生命周期托管：长驻 service
+;;;     （provision gpg-agent，requirement gnupg-session）以
+;;;     systemd-style socket activation 启动（make-systemd-constructor
+;;;     + --deprecated-supervised，pinned gnupg 2.5.20；upstream
+;;;     home-gpg-agent-service-type 同款构造形态，ssh-support? #f——
+;;;     本仓库不使用 gpg-agent 的 SSH agent 语义）。socket 落在
+;;;     GNUPGHOME（/run/user/<uid>/gnupg，0700），随 session 消亡；
+;;;     不再依赖 gpg 按需 self-spawn（--daemon）；
 ;;;   - 本 key 带 passphrase：签名/解密时经 pinentry 提示（已含
 ;;;     pinentry-gtk2），agent 按 gpg-agent.conf 的 cache-ttl 缓存——
 ;;;     ephemeral GNUPGHOME 下缓存随 session 结束失效，每 session
@@ -87,6 +93,7 @@
 ;; session one-shot wrapper：重建 ephemeral GNUPGHOME 并幂等导入
 ;; key。只用 core/posix bindings（与 ssh/gnome-keyring 同一模式；
 ;; 失败 = 服务 failed，登录不受影响——ordinary domain 语义）。
+;; 本 one-shot 不启动任何 daemon（gpg-agent 由长驻 service 托管）。
 (define %gnupg-session-wrapper
   (program-file
    "gnupg-session"
@@ -126,6 +133,60 @@
                               "--batch" "--import" secret))
         (exit 1)))))
 
+;; gpg-agent 长驻 service（Home Shepherd 全生命周期托管）。
+;; 构造形态取自 pinned upstream home-gpg-agent-service-type
+;; （模块 (gnu home services gnupg)：make-systemd-constructor +
+;; --deprecated-supervised + endpoint + make-systemd-destructor），
+;; 但 ssh-support? 语义保持 #f——不提供 ssh socket、不注入
+;; SSH_AUTH_SOCK（本仓库 ssh app 是纯 client 配置，无 agent）。
+;;
+;; supervised 模式只传 std socket 合法：pinned gnupg 2.5.20
+;; agent/gpg-agent.c map_supervised_sockets 按 LISTEN_FDNAMES
+;; 分配 fd，"std" 是标准 socket 标签；缺失的 ssh/browser/extra
+;; 直接不启用；仅要求 fd 数与 fdnames 数一致。std 即可服务
+;; gpg/pinentry/keyserver 全部现有使用路径。
+;;
+;; 细节：
+;;   - requirement gnupg-session：GNUPGHOME（0700）先于 endpoint
+;;     bind 存在（open-sockets 也会 mkdir-p，但顺序显式化）；
+;;   - #:lazy-start? #f：登录即启动并占住 socket，避免与 gpg 的
+;;     按需 self-spawn 竞争（GnuPG 2.5.20 README 的 supervised
+;;     竞态警告）；
+;;   - 显式传 (environ) + GNUPGHOME：shepherd 默认环境不含会话
+;;     env；pinentry 需要 DISPLAY/DBUS_SESSION_BUS_ADDRESS，
+;;     agent 需要从 ephemeral homedir 读 gpg-agent.conf
+;;     （cache-ttl 等 agent 选项）；
+;;   - respawn? #f：session 生命周期语义（与 gnome-keyring/niri
+;;     一致）；第一版不做自动 respawn。
+(define %gnupg-gpg-agent-service
+  (shepherd-service
+   (documentation
+    "GnuPG agent under Home Shepherd supervision: socket-activated \
+gpg-agent (--deprecated-supervised) owning the ephemeral GNUPGHOME \
+runtime sockets under /run/user/<uid>/gnupg.")
+   (provision '(gpg-agent))
+   (requirement '(gnupg-session))
+   (respawn? #f)
+   (modules '((shepherd support))) ; %user-runtime-dir、endpoint 辅助
+   (start #~(make-systemd-constructor
+             (list #$(file-append gnupg "/bin/gpg-agent")
+                   ;; pinned gnupg 2.5.20：--supervised 已改名
+                   ;; --deprecated-supervised（upstream home-gpg-agent
+                   ;; service 同款参数）
+                   "--deprecated-supervised")
+             (list (endpoint
+                    (make-socket-address
+                     AF_UNIX
+                     (string-append %user-runtime-dir
+                                    "/gnupg/S.gpg-agent"))
+                    #:name "std"
+                    #:socket-directory-permissions #o700))
+             #:environment-variables
+             (cons #$(string-append "GNUPGHOME=" %gnupg-home-dir)
+                   (environ))
+             #:lazy-start? #f))
+   (stop #~(make-systemd-destructor))))
+
 (define %gnupg
   (application
    (name 'gnupg)
@@ -149,13 +210,18 @@
 GNUPGHOME and import the repository-owned secret key (runtime \
 plaintext under /run; plaintext secret key never lands on disk).")
                   (provision '(gnupg-session))
-                  (one-shot? #t)        ; 进程退出后不 respawn
+                  (one-shot? #t)        ; 初始化完成后即退出
+                  (respawn? #f)         ; 一次性语义，不 respawn
                   (modules '((shepherd support))) ; %user-log-dir
                   (start #~(make-forkexec-constructor
                             (list #$%gnupg-session-wrapper)
                             #:log-file
                             (string-append %user-log-dir
                                            "/gnupg-session.log")))
-                  (stop #~(make-kill-destructor)))))))
+                  (stop #~(make-kill-destructor)))))
+          (simple-service
+           'gnupg-gpg-agent
+           home-shepherd-service-type
+           (list %gnupg-gpg-agent-service))))
    ;; 无 persistence rule：GNUPGHOME 是 runtime-only（见文件头）。
    (secrets (list %gnupg-secret-key-secret))))

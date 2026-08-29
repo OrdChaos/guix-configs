@@ -192,6 +192,7 @@ last-good 时跳过 promote——登录路径每次图形登录都会触发本�
           (provision (list name))
           (requirement requirement)
           (one-shot? #t)
+          (respawn? #f)                 ; 一次性语义，不 respawn
           (documentation documentation)
           (start #~(lambda () (zero? (system* #$program))))
           (stop #~(const #f))))

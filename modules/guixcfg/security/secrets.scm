@@ -294,6 +294,7 @@ interactive-secrets-ready——login gate 只依赖本 domain。
                                       interactive-secrets-ready))
                          (requirement '(persistent-state-ready))
                          (one-shot? #t)
+                         (respawn? #f)  ; 一次性语义，不 respawn
                          (documentation
                           "Decrypt login-critical declarative runtime secrets \
 with the installed stable age identity into /run/guixcfg-secrets (tmpfs).")
@@ -315,6 +316,7 @@ domain 不发布新 generation（旧代保留）。"
                                       ordinary-secrets-ready))
                          (requirement '(persistent-state-ready))
                          (one-shot? #t)
+                         (respawn? #f)  ; 一次性语义，不 respawn
                          (documentation
                           "Decrypt ordinary (non-login-critical) declarative \
 runtime secrets into /run/guixcfg-secrets-ordinary (tmpfs). Failure must \

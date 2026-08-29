@@ -88,6 +88,7 @@ file-systems——挂载后就位，运行时从 mountinfo 读 SOURCE/ROOT；
                              (provision '(gvfs-mount-metadata))
                              (requirement '(file-systems))
                              (one-shot? #t)
+                             (respawn? #f) ; 一次性语义，不 respawn
                              (documentation
                               "Inject GVfs desktop metadata \
 (x-gvfs-hide/x-gvfs-trash) for HOME persistence bind mounts into \

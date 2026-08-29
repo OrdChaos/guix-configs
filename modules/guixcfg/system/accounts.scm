@@ -306,6 +306,7 @@ account-state-ready 不 provision（fail-closed）。"
                          (requirement '(persistent-state-ready
                                         file-systems user-homes))
                          (one-shot? #t)
+                         (respawn? #f) ; 一次性语义，不 respawn
                          (documentation
                           "Verify the account databases projection (user \
 present in /etc/shadow with the persistent credential); provides \

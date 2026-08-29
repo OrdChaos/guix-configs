@@ -20,6 +20,8 @@
 ;;;         D2 覆盖，此处引用）
 ;;;   OFF11 fallback tty 独立于 desktop（test-desktop D3 覆盖）
 ;;;   OFF12 Home 仍绑定 system generation（guix-home-service-type）
+;;;   OFF13 session one-shot/daemon lifecycle 语义（respawn? #f；
+;;;         gnome-keyring-session 与 gpg-agent 长驻托管）
 ;;;
 ;;; 不启动 niri / 不访问公网；仅 evaluate + 源码结构断言。
 
@@ -64,12 +66,17 @@
              (home-service? home-pipewire-service-type))
 
 ;; ── OFF2b：niri service 的注销 lifecycle 固定 ──────────────
-(define %niri-shepherd-service
-  (find (lambda (svc) (eq? 'niri (shepherd-service-canonical-name svc)))
-        (home-shepherd-configuration-services
-         (service-value
-          (fold-services (home-environment-services %guix-home)
-                         #:target-type home-shepherd-service-type)))))
+(define %home-shepherd-services
+  (home-shepherd-configuration-services
+   (service-value
+    (fold-services (home-environment-services %guix-home)
+                   #:target-type home-shepherd-service-type))))
+
+(define (home-svc name)
+  (find (lambda (svc) (eq? name (shepherd-service-canonical-name svc)))
+        %home-shepherd-services))
+
+(define %niri-shepherd-service (home-svc 'niri))
 
 (test-assert "OFF2b: niri service does not respawn (exit = logout)"
              (not (shepherd-service-respawn? %niri-shepherd-service)))
@@ -125,6 +132,39 @@
                (and (not (string-contains s "spawn-at-startup \"pipewire\""))
                     (not (string-contains s
                                           "spawn-at-startup \"wireplumber\"")))))
+
+;; ── OFF13：session one-shot / daemon lifecycle 语义 ────────
+;; 2026-08 迁移：真正 one-shot 的 session 服务显式 respawn? #f；
+;; gnome-keyring-session 与 gpg-agent 改为长驻托管（非 one-shot、
+;; respawn? #f——daemon 由 Home Shepherd 全生命周期拥有）。
+(test-assert "OFF13: ssh-session is one-shot with respawn disabled"
+             (let ((svc (home-svc 'ssh-session)))
+               (and svc
+                    (shepherd-service-one-shot? svc)
+                    (not (shepherd-service-respawn? svc)))))
+
+(test-assert "OFF13: gnupg-session is one-shot with respawn disabled"
+             (let ((svc (home-svc 'gnupg-session)))
+               (and svc
+                    (shepherd-service-one-shot? svc)
+                    (not (shepherd-service-respawn? svc)))))
+
+(test-assert "OFF13: gnome-keyring-session is long-running (daemon \
+managed for the whole session), no respawn, after D-Bus"
+             (let ((svc (home-svc 'gnome-keyring-session)))
+               (and svc
+                    (not (shepherd-service-one-shot? svc))
+                    (not (shepherd-service-respawn? svc))
+                    (equal? '(dbus) (shepherd-service-requirement svc)))))
+
+(test-assert "OFF13: gpg-agent is long-running, no respawn, after \
+gnupg-session"
+             (let ((svc (home-svc 'gpg-agent)))
+               (and svc
+                    (not (shepherd-service-one-shot? svc))
+                    (not (shepherd-service-respawn? svc))
+                    (equal? '(gnupg-session)
+                            (shepherd-service-requirement svc)))))
 
 ;; ── OFF12：Home 绑定 system generation ─────────────────────
 (test-assert "OFF12: Home remains bound to system generation (guix-home-service-type)"
