@@ -126,12 +126,11 @@
                ;; helper wrapper，非裸 upstream script；greeter 以
                ;; greetd 的 greeter 用户无认证运行——start_greeter
                ;; authenticate=false，HOME=/var/empty）。
-               ;; hardware cursor 的 teardown（KMS cursor plane 残留
-               ;; → 登录后 ghost cursor）与 orientation（面板有效方向
-               ;; 非 normal 时倒置 cursor）问题已在 virelith channel
-               ;; 的 noctalia-greeter package 修复（teardown 显式
-               ;; destroy outputs/backend；orientation 条件锁定软件
-               ;; 光标）。此前诊断用的临时 A/B 环境变量已随修复移除。
+               ;; 光标异常（倒置 + 登录后幽灵光标）最终确认为宿主
+               ;; virglrenderer 的 bug（virtio GPU 的宿主 GL 后端），
+               ;; 与 greeter 无关——virelith channel 的 cursor patch
+               ;; 已回滚，package 保持 unpatched 上游状态。排查记录
+               ;; 见 docs/operations/vm-testing.md「光标异常排查记录」。
                (default-session-command
                 (greetd-noctalia-session))))))))
 

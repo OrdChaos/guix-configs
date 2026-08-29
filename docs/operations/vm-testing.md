@@ -97,3 +97,66 @@ python3 -c 'import socket;s=socket.socket(socket.AF_UNIX);s.connect("vms/monitor
   cryptsetup 回退场景——tests/ 内尚无 Level 1-4 等价覆盖）。
 
 新功能开发优先用 Level 1-4 测试（见 `development/testing.md`）。
+
+## 光标异常排查记录（2026-08-29，已结案）
+
+**症状**（VM 内，virtio GPU）：
+
+1. greeter 内光标**倒置**（上下颠倒，UI 其余部分正常）；
+2. 登录成功后 greeter 光标**不消失**，在 niri 里与真实光标**一起
+   跟随鼠标移动**，二者有**固定位置差**，且 niri 光标才对得上
+   点击位置（幽灵光标 = 硬件 cursor plane 上的陈旧 buffer）。
+
+**结论**：宿主 **virglrenderer** 的 bug（virtio-gpu 的 GL 宿主侧
+渲染后端对 cursor plane 的 buffer 上传/移交处理错误），与 greeter、
+wlroots、noctalia 无关。guest 侧无法修复；已回滚全部 greeter 侧
+cursor patch，channel 恢复 unpatched 上游状态。
+
+**排查路径**（供后续对照）：
+
+1. **先证伪交付，再怀疑逻辑**。最初怀疑 virelith channel 的
+   cursor 修复未生效：`nm -D` 检查 VM 里正在运行的
+   noctalia-greeter-compositor 二进制，补丁符号为 0。但 **VM 里
+   没有安装 `nm`**——命令静默失败、空输出被 grep 计成 0，得出了
+   "补丁没编译进去"的假结论。改用 `grep -a` 直接扫二进制的
+   .dynstr 后确认补丁符号其实**都在**（教训：验证符号存在性时，
+   先确认工具本身存在；`command -v` 先行）。
+2. **gen 46 vs gen 47**。gen 46（substitute* 版修复）的 greeter
+   二进制确实没有补丁符号——substitute* 是**逐行匹配**
+   （`read-line` + `list-matches` 单行内匹配），跨多行的 pattern
+   **永不匹配**，且该 Guix 版本的 substitute* 在 pattern 不匹配时
+   **不报错**——phase "succeeded" 但一个字节没改。这是"构建成功 ≠
+   补丁生效"的典型陷阱。gen 47（patch 文件版）修复已真实编译进
+   二进制，但症状依旧 → 说明 patch 治的不是这个病。
+3. **软件光标 vs 硬件光标的本质**。wlroots 每个 output 有
+   `software_cursor_locks` 计数（`WLR_NO_HARDWARE_CURSORS=1` 在
+   output 初始化时置 1）：
+   - **硬件光标**（默认）：`render_cursor_buffer` 把光标渲染进
+     独立小 buffer，经独立 KMS **cursor plane** 叠加——不走主
+     framebuffer；
+   - **软件光标**：`output_cursor_attempt_hardware` 直接返回
+     false，光标被 composite 进**主 framebuffer**，与场景同一条
+     渲染/变换管线。
+   两个症状恰好都是硬件 cursor plane 的固有风险：倒置 = 独立
+   plane 的 buffer 取向与主内容不一致；幽灵 = 独立 plane 状态跨
+   compositor 交接泄漏（niri 接手后驱动自己的光标平面，陈旧
+   buffer 挂在其上一起移动 → 跟随鼠标 + 固定偏移 + 点击对不上）。
+   这也解释了 A/B 实验里 `WLR_NO_HARDWARE_CURSORS=1` 为何全好。
+4. **错误的假设性 patch（已回滚）**。先做了 orientation patch
+   （假设倒置来自 panel orientation 未合成；但 VM 是 virtio、
+   rotation=0、panel orientation=NORMAL，条件永不成立）；再做
+   teardown patch（假设幽灵是退出时未禁用的静态残留 plane；但
+   幽灵跟随鼠标，说明是 niri 正在驱动的 plane 装着旧 buffer，
+   退出时禁用解决不了）。最终强制软件光标 patch 等价于环境变量，
+   虽可消除症状，但掩盖的是宿主侧根因——已按用户确认真实根因
+   （virglrenderer）后全部回滚。
+5. **回滚动作**（2026-08-29）：virelith commit `ed57562`
+   （"revert(noctalia-greeter): drop compositor cursor patches"，
+   以用户签名后的 commit 为准）将 noctalia-greeter 恢复为
+   unpatched 上游状态；channels.lock.scm 的 virelith 指向该
+   回滚提交。
+
+**VM 硬件层教训**：VM 显示异常（光标倒置/幽灵、GL 渲染错乱）
+优先怀疑宿主 QEMU GL 后端（virglrenderer）版本与 guest Mesa 的
+组合，而不是 guest 侧 compositor——guest 侧补丁只能掩盖症状。
+
