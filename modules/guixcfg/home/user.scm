@@ -2,8 +2,9 @@
 ;;; registry（docs/architecture/home.md、AGENT.md §Application layer）；
 ;;; 用户级默认应用策略来自统一 XDG 模块（guixcfg home xdg）；字体
 ;;; 集合与 Fontconfig 策略来自 (guixcfg home fonts)；会话环境变量
-;;; 来自 (guixcfg home environment)。本文件不知道 Git/Niri/Bash 等
-;;; 具体应用配置。
+;;; 来自 (guixcfg home environment)；仓库派生用户资源（avatar/
+;;; wallpaper）来自 (guixcfg home assets)。本文件不知道 Git/Niri/
+;;; Bash 等具体应用配置。
 ;;;
 ;;; host/profile 层只做 logical application configuration variant
 ;;; selection（(guixcfg apps selection)）——guix-home 接受
@@ -30,6 +31,7 @@
                #:use-module (guixcfg home xdg)      ; %xdg-default-apps-service、%xdg-user-dirs-service
                #:use-module (guixcfg home fonts)    ; %fonts、%fontconfig-service
                #:use-module (guixcfg home environment) ; %session-environment-service
+               #:use-module (guixcfg home assets)   ; %user-assets-service
                #:export (guix-home
                          %guix-home))
 
@@ -45,7 +47,8 @@ selection，不知道文件/路径）。"
           (services (append (list %xdg-default-apps-service
                                   %xdg-user-dirs-service
                                   %fontconfig-service
-                                  %session-environment-service)
+                                  %session-environment-service
+                                  %user-assets-service)
                             (application-configuration-selections->home-services
                              application-configuration-selections)
                             (applications-home-services %applications)))))

@@ -131,7 +131,14 @@ production consumers：
   `/persist/data-app/fcitx5/rime_ice.userdb`，Rime 用户学习词库——
   雾凇主翻译器唯一可写 leveldb；`*.custom.yaml` 为 declarative
   repo-owned，`build/`/`user.yaml`/`installation.yaml` 保持
-  ephemeral；`apps/fcitx5/definition.scm`）。
+  ephemeral；`apps/fcitx5/definition.scm`）；
+- onlyoffice（`.config/onlyoffice` →
+  `/persist/data-app/onlyoffice/config`，偏好
+  DesktopEditors.conf 等；`.local/share/onlyoffice` →
+  `/persist/data-app/onlyoffice/share`，自定义词典/插件/
+  autosave/recovery；`~/.cache/onlyoffice` 保持 ephemeral；
+  包层不生成 store symlink，mutable 配置由应用首次运行自建；
+  `apps/onlyoffice/definition.scm`）。
 
 后续应用按同一契约显式 adopt。
 

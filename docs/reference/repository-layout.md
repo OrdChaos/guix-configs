@@ -5,6 +5,9 @@
 ```text
 channels.scm          频道集合（上游来源声明）
 channels.lock.scm     频道锁（实际使用的 commit）
+assets/               仓库派生的用户资源（avatar/wallpaper——经
+                       (guixcfg home assets) 声明式安装到
+                       ~/.local/share/avatars|backgrounds/）
 manifests/            开发 / 安装 / secrets / Secure Boot 工具链 manifest
 modules/guixcfg/      全部配置模块（-L modules 加入 load path）
   apps/                Application layer：model.scm + registry.scm +

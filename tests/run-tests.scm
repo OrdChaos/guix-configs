@@ -115,6 +115,7 @@
                "tests/test-selection.scm"
                "tests/test-niri-config.scm"
                "tests/test-home.scm"
+               "tests/test-assets.scm"
                "tests/test-application-persistence.scm"
                "tests/test-nushell.scm"
                "tests/test-seed-once.scm"
