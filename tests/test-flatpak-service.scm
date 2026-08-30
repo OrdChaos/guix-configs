@@ -76,7 +76,7 @@
                              "$XDG_DATA_DIRS:$HOME/.local/share/flatpak/exports/share"))
 
 ;; ── override files：无声明 → 不生成（user-owned）───────────
-(test-equal "empty catalog produces no override files"
+(test-equal "catalog apps without override declarations produce no override files"
             '() (flatpak-override-files %flatpak-applications))
 
 ;; ── %vm-os persistence wiring ─────────────────────────────────
@@ -91,6 +91,20 @@
                          (string=?
                           (string-append (persist-mount-point "@persist-data-app")
                                          "/flatpak/installation")
+                          (file-system-device fs))))
+                  (operating-system-file-systems %vm-os)))
+
+;; 生产 catalog 回归：每个 Catalog app（当前：qq）的 ~/.var/app/<id>
+;; bind 由 host 组装进 OS（persistence 从 Catalog 派生）。
+(test-assert "OS file-systems bind ~/.var/app/com.qq.QQ -> flatpak/apps/com.qq.QQ"
+             (any (lambda (fs)
+                    (and (string=?
+                          (string-append "/home/" %fp-user
+                                         "/.var/app/com.qq.QQ")
+                          (file-system-mount-point fs))
+                         (string=?
+                          (string-append (persist-mount-point "@persist-data-app")
+                                         "/flatpak/apps/com.qq.QQ")
                           (file-system-device fs))))
                   (operating-system-file-systems %vm-os)))
 

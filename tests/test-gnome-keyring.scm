@@ -152,17 +152,13 @@
                ;; 同目录原子单元——只持久化 drafts/ 会被 restore 的
                ;; delete_unused_worker 当作无引用草稿删除；
                ;; apps/gnome-text-editor/definition.scm 头注释审计）、
-               ;; noctalia 的用户插件目录（app-private，目录级 bind）、
-               ;; onlyoffice 的 application data 目录（自定义词典、
-               ;; 插件、autosave/recovery——app-private，目录级 bind；
-               ;; apps/onlyoffice/definition.scm 头注释审计）。
+               ;; noctalia 的用户插件目录（app-private，目录级 bind）。
                (every (lambda (c)
                         (or (not (string-prefix? ".local/share/" c))
                             (member c '(".local/share/keyrings"
                                         ".local/share/fcitx5/rime/rime_ice.userdb"
                                         ".local/share/gnome-text-editor"
-                                        ".local/share/noctalia/plugins"
-                                        ".local/share/onlyoffice"))))
+                                        ".local/share/noctalia/plugins"))))
                       consumers)))
 
 (test-assert "GK4: no /run/user persistence anywhere"

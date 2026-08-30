@@ -13,10 +13,6 @@
 ;;;     lifecycle ≠ persistence lifecycle 的结构要求）；
 ;;;   - host 层只知道 logical name，不知道 app-id/remote/branch/
 ;;;     路径（未来 per-host 差异时在 hosts/*.scm 定义各自列表）。
-;;;
-;;; 当前 Catalog/Selection 为空：不为框架落地擅自替用户选软件
-;;; （任务约束）。测试用 fixture；VM acceptance 用手工 flatpak
-;;; --user 或临时 declaration。
 
 (define-module (guixcfg flatpak registry)
                #:use-module (guixcfg flatpak model)
@@ -38,13 +34,31 @@
          (repository-url "https://dl.flathub.org/repo/")
          (comment "Flathub official repository"))))
 
-;; Catalog：已知 Flatpak 应用。当前为空。
+;; Catalog：已知 Flatpak 应用（identity + resource ownership）。
+;;
+;; 采用 Flatpak 的标准：Guix/channel 生态不方便提供、维护成本明显
+;; 过高、或天然更适合 Flatpak 的少数 GUI 应用（overview.md 软件
+;; 分类）。
+;;
+;;   qq —— 腾讯 QQ Linux（Electron 二进制，Guix 无对应包，上游
+;;   更新频繁，天然适合 Flatpak 分发）。app-id/branch 以 Flathub
+;;   官方页面核实（flathub.org/apps/com.qq.QQ，branch=stable）。
+;;   commit #f = branch tracking（默认策略；如需 pin 必须注释理由）。
+;;   overrides #f = 仓库不拥有 override 文件（user/Flatseal owns）：
+;;   先以上游 manifest 权限运行；实机验证发现真正需要的 delta 后，
+;;   按 Flatseal 实验工作流（flatpak.md（overrides））回填声明。
 (define %flatpak-applications
-  '())
+  (list (flatpak-application
+         (name 'qq)
+         (id "com.qq.QQ")
+         (remote 'flathub)
+         (branch "stable"))))
 
-;; Selection：sync 应 ensure 的 logical names。当前为空。
+;; Selection：sync 应 ensure 的 logical names。VM/Laptop 当前相同，
+;; 但 Selection 独立存在（desired lifecycle ≠ persistence lifecycle
+;; 的结构要求——从 selection 删除 ≠ 卸 ref/撕 bind）。
 (define %flatpak-selection
-  '())
+  '(qq))
 
 ;; fail-fast（模块加载即校验；apps/registry.scm 同款）。
 (validate-flatpak-catalog! %flatpak-remotes %flatpak-applications)

@@ -8,6 +8,7 @@
 
 (use-modules (guixcfg flatpak model)
              (guixcfg flatpak service)
+             (guixcfg flatpak registry)   ; %flatpak-applications、%flatpak-selection（生产 catalog 回归）
              (guixcfg system application-persistence) ; valid-application-persistence-rule?
              (srfi srfi-1)
              (srfi srfi-64))
@@ -103,5 +104,31 @@
             (map application-persistence-rule-backing
                  (cons %flatpak-installation-persistence-rule
                        (flatpak-application-persistence-rules %fp-apps))))
+
+;; ── 生产 catalog 回归（registry 的真实内容）────────────────
+;; Catalog/Selection 是 lifecycle authority：真实 catalog 必须持续
+;; 通过校验并派生正确的 persistence 规则（QQ 是首个生产 app）。
+(define %prod-rules (flatpak-persistence-rules))
+
+(test-assert "production catalog validates at load (registry side effect)"
+             (any (lambda (a)
+                    (and (eq? 'qq (flatpak-application-name a))
+                         (string=? "com.qq.QQ" (flatpak-application-id a))))
+                  %flatpak-applications))
+(test-assert "production QQ app gets its .var/app/<id> rule"
+             (any (lambda (r)
+                    (and (string=? ".var/app/com.qq.QQ"
+                                   (application-persistence-rule-consumer r))
+                         (string=? "flatpak/apps/com.qq.QQ"
+                                   (application-persistence-rule-backing r))))
+                  %prod-rules))
+(test-assert "production selection resolves against catalog"
+             (= 1 (length (flatpak-select-applications
+                           %flatpak-selection %flatpak-applications))))
+(test-assert "production selection removal keeps persistence rules"
+             (= (length %prod-rules)
+                (length (cons %flatpak-installation-persistence-rule
+                              (flatpak-application-persistence-rules
+                               %flatpak-applications)))))
 
 (test-end "flatpak-persistence")
