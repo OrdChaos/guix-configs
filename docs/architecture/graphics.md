@@ -110,11 +110,38 @@ interactive-session-ready（core readiness join barrier）
   - `noctalia.kdl`：Noctalia 运行时生成（唯一 owner = Noctalia，
     Guix Home 不安装；entrypoint 只 include 不声明）。
 
-## NVIDIA adapter contract（当前 disabled/identity）
+## NVIDIA adapter contract（已实现，laptop 专属）
 
-`modules/guixcfg/system/graphics/nvidia.scm` 是未来 proprietary
-NVIDIA 的 seam（不启用、不填充）。未来 ownership：
-selected %kernel → matching kernel module + firmware + KMS +
-nouveau blacklist + nvda/replace-mesa + nvidia-prime/prime-run +
-hybrid Intel+NVIDIA + Secure Boot module signing boundary。
+`modules/guixcfg/system/graphics/nvidia.scm` 是 proprietary NVIDIA
+的唯一 seam：薄 wrapper 把本仓库 machine policy 映射为
+`nonguix-transformation-nvidia` 的明确参数。ownership：
+
+- kernel：**不选择、不替换**——transformation 对 OS 的 kernel/
+  initrd/firmware 字段原样 inherit，`%kernel`
+  （`(guixcfg system kernel-platform)`）仍是唯一权威；NVIDIA
+  module 经 `linux-module-build-system` 的 `#:linux` 关键字自动
+  针对 `%kernel` 构建；
+- nouveau/nova 黑名单、`nvidia_drm.modeset=1`、nvidia-service-type
+  （firmware/udev/nvidia-modprobe/linux-loadable-module/
+  nvidia-prime/nvidia-powerd）、replace-mesa：全部由锁定版 Nonguix
+  transformation 负责，本模块不重新实现；
+- 参数（laptop = RTX 4050 Laptop，Ada）：`#:driver nvda-580`、
+  `#:open-source-kernel-module? #t`（NVIDIA 自 R560 起推荐 Turing+
+  使用 open module）、`#:kernel-mode-setting? #t`、
+  `#:configure-xorg? #f`（纯 Wayland：greetd/niri，无 Xorg DM）、
+  `#:dynamic-boost? #t`（Ampere 起支持，`nvidia-powerd`）；
+- per-machine：只在 `(guixcfg hosts laptop)` 最终 `%os` 上调用；
+  VM/Intel-only 机器不调用，零 NVIDIA closure（test-nvidia N6 +
+  K8 固定）；
+- Wayland：niri compositor 继续跑 Intel iGPU（`variants/laptop.kdl`
+  的 `render-drm-device`），NVIDIA dGPU 仅 PRIME Render Offload
+  （`prime-run`，由 nvidia-service-type 自动进 system profile）。
+  无任何全局 NVIDIA/GBM 环境变量（禁止 `__GLX_VENDOR_LIBRARY_NAME`
+  等 session-global 设置；它们只由 `prime-run` per-app 设置）；
+- Secure Boot：当前 kernel 配置 `CONFIG_MODULE_SIG=n` 且无
+  lockdown，out-of-tree module 无需签名。未来若启用
+  `CONFIG_MODULE_SIG_FORCE`/lockdown，需在 Guix build phase 内
+  重新设计 module signing pipeline（私钥不入 store、不改 store
+  内 `.ko`）——见模块头 TODO，本阶段不实现。
+
 桌面层无需改动（GPU-neutral）。

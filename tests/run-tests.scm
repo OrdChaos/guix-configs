@@ -106,6 +106,7 @@
                "tests/test-tpm2-enroll.scm"
                "tests/test-credential-source.scm"
                "tests/test-kernel-platform.scm"
+               "tests/test-nvidia.scm"
                "tests/test-substitutes.scm"
                "tests/test-desktop.scm"
                "tests/test-mihomo.scm"

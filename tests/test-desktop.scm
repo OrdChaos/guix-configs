@@ -13,7 +13,7 @@
 ;;;        state dir machine-state bind）
 ;;;   H3-H5 HOME provenance 契约（greetd upstream 从 passwd entry
 ;;;        设置 HOME；pam_env 无 HOME 规则；官方 wrapper 只设 XDG_*）
-;;;   NV1 NVIDIA adapter 默认 disabled/identity
+;;;   NV1 NVIDIA adapter：laptop 启用 / disabled 路径 = identity
 ;;;   NV2 VM OS 无 proprietary NVIDIA 包
 ;;;   NV3 VM kernel args 无 nouveau blacklist
 ;;;   NV4 common desktop 模块不引用 NVIDIA/vendor 符号（无 layer leak）
@@ -437,14 +437,14 @@
                   %common-services))
 
 ;; ── NV1：NVIDIA adapter 默认 disabled/identity ─────────────
-(test-assert "NV1: NVIDIA adapter disabled by default"
-             (not %nvidia-adapter-enabled?))
+(test-assert "NV1: NVIDIA adapter enabled (laptop host policy)"
+             %nvidia-adapter-enabled?)
 
-(test-assert "NV1: adapter contributions are empty"
-             (and (null? nvidia-kernel-arguments)
-                  (null? nvidia-system-packages)
-                  (null? nvidia-system-services)
-                  (null? nvidia-user-packages)))
+(test-assert "NV1: disabled path is identity (VM / Intel-only machines unaffected)"
+             (eq? %os (nvidia-system-transformation %os #:enabled? #f)))
+
+(test-assert "NV1: no speculative NVIDIA kernel arguments (seam empty)"
+             (null? nvidia-kernel-arguments))
 
 ;; ── NV2：VM OS 无 proprietary NVIDIA 包 ────────────────────
 (test-assert "NV2: %os packages contain no nvidia stack"
@@ -501,9 +501,19 @@
 (test-assert "NV6: %os kernel is still %kernel (kernel-platform owns it)"
              (eq? (operating-system-kernel %os) %kernel))
 
-;; ── NV7：package-transform 默认 identity ───────────────────
-(test-assert "NV7: nvidia package transform defaults to identity"
-             (eq? nvidia-package-transform identity))
+;; ── NV7：adapter 委托 Nonguix，不自行实现 NVIDIA 集成 ────────
+(test-assert "NV7: adapter delegates to nonguix-transformation-nvidia"
+             ;; 薄 wrapper 契约：源码只做 machine policy → 参数 →
+             ;; transformation 的映射；不实例化 nvidia-service-type、
+             ;; 不复制 Nonguix 的 blacklist/firmware/udev/PRIME/Mesa
+             ;; 实现。
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/system/graphics/nvidia.scm"
+                       (lambda (p) (read-string p)))))
+               ;; 负向断言检查代码形式（头注释里作为"由
+               ;; transformation 负责"的说明性提及是合法的）。
+               (and (string-contains s "nonguix-transformation-nvidia")
+                    (not (string-contains s "(service nvidia-service-type")))))
 
 ;; ── NV8：无全局 PRIME/DRM 环境变量 ─────────────────────────
 (test-assert "NV8: niri common config has no global PRIME/DRM env vars"

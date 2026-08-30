@@ -59,10 +59,10 @@ Level 1-4 测试，这三个文件可删。
   自动 git pull、自动 clone 丢失仓库、自动更新 channel、自动部署脏
   工作区、后台监控、开机自动 reconfigure、自动删 Flatpak、自动选择
   可破坏磁盘。
-- Laptop：完整 host 组装点 + 硬件驱动（kernel platform 已就位：
-  `(guixcfg system kernel-platform)` 的 standard Linux +
-  linux-firmware + Intel microcode 直接复用；实机 firmware 选择与
-  microcode revision 验收属 laptop phase）。
+- Laptop：host 组装点已落地（`(guixcfg hosts laptop)` 完整 OS +
+  NVIDIA open module adapter + niri iGPU/offload 机器事实）；剩余：
+  实机 firmware 选择、microcode revision 验收、实机运行验证清单
+  （prime-run/vulkaninfo/nvidia-smi/powerd，见 graphics.md）。
 - Mihomo / Flatpak 应用管理（docs 已规划，未实现）。
 
 
