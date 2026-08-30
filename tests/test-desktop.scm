@@ -56,12 +56,12 @@
 (test-runner-current (test-runner-simple))
 
 (define (os-service service-type)
-  "从 %os 的 services 里按 SERVICE-TYPE 折叠出配置。"
-  (fold-services (operating-system-services %os)
+  "从 %vm-os 的 services 里按 SERVICE-TYPE 折叠出配置。"
+  (fold-services (operating-system-services %vm-os)
                  #:target-type service-type))
 
 (define (all-shepherd-services)
-  "%os 的 shepherd root 服务列表。"
+  "%vm-os 的 shepherd root 服务列表。"
   (service-value
    (os-service shepherd-root-service-type)))
 
@@ -119,9 +119,9 @@
              commit))))
 
 (define (os-services-of-type type)
-  "扫描 %os 的 services 列表（不 fold——mingetty 等多实例类型）。"
+  "扫描 %vm-os 的 services 列表（不 fold——mingetty 等多实例类型）。"
   (filter (lambda (svc) (eq? (service-kind svc) type))
-          (operating-system-services %os)))
+          (operating-system-services %vm-os)))
 
 (test-begin "desktop")
 
@@ -200,7 +200,7 @@
   (module-ref (resolve-module '(gnu system pam)) 'pam-configuration-transformers))
 
 (define %pam-cfg
-  (service-value (fold-services (operating-system-services %os)
+  (service-value (fold-services (operating-system-services %vm-os)
                                 #:target-type pam-root-service-type)))
 
 (define (final-pam-service name)
@@ -252,7 +252,7 @@
                    (all-shepherd-services))))
 
 ;; ── D5：elogind 仍是 session authority ─────────────────────
-(test-assert "D5: elogind service present in %os"
+(test-assert "D5: elogind service present in %vm-os"
              (let ((cfg (os-service elogind-service-type)))
                (and cfg #t)))
 
@@ -325,14 +325,14 @@
                          (noctalia-greeter-configuration-state-directory cfg))))
 
 (test-assert "G2: system profile carries the repo-owned session data package"
-             (let* ((folded (fold-services (operating-system-services %os)
+             (let* ((folded (fold-services (operating-system-services %vm-os)
                                            #:target-type profile-service-type))
                     (packages (service-value folded)))
                (member "guixcfg-noctalia-greeter-sessions"
                        (map package-name packages))))
 
 (test-assert "G2: noctalia-greeter package is in the system profile (shell Sync detection via PATH)"
-             (let* ((folded (fold-services (operating-system-services %os)
+             (let* ((folded (fold-services (operating-system-services %vm-os)
                                            #:target-type profile-service-type))
                     (packages (service-value folded)))
                (member "noctalia-greeter" (map package-name packages))))
@@ -356,7 +356,7 @@
                          (string=?
                           "/var/lib/noctalia-greeter"
                           (file-system-mount-point fs))))
-                  (operating-system-file-systems %os)))
+                  (operating-system-file-systems %vm-os)))
 
 (test-assert "G3: greeter persistence rule passes machine-state validation"
              (valid-machine-state-persistence-rule?
@@ -397,7 +397,7 @@
 
 ;; ── D8：application persistence production wiring（mpv 第一个
 ;;     真实 rule：host assembly 消费 applications-persistence）──
-(test-assert "D8: mpv state bind mount declared in %os"
+(test-assert "D8: mpv state bind mount declared in %vm-os"
              (any (lambda (fs)
                     (and (string=?
                           (string-append (user-profile-home-directory
@@ -406,13 +406,13 @@
                           (file-system-mount-point fs))
                          (string=? "/persist/data-app/mpv/state"
                                    (file-system-device fs))))
-                  (operating-system-file-systems %os)))
+                  (operating-system-file-systems %vm-os)))
 
-(test-assert "D8: application-persistence activation service present in %os"
+(test-assert "D8: application-persistence activation service present in %vm-os"
              (any (lambda (svc)
                     (eq? 'application-persistence
                          (service-type-name (service-kind svc))))
-                  (operating-system-services %os)))
+                  (operating-system-services %vm-os)))
 
 ;; ── D9：guix-daemon 本地构建 tmpdir 声明（common services；
 ;;     2026-08-25：/tmp 7.7GB tmpfs 装不下内核编译 ~11GB 中间产物，
@@ -420,9 +420,9 @@
 ;;     注意 guix-tmpdir accessor 未被上游导出（base.scm #:export
 ;;     遗漏），经 module-ref 访问）──
 (define (os-guix-config)
-  "折叠 %os 的 guix-service-type 配置。"
+  "折叠 %vm-os 的 guix-service-type 配置。"
   (service-value
-   (fold-services (operating-system-services %os)
+   (fold-services (operating-system-services %vm-os)
                   #:target-type guix-service-type)))
 
 (define %guix-tmpdir
@@ -441,16 +441,16 @@
              %nvidia-adapter-enabled?)
 
 (test-assert "NV1: disabled path is identity (VM / Intel-only machines unaffected)"
-             (eq? %os (nvidia-system-transformation %os #:enabled? #f)))
+             (eq? %vm-os (nvidia-system-transformation %vm-os #:enabled? #f)))
 
 (test-assert "NV1: no speculative NVIDIA kernel arguments (seam empty)"
              (null? nvidia-kernel-arguments))
 
 ;; ── NV2：VM OS 无 proprietary NVIDIA 包 ────────────────────
-(test-assert "NV2: %os packages contain no nvidia stack"
+(test-assert "NV2: %vm-os packages contain no nvidia stack"
              (every (lambda (p)
                       (not (string-contains (package-name p) "nvidia")))
-                    (operating-system-packages %os)))
+                    (operating-system-packages %vm-os)))
 
 ;; ── NV3：VM kernel args 无 nouveau blacklist ───────────────
 (test-assert "NV3: VM configuration adds no nouveau blacklist"
@@ -498,8 +498,8 @@
                     (string-contains s "kernel-platform"))))
 
 ;; ── NV6：kernel 仍由 kernel-platform 拥有 ──────────────────
-(test-assert "NV6: %os kernel is still %kernel (kernel-platform owns it)"
-             (eq? (operating-system-kernel %os) %kernel))
+(test-assert "NV6: %vm-os kernel is still %kernel (kernel-platform owns it)"
+             (eq? (operating-system-kernel %vm-os) %kernel))
 
 ;; ── NV7：adapter 委托 Nonguix，不自行实现 NVIDIA 集成 ────────
 (test-assert "NV7: adapter delegates to nonguix-transformation-nvidia"
@@ -538,7 +538,7 @@
 ;; （instantiate-missing-services），assembly 再显式声明 authority；
 ;; polkit-gnome 只是 graphical session agent（apps/polkit-gnome，
 ;; niri spawn-at-startup + ~/.local/bin wrapper）——不拥有 polkit。
-(test-assert "PK1: exactly one polkit authority in %os"
+(test-assert "PK1: exactly one polkit authority in %vm-os"
              (= 1 (length (os-services-of-type polkit-service-type))))
 
 (test-assert "PK1: polkit service is explicitly declared in common services"
@@ -554,7 +554,7 @@
 
 (test-assert "PK2: polkit action/rules contributions come only from elogind
 + upstream wheel admin rule + NetworkManager + noctalia-greeter (no custom rules)"
-             (let* ((folded (fold-services (operating-system-services %os)
+             (let* ((folded (fold-services (operating-system-services %vm-os)
                                            #:target-type polkit-service-type))
                     (actions (%polkit-configuration-actions
                               (service-value folded))))
@@ -570,7 +570,7 @@
 (test-assert "PK2: upstream polkit-wheel admin identity is used"
              (any (lambda (svc)
                     (eq? 'polkit-wheel (service-type-name (service-kind svc))))
-                  (operating-system-services %os)))
+                  (operating-system-services %vm-os)))
 
 ;; polkit 内部 accessor 未导出；经顶层 define 绑定（编译环境内联
 ;; module-ref 应用会拿到 syntax-transformer——实测）。
@@ -607,7 +607,7 @@
              ;; <home-environment> record（包名/wrapper 文件名都会
              ;; 出现）；正确断言是 provision 名——agent 不是系统
              ;; daemon，boot shepherd 图里没有任何 polkit-gnome 服务。
-             (let* ((folded (fold-services (operating-system-services %os)
+             (let* ((folded (fold-services (operating-system-services %vm-os)
                                            #:target-type shepherd-root-service-type))
                     (cfg (service-value folded)))
                (not (any (lambda (svc)

@@ -74,7 +74,7 @@
 ;; ── GK2：PAM 完全无 keyring ───────────────────────────────
 (define %pam-cfg
   (service-value
-   (fold-services (operating-system-services %os)
+   (fold-services (operating-system-services %vm-os)
                   #:target-type pam-root-service-type)))
 
 (define (final-pam-service name)
@@ -117,7 +117,7 @@
              (not (any (lambda (svc)
                          (eq? 'gnome-keyring
                               (service-type-name (service-kind svc))))
-                       (operating-system-services %os))))
+                       (operating-system-services %vm-os))))
 
 ;; ── GK3：greetd-greeter 专用 PAM 已删除 ───────────────────
 (test-assert "GK3: greetd-greeter PAM service removed (reason gone)"
@@ -171,7 +171,7 @@
                            (not (string-prefix? "/" (application-persistence-rule-backing r)))))
                     (applications-persistence %applications)))
 
-(test-assert "GK4: keyrings bind mount declared in %os"
+(test-assert "GK4: keyrings bind mount declared in %vm-os"
              (any (lambda (fs)
                     (and (string=?
                           (string-append (user-profile-home-directory
@@ -180,26 +180,26 @@
                           (file-system-mount-point fs))
                          (string=? "/persist/data-app/gnome-keyring/keyrings"
                                    (file-system-device fs))))
-                  (operating-system-file-systems %os)))
+                  (operating-system-file-systems %vm-os)))
 
 ;; GK4：keyrings 是 application-persistence，不属 machine-state。
-;; %os 自 mihomo Phase 1 起合法含 machine-state（mihomo providers
-;; bind），断言收紧为：%os 的 machine-state 服务恰好是 mihomo 那
+;; %vm-os 自 mihomo Phase 1 起合法含 machine-state（mihomo providers
+;; bind），断言收紧为：%vm-os 的 machine-state 服务恰好是 mihomo 那
 ;; 一个，且任何 machine-state bind 都不得指向 keyrings 路径。
-(test-equal "GK4: machine-state service in %os is exactly the mihomo one"
+(test-equal "GK4: machine-state service in %vm-os is exactly the mihomo one"
             1
             (count (lambda (svc)
                      (eq? 'machine-state-persistence
                           (service-type-name (service-kind svc))))
-                   (operating-system-services %os)))
+                   (operating-system-services %vm-os)))
 
-(test-assert "GK4: no machine-state rule wired for keyrings in %os"
+(test-assert "GK4: no machine-state rule wired for keyrings in %vm-os"
              (not (any (lambda (fs)
                          (and (string-prefix? %machine-state-root
                                               (file-system-device fs))
                               (string-contains (file-system-mount-point fs)
                                                "keyrings")))
-                       (operating-system-file-systems %os))))
+                       (operating-system-file-systems %vm-os))))
 
 ;; ── GK5：daemon 单一 owner、无旧 lifecycle ────────────────
 (test-assert "GK5: niri configs have no gnome-keyring spawn"
@@ -340,10 +340,10 @@ with strict permissions"
                     (eq? #o400 (secret-decl-mode d)))))
 
 ;; ── GK6：polkit authority 恰好一个（与 Phase A 同源）──────
-(test-assert "GK6: exactly one polkit authority in %os"
+(test-assert "GK6: exactly one polkit authority in %vm-os"
              (= 1 (length (filter (lambda (svc)
                                     (eq? 'polkit
                                          (service-type-name (service-kind svc))))
-                                  (operating-system-services %os)))))
+                                  (operating-system-services %vm-os)))))
 
 (test-end "gnome-keyring")

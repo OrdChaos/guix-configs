@@ -24,7 +24,7 @@
              (guixcfg system mihomo config)
              (guixcfg system machine-state-persistence) ; rule 校验
              (guixcfg security secrets) ; secret-decl-name（M13）
-             (guixcfg hosts vm)   ; %os
+             (guixcfg hosts vm)   ; %vm-os
              (ice-9 textual-ports)
              (srfi srfi-1)
              (srfi srfi-64))
@@ -182,9 +182,9 @@
 (define %mihomo-service-instance
   (find (lambda (svc)
           (eq? 'mihomo (service-type-name (service-kind svc))))
-        (operating-system-services %os)))
+        (operating-system-services %vm-os)))
 
-(test-assert "M11: mihomo service present in %os"
+(test-assert "M11: mihomo service present in %vm-os"
              (and %mihomo-service-instance #t))
 
 (define (shepherd-service-with-provision name)
@@ -192,7 +192,7 @@
           (memq name (shepherd-service-provision s)))
         (shepherd-configuration-services
          (service-value
-          (fold-services (operating-system-services %os)
+          (fold-services (operating-system-services %vm-os)
                          #:target-type shepherd-root-service-type)))))
 
 (define %mihomo-daemon
@@ -222,7 +222,7 @@
 (test-assert "M12: clash system group in folded accounts"
              (let ((accounts (service-value
                               (fold-services
-                               (operating-system-services %os)
+                               (operating-system-services %vm-os)
                                #:target-type account-service-type))))
                (and (find (lambda (g)
                             (and (user-group? g)

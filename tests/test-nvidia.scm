@@ -17,10 +17,10 @@
 ;;;       会重建 config 内 package 字段（拷贝），断言按 name 而非 eq?
 ;;;   N5  replace-mesa：transformation 对 packages 做 mesa → nvda
 ;;;       grafting（依赖 mesa 的包其 input 的 replacement 是 nvda）
-;;;   N6  VM isolation：vm %os 无 nvidia kernel-arguments、无
+;;;   N6  VM isolation：vm %vm-os 无 nvidia kernel-arguments、无
 ;;;       nvidia-service-type 实例（packages/firmware 无 nvidia 已由
 ;;;       test-kernel-platform K8 覆盖）
-;;;   N7  laptop %os 实例化（services 字段为合法服务列表）
+;;;   N7  laptop %vm-os 实例化（services 字段为合法服务列表）
 ;;;
 ;;; 由 tests/run-tests.scm 加载运行（GUIX_CONFIG_FACTS 已设、nonguix
 ;;; channel 源已加入 load path）；单独运行需先设 GUIX_CONFIG_FACTS
@@ -77,7 +77,7 @@
          (nvidia-system-transformation probe-os #:enabled? #f))
 
 ;; ── N2：kernel authority 保留 ───────────────────────────────
-(test-assert "N2: laptop %os still selects %kernel (NVIDIA never replaces the kernel)"
+(test-assert "N2: laptop %vm-os still selects %kernel (NVIDIA never replaces the kernel)"
              (eq? (operating-system-kernel laptop:%laptop-os) %kernel))
 
 (test-assert "N2: transformed probe OS still selects %kernel"
@@ -110,7 +110,7 @@
                        (list-index (lambda (a) (equal? a "probe.arg=1"))
                                    args)))))
 
-(test-assert "N3: laptop %os carries the nvidia kernel arguments"
+(test-assert "N3: laptop %vm-os carries the nvidia kernel arguments"
              (let ((args (operating-system-user-kernel-arguments laptop:%laptop-os)))
                (member "nvidia_drm.modeset=1" args)))
 
@@ -134,7 +134,7 @@
           (eq? (service-kind s) nvidia-service-type))
         (operating-system-user-services laptop:%laptop-os)))
 
-(test-assert "N4: laptop %os includes nvidia-service-type"
+(test-assert "N4: laptop %vm-os includes nvidia-service-type"
              laptop-nvidia-service)
 
 (test-assert "N4: open kernel module selected (Ada policy)"
@@ -188,19 +188,19 @@
                     (string=? (package-name repl) "nvda"))))
 
 ;; ── N6：VM isolation ────────────────────────────────────────
-(test-assert "N6: vm %os has no nvidia kernel arguments"
+(test-assert "N6: vm %vm-os has no nvidia kernel arguments"
              (every (lambda (a)
                       (and (string? a)
                            (not (string-contains a "nvidia"))))
-                    (operating-system-user-kernel-arguments vm:%os)))
+                    (operating-system-user-kernel-arguments vm:%vm-os)))
 
-(test-assert "N6: vm %os has no nvidia-service-type instance"
+(test-assert "N6: vm %vm-os has no nvidia-service-type instance"
              (not (find (lambda (s)
                           (eq? (service-kind s) nvidia-service-type))
-                        (operating-system-user-services vm:%os))))
+                        (operating-system-user-services vm:%vm-os))))
 
-;; ── N7：laptop %os 实例化 ───────────────────────────────────
-(test-assert "N7: laptop %os instantiates (valid services field)"
+;; ── N7：laptop %vm-os 实例化 ───────────────────────────────────
+(test-assert "N7: laptop %vm-os instantiates (valid services field)"
              (list? (operating-system-services laptop:%laptop-os)))
 
 (test-end "nvidia")

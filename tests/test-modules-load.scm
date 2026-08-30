@@ -140,10 +140,10 @@
                    (and ok (not (string-contains text "unbound")))))))
 
 ;; operating-system 的 services 等字段是延迟求值的，compile-file 不会
-;; 触发字段校验；这里显式实例化 %os，让“services 字段必须是服务列表”
+;; 触发字段校验；这里显式实例化 %vm-os，让“services 字段必须是服务列表”
 ;; 这类错误在测试期暴露，而不是留到 system build。
-(test-assert "hosts/vm.scm %os instantiates (valid services field)"
-             (let ((os (module-ref (resolve-module '(guixcfg hosts vm)) '%os)))
+(test-assert "hosts/vm.scm %vm-os instantiates (valid services field)"
+             (let ((os (module-ref (resolve-module '(guixcfg hosts vm)) '%vm-os)))
                (list? ((@ (gnu system) operating-system-services) os))))
 
 ;; tools/*.scm 是 CLI 脚本（无 define-module）：脚本里的未绑定变量只有

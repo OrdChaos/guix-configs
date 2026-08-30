@@ -46,7 +46,7 @@
 (test-begin "store-leakage")
 
 ;; 1. system activation 脚本（含 account/shadow 生成逻辑）
-(define %vm-os (module-ref (resolve-module '(guixcfg hosts vm)) '%os))
+(define %vm-os (module-ref (resolve-module '(guixcfg hosts vm)) '%vm-os))
 (define activation-text
   (build-text (lower-object (operating-system-activation-script %vm-os))))
 (test-assert "activation script contains no secret plaintext"

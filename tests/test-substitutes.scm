@@ -40,7 +40,7 @@
 ;; ── T-S1：evaluated service graph 的 guix-daemon 配置 ───────
 (define %vm-guix-config
   (service-value
-   (fold-services (operating-system-services %os)
+   (fold-services (operating-system-services %vm-os)
                   #:target-type guix-service-type)))
 
 (define %vm-substitute-urls
@@ -94,7 +94,7 @@
                   (string=? (package-name %kernel) "linux")
                   (not (string-contains (package-name %kernel) "libre"))))
 
-(test-assert "T-S6: %os selects %kernel unchanged"
-             (eq? (operating-system-kernel %os) %kernel))
+(test-assert "T-S6: %vm-os selects %kernel unchanged"
+             (eq? (operating-system-kernel %vm-os) %kernel))
 
 (test-end "substitutes")

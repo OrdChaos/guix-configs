@@ -4,7 +4,7 @@
 ;;; 写入包在 with-file-lock（fcntl-flock FFI）里，boot 环境该 FFI 求值
 ;;; 失败 → /etc/passwd|group|shadow 空/缺失 → 所有 getpw 失败 → readiness
 ;;; 卡死。本测试验证：
-;;;   A. %os 折叠出的完整 account 列表（root + user + 服务贡献账号）；
+;;;   A. %vm-os 折叠出的完整 account 列表（root + user + 服务贡献账号）；
 ;;;   B. account-databases-service 挂进 activation-service-type；
 ;;;   C. activation gexp 是纯 Scheme 写库（无 with-file-lock /
 ;;;      activate-users+groups），用的就是 user+group-databases +
@@ -41,7 +41,7 @@
 ;; 折叠必须包含 root、primary user、服务贡献账号（guixbuilders、
 ;; sshd、dhcpcd、messagebus、polkitd）——与 store 内
 ;; activate-users+groups 序列化的账号集合一致。
-(define %vm-accounts+groups (account-list %os))
+(define %vm-accounts+groups (account-list %vm-os))
 ;; 主用户名从 %primary-user 推导（AGENT.md §13：唯一权威来源，
 ;; 测试不硬编码具体用户名）。
 (define %account-test-user (user-profile-name %primary-user))
@@ -81,7 +81,7 @@
 ;; activation 值里必须包含它（激活脚本会运行纯 Scheme 投影）。
 (define activation-gexps
   (service-value
-   (fold-services (operating-system-services %os)
+   (fold-services (operating-system-services %vm-os)
                   #:target-type activation-service-type)))
 
 ;; gexp 的 source 形式（gexp 记录打印器会 false-if-exception 吞掉正文，

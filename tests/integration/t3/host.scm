@@ -1,7 +1,7 @@
 ;;; T3 集成测试专用 host：正常 VM（(guixcfg hosts vm)）+ 测试增强。
 ;;;
 ;;; 职责边界：正常 VM target 由 modules/guixcfg/hosts/vm.scm 描述；本模块
-;;; 只做 T3 测试需要的增强（composition，不复制 %os）：
+;;; 只做 T3 测试需要的增强（composition，不复制 %vm-os）：
 ;;;   - root 测试账号（t3-root-password，仅测试环境）
 ;;;   - ttyS0 串口自动登录（harness 串口交互）
 ;;;   - SSH（harness 经 hostfwd 2222→22 执行系统内命令）
@@ -21,7 +21,7 @@
                #:use-module (gnu packages package-management) ; guix
                #:use-module (virelith packages tpm2)       ; tpm2-tools-compat
                #:use-module (guix gexp)                    ; local-file
-               #:use-module ((guixcfg hosts vm) #:prefix vm:) ; %os
+               #:use-module ((guixcfg hosts vm) #:prefix vm:) ; %vm-os
                #:export (%t3-os))
 
 ;; T3 测试 root 账号。密码哈希对应 t3-root-password（仅测试环境；
@@ -60,10 +60,10 @@
 
 (define %t3-os
   (operating-system
-   (inherit vm:%os)
-   (users (cons %t3-root (operating-system-users vm:%os)))
+   (inherit vm:%vm-os)
+   (users (cons %t3-root (operating-system-users vm:%vm-os)))
    (packages (append (list guix tpm2-tools-compat)
-                     (operating-system-packages vm:%os)))
+                     (operating-system-packages vm:%vm-os)))
    ;; 基础服务用 vm 的显式 services 字段（%vm-services）——不含
    ;; operating-system-services 自动生成的 account/shepherd-root
    ;; （本 OS 的 users 与实例化会各自生成唯一实例）。

@@ -130,7 +130,7 @@ interactive-session-ready（core readiness join barrier）
   使用 open module）、`#:kernel-mode-setting? #t`、
   `#:configure-xorg? #f`（纯 Wayland：greetd/niri，无 Xorg DM）、
   `#:dynamic-boost? #t`（Ampere 起支持，`nvidia-powerd`）；
-- per-machine：只在 `(guixcfg hosts laptop)` 最终 `%os` 上调用；
+- per-machine：只在 `(guixcfg hosts laptop)` 最终 `%laptop-os` 上调用；
   VM/Intel-only 机器不调用，零 NVIDIA closure（test-nvidia N6 +
   K8 固定）；
 - Wayland：niri compositor 继续跑 Intel iGPU（`variants/laptop.kdl`

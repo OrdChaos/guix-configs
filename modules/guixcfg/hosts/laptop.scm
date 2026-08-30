@@ -30,7 +30,7 @@
 ;;;   2. secrets：无 %vm-test-secrets（那是 VM 测试机的机制 sentinel）；
 ;;;   3. guix-home：%laptop-guix-home（含 niri 'laptop variant
 ;;;      selection，iGPU compositor + NVIDIA offload 的机器事实）；
-;;;   4. NVIDIA：最终 %os 套 nvidia-system-transformation（open kernel
+;;;   4. NVIDIA：最终 %laptop-os 套 nvidia-system-transformation（open kernel
 ;;;      module + dynamic boost；kernel 不被替换）。
 ;;;
 ;;; 构建（需要 machine facts，见 (guixcfg system file-systems) 头注释）：
@@ -211,7 +211,7 @@
 
 ;; 完整 user services（不含 account-databases 投影本身）。OS 的全部
 ;; 业务服务都在这一个列表里——用于 (a) 折叠完整 account 列表，
-;; (b) 组装最终 %os。
+;; (b) 组装最终 %laptop-os。
 (define %laptop-user-services
   (append
    (list (secure-ssh-service)
@@ -277,8 +277,8 @@
            ;; 段 pam_nologin）
            (login-gate-services))))
 
-;; 基础 OS：与最终 %os 完全相同，只是不含 account-databases 投影与
-;; NVIDIA transformation。仅用于折叠 account 列表；真正启动用 %os。
+;; 基础 OS：与最终 %laptop-os 完全相同，只是不含 account-databases 投影与
+;; NVIDIA transformation。仅用于折叠 account 列表；真正启动用 %laptop-os。
 (define %os-without-account-databases
   (operating-system
    (host-name "guix-laptop")
@@ -329,7 +329,7 @@
 ;; 声明的 users/groups + 全部服务贡献的 account，如 guixbuilder01-10、
 ;; sshd、messagebus、polkitd）。account-databases 投影自身不扩展
 ;; account-service-type，因此含不含它对折叠结果无影响——先在一个
-;; 不含它的 probe OS 上折叠，再组装最终 %os（避免自引用）。
+;; 不含它的 probe OS 上折叠，再组装最终 %laptop-os（避免自引用）。
 ;; NVIDIA 不扩展 account-service-type（pinned nongnu/services/
 ;; nvidia.scm），因此 transformation 与折叠互不影响。
 (define %laptop-accounts+groups
@@ -347,7 +347,7 @@
 ;; 的 getpw）能看到完整数据库。
 ;; 最后套 NVIDIA adapter：只改 kernel-arguments/packages/services，
 ;; kernel/initrd/firmware 原样保留（%kernel 仍是被选内核）。
-;; 命名为 %laptop-os 而非 %os：避免与 (guixcfg hosts vm) 的 %os 在
+;; 命名为 %laptop-os 而非 %laptop-os：避免与 (guixcfg hosts vm) 的 %laptop-os 在
 ;; 同时 import 两个 host 模块时产生跨模块绑定歧义（测试套件实测）。
 (define %laptop-os
   (nvidia-system-transformation

@@ -1,7 +1,7 @@
 ;;; VM 最终 <operating-system> 组装点（docs/README.md）。
 ;;;
 ;;; 构建：guix time-machine -C channels.lock.scm -- system build \
-;;;         -L modules -e '(@ (guixcfg hosts vm) %os)'
+;;;         -L modules -e '(@ (guixcfg hosts vm) %vm-os)'
 
 (define-module (guixcfg hosts vm)
                #:use-module (gnu)                          ; operating-system、user-account、service 等
@@ -39,7 +39,7 @@
                #:use-module (gnu services guix)        ; guix-home-service-type
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:use-module (srfi srfi-1)              ; remove
-               #:export (%vm-storage-policy %vm-services %vm-test-secrets %os))
+               #:export (%vm-storage-policy %vm-services %vm-test-secrets %vm-os))
 
 ;; 保留 host 模块原有导出名；实际 policy 放在纯存储模块中，避免早期
 ;; disk-install 为取 policy 而加载完整 OS/UKI/channel 依赖。
@@ -179,7 +179,7 @@
 
 ;; 完整 user services（不含 account-databases 投影本身）。OS 的全部
 ;; 业务服务都在这一个列表里——用于 (a) 折叠完整 account 列表，
-;; (b) 组装最终 %os。
+;; (b) 组装最终 %vm-os。
 (define %vm-user-services
   (append
    (list (secure-ssh-service)
@@ -253,8 +253,8 @@
            ;; 段 pam_nologin）
            (login-gate-services))))
 
-;; 基础 OS：与最终 %os 完全相同，只是不含 account-databases 投影。
-;; 仅用于折叠 account 列表；真正启动用 %os。
+;; 基础 OS：与最终 %vm-os 完全相同，只是不含 account-databases 投影。
+;; 仅用于折叠 account 列表；真正启动用 %vm-os。
 (define %os-without-account-databases
   (operating-system
    (host-name "guix-vm")
@@ -304,7 +304,7 @@
 ;; 声明的 users/groups + 全部服务贡献的 account，如 guixbuilder01-10、
 ;; sshd、messagebus、polkitd）。account-databases 投影自身不扩展
 ;; account-service-type，因此含不含它对折叠结果无影响——先在一个
-;; 不含它的 probe OS 上折叠，再组装最终 %os（避免自引用）。
+;; 不含它的 probe OS 上折叠，再组装最终 %vm-os（避免自引用）。
 (define %vm-accounts+groups
   (service-value
    (fold-services (operating-system-services
@@ -318,7 +318,7 @@
 ;; 列表末尾 = user activation 中最早运行（紧随 essential 的
 ;; account 步骤之后），保证后续 user activation（如 user-persistence
 ;; 的 getpw）能看到完整数据库。
-(define %os
+(define %vm-os
   (operating-system
    (inherit %os-without-account-databases)
    (services (append (operating-system-user-services
@@ -330,4 +330,4 @@
 ;; guix system init/reconfigure 加载文件时取最后一个顶层表达式的值
 ;; （daviwil 模式）。因此本文件既是模块 (guixcfg hosts vm)，又是入口：
 ;;   guix system init -L modules modules/guixcfg/hosts/vm.scm /mnt
-%os
+%vm-os

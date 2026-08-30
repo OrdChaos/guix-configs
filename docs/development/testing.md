@@ -13,7 +13,7 @@ generation 状态机、policies、plan、validate、users 等）。
 
 ## Level 2 — Module load
 
-`tests/test-modules-load.scm` 等：确认模块可加载、`%os` 可实例化
+`tests/test-modules-load.scm` 等：确认模块可加载、`%vm-os` 可实例化
 （machine facts 由 run-tests.scm 注入测试值）。
 
 证明：模块结构/依赖图健康，无 compile/load 错误。
@@ -38,7 +38,7 @@ thunk、secrets deploy、只读 verify。
 ```bash
 GUIX_CONFIG_FACTS=<facts> \
   guix time-machine -C channels.lock.scm -- system build \
-  -L "$PWD/modules" -e '(@ (guixcfg hosts vm) %os)'
+  -L "$PWD/modules" -e '(@ (guixcfg hosts vm) %vm-os)'
 ```
 
 证明：完整 OS 可构建，所有 activation/shepherd 配置生成正确。
@@ -69,7 +69,7 @@ guix time-machine -C channels.lock.scm -- repl tests/run-tests.scm
 # system build dry-run / build
 GUIX_CONFIG_FACTS=/tmp/facts.scm \
   guix time-machine -C channels.lock.scm -- system build \
-  -L "$PWD/modules" -e '(@ (guixcfg hosts vm) %os)'
+  -L "$PWD/modules" -e '(@ (guixcfg hosts vm) %vm-os)'
 ```
 
 不要把 "gexp successfully builds" 当作 "runtime program definitely

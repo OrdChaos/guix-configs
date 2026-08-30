@@ -2,11 +2,11 @@
 ;;; docs/architecture/boot.md（Kernel platform））。
 ;;;
 ;;; 覆盖：
-;;;   K1  authoritative kernel selection：最终 %os 使用 Nonguix standard
+;;;   K1  authoritative kernel selection：最终 %vm-os 使用 Nonguix standard
 ;;;       Linux（evaluated package identity，非字符串 grep）
 ;;;   K2  boot/runtime 配置不依赖 Linux-libre package identity（注释除外）
-;;;   K3  firmware declarative：%os 的 firmware 字段含 linux-firmware
-;;;   K4  microcode composition：%os 的 initrd 是 microcode-ephemeral-
+;;;   K3  firmware declarative：%vm-os 的 firmware 字段含 linux-firmware
+;;;   K4  microcode composition：%vm-os 的 initrd 是 microcode-ephemeral-
 ;;;       initrd（microcode-initrd 把框架参数转发给 custom initrd
 ;;;       builder = composition 而非 replacement）；microcode 声明只含
 ;;;       Intel（declarative，无 AMD 混入 common base）
@@ -17,7 +17,7 @@
 ;;;       kernel 路径）
 ;;;   K7  UKI 部署程序结构（program-file + %kernel bzImage）；完整
 ;;;       build 由 M1-6 的 system build --dry-run 证明
-;;;   K8  不引入 NVIDIA：%os packages/firmware 无 nvidia
+;;;   K8  不引入 NVIDIA：%vm-os packages/firmware 无 nvidia
 ;;;   K9  generated runtime：由 test-runtime-exec 覆盖（套件）
 ;;;   K10 UI language：由 test-ui-language 覆盖（套件）
 ;;;
@@ -85,8 +85,8 @@
                   (string=? (package-name %kernel) "linux")
                   (not (string-contains (package-name %kernel) "libre"))))
 
-(test-assert "K1: %os selects %kernel (no linux-libre fallback)"
-             (eq? (operating-system-kernel %os) %kernel))
+(test-assert "K1: %vm-os selects %kernel (no linux-libre fallback)"
+             (eq? (operating-system-kernel %vm-os) %kernel))
 
 ;; ── K2：boot/runtime 不依赖 Linux-libre package identity ───
 (test-assert "K2: boot/runtime modules have no linux-libre symbol (comments excluded)"
@@ -97,15 +97,15 @@
                     %boot-runtime-modules))
 
 ;; ── K3：firmware declarative ────────────────────────────────
-(test-assert "K3: %os firmware includes linux-firmware"
-             (memq linux-firmware (operating-system-firmware %os)))
+(test-assert "K3: %vm-os firmware includes linux-firmware"
+             (memq linux-firmware (operating-system-firmware %vm-os)))
 
 (test-assert "K3: firmware comes from the kernel platform definition"
              (eq? %kernel-firmware linux-firmware))
 
 ;; ── K4：microcode composition（非 replacement）──────────────
-(test-assert "K4: %os initrd is the microcode + custom initrd composition"
-             (eq? (operating-system-initrd %os) microcode-ephemeral-initrd))
+(test-assert "K4: %vm-os initrd is the microcode + custom initrd composition"
+             (eq? (operating-system-initrd %vm-os) microcode-ephemeral-initrd))
 
 (test-assert "K4: microcode packages are declaratively Intel-only"
              (equal? %kernel-microcode-packages (list intel-microcode)))
@@ -125,8 +125,8 @@
                (any (lambda (rest) (memq 'linux-pkg rest)) seen)))
 
 ;; ── K6：UKI/boot-plan 消费 selected kernel 路径（generic）──
-(test-assert "K6: kernel-file of %os is %kernel's bzImage (generic path)"
-             (let ((kf (operating-system-kernel-file %os)))
+(test-assert "K6: kernel-file of %vm-os is %kernel's bzImage (generic path)"
+             (let ((kf (operating-system-kernel-file %vm-os)))
                (and (eq? (file-append-base kf) %kernel)
                     (equal? (file-append-suffix kf) '("/" "bzImage")))))
 
@@ -136,7 +136,7 @@
              ;; system build --dry-run 证明（最终 derivation 使用
              ;; nonguix linux 7.1 source）。
              (let* ((bp (boot-plan
-                         (kernel (operating-system-kernel-file %os))
+                         (kernel (operating-system-kernel-file %vm-os))
                          (initrd (computed-file "test-initrd"
                                                 #~(mkdir-p #$output)))
                          (cmdline "root=/selected-root gnu.system=/gnu/store/x-system")))
@@ -145,14 +145,14 @@
                     (eq? (file-append-base (boot-plan-kernel bp)) %kernel))))
 
 ;; ── K8：不引入 NVIDIA ───────────────────────────────────────
-(test-assert "K8: %os packages contain no nvidia stack"
+(test-assert "K8: %vm-os packages contain no nvidia stack"
              (every (lambda (p)
                       (not (string-contains (package-name p) "nvidia")))
-                    (operating-system-packages %os)))
+                    (operating-system-packages %vm-os)))
 
 (test-assert "K8: firmware is only the generic linux-firmware"
              (every (lambda (f)
                       (not (string-contains (package-name f) "nvidia")))
-                    (operating-system-firmware %os)))
+                    (operating-system-firmware %vm-os)))
 
 (test-end "kernel-platform")

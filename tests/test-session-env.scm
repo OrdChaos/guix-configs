@@ -170,7 +170,7 @@ gnupg-session"
 (test-assert "OFF12: Home remains bound to system generation (guix-home-service-type)"
              (any (lambda (svc)
                     (eq? (service-kind svc) guix-home-service-type))
-                  (operating-system-services %os)))
+                  (operating-system-services %vm-os)))
 
 ;; OFF10/OFF11（greetd gating / fallback tty）由 test-desktop
 ;; D2/D3 覆盖——composition invariant 见该文件。

@@ -22,7 +22,7 @@
              (guixcfg system dns ownership)
              (guixcfg system dns smartdns)
              (guixcfg system mihomo service) ; %mihomo-template-file（rules 一致性）
-             (guixcfg hosts vm)        ; %os
+             (guixcfg hosts vm)        ; %vm-os
              (ice-9 textual-ports)
              (srfi srfi-1)
              (srfi srfi-64))
@@ -53,7 +53,7 @@
           (memq name (shepherd-service-provision s)))
         (shepherd-configuration-services
          (service-value
-          (fold-services (operating-system-services %os)
+          (fold-services (operating-system-services %vm-os)
                          #:target-type shepherd-root-service-type)))))
 
 (test-begin "smartdns")
@@ -120,7 +120,7 @@
              (let* ((nm (find (lambda (svc)
                                 (eq? 'network-manager
                                      (service-type-name (service-kind svc))))
-                              (operating-system-services %os)))
+                              (operating-system-services %vm-os)))
                     (req (network-manager-configuration-shepherd-requirement
                           (service-value nm))))
                (not (memq 'resolvconf-bootstrap req))))
