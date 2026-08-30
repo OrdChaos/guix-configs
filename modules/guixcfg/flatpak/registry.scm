@@ -28,6 +28,10 @@
 ;;               4184DD4D907A7CAE + 签名子密钥 562702E9E3ED7EE8；
 ;;               provenance = dl.flathub.org/repo/flathub.gpg，
 ;;               与镜像副本逐字节一致）
+;;               维护检查点：主/子密钥均于 2027-06-14 过期——到期前
+;;               Flathub 必然续期或轮换（发布新 key 文件）；届时
+;;               更新本文件 + remote-replace 重新导入（轮换失败
+;;               模式 = sync 报 summary 签名 "public key not found"）
 ;;   transport = SJTU 镜像裸 OSTree URL（镜像内容 = 官方仓库同副本，
 ;;               同一份已签名 summary，GPG 验证不变）
 ;; 换源 = 改 repository-url（+ 如需改 trust 则换 key-file），然后
