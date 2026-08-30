@@ -55,7 +55,8 @@ tools/                 命令行工具（disk-install、flatpak（sync/status/
                        update/remove/gc，Flatpak 唯一联网入口）、
                        secrets、secure-boot、reconfigure、tpm2-enroll、
                        历史 E2E harness）
-templates/            新组件模板（application/definition.scm）
+templates/            新组件模板（application/definition.scm 原生应用、
+                       flatpak-application/definition.scm Flatpak 应用）
 secrets 密文          密文与引用者同置：apps/<app>/secrets/、
                       modules/guixcfg/<域>/<组件>/secrets/、
                       tests/fixtures/secrets/（测试 sentinel）；

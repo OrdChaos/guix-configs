@@ -59,7 +59,9 @@ reconcile projection（mutable）  selected definitions → install/update plan
   ID 推导（definition 无需重复拼写），例外用 extra-persistence
   （(consumer backing) 两元素列表，与 seeds 约定同构）。
 - **新增应用 = 一个 definition 文件 + registry aggregation 一行 +
-  selection 一行**；service/persistence/host 表格零改动。
+  selection 一行**；service/persistence/host 表格零改动。模板：
+  `templates/flatpak-application/definition.scm`（生产参考
+  `applications/qq.scm`）。
 
 ### 生命周期（Case A–D）
 
