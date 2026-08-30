@@ -1,77 +1,53 @@
-;;; Flatpak registry：Catalog（Known Applications）+ Selection
-;;; （Desired Applications）。显式列表——目录存在 ≠ 启用；名字查重
-;;; 与 selection ⊆ catalog 在模块加载时 fail-fast（apps/registry
-;;; 同款）。
+;;; Flatpak registry：纯 aggregation / lookup（docs/architecture/
+;;; flatpak.md）。
 ;;;
-;;; Catalog / Selection 分离（docs/architecture/flatpak.md
-;;; （catalog/selection））：
-;;;   - %flatpak-applications（Catalog）：identity + resource
-;;;     ownership；persistence rules 从这里派生（与 selection
-;;;     无关——selection removal 不撕 bind，不产生 split-brain）；
-;;;   - %flatpak-selection（Selection）：sync 应该 ensure 哪些
-;;;     logical names；即使 VM/Laptop 当前相同也独立存在（desired
-;;;     lifecycle ≠ persistence lifecycle 的结构要求）；
-;;;   - host 层只知道 logical name，不知道 app-id/remote/branch/
-;;;     路径（未来 per-host 差异时在 hosts/*.scm 定义各自列表）。
+;;; 本文件不包含任何应用的业务声明——应用事实全部在各
+;;; applications/<name>.scm 的自包含 definition 里。registry 只做：
+;;;   - 导入 definitions，构造 %flatpak-applications（Catalog）；
+;;;   - 构造 %flatpak-selection（Selection：设备要哪些 logical
+;;;     names——不复制 app 事实，resolution 由 model 的
+;;;     flatpak-select-applications 做 catalog lookup）；
+;;;   - 构造 %flatpak-remotes（identity/trust/transport 声明）；
+;;;   - 模块加载时统一 fail-fast 校验（名字查重、remote 已知、
+;;;     selection ⊆ catalog）。
+;;;
+;;; 新增应用 = 新建 applications/<name>.scm + 在 aggregation list
+;;; 加一次 + 在 selection 加一次。不改 service/persistence/host。
 
 (define-module (guixcfg flatpak registry)
                #:use-module (guixcfg flatpak model)
+               #:use-module (guixcfg flatpak applications qq) ; %flatpak-qq
                #:export (%flatpak-remotes
                          %flatpak-applications
                          %flatpak-selection))
 
-;; Remote 定义。Flathub：location 是官方 bootstrap descriptor URL
-;; （含 GPG trust material，flatpak 添加时抓取解析——联网，只发生在
-;; 显式 sync）；repository-url 是建立后的 effective repo URL，用于
-;; drift 检查（flatpak remotes --user --columns=name,url），两者
-;; 语义独立不可互相比较。信任决策：SJTU 镜像内容 = dl.flathub.org/
-;; repo 的同副本（同一份已签名 summary，GPG 验证不变）；公开
-;; keyring 已 vendor 进 flathub.flatpakrepo（provenance = 官方
-;; dl.flathub.org/repo/flathub.gpg），sync/remotes-replace 经 --from
-;; 引导（内嵌 GPGKey，裸 URL 引导不会自动导入 keyring）。
-;;
-;; 换源注意（flatpak.md（remotes））：
-;;   - 镜像的 flathub.flatpakrepo 是官方 descriptor 的原样转发
-;;     （Url= 仍指向 dl.flathub.org），因此 location/repository-url
-;;     必须用镜像的裸 OSTree URL——用镜像 descriptor 等于没换源；
-;;   - 换源 = 修改已有 mutable state：sync 永远 fail-loud 不自动改
-;;     trust root；唯一换源入口是显式命令
-;;     `tools/flatpak.scm remotes-replace <name>`（delete + 按声明
-;;     重建）。改本文件时必须同步 vendored descriptor 的 Url=
-;;     （tests/test-flatpak-service.scm 一致性回归）；
-;;   - SJTU 是智能缓存：未缓存文件会重定向回官方源（NVIDIA 等
-;;     受限内容必须走官方服务器），首次拉取冷门 runtime 时可能
-;;     仍慢；同步间隔约 4 小时。
+;; Remote 声明（identity / trust / transport 分离）：
+;;   identity  = 'flathub
+;;   trust     = key-file "flathub.gpg"（本目录 vendored 公开
+;;               keyring，Flathub 官方签名密钥——主密钥
+;;               4184DD4D907A7CAE + 签名子密钥 562702E9E3ED7EE8；
+;;               provenance = dl.flathub.org/repo/flathub.gpg，
+;;               与镜像副本逐字节一致）
+;;   transport = SJTU 镜像裸 OSTree URL（镜像内容 = 官方仓库同副本，
+;;               同一份已签名 summary，GPG 验证不变）
+;; 换源 = 改 repository-url（+ 如需改 trust 则换 key-file），然后
+;; tools/flatpak.scm remote-replace <name>（显式）。
 (define %flatpak-remotes
   (list (flatpak-remote
          (name 'flathub)
-         (location "https://mirror.sjtu.edu.cn/flathub")
          (repository-url "https://mirror.sjtu.edu.cn/flathub")
+         (key-file "flathub.gpg")
          (comment "Flathub via SJTU mirror"))))
 
-;; Catalog：已知 Flatpak 应用（identity + resource ownership）。
-;;
-;; 采用 Flatpak 的标准：Guix/channel 生态不方便提供、维护成本明显
-;; 过高、或天然更适合 Flatpak 的少数 GUI 应用（overview.md 软件
-;; 分类）。
-;;
-;;   qq —— 腾讯 QQ Linux（Electron 二进制，Guix 无对应包，上游
-;;   更新频繁，天然适合 Flatpak 分发）。app-id/branch 以 Flathub
-;;   官方页面核实（flathub.org/apps/com.qq.QQ，branch=stable）。
-;;   commit #f = branch tracking（默认策略；如需 pin 必须注释理由）。
-;;   overrides #f = 仓库不拥有 override 文件（user/Flatseal owns）：
-;;   先以上游 manifest 权限运行；实机验证发现真正需要的 delta 后，
-;;   按 Flatseal 实验工作流（flatpak.md（overrides））回填声明。
+;; Catalog：已知 Flatpak 应用（纯聚合——定义在 applications/ 下）。
 (define %flatpak-applications
-  (list (flatpak-application
-         (name 'qq)
-         (id "com.qq.QQ")
-         (remote 'flathub)
-         (branch "stable"))))
+  (list %flatpak-qq))
 
-;; Selection：sync 应 ensure 的 logical names。VM/Laptop 当前相同，
-;; 但 Selection 独立存在（desired lifecycle ≠ persistence lifecycle
-;; 的结构要求——从 selection 删除 ≠ 卸 ref/撕 bind）。
+;; Selection：sync 应 ensure 的 logical names（desired lifecycle ≠
+;; persistence lifecycle 的结构分离；未来 per-host 差异时在
+;; hosts/*.scm 定义各自列表）。persistence 投影从 selection 派生：
+;; 未选中的 app 不产生 persistence mount（其 definition 里的
+;; persistence intent 随 selection 生效）。
 (define %flatpak-selection
   '(qq))
 

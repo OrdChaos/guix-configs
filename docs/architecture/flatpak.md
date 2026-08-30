@@ -27,36 +27,52 @@ mutable external state，不随 generation 回滚。`flatpak status` 如实
 5. Persistent Runtime      /persist/data-app/flatpak/{installation,apps/<id>}
 ```
 
-## Catalog ≠ Selection（生命周期分离）
+## Application model（definition / registry / selection / projection）
 
-```scheme
-;; (guixcfg flatpak registry)
-%flatpak-applications   ; Catalog：已知应用（identity + resource ownership）
-%flatpak-selection      ; Selection：desired installation（logical names）
+Flatpak 应用与仓库原生应用同构：**自包含 definition + 纯聚合
+registry + logical selection + generic projection**。
+
+```text
+applications/<name>.scm          definition = 应用是什么（全部业务事实）
+    ├── identity                logical name、Flatpak app-id
+    ├── ref metadata            remote、branch
+    ├── update policy           'track-branch | (flatpak-commit-pin "<hex>")
+    ├── override policy         'external | (managed-overrides <flatpak-override>)
+    └── persistence intent      默认 ~/.var/app/<id>（ID 推导）+ extra-persistence 例外
+registry.scm                     纯 aggregation：import definitions → %flatpak-applications；
+                                 %flatpak-selection（logical names）；%flatpak-remotes；统一校验
+service projection（offline）    selected definitions → persistence rules + managed override 文件
+reconcile projection（mutable）  selected definitions → install/update plan
 ```
 
-- **Catalog** 决定：logical name、app-id、remote、branch、optional
-  commit、optional repo-owned override、`~/.var/app/<id>` persistence
-  rule。**persistence rules 从 Catalog 派生**——与 selected? /
-  installed? 无关。
-- **Selection** 只决定 `flatpak sync` ensure 哪些应用。约束
-  `selection ⊆ catalog`，模块加载 fail-fast（未知 name 报错并列出
-  可用名）。即使 VM/Laptop selection 相同也独立存在：它承担
+- **definition 是事实的唯一归属**：打开 `applications/qq.scm` 就能
+  读完一个应用的全部声明；registry 只是索引，不含任何 inline
+  `flatpak-application` 记录。
+- **selection 只选择**：`%flatpak-selection = '(qq)` 只含 logical
+  names，不复制 id/branch/persistence；resolver
+  （`flatpak-select-applications`）做 catalog lookup（未知 name
+  fail-fast 并列出可用名）。即使 VM/Laptop 相同也独立存在：
   **desired lifecycle ≠ persistence lifecycle** 的结构分离。
-- host 层只知道 logical name（`flatpak-select-applications`），
-  不知道 app-id/remote/branch/路径。
+- **persistence 从 selected definitions 投影**：未选中的 catalog
+  app 不产生 persistence mount（其 definition 里的 persistence
+  intent 随 selection 生效）；默认 `~/.var/app/<id>` 由 application
+  ID 推导（definition 无需重复拼写），例外用 extra-persistence
+  （(consumer backing) 两元素列表，与 seeds 约定同构）。
+- **新增应用 = 一个 definition 文件 + registry aggregation 一行 +
+  selection 一行**；service/persistence/host 表格零改动。
 
 ### 生命周期（Case A–D）
 
 | Case | Catalog | Selection | Installed | Persistence bind |
 |---|---|---|---|---|
 | A 正常态 | 有 | 有 | 有 | 有 |
-| B 从 selection 删除 | 有 | **无** | **仍在** | **仍在**（Catalog 派生——不产生 ephemeral split-brain） |
+| B 从 selection 删除 | 有 | **无** | **仍在** | **随 reconfigure 消失**（selection 投影——用户明确表示"本设备不再要它"，新写入不再持久化；backing 内旧数据保留到显式 purge） |
 | C 显式 remove | 有 | 无 | 无 | 仍在（userdata 保留，owner 清晰） |
 | D 显式 purge | 有 | 无 | 无 | 内容清空、规则仍在；**之后**才允许从 Catalog 删除定义 |
 
 ```text
-selection removal = 非破坏性（sync 不再 ensure；ref 不卸载；bind 仍在）
+selection removal = 非破坏性（sync 不再 ensure；ref 不卸载；旧数据不删除；
+                     仅新 generation 不再投影其 mount——行为变化记录见 git 历史）
 catalog definition removal = lifecycle teardown 的最后一步（purge 之后）
 declaration removal 不是"永久销毁用户数据"的充分授权
 ```
@@ -65,9 +81,16 @@ declaration removal 不是"永久销毁用户数据"的充分授权
 
 ```text
 /persist/data-app/flatpak/installation     → ~/.local/share/flatpak   （平台拥有）
-/persist/data-app/flatpak/apps/<app-id>    → ~/.var/app/<app-id>      （每个 Catalog app 拥有）
+/persist/data-app/flatpak/apps/<app-id>    → ~/.var/app/<app-id>      （selected app 的 definition 拥有）
 ```
 
+- **persistence intent 属于 application definition**：默认
+  `~/.var/app/<id>` 由 application ID 推导（service 投影显式实现，
+  definition 无需重复拼写）；例外经 `extra-persistence`
+  （(consumer backing) 两元素列表）在 definition 里声明。投影从
+  **selected** definitions 派生（`flatpak-persistence-rules` =
+  installation + selected apps 的 intent）——未选中的 catalog app
+  不产生 mount。
 - 全部经 `(guixcfg system application-persistence)` generic engine
   （bind-directory + activation backing/owner + home-path helper）——
   **零 Flatpak 专属 mount 代码**；host 组装点
@@ -84,82 +107,83 @@ declaration removal 不是"永久销毁用户数据"的充分授权
   禁止 parent/child mount 嵌套（`tests/test-flatpak-persistence.scm`
   回归固定）。
 
-## Remotes 与 trust
+## Remotes 与 trust（identity / trust / transport）
 
 ```scheme
 (flatpak-remote
-  (name 'flathub)
-  (location "https://mirror.sjtu.edu.cn/flathub")  ; bootstrap LOCATION（裸 OSTree URL）
-  (repository-url "https://mirror.sjtu.edu.cn/flathub") ; effective repo URL（drift 基线）
+  (name 'flathub)                                  ; identity
+  (repository-url "https://mirror.sjtu.edu.cn/flathub") ; transport（唯一 URL 事实：drift 基线 + bootstrap 目标）
+  (key-file "flathub.gpg")                         ; trust：vendored 公开 keyring 文件名（模块目录相对）
   (comment "Flathub via SJTU mirror"))
 ```
 
-`location`（bootstrap）与 `repository-url`（effective）语义独立，
-**不可互相比较**。sync 的 remote reconciliation：
+- **identity / trust / transport 分离**：SJTU 镜像只改变 transport，
+  不改变 remote identity 与 trust root（镜像服务同一份已签名
+  summary，GPG 验证不变）——因此"URL drift"与"trust root 替换"
+  不是一回事，诊断信息保持这一层次。
+- **repository-url 是唯一 URL 声明源**：bootstrap 的
+  `.flatpakrepo` 不再手工维护，由 `model.scm` 的纯函数
+  `flatpak-remote-descriptor-text`（record + vendored keyring 字节）
+  生成；tools 入口写临时文件供 `remote-add --from` 使用。
+  "两个手写 URL 相等"的一致性测试已被"生成物 Url == 声明"的
+  纯函数测试取代。
+- **trust material**：`flathub.gpg`（2844 字节公开 keyring，
+  provenance = 官方 `dl.flathub.org/repo/flathub.gpg`，2026-08-30
+  抓取、与镜像副本逐字节一致）含主密钥 `4184DD4D907A7CAE` 与
+  签名子密钥 `562702E9E3ED7EE8`（summary 由子密钥签名，二者缺一
+  不可）。flathub 若轮换密钥，随仓库更新此文件并 review。项目
+  不管理任何秘密 key material、不建模 fingerprint。
+
+### Bootstrap（封装为领域操作，见 reconcile.scm）
+
+`flatpak-bootstrap-remote!`（内部：remote-add → remote-modify
+--url canonicalize）封装 pinned Flatpak 1.16.6 的必要 bootstrap
+语义，调用方不需要理解：
 
 ```text
-remote 不存在        → flatpak remote-add --user --if-not-exists NAME LOCATION
-                       （--from 本地 vendored descriptor：keyring 内嵌、
-                        零联网抓取；裸 OSTree URL：离线写配置但不导入
-                        keyring）
-                       → flatpak remote-modify --user --url=<repository-url> NAME
-                         （落定声明 URL——理由见下"summary redirect"）
-remote 存在且 url 一致  → no-op
-remote 存在但 url 不一致 → FAIL + actionable diagnostic
-                       （绝不自动 remote-modify/delete，不静默改 trust root）
+remote-add --from <generated descriptor>   ← keyring 内嵌；add 阶段抓取
+                                            summary 并【无条件】应用其
+                                            xa.redirect-url（Flathub 的
+                                            summary 指回官方——镜像 URL
+                                            被改写；--no-follow_redirect
+                                            flag 在 --from 路径上无效，
+                                            VM -vv 实测）
+remote-modify --user --url=<repository-url> ← canonicalize：不抓 summary、
+                                            redirect 是显式 opt-in，落定
+                                            声明 transport；落定后
+                                            install/update/remote-ls 的
+                                            summary 抓取不再改写 URL（VM
+                                            实测）
+partial-failure rollback                  ← modify 失败时只删除【本次
+                                            调用创建】的 remote（调用前提
+                                            = check-remote! 为 #f），不留
+                                            下 redirect 改写后的非声明状态
 ```
 
-**summary redirect（pinned 1.16.6 实测，镜像场景的关键坑）**：
-Flathub 的 summary 自带 `xa.redirect-url=https://dl.flathub.org/repo/`；
-`remote-add --from` 抓取 summary 时**无条件**应用它，把镜像 URL
-静默改写回官方（`--no-follow_redirect` flag 在 `--from` 路径上无效，
-VM `-vv` 实测）。因此 add 之后必须用 `remote-modify --url` 落定
-声明 URL：它不抓 summary、redirect 跟随是显式 opt-in
-（`--follow-redirect`，默认不跟），且落定后 install/update/
-remote-ls 的 summary 抓取**不会再改写** URL（VM 实测）。实现见
-`reconcile.scm` 的 `flatpak-ensure-remote!` /
-`flatpak-remote-set-url!`。
-
-**keyring 引导（vendored descriptor）**：sync/remotes-replace 用
-`--from` 本地 vendored 的 `modules/guixcfg/flatpak/flathub.flatpakrepo`
-添加 remote——Url= 与 registry 的 repository-url 一致（一致性由
-`tests/test-flatpak-service.scm` 回归），GPGKey 内嵌官方密钥
-（pinned 1.16.6 实测：裸 URL remote 不会自动抓 keyring，首次
-install 直接报 "public key not found"；descriptor 引导无此问题）。
-key 文件同时含主密钥 `4184DD4D907A7CAE` 与其签名子密钥
-`562702E9E3ED7EE8`——summary 由子密钥签名，二者缺一不可。这是对
-"项目不管理 key material"记录的修正：vendored 的是**公开** keyring
-（非秘密），provenance = 官方 `dl.flathub.org/repo/flathub.gpg`
-（2026-08-30 抓取，与镜像副本逐字节一致）；flathub 若轮换密钥，
-随仓库更新此文件并 review。手工创建的 remote 若缺 keyring，恢复
-手段：`flatpak remote-modify --user --gpg-import=flathub.gpg flathub`。
-
-**换源（镜像）操作路径**（registry 的 location + repository-url
-与 vendored descriptor 的 Url= 三处一致——否则 sync fail）：
+### Remote reconciliation（sync 的 check）
 
 ```text
-推荐（一条命令）：
-  改 registry（两个字段）+ vendored descriptor 的 Url=
-  → flatpak remotes-replace flathub（显式 destructive acknowledgment：
-    remote-delete + 按声明 --from descriptor 重建，keyring 一次到位）
-  → flatpak sync
+remote 不存在          → flatpak-bootstrap-remote!（建立 + canonicalize）
+remote 存在且 url 一致   → no-op
+remote 存在但 url 不一致 → FAIL + actionable diagnostic
+                        （绝不自动 remote-modify/delete，不静默改 trust root）
+```
 
-保 remote 手工路径（不推荐，供恢复用）：
-  flatpak remote-modify --user --url=<镜像> flathub
-  + registry 的 repository-url 同步改为镜像值 → sync 通过 drift 检查
+**换源（镜像）操作路径**（repository-url 是唯一事实）：
+
+```text
+1. registry.scm：repository-url（transport）+ 如需换 trust 换 key-file
+2. tools/flatpak.scm remote-replace flathub
+   （显式 destructive acknowledgment：remote-delete + bootstrap 重建）
+3. tools/flatpak.scm sync
 ```
 
 镜像注意：国内镜像通常智能缓存——未缓存文件重定向回官方源、
 NVIDIA 等受限内容必须走官方服务器；镜像站发布的 `.flatpakrepo`
-可能是官方 descriptor 原样转发（`Url=` 仍指向官方），换源时必须
-用镜像的**裸 OSTree URL**，用 descriptor 等于没换。恢复官方源 =
-同路径反向执行。信任语义不变：镜像服务同一份已签名 summary，GPG
-验证与 keyring 不因换源改变——这正是 drift 检查存在的意义。
-
-信任决策：跟随 Flathub 官方签名（镜像内容 = 官方仓库同副本），
-GPG 签名验证由 flatpak 内置执行；项目 vendored **公开** keyring
-（非秘密，provenance 见上），不管理任何秘密 key material、不建模
-fingerprint。
+可能是官方 descriptor 原样转发（`Url=` 仍指向官方），因此本仓库
+的 descriptor 一律由声明生成，绝不复用镜像站 descriptor。恢复
+官方源 = 同路径反向执行。手工创建的 remote 若缺 keyring，恢复
+手段：`flatpak remote-modify --user --gpg-import=flathub.gpg flathub`。
 
 ## Overrides：complete-file ownership
 
@@ -193,7 +217,7 @@ guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- status [--re
 guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- update
 guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- update-runtimes
 guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remove <logical-name>
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remotes-replace <remote-name>
+guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remote-replace <remote-name>
 guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- gc
 ```
 
@@ -204,7 +228,7 @@ guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- gc
 | `update` | 目标 = **selection ∩ installed ∩ unpinned**，显式 ref 列表；绝无无参全 installation update；commit pinned app 默认不进目标 |
 | `update-runtimes` | 枚举 installed runtimes → 显式 ref 更新（app pin 不隐含 runtime pin） |
 | `remove` | 显式 uninstall ref（logical name，catalog fail-fast 解析）；**userdata 与 persistence rule 保留（remove ≠ purge）** |
-| `remotes-replace <name>` | **唯一换源入口**：显式 destructive acknowledgment——remote-delete + 按声明经 vendored descriptor（--from，keyring 内嵌）重建；sync 的 drift 检查永远 fail-loud，绝不自动改 trust root |
+| `remote-replace <name>` | **唯一换源入口**：显式 destructive acknowledgment——remote-delete + 按声明 bootstrap 重建（生成的 descriptor + keyring）；sync 的 drift 检查永远 fail-loud，绝不自动改 trust root |
 | `gc` | 显式维护：`uninstall --unused --user` + `repair --user`；不挂任何 hook |
 | `purge` | Phase 4（seam 已定义）：remove ref + 清空 userdata **内容**（绝不 `rm -rf` 仍 bind-mounted 的 backing root）；之后才允许从 Catalog 删除定义 |
 
@@ -225,13 +249,19 @@ import `(guixcfg flatpak reconcile)`、不含 CLI 调用面
 | portal | 现有 niri 栈（零新增） | niri home profile 三件套 + repo-owned `niri-portals.conf`；Flatpak 只是 portal client |
 | Secret Service | 现有 gnome-keyring 栈 | Flatpak 应用默认无 secrets 权限；portal Secret 或 per-app override `session-bus` |
 
-## Commit pin（可选例外，弱于 Guix pin）
+## Update policy（显式领域语义，弱于 Guix pin）
 
-默认 `commit #f` = branch tracking。只有 regression 规避 / 特殊
-版本要求 / 排查期才 pin，且声明处必须注释理由。pin 不等价 Guix
-source pin：remote 可 prune 历史 commit、无自建 mirror——因此**不设
-mandatory lockfile、不自动记录 installed commit**。app pin 不隐含
-runtime pin；不实现 Flatpak dependency lock。
+definition 的 update-policy 显式表达：
+
+```scheme
+(update-policy 'track-branch)                 ; 默认：跟随 branch
+(update-policy (flatpak-commit-pin "<hex>"))  ; optional pin（必须注释理由）
+```
+
+只有 regression 规避 / 特殊版本要求 / 排查期才 pin。pin 不等价
+Guix source pin：remote 可 prune 历史 commit、无自建 mirror——因此
+**不设 mandatory lockfile、不自动记录 installed commit**。app pin
+不隐含 runtime pin；不实现 Flatpak dependency lock。
 
 ## Non-goals
 

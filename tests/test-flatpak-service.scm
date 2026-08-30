@@ -26,6 +26,7 @@
              (gnu services)              ; service-kind
              (guixcfg home user)         ; %guix-home
              (ice-9 rdelim)              ; read-string
+             (rnrs io ports)             ; get-bytevector-all（key 文件字节）
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -75,9 +76,22 @@
              (string-prefix? "$XDG_DATA_DIRS:"
                              "$XDG_DATA_DIRS:$HOME/.local/share/flatpak/exports/share"))
 
-;; ── override files：无声明 → 不生成（user-owned）───────────
-(test-equal "catalog apps without override declarations produce no override files"
+;; ── override files：managed 才生成（external = user-owned）────
+(test-equal "catalog apps with external override policy produce no override files"
             '() (flatpak-override-files %flatpak-applications))
+;; fixture：managed-overrides 的 app 生成完整文件（home-files
+;; 条目 target = .local/share/flatpak/overrides/<id>）。
+(define %managed-override-files
+  (flatpak-override-files
+   (list (flatpak-application
+          (name 'managed) (id "org.example.Managed")
+          (remote 'flathub) (branch "stable")
+          (override-policy
+           (list 'managed-overrides
+                 (flatpak-override (sockets '("wayland")))))))))
+(test-equal "managed override policy produces one home-files entry"
+            '(".local/share/flatpak/overrides/org.example.Managed")
+            (map car %managed-override-files))
 
 ;; ── %vm-os persistence wiring ─────────────────────────────────
 (define %fp-user (user-profile-name %primary-user))
@@ -94,8 +108,8 @@
                           (file-system-device fs))))
                   (operating-system-file-systems %vm-os)))
 
-;; 生产 catalog 回归：每个 Catalog app（当前：qq）的 ~/.var/app/<id>
-;; bind 由 host 组装进 OS（persistence 从 Catalog 派生）。
+;; 生产 selection 回归：selected app（当前：qq）的 ~/.var/app/<id>
+;; bind 由 host 组装进 OS（persistence 从 selected definitions 投影）。
 (test-assert "OS file-systems bind ~/.var/app/com.qq.QQ -> flatpak/apps/com.qq.QQ"
              (any (lambda (fs)
                     (and (string=?
@@ -108,35 +122,41 @@
                           (file-system-device fs))))
                   (operating-system-file-systems %vm-os)))
 
-;; ── vendored descriptor 与 registry 一致性 ──────────────────
-;; flathub.flatpakrepo（本地引导物，含官方 GPGKey）的 Url= 必须与
-;; registry 声明的 repository-url 一致——两个地方，一个事实，
-;; 测试固定（换源时改 registry 必须同步改 descriptor，否则
-;; remotes-replace/sync 会以错误 URL 引导）。
-(define %vendored-descriptor
-  (call-with-input-file "modules/guixcfg/flatpak/flathub.flatpakrepo"
-                        (lambda (port) (read-string port))))
+;; ── 生成式 descriptor：单一事实源 ──────────────────────────
+;; .flatpakrepo 不再是手工文件——由 model 的纯函数从 remote record
+;; （repository-url）与 vendored 公开 keyring 生成。Url 只存在一个
+;; 声明源；GPGKey 来自 vendored key 文件。
+(define %vendored-key-bytes
+  (call-with-input-file "modules/guixcfg/flatpak/flathub.gpg"
+                        (lambda (port) (get-bytevector-all port))))
+(define %generated-descriptor
+  (flatpak-remote-descriptor-text (car %flatpak-remotes)
+                                  %vendored-key-bytes))
 
-(test-assert "vendored flatpakrepo Url matches declared repository-url"
+(test-assert "generated descriptor Url equals declared repository-url"
              (string-contains
-              %vendored-descriptor
+              %generated-descriptor
               (string-append "Url="
                              (flatpak-remote-repository-url
                               (car %flatpak-remotes))
                              "\n")))
-(test-assert "vendored flatpakrepo embeds the official GPG key"
-             (string-contains %vendored-descriptor "GPGKey=mQINB"))
+(test-assert "generated descriptor embeds the vendored keyring"
+             (string-contains %generated-descriptor "GPGKey=mQINB"))
+(test-assert "generated descriptor names the remote identity"
+             (string-contains %generated-descriptor
+                              "Title=flathub\n"))
 
 ;; ── 静态回归：platform 模块零 flatpak CLI / 零 reconcile ────
-(define (module-source name)
+(define (module-source path)
   (call-with-input-file
-   (string-append "modules/guixcfg/flatpak/" name)
+   (string-append "modules/guixcfg/flatpak/" path)
    (lambda (port) (read-string port))))
 
 (define %platform-sources
   (list (cons "model.scm" (module-source "model.scm"))
         (cons "registry.scm" (module-source "registry.scm"))
-        (cons "service.scm" (module-source "service.scm"))))
+        (cons "service.scm" (module-source "service.scm"))
+        (cons "applications/qq.scm" (module-source "applications/qq.scm"))))
 
 ;; 精确扫描：只禁止 (a) reconcile 模块的 import 形式；(b) Scheme 子
 ;; 进程调用原语。注释里出现 CLI 名词（如 remote-add 的文档性说明）

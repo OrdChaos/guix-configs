@@ -36,6 +36,7 @@
                          flatpak-remotes-alist
                          flatpak-remote-by-name
                          flatpak-check-remote!
+                         flatpak-bootstrap-remote!
                          flatpak-ensure-remote!
                          flatpak-replace-remote!
                          flatpak-list-installed-apps
@@ -61,7 +62,7 @@ FLATPAK_BINARY，install 时 desktop entry export 需要绝对路径）。
 
 (define (flatpak-remote-by-name name)
   "REMOTE name → <flatpak-remote>（registry 查表；未知名 fail-fast
-并列出可用名——remotes-replace 的解析入口）。"
+并列出可用名——remote-replace 的解析入口）。"
   (or (find (lambda (r) (eq? name (flatpak-remote-name r)))
             %flatpak-remotes)
       (error "unknown flatpak remote"
@@ -108,38 +109,46 @@ pinned 1.16.6 实测：remote-add --from 抓取 summary 时会【无条件】
 redirect 回 dl.flathub.org——镜像 URL 会被静默改写回官方；
 --no-follow_redirect flag 在 --from 路径上无效，VM -vv 实测），而
 remote-modify --url 不抓 summary、redirect 跟随是显式 opt-in
-（--follow-redirect，默认不跟）——因此 add 之后必须经此步骤
-落定声明 URL。已实测：落定后 install/update/remote-ls 的 summary
-抓取不会再次改写 URL。"
+（--follow-redirect，默认不跟）。已实测：落定后 install/update/
+remote-ls 的 summary 抓取不会再次改写 URL。"
   (invoke "flatpak" "remote-modify" "--user"
           (string-append "--url="
                          (flatpak-remote-repository-url remote))
           (symbol->string (flatpak-remote-name remote))))
 
-(define* (flatpak-ensure-remote! remote #:key (flatpakrepo #f))
-  "remote 缺失 → remote-add + remote-modify --url 落定声明 URL；
-已存在 → drift 检查（见 flatpak-check-remote!），绝不自动修改。
+(define* (flatpak-bootstrap-remote! remote #:key (flatpakrepo #f))
+  "领域操作：从零建立 remote 并落定为声明状态——封装 pinned
+Flatpak 1.16.6 的 bootstrap 细节，调用方不需要理解：
+    1. remote-add（FLATPAKREPO 时 --from 本地 descriptor：keyring
+       内嵌；否则裸 URL：离线写配置、不导入 keyring——生产路径
+       tools/flatpak.scm 总是传生成的 descriptor）；
+    2. remote-modify --url=<repository-url>（canonicalize——add
+       阶段的 summary redirect 会改写 transport，必须此步落定）。
+Partial-failure rollback：modify 失败时只删除【本次调用刚创建】
+的 remote（调用前提 = flatpak-check-remote! 为 #f），避免留下
+redirect 改写后的非声明状态等下次 sync 才发现 drift。绝不删除
+本操作之前已存在的 remote。"
+  (let ((name (symbol->string (flatpak-remote-name remote))))
+    (if flatpakrepo
+      (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
+              "--from" name flatpakrepo)
+      (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
+              name (flatpak-remote-repository-url remote)))
+    (catch #t
+      (lambda ()
+        (flatpak-remote-set-url! remote))
+      (lambda args
+        (false-if-exception
+         (invoke "flatpak" "remote-delete" "--user" name))
+        (apply throw args)))))
 
-FLATPAKREPO 提供时（本地 vendored descriptor，内含 GPGKey 与
-effective Url）用 --from 引导：本地文件、keyring 一次到位——裸
-URL 引导不会自动导入 keyring（pinned 1.16.6 实测首次 install 报
-'public key not found'）。add 之后一律 remote-set-url!（理由见该
-函数：add 阶段的 summary redirect 会改写 URL）。"
+(define* (flatpak-ensure-remote! remote #:key (flatpakrepo #f))
+  "remote 缺失 → flatpak-bootstrap-remote!（建立 + canonicalize）；
+已存在 → drift 检查（见 flatpak-check-remote!），绝不自动修改。"
   (unless (flatpak-check-remote! remote)
     (format #t "Adding Flatpak remote '~a'...~%"
             (symbol->string (flatpak-remote-name remote)))
-    (if flatpakrepo
-      ;; remote-add 语法：NAME 在前、LOCATION 在后；--from 时
-      ;; LOCATION 是本地配置文件（顺序实测修正：文件在前会让
-      ;; flatpak 把 name 当文件加载）。
-      (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
-              "--from"
-              (symbol->string (flatpak-remote-name remote))
-              flatpakrepo)
-      (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
-              (symbol->string (flatpak-remote-name remote))
-              (flatpak-remote-location remote)))
-    (flatpak-remote-set-url! remote)))
+    (flatpak-bootstrap-remote! remote #:flatpakrepo flatpakrepo)))
 
 (define* (flatpak-replace-remote! remote #:key (flatpakrepo #f))
   "显式换源（唯一允许删除 remote 的入口；不自动调用——换源 = 修改

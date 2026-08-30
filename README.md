@@ -44,7 +44,7 @@ guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- status [--re
 guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- update
 guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- update-runtimes
 guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remove <logical-name>
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remotes-replace <remote-name>
+guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remote-replace <remote-name>
 guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- gc
 ```
 

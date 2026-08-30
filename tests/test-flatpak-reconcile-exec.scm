@@ -111,8 +111,8 @@
 (define %fp-remotes
   (list (flatpak-remote
          (name 'flathub)
-         (location "https://dl.flathub.org/repo/flathub.flatpakrepo")
-         (repository-url "https://dl.flathub.org/repo/"))))
+         (repository-url "https://dl.flathub.org/repo/")
+         (key-file "flathub.gpg"))))
 (define %fp-commit
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 (define %fp-apps
@@ -122,7 +122,7 @@
         (flatpak-application
          (name 'pinned) (id "org.example.Pinned")
          (remote 'flathub) (branch "stable")
-         (commit %fp-commit))
+         (update-policy (list 'flatpak-commit-pin %fp-commit)))
         (flatpak-application
          (name 'unselected) (id "org.example.Unselected")
          (remote 'flathub) (branch "stable"))))
@@ -145,9 +145,9 @@
                   (not (fp-log-pred?
                         (lambda (line)
                           (not (string-contains line "--user"))))))
-     (test-assert "sync: remote-add when missing (descriptor location)"
+     (test-assert "sync: remote-add when missing (bare transport URL)"
                   (fp-log-has?
-                   "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo"))
+                   "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/"))
      (test-assert "sync: remote URL pinned via remote-modify after add"
                   (fp-log-has?
                    "flatpak remote-modify --user --url=https://dl.flathub.org/repo/ flathub"))
@@ -239,37 +239,62 @@
    (test-assert "sync: --from add also pins URL via remote-modify"
                 (fp-log-has?
                  "flatpak remote-modify --user --url=https://dl.flathub.org/repo/ flathub"))
-   ;; remotes-replace：已有 remote → 显式 remote-delete + 重建。
+   ;; remote-replace：已有 remote → 显式 remote-delete + 重建。
    (fp-write-file %fp-remotes-out
                   "flathub\thttps://dl.flathub.org/repo/\n")
    (fp-clear-log!)
    (flatpak-replace-remote! (car %fp-remotes)
                             #:flatpakrepo "/tmp/fake.flatpakrepo")
-   (test-assert "remotes-replace: explicit delete first"
+   (test-assert "remote-replace: explicit delete first"
                 (fp-log-has? "flatpak remote-delete --user flathub"))
-   (test-assert "remotes-replace: rebuild via --from descriptor"
+   (test-assert "remote-replace: rebuild via --from descriptor"
                 (fp-log-has?
                  "flatpak remote-add --user --if-not-exists --from flathub /tmp/fake.flatpakrepo"))
-   (test-assert "remotes-replace: declared URL enforced via remote-modify"
+   (test-assert "remote-replace: declared URL enforced via remote-modify"
                 (fp-log-has?
                  "flatpak remote-modify --user --url=https://dl.flathub.org/repo/ flathub"))
-   (test-assert "remotes-replace: delete precedes add"
+   (test-assert "remote-replace: delete precedes add"
                 (let ((lines (fp-log-lines)))
                   (< (list-index (lambda (l) (string-contains l "remote-delete"))
                                  lines)
                      (list-index (lambda (l) (string-contains l "remote-add"))
                                  lines))))
-   ;; remotes-replace：remote 缺失 → 无 delete，只有 add。
+   ;; remote-replace：remote 缺失 → 无 delete，只有 add。
    (fp-write-file %fp-remotes-out "")
    (fp-clear-log!)
    (flatpak-replace-remote! (car %fp-remotes)
                             #:flatpakrepo "/tmp/fake.flatpakrepo")
-   (test-assert "remotes-replace: no delete when remote missing"
+   (test-assert "remote-replace: no delete when remote missing"
                 (not (fp-log-has? "remote-delete")))
-   (test-assert "remotes-replace: adds when remote missing"
+   (test-assert "remote-replace: adds when remote missing"
                 (fp-log-has? "flatpak remote-add"))
    (test-error "remote-by-name: unknown remote fails fast" #t
                (flatpak-remote-by-name 'nope))
+
+   ;; ── 3c. bootstrap partial-failure rollback ────────────────
+   ;; remote 原本不存在 → remote-add 成功、remote-modify（URL
+   ;; canonicalize）失败 → 只删除【本次调用创建】的 remote，避免
+   ;; 留下 redirect 改写后的非声明状态等下次 sync 才发现 drift。
+   ;; bootstrap 只会在 check-remote! = #f 时运行，因此 rollback
+   ;; 不可能命中本操作之前已存在的 remote。
+   (fp-write-file %fp-remotes-out "")
+   (fp-write-file %fp-list-app-out "")
+   (setenv "FP_FAKE_FAIL_ON" "remote-modify")
+   (fp-clear-log!)
+   (test-error "bootstrap: modify failure propagates" #t
+               (flatpak-bootstrap-remote! (car %fp-remotes)
+                                          #:flatpakrepo "/tmp/fake.flatpakrepo"))
+   (test-assert "bootstrap: failed canonicalize rolls back created remote"
+                (fp-log-has? "flatpak remote-delete --user flathub"))
+   (test-assert "bootstrap: add still preceded rollback"
+                (let ((lines (fp-log-lines)))
+                  (< (list-index (lambda (l)
+                                   (string-contains l "remote-add"))
+                                 lines)
+                     (list-index (lambda (l)
+                                   (string-contains l "remote-delete"))
+                                 lines))))
+   (setenv "FP_FAKE_FAIL_ON" "")
 
    ;; ── 4. update：显式 unpinned selected targets ─────────────
    (fp-write-file %fp-remotes-out

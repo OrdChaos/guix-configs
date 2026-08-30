@@ -1,6 +1,6 @@
 ;;; Flatpak 平台 Home/System 集成（docs/architecture/flatpak.md）。
 ;;;
-;;; 本模块只做【离线生成式】集成——不 import (guixcfg flatpak
+;;; 本模块只做【离线生成式】投影——不 import (guixcfg flatpak
 ;;; reconcile)、不产生任何 flatpak CLI 调用（composition 测试静态
 ;;; 断言；网络边界不变量）：
 ;;;   - session env：XDG_DATA_DIRS 追加 per-user exports 目录
@@ -8,30 +8,32 @@
 ;;;     native extension；追加不覆盖——pinned setup-environment 的
 ;;;     preamble 先置 Home profile share，本值经 shell-double-quote
 ;;;     发射（$ 保留）在 source 时展开 $XDG_DATA_DIRS）；
-;;;   - override 完整文件：有 declaration 的 app 由 home-files
-;;;     生成 .local/share/flatpak/overrides/<id>（store symlink =
+;;;   - override 完整文件：definition 的 override-policy 为
+;;;     (managed-overrides ...) 的 app 由 home-files 生成
+;;;     .local/share/flatpak/overrides/<id>（store symlink =
 ;;;     derived state，随 generation/rollback；complete-file
-;;;     ownership，repo 与 Flatseal 永不 merge）；无声明 → 不生成
-;;;     （user/Flatseal owns）；
-;;;   - persistence rules：installation（平台拥有）+ 每 Catalog app
-;;;     （apps/<id> backing）——从 Catalog 派生，与 selection
-;;;     无关。全部 mount/activation 经 (guixcfg system
-;;;     application-persistence) generic engine 执行（host 组装点
-;;;     调用 flatpak-persistence-rules），零 Flatpak 专属 mount
-;;;     代码；installation 与 apps/<id> 为平级 backing（regression
-;;;     测试固定 parent/child 嵌套禁止）。
+;;;     ownership，repo 与 Flatseal 永不 merge）；'external →
+;;;     不生成（user/Flatseal owns）；
+;;;   - persistence rules：installation（平台拥有）+ 每个
+;;;     **selected** app 的 persistence intent（默认
+;;;     ~/.var/app/<id> 从 application ID 推导 + definition 的
+;;;     extra-persistence 例外）——未选中的 app 不产生 mount。
+;;;     全部经 (guixcfg system application-persistence) generic
+;;;     engine 执行（host 组装点调用 flatpak-persistence-rules），
+;;;     零 Flatpak 专属 mount 代码；installation 与 apps/<id> 为
+;;;     平级 backing（regression 测试固定 parent/child 嵌套禁止）。
 
 (define-module (guixcfg flatpak service)
                #:use-module (gnu home services) ; home-environment-variables-service-type、home-files-service-type
                #:use-module (gnu services)      ; simple-service
                #:use-module (guix gexp)         ; plain-file
-               #:use-module (srfi srfi-1)       ; filter-map
+               #:use-module (srfi srfi-1)       ; filter-map、append-map
                #:use-module (guixcfg flatpak model)
                #:use-module (guixcfg flatpak registry)
                #:use-module (guixcfg system application-persistence) ; application-persistence-rule
                #:export (%flatpak-installation-persistence-rule
-                         flatpak-application-persistence-rule
                          flatpak-application-persistence-rules
+                         flatpak-selected-applications
                          flatpak-persistence-rules
                          flatpak-override-files
                          %flatpak-session-environment-service
@@ -51,9 +53,11 @@
    (exposure 'bind-directory)
    (lifecycle 'application-owned)))
 
-(define (flatpak-application-persistence-rule app)
-  "Catalog app 的 userdata rule：~/.var/app/<id> 整体（含 sandbox
-内 cache——不做目录白名单，reliability 优先）。app 自己拥有。"
+(define (flatpak-default-persistence-rule app)
+  "默认 persistence intent：~/.var/app/<id>（含 sandbox 内
+config/data/cache——不做目录白名单，reliability 优先），从
+application ID 推导——app 自己拥有这条事实（definition 只需声明
+ID，投影在此显式可见）。"
   (application-persistence-rule
    (name (string->symbol (string-append "flatpak-app-"
                                         (flatpak-application-id app))))
@@ -63,30 +67,57 @@
    (exposure 'bind-directory)
    (lifecycle 'application-owned)))
 
-(define (flatpak-application-persistence-rules apps)
-  "Catalog 每 app 一条 rule（从 Catalog 派生——selection removal
-不撕 bind；docs/architecture/flatpak.md（lifecycle））。"
-  (map flatpak-application-persistence-rule apps))
+(define (flatpak-extra-persistence-rules app)
+  "definition 的 extra-persistence（(consumer backing) 两元素
+列表；backing 相对 flatpak/apps/ 命名空间）→ rules。默认路径之外
+才有此字段。"
+  (map (lambda (entry)
+         (let ((consumer (car entry))
+               (backing (cadr entry)))
+           (application-persistence-rule
+            (name (string->symbol
+                   (string-append "flatpak-app-"
+                                  (flatpak-application-id app)
+                                  "-" backing)))
+            (backing backing)
+            (consumer consumer)
+            (exposure 'bind-directory)
+            (lifecycle 'application-owned))))
+       (flatpak-application-extra-persistence app)))
+
+(define (flatpak-application-persistence-rules app)
+  "APP 的 persistence intent → rules：默认 ~/.var/app/<id> +
+definition 声明的例外。"
+  (cons (flatpak-default-persistence-rule app)
+        (flatpak-extra-persistence-rules app)))
+
+(define (flatpak-selected-applications)
+  "selection（logical names）→ catalog lookup → 完整 definitions。"
+  (flatpak-select-applications %flatpak-selection
+                               %flatpak-applications))
 
 (define (flatpak-persistence-rules)
-  "平台全部 persistence rules：installation + 每 Catalog app。
-host 组装点把它与 applications-persistence 一起交给 generic
-engine（file-systems bind + activation backing/owner）。"
+  "平台全部 persistence rules：installation + 每个 **selected** app
+的 persistence intent。host 组装点把它与 applications-persistence
+一起交给 generic engine（file-systems bind + activation backing/
+owner）。未选中的 catalog app 不产生 mount（persistence 随
+selection 投影）。"
   (cons %flatpak-installation-persistence-rule
-        (flatpak-application-persistence-rules %flatpak-applications)))
+        (append-map flatpak-application-persistence-rules
+                    (flatpak-selected-applications))))
 
 ;;; ── override 完整文件（complete-file ownership）────────────
 
 (define (flatpak-override-files apps)
-  "APPS（Catalog）中每个有 override 声明的 app → home-files 的
-(target source) 条目：.local/share/flatpak/overrides/<app-id> ←
-确定性渲染的完整 GKeyFile（plain-file）。无声明的 app 不生成
-（user/Flatseal owns）。renderer 输出空串时不生成文件。"
+  "APPS 中每个 override-policy = (managed-overrides ...) 的应用 →
+home-files 的 (target source) 条目：.local/share/flatpak/overrides/
+<app-id> ← 确定性渲染的完整 GKeyFile（plain-file）。'external 的
+应用不生成（user/Flatseal owns）。renderer 输出空串时不生成文件。"
   (filter-map
    (lambda (app)
-     (let ((overrides (flatpak-application-overrides app)))
-       (and overrides
-            (let ((rendered (flatpak-render-override-file overrides)))
+     (let ((managed (flatpak-application-managed-overrides app)))
+       (and managed
+            (let ((rendered (flatpak-render-override-file managed)))
               (and (not (string-null? rendered))
                    (list (string-append ".local/share/flatpak/overrides/"
                                         (flatpak-application-id app))

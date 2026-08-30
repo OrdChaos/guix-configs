@@ -1,9 +1,10 @@
 ;;; Flatpak model 测试（docs/architecture/flatpak.md）：记录构造、
 ;;; fail-fast 校验（duplicate logical name / duplicate app-id /
-;;; unknown remote / invalid app-id / empty branch / invalid commit /
-;;; selection unknown app / remote location 校验）、selection
-;;; resolver、reconcile plan 纯函数（只增不删、runtime 不参与）、
-;;; override renderer 确定性 fixture。
+;;; unknown remote / invalid app-id / empty branch / update policy /
+;;; override policy / extra-persistence / selection unknown app /
+;;; remote 校验）、selection resolver、reconcile plan 纯函数（只增
+;;; 不删、runtime 不参与）、override renderer 确定性 fixture、
+;;; bootstrap descriptor 生成（Url 从 record 派生、GPGKey 内嵌）。
 ;;;
 ;;; 全部纯数据——不触 flatpak CLI、不触网络。
 
@@ -19,13 +20,13 @@
 (define %fp-remotes
   (list (flatpak-remote
          (name 'flathub)
-         (location "https://dl.flathub.org/repo/flathub.flatpakrepo")
          (repository-url "https://dl.flathub.org/repo/")
+         (key-file "flathub.gpg")
          (comment "fixture"))
         (flatpak-remote
          (name 'internal)
-         (location "https://example.invalid/repo")
-         (repository-url "https://example.invalid/repo/"))))
+         (repository-url "https://example.invalid/repo/")
+         (key-file "internal.gpg"))))
 
 (define %fp-commit
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
@@ -41,7 +42,7 @@
          (id "org.example.Pinned")
          (remote 'flathub)
          (branch "stable")
-         (commit %fp-commit))
+         (update-policy (list 'flatpak-commit-pin %fp-commit)))
         (flatpak-application
          (name 'unselected)
          (id "org.example.Unselected")
@@ -51,19 +52,23 @@
 ;; ── record 构造与 accessor ─────────────────────────────────
 (test-assert "flatpak-remote constructible"
              (flatpak-remote? (car %fp-remotes)))
-(test-equal "remote name" 'flathub (flatpak-remote-name (car %fp-remotes)))
-(test-equal "remote location/repository-url are independent semantics"
-            "https://dl.flathub.org/repo/flathub.flatpakrepo"
-            (flatpak-remote-location (car %fp-remotes)))
+(test-equal "remote name"
+            'flathub (flatpak-remote-name (car %fp-remotes)))
 (test-equal "remote repository-url"
             "https://dl.flathub.org/repo/"
             (flatpak-remote-repository-url (car %fp-remotes)))
+(test-equal "remote key-file"
+            "flathub.gpg" (flatpak-remote-key-file (car %fp-remotes)))
 (test-assert "flatpak-application constructible"
              (flatpak-application? (car %fp-apps)))
-(test-equal "application default commit #f (branch tracking)"
-            #f (flatpak-application-commit (car %fp-apps)))
-(test-equal "application default overrides #f (user-owned)"
-            #f (flatpak-application-overrides (car %fp-apps)))
+(test-equal "application default update-policy is track-branch"
+            'track-branch
+            (flatpak-application-update-policy (car %fp-apps)))
+(test-equal "application default override-policy is external"
+            'external
+            (flatpak-application-override-policy (car %fp-apps)))
+(test-equal "application default extra-persistence is empty"
+            '() (flatpak-application-extra-persistence (car %fp-apps)))
 (test-equal "application ref"
             "com.tencent.WeChat//stable"
             (flatpak-application-ref (car %fp-apps)))
@@ -97,8 +102,6 @@
 (test-assert "invalid branch: whitespace"
              (not (valid-flatpak-branch? "sta ble")))
 
-(test-assert "valid commit: #f"
-             (valid-flatpak-commit? #f))
 (test-assert "valid commit: hex"
              (valid-flatpak-commit? %fp-commit))
 (test-assert "invalid commit: empty string"
@@ -108,60 +111,120 @@
 (test-assert "invalid commit: non-string"
              (not (valid-flatpak-commit? 42)))
 
-;; ── remote 校验 ────────────────────────────────────────────
-(test-assert "valid remote"
-             (valid-flatpak-remote? (car %fp-remotes)))
-(test-assert "invalid remote: empty location"
-             (not (valid-flatpak-remote?
-                   (flatpak-remote
-                    (name 'x) (location "") (repository-url "https://e/")))))
-(test-assert "invalid remote: empty repository-url"
-             (not (valid-flatpak-remote?
-                   (flatpak-remote
-                    (name 'x) (location "https://e/") (repository-url "")))))
+;; ── update policy（显式领域语义）───────────────────────────
+(test-assert "valid update-policy: track-branch"
+             (valid-flatpak-update-policy? 'track-branch))
+(test-assert "valid update-policy: commit pin"
+             (valid-flatpak-update-policy?
+              (list 'flatpak-commit-pin %fp-commit)))
+(test-assert "invalid update-policy: unknown symbol"
+             (not (valid-flatpak-update-policy? 'magic)))
+(test-assert "invalid update-policy: pin with bad commit"
+             (not (valid-flatpak-update-policy?
+                   (list 'flatpak-commit-pin "nothex"))))
+(test-assert "invalid update-policy: pin wrong arity"
+             (not (valid-flatpak-update-policy?
+                   (list 'flatpak-commit-pin %fp-commit "extra"))))
+(test-equal "commit view: track-branch -> #f"
+            #f (flatpak-application-commit (car %fp-apps)))
+(test-equal "commit view: pinned -> hash"
+            %fp-commit (flatpak-application-commit (cadr %fp-apps)))
+(test-assert "pinned? view"
+             (and (not (flatpak-application-pinned? (car %fp-apps)))
+                  (flatpak-application-pinned? (cadr %fp-apps))))
 
-;; ── override 校验 ──────────────────────────────────────────
-(test-assert "override #f valid"
-             (valid-flatpak-application?
-              (flatpak-application (name 'a) (id "com.x.A") (remote 'flathub)
-                                   (branch "stable"))
-              '(flathub)))
+;; ── override policy（explicit ownership）───────────────────
+(test-assert "valid override-policy: external"
+             (valid-flatpak-override-policy? 'external))
+(test-assert "valid override-policy: managed"
+             (valid-flatpak-override-policy?
+              (list 'managed-overrides
+                    (flatpak-override (sockets '("wayland"))))))
+(test-assert "invalid override-policy: managed with non-override"
+             (not (valid-flatpak-override-policy?
+                   (list 'managed-overrides 42))))
+(test-assert "invalid override-policy: unknown symbol"
+             (not (valid-flatpak-override-policy? 'magic)))
+(test-equal "managed view: external -> #f"
+            #f (flatpak-application-managed-overrides (car %fp-apps)))
+(test-equal "managed view: managed -> override record"
+            '("wayland")
+            (flatpak-override-sockets
+             (flatpak-application-managed-overrides
+              (flatpak-application
+               (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
+               (override-policy
+                (list 'managed-overrides
+                      (flatpak-override (sockets '("wayland")))))))))
+
+;; ── override 校验（record 内部字段）────────────────────────
 (test-assert "valid bus policy"
              (valid-flatpak-application?
               (flatpak-application
                (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-               (overrides (flatpak-override
-                           (session-bus '("org.freedesktop.secrets=talk"))
-                           (system-bus '("org.freedesktop.UPower=own")))))
+               (override-policy
+                (list 'managed-overrides
+                      (flatpak-override
+                       (session-bus '("org.freedesktop.secrets=talk"))
+                       (system-bus '("org.freedesktop.UPower=own"))))))
               '(flathub)))
 (test-assert "invalid bus policy: no assignment"
              (not (valid-flatpak-application?
                    (flatpak-application
                     (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-                    (overrides (flatpak-override
-                                (session-bus '("org.freedesktop.secrets")))))
-                   '(flathub))))
-(test-assert "invalid bus policy: unknown value"
-             (not (valid-flatpak-application?
-                   (flatpak-application
-                    (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-                    (overrides (flatpak-override
-                                (system-bus '("org.foo=talkalot")))))
+                    (override-policy
+                     (list 'managed-overrides
+                           (flatpak-override
+                            (session-bus '("org.freedesktop.secrets"))))))
                    '(flathub))))
 (test-assert "invalid environment entry: no assignment"
              (not (valid-flatpak-application?
                    (flatpak-application
                     (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-                    (overrides (flatpak-override
-                                (environment '("NOVAR")))))
+                    (override-policy
+                     (list 'managed-overrides
+                           (flatpak-override
+                            (environment '("NOVAR"))))))
                    '(flathub))))
-(test-assert "invalid environment entry: newline"
+
+;; ── extra-persistence 校验 ─────────────────────────────────
+(test-assert "valid extra-persistence: empty"
+             (valid-flatpak-application?
+              (flatpak-application (name 'a) (id "com.x.A")
+                                   (remote 'flathub) (branch "stable"))
+              '(flathub)))
+(test-assert "valid extra-persistence: pairs"
+             (valid-flatpak-application?
+              (flatpak-application
+               (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
+               (extra-persistence '((".local/share/wechat" "wechat/share"))))
+              '(flathub)))
+(test-assert "invalid extra-persistence: absolute consumer"
              (not (valid-flatpak-application?
                    (flatpak-application
                     (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-                    (overrides (flatpak-override
-                                (environment '("A=1\nB=2")))))
+                    (extra-persistence '(("/abs" "wechat/share"))))
                    '(flathub))))
+(test-assert "invalid extra-persistence: backing escape"
+             (not (valid-flatpak-application?
+                   (flatpak-application
+                    (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
+                    (extra-persistence '((".local/share/wechat" "../x"))))
+                   '(flathub))))
+
+;; ── remote 校验 ────────────────────────────────────────────
+(test-assert "valid remote"
+             (valid-flatpak-remote? (car %fp-remotes)))
+(test-assert "invalid remote: empty repository-url"
+             (not (valid-flatpak-remote?
+                   (flatpak-remote
+                    (name 'x) (repository-url "")
+                    (key-file "k.gpg")))))
+(test-assert "invalid remote: empty key-file"
+             (not (valid-flatpak-remote?
+                   (flatpak-remote
+                    (name 'x) (repository-url "https://e/")
+                    (key-file "")))))
 
 ;; ── application 校验（remote 已知性）───────────────────────
 (test-assert "valid application"
@@ -174,11 +237,11 @@
                    (flatpak-application (name 'x) (id "com.x.X")
                                         (remote 'flathub) (branch ""))
                    '(flathub))))
-(test-assert "invalid application: bad commit"
+(test-assert "invalid application: bad update-policy"
              (not (valid-flatpak-application?
                    (flatpak-application (name 'x) (id "com.x.X")
                                         (remote 'flathub) (branch "stable")
-                                        (commit "nothex"))
+                                        (update-policy 'magic))
                    '(flathub))))
 
 ;; ── catalog / selection fail-fast ──────────────────────────
@@ -199,10 +262,10 @@
                                         (remote 'flathub) (branch "stable")))))
 (test-error "catalog duplicate remote name" #t
             (validate-flatpak-catalog!
-             (list (flatpak-remote (name 'flathub) (location "https://a/")
-                                   (repository-url "https://a/"))
-                   (flatpak-remote (name 'flathub) (location "https://b/")
-                                   (repository-url "https://b/")))
+             (list (flatpak-remote (name 'flathub) (repository-url "https://a/")
+                                   (key-file "a.gpg"))
+                   (flatpak-remote (name 'flathub) (repository-url "https://b/")
+                                   (key-file "b.gpg")))
              %fp-apps))
 (test-error "catalog invalid app" #t
             (validate-flatpak-catalog!
@@ -292,5 +355,18 @@
             (flatpak-render-override-file
              (flatpak-override
               (session-bus '("org.freedesktop.secrets=talk")))))
+
+;; ── bootstrap descriptor 生成（单一事实源）─────────────────
+;; Url 直接从 record 派生——不存在手写第二份 URL；GPGKey 由 key
+;; bytes 生成。
+(test-assert "generated descriptor Url derives from record"
+             (string-contains
+              (flatpak-remote-descriptor-text (car %fp-remotes)
+                                              #vu8(1 2 3))
+              "Url=https://dl.flathub.org/repo/\n"))
+(test-equal "generated descriptor is complete"
+            "[Flatpak Repo]\nTitle=flathub\nUrl=https://dl.flathub.org/repo/\nComment=fixture\nDescription=fixture\nGPGKey=aGVsbG8=\n"
+            (flatpak-remote-descriptor-text (car %fp-remotes)
+                                            #vu8(104 101 108 108 111)))
 
 (test-end "flatpak-model")
