@@ -116,6 +116,7 @@
                "tests/test-selection.scm"
                "tests/test-niri-config.scm"
                "tests/test-home.scm"
+               "tests/test-xdg-policy.scm"
                "tests/test-assets.scm"
                "tests/test-application-persistence.scm"
                "tests/test-flatpak-model.scm"

@@ -107,19 +107,24 @@
                           (file-system-device fs))))
                   (operating-system-file-systems %vm-os)))
 
-;; 生产 selection 回归：selected app（当前：qq）的 ~/.var/app/<id>
-;; bind 由 host 组装进 OS（persistence 从 selected definitions 投影）。
-(test-assert "OS file-systems bind ~/.var/app/com.qq.QQ -> flatpak/apps/com.qq.QQ"
-             (any (lambda (fs)
-                    (and (string=?
-                          (string-append "/home/" %fp-user
-                                         "/.var/app/com.qq.QQ")
-                          (file-system-mount-point fs))
-                         (string=?
-                          (string-append (persist-mount-point "@persist-data-app")
-                                         "/flatpak/apps/com.qq.QQ")
-                          (file-system-device fs))))
-                  (operating-system-file-systems %vm-os)))
+;; 生产 selection 回归：每个 selected app 的 ~/.var/app/<id> bind
+;; 由 host 组装进 OS（persistence 从 selected definitions 投影）——
+;; 逐 app 断言由通用检查取代（新增 selected app 无需改本测试）。
+(test-assert "OS file-systems bind every selected app's ~/.var/app/<id>"
+             (every (lambda (app)
+                      (any (lambda (fs)
+                             (and (string=?
+                                   (string-append "/home/" %fp-user
+                                                  "/.var/app/"
+                                                  (flatpak-application-id app))
+                                   (file-system-mount-point fs))
+                                  (string=?
+                                   (string-append (persist-mount-point "@persist-data-app")
+                                                  "/flatpak/apps/"
+                                                  (flatpak-application-id app))
+                                   (file-system-device fs))))
+                           (operating-system-file-systems %vm-os)))
+                    (flatpak-selected-applications)))
 
 ;; ── 静态回归：platform 模块零 flatpak CLI / 零 reconcile ────
 (define (module-source path)
@@ -131,7 +136,9 @@
   (list (cons "model.scm" (module-source "model.scm"))
         (cons "registry.scm" (module-source "registry.scm"))
         (cons "service.scm" (module-source "service.scm"))
-        (cons "applications/qq.scm" (module-source "applications/qq.scm"))))
+        (cons "applications/qq.scm" (module-source "applications/qq.scm"))
+        (cons "applications/wechat.scm" (module-source "applications/wechat.scm"))
+        (cons "applications/onlyoffice.scm" (module-source "applications/onlyoffice.scm"))))
 
 ;; 精确扫描：只禁止 (a) reconcile 模块的 import 形式；(b) Scheme 子
 ;; 进程调用原语。注释里出现 CLI 名词（如 remote-add 的文档性说明）

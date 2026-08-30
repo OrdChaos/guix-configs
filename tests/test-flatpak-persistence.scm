@@ -134,7 +134,7 @@
                          (string=? "com.qq.QQ" (flatpak-application-id a))))
                   %flatpak-applications))
 (test-assert "production selection resolves against catalog"
-             (= 2 (length (flatpak-selected-applications))))
+             (= 3 (length (flatpak-selected-applications))))
 (test-assert "production selected QQ gets its default .var/app rule"
              (any (lambda (r)
                     (and (string=? ".var/app/com.qq.QQ"
@@ -150,6 +150,13 @@
                     (and (string=? ".var/app/com.tencent.WeChat"
                                    (application-persistence-rule-consumer r))
                          (string=? "flatpak/apps/com.tencent.WeChat"
+                                   (application-persistence-rule-backing r))))
+                  %prod-rules))
+(test-assert "production selected ONLYOFFICE gets its default .var/app rule"
+             (any (lambda (r)
+                    (and (string=? ".var/app/org.onlyoffice.desktopeditors"
+                                   (application-persistence-rule-consumer r))
+                         (string=? "flatpak/apps/org.onlyoffice.desktopeditors"
                                    (application-persistence-rule-backing r))))
                   %prod-rules))
 

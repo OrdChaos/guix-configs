@@ -26,6 +26,11 @@
 ;;;     manifest 权限运行；实机验证需要的 delta 后按 Flatseal
 ;;;     工作流改为 (managed-overrides ...)，flatpak.md（overrides））；
 ;;;   - remote 用 registry 里的 logical name（'flathub），不写 URL；
+;;;   - 默认应用/MIME 关联不在 definition："是否默认"是用户级策略，
+;;;     统一 XDG 模块 (guixcfg home xdg) 消费本模块导出的
+;;;     desktop-entry 常量（<id>.desktop，Flatpak exports 固定
+;;;     命名）——policy → app metadata，本模块不反向依赖 xdg
+;;;     （参考 applications/onlyoffice.scm）；
 ;;;   - 目录存在 != 应用启用：启用必须进 registry 与 selection。
 ;;;
 ;;; 生产参考：modules/guixcfg/flatpak/applications/qq.scm。

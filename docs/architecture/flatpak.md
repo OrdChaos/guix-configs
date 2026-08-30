@@ -48,8 +48,8 @@ reconcile projection（mutable）  selected definitions → install/update plan
 - **definition 是事实的唯一归属**：打开 `applications/qq.scm` 就能
   读完一个应用的全部声明；registry 只是索引，不含任何 inline
   `flatpak-application` 记录。
-- **selection 只选择**：`%flatpak-selection = '(qq)` 只含 logical
-  names，不复制 id/branch/persistence；resolver
+- **selection 只选择**：`%flatpak-selection = '(qq wechat onlyoffice)`
+  只含 logical names，不复制 id/branch/persistence；resolver
   （`flatpak-select-applications`）做 catalog lookup（未知 name
   fail-fast 并列出可用名）。即使 VM/Laptop 相同也独立存在：
   **desired lifecycle ≠ persistence lifecycle** 的结构分离。
@@ -62,6 +62,13 @@ reconcile projection（mutable）  selected definitions → install/update plan
   selection 一行**；service/persistence/host 表格零改动。模板：
   `templates/flatpak-application/definition.scm`（生产参考
   `applications/qq.scm`）。
+- **默认应用/MIME 关联不属于 definition**："是否被选作默认"是用户级
+  策略，与仓库原生应用同构地由统一 XDG 模块 `(guixcfg home xdg)`
+  声明（依赖方向 policy → app metadata，definition 不反向依赖 xdg）。
+  需要文件关联的应用（如 ONLYOFFICE）在 definition 导出
+  desktop-entry 纯数据常量——Flatpak exports 固定命名
+  `<app-id>.desktop`——策略模块消费它生成 mimeapps.list 的
+  [Default Applications]。QQ/WeChat 类无文件关联的应用不涉及。
 
 ### 生命周期（Case A–D）
 
