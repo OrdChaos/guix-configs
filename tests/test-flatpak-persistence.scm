@@ -134,7 +134,7 @@
                          (string=? "com.qq.QQ" (flatpak-application-id a))))
                   %flatpak-applications))
 (test-assert "production selection resolves against catalog"
-             (= 1 (length (flatpak-selected-applications))))
+             (= 2 (length (flatpak-selected-applications))))
 (test-assert "production selected QQ gets its default .var/app rule"
              (any (lambda (r)
                     (and (string=? ".var/app/com.qq.QQ"
@@ -145,5 +145,12 @@
 (test-assert "production rules = installation + selected apps only"
              (= (+ 1 (length (flatpak-selected-applications)))
                 (length %prod-rules)))
+(test-assert "production selected WeChat gets its default .var/app rule"
+             (any (lambda (r)
+                    (and (string=? ".var/app/com.tencent.WeChat"
+                                   (application-persistence-rule-consumer r))
+                         (string=? "flatpak/apps/com.tencent.WeChat"
+                                   (application-persistence-rule-backing r))))
+                  %prod-rules))
 
 (test-end "flatpak-persistence")
