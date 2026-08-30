@@ -113,9 +113,13 @@ install 报 'public key not found'）。"
     (format #t "Adding Flatpak remote '~a'...~%"
             (symbol->string (flatpak-remote-name remote)))
     (if flatpakrepo
+      ;; remote-add 语法：NAME 在前、LOCATION 在后；--from 时
+      ;; LOCATION 是本地配置文件（顺序实测修正：文件在前会让
+      ;; flatpak 把 name 当文件加载）。
       (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
-              "--from" flatpakrepo
-              (symbol->string (flatpak-remote-name remote)))
+              "--from"
+              (symbol->string (flatpak-remote-name remote))
+              flatpakrepo)
       (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
               (symbol->string (flatpak-remote-name remote))
               (flatpak-remote-location remote)))))

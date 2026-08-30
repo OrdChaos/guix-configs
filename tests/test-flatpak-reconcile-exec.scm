@@ -224,7 +224,7 @@
                  #:flatpakrepo "/tmp/fake.flatpakrepo")
    (test-assert "sync: missing remote added via --from local descriptor"
                 (fp-log-has?
-                 "flatpak remote-add --user --if-not-exists --from /tmp/fake.flatpakrepo flathub"))
+                 "flatpak remote-add --user --if-not-exists --from flathub /tmp/fake.flatpakrepo"))
    ;; remotes-replace：已有 remote → 显式 remote-delete + 重建。
    (fp-write-file %fp-remotes-out
                   "flathub\thttps://dl.flathub.org/repo/\n")
@@ -235,7 +235,7 @@
                 (fp-log-has? "flatpak remote-delete --user flathub"))
    (test-assert "remotes-replace: rebuild via --from descriptor"
                 (fp-log-has?
-                 "flatpak remote-add --user --if-not-exists --from /tmp/fake.flatpakrepo flathub"))
+                 "flatpak remote-add --user --if-not-exists --from flathub /tmp/fake.flatpakrepo"))
    (test-assert "remotes-replace: delete precedes add"
                 (let ((lines (fp-log-lines)))
                   (< (list-index (lambda (l) (string-contains l "remote-delete"))
