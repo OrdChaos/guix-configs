@@ -89,9 +89,9 @@ declaration removal 不是"永久销毁用户数据"的充分授权
 ```scheme
 (flatpak-remote
   (name 'flathub)
-  (location "https://dl.flathub.org/repo/flathub.flatpakrepo")  ; bootstrap descriptor
-  (repository-url "https://dl.flathub.org/repo/")               ; effective repo URL
-  (comment "..."))
+  (location "https://mirror.sjtu.edu.cn/flathub")  ; bootstrap LOCATION（裸 OSTree URL）
+  (repository-url "https://mirror.sjtu.edu.cn/flathub") ; effective repo URL（drift 基线）
+  (comment "Flathub via SJTU mirror"))
 ```
 
 `location`（bootstrap）与 `repository-url`（effective）语义独立，
@@ -100,14 +100,37 @@ declaration removal 不是"永久销毁用户数据"的充分授权
 ```text
 remote 不存在        → flatpak remote-add --user --if-not-exists NAME LOCATION
                        （.flatpakrepo descriptor 由 flatpak 抓取解析——
-                        联网，只发生在显式 sync）
+                        联网，只发生在显式 sync；裸 OSTree URL 是离线
+                        写配置，keyring 首次 update 时从仓库获取）
 remote 存在且 url 一致  → no-op
 remote 存在但 url 不一致 → FAIL + actionable diagnostic
-                           （绝不自动 remote-modify/delete，不静默改 trust root）
+                       （绝不自动 remote-modify/delete，不静默改 trust root）
 ```
 
-信任决策：跟随 Flathub 官方 descriptor，GPG 签名验证由 flatpak
-内置执行；项目不管理 key material、不建模 fingerprint。
+**换源（镜像）操作路径**（两个字段必须同时改、且与已配置 remote
+的实际 URL 一致——否则 sync fail）：
+
+```text
+路径 A（重建，干净）：
+  registry 改 location + repository-url → 显式维护
+  flatpak remote-delete --user flathub → 重跑 sync（从镜像重建）
+
+路径 B（保 remote，保留已安装 keyring）：
+  flatpak remote-modify --user --url=<镜像> flathub
+  + registry 的 repository-url 同步改为镜像值 → sync 通过 drift 检查
+```
+
+镜像注意：国内镜像通常智能缓存——未缓存文件重定向回官方源、
+NVIDIA 等受限内容必须走官方服务器；镜像站发布的 `.flatpakrepo`
+可能是官方 descriptor 原样转发（`Url=` 仍指向官方），换源时必须
+用镜像的**裸 OSTree URL**，用 descriptor 等于没换。恢复官方源 =
+同路径反向执行。信任语义不变：镜像服务同一份已签名 summary，GPG
+验证与 keyring 不因换源改变——这正是 drift 检查存在的意义。
+```
+
+信任决策：跟随 Flathub 官方签名（镜像内容 = 官方仓库同副本），
+GPG 签名验证由 flatpak 内置执行；项目不管理 key material、不建模
+fingerprint。
 
 ## Overrides：complete-file ownership
 

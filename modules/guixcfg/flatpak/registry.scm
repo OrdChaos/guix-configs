@@ -24,15 +24,26 @@
 ;; （含 GPG trust material，flatpak 添加时抓取解析——联网，只发生在
 ;; 显式 sync）；repository-url 是建立后的 effective repo URL，用于
 ;; drift 检查（flatpak remotes --user --columns=name,url），两者
-;; 语义独立不可互相比较。信任决策：跟随 Flathub 官方 descriptor，
-;; GPG 签名验证由 flatpak 内置执行，项目不管理 key material、
-;; 不建模 fingerprint。
+;; 语义独立不可互相比较。信任决策：SJTU 镜像内容 = dl.flathub.org/
+;; repo 的同副本（同一份已签名 summary，GPG 验证不变），keyring
+;; 随仓库内容从镜像获取；项目不管理 key material、不建模
+;; fingerprint。
+;;
+;; 换源注意（flatpak.md（remotes））：
+;;   - 镜像的 flathub.flatpakrepo 是官方 descriptor 的原样转发
+;;     （Url= 仍指向 dl.flathub.org），因此 location 必须用镜像的
+;;     裸 OSTree URL——用 descriptor 等于没换源；
+;;   - 裸 URL 的 remote-add 是离线写配置，keyring 首次 update 时
+;;     从镜像获取；
+;;   - SJTU 是智能缓存：未缓存文件会重定向回官方源（NVIDIA 等
+;;     受限内容必须走官方服务器），首次拉取冷门 runtime 时可能
+;;     仍慢；同步间隔约 4 小时。
 (define %flatpak-remotes
   (list (flatpak-remote
          (name 'flathub)
-         (location "https://dl.flathub.org/repo/flathub.flatpakrepo")
-         (repository-url "https://dl.flathub.org/repo/")
-         (comment "Flathub official repository"))))
+         (location "https://mirror.sjtu.edu.cn/flathub")
+         (repository-url "https://mirror.sjtu.edu.cn/flathub")
+         (comment "Flathub via SJTU mirror"))))
 
 ;; Catalog：已知 Flatpak 应用（identity + resource ownership）。
 ;;
