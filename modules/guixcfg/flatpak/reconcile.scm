@@ -146,12 +146,16 @@ drift 检查（见 flatpak-check-remote!）。"
   "install（只增）+ optional commit pin deploy。pinned Flatpak
 1.16.6：install 无 --commit 参数——pin 经两步：
   install <remote> <ref> → update --commit=<H> <ref>。
-app pin 不隐含 runtime pin（不实现 dependency lockfile）。"
+app pin 不隐含 runtime pin（不实现 dependency lockfile）。
+
+有意不带 --noninteractive：该 flag 会关掉下载进度条（终端用户
+看不到 runtime 大体积拉取的任何反馈，像卡死）。-y 已自动应答
+全部提问；stdout 非 tty 时 flatpak 自行不画进度——脚本场景不受
+影响。"
   (let ((ref (flatpak-application-ref app))
         (remote (symbol->string (flatpak-application-remote app))))
     (format #t "Installing ~a from '~a'...~%" ref remote)
-    (invoke "flatpak" "install" "--user" "-y" "--noninteractive"
-            remote ref)
+    (invoke "flatpak" "install" "--user" "-y" remote ref)
     (let ((commit (flatpak-application-commit app)))
       (when commit
         (format #t "Deploying pinned commit ~a for ~a...~%" commit ref)

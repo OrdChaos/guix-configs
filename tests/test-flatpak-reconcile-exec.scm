@@ -147,7 +147,7 @@
                    "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo"))
      (test-assert "sync: installs missing selected app"
                   (fp-log-has?
-                   "flatpak install --user -y --noninteractive flathub com.tencent.WeChat//stable"))
+                   "flatpak install --user -y flathub com.tencent.WeChat//stable"))
      (test-assert "sync: never installs unselected catalog app"
                   (not (fp-log-has? "org.example.Unselected")))
      (test-assert "sync: pinned app deploys via update --commit after install"
