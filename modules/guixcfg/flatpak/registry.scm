@@ -22,7 +22,6 @@
                #:use-module (guixcfg flatpak model)
                #:use-module (guixcfg flatpak applications qq)
                #:use-module (guixcfg flatpak applications wechat)
-               #:use-module (guixcfg flatpak applications missioncenter)
                #:use-module (guixcfg flatpak applications wps)
                #:export (%flatpak-remotes
                          %flatpak-applications
@@ -51,7 +50,6 @@
 (define %flatpak-applications
   (list %flatpak-qq
         %flatpak-wechat
-        %flatpak-missioncenter
         %flatpak-wps))
 
 ;; Selection：sync 应 ensure 的 logical names（desired lifecycle ≠
@@ -60,7 +58,7 @@
 ;; 未选中的 app 不产生 persistence mount（其 definition 里的
 ;; persistence intent 随 selection 生效）。
 (define %flatpak-selection
-  '(qq wechat missioncenter wps))
+  '(qq wechat wps))
 
 ;; fail-fast（模块加载即校验；apps/registry.scm 同款）。
 (validate-flatpak-catalog! %flatpak-remotes %flatpak-applications)

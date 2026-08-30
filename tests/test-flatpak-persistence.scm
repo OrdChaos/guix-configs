@@ -134,7 +134,7 @@
                          (string=? "com.qq.QQ" (flatpak-application-id a))))
                   %flatpak-applications))
 (test-assert "production selection resolves against catalog"
-             (= 4 (length (flatpak-selected-applications))))
+             (= 3 (length (flatpak-selected-applications))))
 (test-assert "production selected QQ gets its default .var/app rule"
              (any (lambda (r)
                     (and (string=? ".var/app/com.qq.QQ"
@@ -157,13 +157,6 @@
                     (and (string=? ".var/app/cn.wps.wps_365"
                                    (application-persistence-rule-consumer r))
                          (string=? "flatpak/apps/cn.wps.wps_365"
-                                   (application-persistence-rule-backing r))))
-                  %prod-rules))
-(test-assert "production selected Mission Center gets its default .var/app rule"
-             (any (lambda (r)
-                    (and (string=? ".var/app/io.missioncenter.MissionCenter"
-                                   (application-persistence-rule-consumer r))
-                         (string=? "flatpak/apps/io.missioncenter.MissionCenter"
                                    (application-persistence-rule-backing r))))
                   %prod-rules))
 

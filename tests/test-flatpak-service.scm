@@ -138,7 +138,6 @@
         (cons "service.scm" (module-source "service.scm"))
         (cons "applications/qq.scm" (module-source "applications/qq.scm"))
         (cons "applications/wechat.scm" (module-source "applications/wechat.scm"))
-        (cons "applications/missioncenter.scm" (module-source "applications/missioncenter.scm"))
         (cons "applications/wps.scm" (module-source "applications/wps.scm"))))
 
 ;; 精确扫描：只禁止 (a) reconcile 模块的 import 形式；(b) Scheme 子

@@ -48,7 +48,7 @@ reconcile projection（mutable）  selected definitions → install/update plan
 - **definition 是事实的唯一归属**：打开 `applications/qq.scm` 就能
   读完一个应用的全部声明；registry 只是索引，不含任何 inline
   `flatpak-application` 记录。
-- **selection 只选择**：`%flatpak-selection = '(qq wechat missioncenter wps)`
+- **selection 只选择**：`%flatpak-selection = '(qq wechat wps)`
   只含 logical names，不复制 id/branch/persistence；resolver
   （`flatpak-select-applications`）做 catalog lookup（未知 name
   fail-fast 并列出可用名）。即使 VM/Laptop 相同也独立存在：
