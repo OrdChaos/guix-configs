@@ -99,13 +99,26 @@ declaration removal 不是"永久销毁用户数据"的充分授权
 
 ```text
 remote 不存在        → flatpak remote-add --user --if-not-exists NAME LOCATION
-                       （.flatpakrepo descriptor 由 flatpak 抓取解析——
-                        联网，只发生在显式 sync；裸 OSTree URL 是离线
-                        写配置，但不导入 keyring）
+                       （--from 本地 vendored descriptor：keyring 内嵌、
+                        零联网抓取；裸 OSTree URL：离线写配置但不导入
+                        keyring）
+                       → flatpak remote-modify --user --url=<repository-url> NAME
+                         （落定声明 URL——理由见下"summary redirect"）
 remote 存在且 url 一致  → no-op
 remote 存在但 url 不一致 → FAIL + actionable diagnostic
                        （绝不自动 remote-modify/delete，不静默改 trust root）
 ```
+
+**summary redirect（pinned 1.16.6 实测，镜像场景的关键坑）**：
+Flathub 的 summary 自带 `xa.redirect-url=https://dl.flathub.org/repo/`；
+`remote-add --from` 抓取 summary 时**无条件**应用它，把镜像 URL
+静默改写回官方（`--no-follow_redirect` flag 在 `--from` 路径上无效，
+VM `-vv` 实测）。因此 add 之后必须用 `remote-modify --url` 落定
+声明 URL：它不抓 summary、redirect 跟随是显式 opt-in
+（`--follow-redirect`，默认不跟），且落定后 install/update/
+remote-ls 的 summary 抓取**不会再改写** URL（VM 实测）。实现见
+`reconcile.scm` 的 `flatpak-ensure-remote!` /
+`flatpak-remote-set-url!`。
 
 **keyring 引导（vendored descriptor）**：sync/remotes-replace 用
 `--from` 本地 vendored 的 `modules/guixcfg/flatpak/flathub.flatpakrepo`
