@@ -116,24 +116,27 @@ remote-ls 的 summary 抓取不会再次改写 URL。"
                          (flatpak-remote-repository-url remote))
           (symbol->string (flatpak-remote-name remote))))
 
-(define* (flatpak-bootstrap-remote! remote #:key (flatpakrepo #f))
+(define* (flatpak-bootstrap-remote! remote)
   "领域操作：从零建立 remote 并落定为声明状态——封装 pinned
 Flatpak 1.16.6 的 bootstrap 细节，调用方不需要理解：
-    1. remote-add（FLATPAKREPO 时 --from 本地 descriptor：keyring
-       内嵌；否则裸 URL：离线写配置、不导入 keyring——生产路径
-       tools/flatpak.scm 总是传生成的 descriptor）；
+    1. remote-add --from NAME DESCRIPTOR-URL
+       （flatpak 下载官方 descriptor、导入其当前 GPGKey——trust
+       lifecycle 由官方持有：续期/轮换在本次 bootstrap 自然获取；
+       descriptor 下载失败 = bootstrap 失败，绝不 fallback 到镜像
+       descriptor / 缓存 / --no-gpg-verify / 裸 URL）；
     2. remote-modify --url=<repository-url>（canonicalize——add
-       阶段的 summary redirect 会改写 transport，必须此步落定）。
+       阶段抓取 summary 时会【无条件】应用其 xa.redirect-url
+       （Flathub 的 summary 指回官方，镜像 URL 被改写；
+       --no-follow_redirect flag 在 --from 路径上无效，VM -vv
+       实测），必须此步落定声明 transport）。
 Partial-failure rollback：modify 失败时只删除【本次调用刚创建】
 的 remote（调用前提 = flatpak-check-remote! 为 #f），避免留下
 redirect 改写后的非声明状态等下次 sync 才发现 drift。绝不删除
 本操作之前已存在的 remote。"
   (let ((name (symbol->string (flatpak-remote-name remote))))
-    (if flatpakrepo
-      (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
-              "--from" name flatpakrepo)
-      (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
-              name (flatpak-remote-repository-url remote)))
+    (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
+            "--from" name
+            (flatpak-remote-descriptor-url remote))
     (catch #t
       (lambda ()
         (flatpak-remote-set-url! remote))
@@ -142,24 +145,25 @@ redirect 改写后的非声明状态等下次 sync 才发现 drift。绝不删�
          (invoke "flatpak" "remote-delete" "--user" name))
         (apply throw args)))))
 
-(define* (flatpak-ensure-remote! remote #:key (flatpakrepo #f))
+(define (flatpak-ensure-remote! remote)
   "remote 缺失 → flatpak-bootstrap-remote!（建立 + canonicalize）；
 已存在 → drift 检查（见 flatpak-check-remote!），绝不自动修改。"
   (unless (flatpak-check-remote! remote)
     (format #t "Adding Flatpak remote '~a'...~%"
             (symbol->string (flatpak-remote-name remote)))
-    (flatpak-bootstrap-remote! remote #:flatpakrepo flatpakrepo)))
+    (flatpak-bootstrap-remote! remote)))
 
-(define* (flatpak-replace-remote! remote #:key (flatpakrepo #f))
+(define (flatpak-replace-remote! remote)
   "显式换源（唯一允许删除 remote 的入口；不自动调用——换源 = 修改
 已有 mutable state，必须由用户显式发起）：remote-delete（如存在）
-→ 按声明重新 remote-add。trust 边界仍在：命令本身是显式的
-destructive acknowledgment，sync 永远走不到这里。"
+→ bootstrap 重建（官方 descriptor → key 重导入 → transport 落定）。
+trust 边界仍在：命令本身是显式的 destructive acknowledgment，sync
+永远走不到这里。"
   (let ((name (symbol->string (flatpak-remote-name remote))))
     (when (assoc-ref (flatpak-remotes-alist) name)
       (format #t "Replacing Flatpak remote '~a' (explicit)...~%" name)
       (invoke "flatpak" "remote-delete" "--user" name))
-    (flatpak-ensure-remote! remote #:flatpakrepo flatpakrepo)))
+    (flatpak-ensure-remote! remote)))
 
 ;;; ── installed state ────────────────────────────────────────
 
@@ -223,15 +227,14 @@ app pin 不隐含 runtime pin（不实现 dependency lockfile）。
 
 (define* (flatpak-sync #:key (remotes %flatpak-remotes)
                             (applications %flatpak-applications)
-                            (selection %flatpak-selection)
-                            (flatpakrepo #f))
+                            (selection %flatpak-selection))
   "ensure declared remotes + ensure selected apps installed。
 只增不删：不 update 已装 app、不 remove 未声明 app、不 gc。
-FLATPAKREPO（本地 vendored descriptor）传给 ensure-remote 做带
-keyring 的引导。返回本次安装的 <flatpak-application> 列表。"
-  (for-each (lambda (remote)
-              (flatpak-ensure-remote! remote #:flatpakrepo flatpakrepo))
-            remotes)
+sync 对【全部 declared remotes】做 ensure（缺即 bootstrap——新
+remote 首次引入 sync 即自动建立；drift 则 fail-loud），不依赖
+selected apps 是否引用它们（声明即意图）。返回本次安装的
+<flatpak-application> 列表。"
+  (for-each flatpak-ensure-remote! remotes)
   (let* ((selected (flatpak-select-applications selection applications))
          (missing (flatpak-reconcile-plan
                    selected (flatpak-list-installed-apps))))

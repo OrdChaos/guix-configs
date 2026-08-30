@@ -17,48 +17,16 @@
 ;;; 换源是修改已有 mutable state，必须由用户显式发起）。
 ;;; 一切操作 --user scope。reconfigure/boot/login 与网络零耦合。
 ;;;
-;;; bootstrap descriptor：本入口从 registry 的 remote 声明 + vendored
-;;; 公开 keyring 生成临时 .flatpakrepo（model 的纯函数
-;;; flatpak-remote-descriptor-text），交给 reconcile 的
-;;; flatpak-bootstrap-remote!（add --from → remote-modify --url
-;;; canonicalize）。不存在手写 descriptor 文件——URL 只有
-;;; repository-url 一个声明源。
+;;; trust 模型：bootstrap 直接使用 registry 声明的官方 descriptor
+;;; URL（flatpak remote-add --from 自行下载并导入当前官方 GPGKey）；
+;;; 本入口不 vendor key、不生成 descriptor、不维护指纹/过期日期。
 
 ;; guix repl 不提供 -L，这里显式把 modules/ 加入 load path（从仓库根目录运行）。
 (add-to-load-path (string-append (getcwd) "/modules"))
 
-(use-modules (guixcfg flatpak model)
-             (guixcfg flatpak registry)
-             (guixcfg flatpak reconcile)
+(use-modules (guixcfg flatpak reconcile)
              (ice-9 format)
-             (ice-9 match)
-             (ice-9 binary-ports)  ; get-bytevector-all
-             (ice-9 rdelim)        ; read-string
-             (srfi srfi-1))
-
-(define %flatpak-dir
-  (string-append (getcwd) "/modules/guixcfg/flatpak/"))
-
-(define (remote-key-bytes remote)
-  "REMOTE 的 vendored 公开 keyring 字节（trust material；文件路径
-相对 flatpak 模块目录）。"
-  (call-with-input-file
-   (string-append %flatpak-dir (flatpak-remote-key-file remote))
-   (lambda (port) (get-bytevector-all port))))
-
-(define (remote-descriptor-path remote)
-  "把 REMOTE 的声明 + keyring 生成临时 .flatpakrepo 并返回其路径
-（tooling plane：tools 从 checkout 运行，临时文件放 /tmp，每次
-调用重写）。"
-  (let ((path (string-append "/tmp/guixcfg-flatpak-"
-                             (symbol->string (flatpak-remote-name remote))
-                             ".flatpakrepo")))
-    (call-with-output-file path
-      (lambda (port)
-        (display (flatpak-remote-descriptor-text
-                  remote (remote-key-bytes remote))
-                 port)))
-    path))
+             (ice-9 match))
 
 (define (usage)
   (format #t "Usage:
@@ -76,20 +44,15 @@
   ;; activation 环境下也能启动）。
   (setenv "FLATPAK_BINARY" (flatpak-binary))
   (match (cdr args)
-         (("sync")
-          (flatpak-sync #:flatpakrepo
-                        (remote-descriptor-path (car %flatpak-remotes))))
+         (("sync")           (flatpak-sync))
          (("status")         (flatpak-status))
          (("status" "--refresh") (flatpak-status #:refresh? #t))
          (("update")         (flatpak-update))
          (("update-runtimes") (flatpak-update-runtimes))
          (("remove" name)    (flatpak-remove (string->symbol name)))
          (("remote-replace" name)
-          (flatpak-replace-remote!
-           (flatpak-remote-by-name (string->symbol name))
-           #:flatpakrepo
-           (remote-descriptor-path
-            (flatpak-remote-by-name (string->symbol name)))))
+          (flatpak-replace-remote! (flatpak-remote-by-name
+                                    (string->symbol name))))
          (("gc")             (flatpak-gc))
          (_ (usage) (exit 1))))
 

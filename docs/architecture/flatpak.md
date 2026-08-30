@@ -107,83 +107,73 @@ declaration removal 不是"永久销毁用户数据"的充分授权
   禁止 parent/child mount 嵌套（`tests/test-flatpak-persistence.scm`
   回归固定）。
 
-## Remotes 与 trust（identity / trust / transport）
+## Remotes 与 trust（identity / bootstrap authority / transport）
 
 ```scheme
 (flatpak-remote
-  (name 'flathub)                                  ; identity
-  (repository-url "https://mirror.sjtu.edu.cn/flathub") ; transport（唯一 URL 事实：drift 基线 + bootstrap 目标）
-  (key-file "flathub.gpg")                         ; trust：vendored 公开 keyring 文件名（模块目录相对）
+  (name 'flathub)                                                  ; identity
+  (descriptor-url "https://dl.flathub.org/repo/flathub.flatpakrepo") ; bootstrap + trust authority
+  (repository-url "https://mirror.sjtu.edu.cn/flathub")              ; desired transport
   (comment "Flathub via SJTU mirror"))
 ```
 
-- **identity / trust / transport 分离**：SJTU 镜像只改变 transport，
-  不改变 remote identity 与 trust root（镜像服务同一份已签名
-  summary，GPG 验证不变）——因此"URL drift"与"trust root 替换"
-  不是一回事，诊断信息保持这一层次。
-- **repository-url 是唯一 URL 声明源**：bootstrap 的
-  `.flatpakrepo` 不再手工维护，由 `model.scm` 的纯函数
-  `flatpak-remote-descriptor-text`（record + vendored keyring 字节）
-  生成；tools 入口写临时文件供 `remote-add --from` 使用。
-  "两个手写 URL 相等"的一致性测试已被"生成物 Url == 声明"的
-  纯函数测试取代。
-- **trust material**：`flathub.gpg`（2844 字节公开 keyring，
-  provenance = 官方 `dl.flathub.org/repo/flathub.gpg`，2026-08-30
-  抓取、与镜像副本逐字节一致）含主密钥 `4184DD4D907A7CAE` 与
-  签名子密钥 `562702E9E3ED7EE8`（summary 由子密钥签名，二者缺一
-  不可）。flathub 若轮换密钥，随仓库更新此文件并 review。项目
-  不管理任何秘密 key material、不建模 fingerprint。
+- **我们完全信任官方 descriptor**：`descriptor-url` 指向的官方
+  `.flatpakrepo` 是该 remote 的权威 trust material（内嵌 GPGKey）。
+  **trust lifecycle 由 upstream 持有**——官方续期/轮换密钥后，下次
+  bootstrap / remote-replace 自然获取最新 key；仓库不 vendor key
+  文件、不 pin fingerprint、不维护过期日期、不做轮换人工审批。
+- **repository-url 是唯一 transport 事实**（drift 检查基线 +
+  canonicalize 目标）；SJTU 镜像只改变 transport，不改变 identity
+  与 trust。
+- 换源 = 改 `repository-url` → `tools/flatpak.scm remote-replace
+  <name>`（显式）；换 trust authority = 改 `descriptor-url`。
+- **当前 declarative remote 契约要求官方提供 bootstrap descriptor**
+  （Case A/B）；无 `.flatpakrepo` 的 remote（Case C）不在模型内，
+  实际遇到时再扩展 bootstrap strategy sum type——不提前设计。
 
 ### Bootstrap（封装为领域操作，见 reconcile.scm）
 
-`flatpak-bootstrap-remote!`（内部：remote-add → remote-modify
---url canonicalize）封装 pinned Flatpak 1.16.6 的必要 bootstrap
+`flatpak-bootstrap-remote!` 封装 pinned Flatpak 1.16.6 的 bootstrap
 语义，调用方不需要理解：
 
 ```text
-remote-add --from <generated descriptor>   ← keyring 内嵌；add 阶段抓取
-                                            summary 并【无条件】应用其
-                                            xa.redirect-url（Flathub 的
-                                            summary 指回官方——镜像 URL
-                                            被改写；--no-follow_redirect
-                                            flag 在 --from 路径上无效，
-                                            VM -vv 实测）
-remote-modify --user --url=<repository-url> ← canonicalize：不抓 summary、
-                                            redirect 是显式 opt-in，落定
-                                            声明 transport；落定后
-                                            install/update/remote-ls 的
-                                            summary 抓取不再改写 URL（VM
-                                            实测）
-partial-failure rollback                  ← modify 失败时只删除【本次
-                                            调用创建】的 remote（调用前提
-                                            = check-remote! 为 #f），不留
-                                            下 redirect 改写后的非声明状态
+remote-add --user --if-not-exists --from NAME <descriptor-url>
+                         ← flatpak 下载官方 descriptor、导入其当前
+                           GPGKey（--from 直接接受 URL，1.16.6 实测；
+                           descriptor 下载失败 = bootstrap 失败，
+                           绝不 fallback 到镜像 descriptor / 缓存 /
+                           --no-gpg-verify / 裸 URL）
+remote-modify --user --url=<repository-url> NAME
+                         ← canonicalize：add 阶段抓取 summary 时会
+                           【无条件】应用其 xa.redirect-url（Flathub
+                           的 summary 指回官方——镜像 URL 被改写；
+                           --no-follow_redirect flag 在 --from 路径
+                           上无效，VM -vv 实测）；modify 不抓 summary、
+                           redirect 是显式 opt-in；落定后 install/
+                           update/remote-ls 的 summary 抓取不再改写
+                           URL（VM 实测）
+partial-failure rollback ← modify 失败时只删除【本次调用创建】的
+                           remote（调用前提 = check-remote! 为 #f），
+                           不留半配置状态
 ```
 
 ### Remote reconciliation（sync 的 check）
 
 ```text
 remote 不存在          → flatpak-bootstrap-remote!（建立 + canonicalize）
-remote 存在且 url 一致   → no-op
+remote 存在且 url 一致   → no-op（不重新 bootstrap、不重新取 descriptor）
 remote 存在但 url 不一致 → FAIL + actionable diagnostic
                         （绝不自动 remote-modify/delete，不静默改 trust root）
 ```
 
-**换源（镜像）操作路径**（repository-url 是唯一事实）：
-
-```text
-1. registry.scm：repository-url（transport）+ 如需换 trust 换 key-file
-2. tools/flatpak.scm remote-replace flathub
-   （显式 destructive acknowledgment：remote-delete + bootstrap 重建）
-3. tools/flatpak.scm sync
-```
-
-镜像注意：国内镜像通常智能缓存——未缓存文件重定向回官方源、
-NVIDIA 等受限内容必须走官方服务器；镜像站发布的 `.flatpakrepo`
-可能是官方 descriptor 原样转发（`Url=` 仍指向官方），因此本仓库
-的 descriptor 一律由声明生成，绝不复用镜像站 descriptor。恢复
-官方源 = 同路径反向执行。手工创建的 remote 若缺 keyring，恢复
-手段：`flatpak remote-modify --user --gpg-import=flathub.gpg flathub`。
+**trust rotation 与 transport drift 是两个不同问题**：前者在显式
+bootstrap 时静默接受（官方 descriptor 是权威）；后者在普通 sync
+永远 fail-loud（transport 是仓库声明，换源必须显式
+`remote-replace`）。镜像注意：国内镜像通常智能缓存——未缓存文件
+重定向回官方源、NVIDIA 等受限内容必须走官方服务器；镜像站发布的
+`.flatpakrepo` 可能是官方 descriptor 原样转发（`Url=` 仍指向官方），
+因此 bootstrap 一律使用**官方** descriptor-url，绝不从镜像建立
+trust。
 
 ## Overrides：complete-file ownership
 

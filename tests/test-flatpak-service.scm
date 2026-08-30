@@ -26,7 +26,6 @@
              (gnu services)              ; service-kind
              (guixcfg home user)         ; %guix-home
              (ice-9 rdelim)              ; read-string
-             (rnrs io ports)             ; get-bytevector-all（key 文件字节）
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -121,30 +120,6 @@
                                          "/flatpak/apps/com.qq.QQ")
                           (file-system-device fs))))
                   (operating-system-file-systems %vm-os)))
-
-;; ── 生成式 descriptor：单一事实源 ──────────────────────────
-;; .flatpakrepo 不再是手工文件——由 model 的纯函数从 remote record
-;; （repository-url）与 vendored 公开 keyring 生成。Url 只存在一个
-;; 声明源；GPGKey 来自 vendored key 文件。
-(define %vendored-key-bytes
-  (call-with-input-file "modules/guixcfg/flatpak/flathub.gpg"
-                        (lambda (port) (get-bytevector-all port))))
-(define %generated-descriptor
-  (flatpak-remote-descriptor-text (car %flatpak-remotes)
-                                  %vendored-key-bytes))
-
-(test-assert "generated descriptor Url equals declared repository-url"
-             (string-contains
-              %generated-descriptor
-              (string-append "Url="
-                             (flatpak-remote-repository-url
-                              (car %flatpak-remotes))
-                             "\n")))
-(test-assert "generated descriptor embeds the vendored keyring"
-             (string-contains %generated-descriptor "GPGKey=mQINB"))
-(test-assert "generated descriptor names the remote identity"
-             (string-contains %generated-descriptor
-                              "Title=flathub\n"))
 
 ;; ── 静态回归：platform 模块零 flatpak CLI / 零 reconcile ────
 (define (module-source path)

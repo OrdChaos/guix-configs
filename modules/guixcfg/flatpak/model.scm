@@ -11,16 +11,16 @@
 ;;;   overrides，offline）与 reconcile（install/update plan，
 ;;;   mutable/network）从 definition 推导。
 ;;;
-;;; Remote model（identity / trust / transport 分离）：
-;;;   identity  = remote name（'flathub）
-;;;   trust     = vendored 公开 keyring 文件（key-file 字段指向
-;;;               modules/guixcfg/flatpak/ 下的文件名；Flathub 官方
-;;;               签名密钥——镜像只改变 transport，不改变 trust）
-;;;   transport = repository-url（当前：SJTU 镜像裸 OSTree URL）
-;;;   bootstrap descriptor 由本模块从 record 生成
-;;;   （flatpak-remote-descriptor-text），不存在手写的第二份 URL
-;;;   事实（"两个手写 URL 相等"的一致性测试随之上移为"生成物
-;;;   Url == 声明"的纯函数测试）。
+;;; Remote model（identity / bootstrap authority / transport）：
+;;;   identity           = remote name（'flathub）
+;;;   bootstrap authority = descriptor-url：官方 .flatpakrepo URL——
+;;;     我们明确信任官方 descriptor 当前提供的 GPGKey（trust
+;;;     lifecycle 由 upstream 持有：续期/轮换在下次 bootstrap /
+;;;     remote-replace 时自然获取，无需仓库维护 key material、
+;;;     fingerprint 或过期日期）
+;;;   transport          = repository-url（当前：SJTU 镜像裸 OSTree
+;;;     URL——镜像只改变 transport，不改变 identity 与 trust）
+;;;   本模块不生成任何 descriptor、不 vendor 任何 key 文件。
 ;;;
 ;;; update policy（显式领域语义，替代裸 commit 字段）：
 ;;;   'track-branch                   默认：跟随 branch
@@ -44,7 +44,6 @@
 
 (define-module (guixcfg flatpak model)
                #:use-module (guix records)
-               #:use-module (guix base64)  ; base64-encode（descriptor GPGKey）
                #:use-module (guixcfg utils paths) ; valid-relative-path?（extra-persistence 契约共享）
                #:use-module (srfi srfi-1)  ; every、member、filter、delete-duplicates
                #:use-module (srfi srfi-13) ; string-every、string-contains、string-index
@@ -52,8 +51,8 @@
                #:export (<flatpak-remote>
                          flatpak-remote make-flatpak-remote flatpak-remote?
                          flatpak-remote-name
+                         flatpak-remote-descriptor-url
                          flatpak-remote-repository-url
-                         flatpak-remote-key-file
                          flatpak-remote-comment
                          <flatpak-application>
                          flatpak-application make-flatpak-application flatpak-application?
@@ -88,7 +87,6 @@
                          flatpak-application-commit
                          flatpak-application-pinned?
                          flatpak-application-managed-overrides
-                         flatpak-remote-descriptor-text
                          flatpak-reconcile-plan
                          flatpak-render-override-file))
 
@@ -97,10 +95,10 @@
 (define-record-type* <flatpak-remote>
                      flatpak-remote make-flatpak-remote
                      flatpak-remote?
-                     (name flatpak-remote-name)                    ; symbol：identity
-                     (repository-url flatpak-remote-repository-url) ; string：transport（drift 检查基准 + bootstrap 目标）
-                     (key-file flatpak-remote-key-file)            ; string：trust 文件名（flatpak 模块目录相对；vendored 公开 keyring）
-                     (comment flatpak-remote-comment               ; string（信任决策说明）
+                     (name flatpak-remote-name)                      ; symbol：identity
+                     (descriptor-url flatpak-remote-descriptor-url)  ; string：官方 .flatpakrepo URL（bootstrap + trust authority）
+                     (repository-url flatpak-remote-repository-url)  ; string：desired transport（drift 检查基准 + canonicalize 目标）
+                     (comment flatpak-remote-comment                 ; string（信任决策说明）
                               (default "")))
 
 ;;; ── application ───────────────────────────────────────────
@@ -194,10 +192,10 @@
 (define (valid-flatpak-remote? remote)
   (and (flatpak-remote? remote)
        (symbol? (flatpak-remote-name remote))
-       (let ((url (flatpak-remote-repository-url remote))
-             (key (flatpak-remote-key-file remote)))
-         (and (string? url) (> (string-length url) 0)
-              (string? key) (> (string-length key) 0)
+       (let ((descriptor (flatpak-remote-descriptor-url remote))
+             (url (flatpak-remote-repository-url remote)))
+         (and (string? descriptor) (> (string-length descriptor) 0)
+              (string? url) (> (string-length url) 0)
               (string? (flatpak-remote-comment remote))))))
 
 (define (valid-flatpak-override? overrides)
@@ -332,25 +330,6 @@ owns）；<flatpak-override> = repo owns whole file。"
     (if (eq? 'external policy)
       #f
       (cadr policy))))
-
-;;; ── bootstrap descriptor 生成（单一事实源）────────────────
-;;; repository-url 只声明一次；.flatpakrepo 不再是手工维护文件，
-;;; 由本函数从 record + vendored 公开 keyring 字节生成。tools 层
-;;; （tooling plane）读取 key 文件并写出临时 descriptor 交给
-;;; remote-add --from；key 文件内容 = 官方 flathub.gpg（provenance
-;;; 见 docs/architecture/flatpak.md（remotes））。
-
-(define (flatpak-remote-descriptor-text remote key-bytes)
-  "REMOTE + KEY-BYTES（bytevector，vendored 公开 keyring）→ 完整
-.flatpakrepo descriptor 文本。Url 直接取 record 的
-repository-url——不存在第二份 URL 事实。"
-  (string-append
-   "[Flatpak Repo]\n"
-   "Title=" (symbol->string (flatpak-remote-name remote)) "\n"
-   "Url=" (flatpak-remote-repository-url remote) "\n"
-   "Comment=" (flatpak-remote-comment remote) "\n"
-   "Description=" (flatpak-remote-comment remote) "\n"
-   "GPGKey=" (base64-encode key-bytes) "\n"))
 
 ;;; ── reconcile plan（纯函数，只增不删）─────────────────────
 

@@ -111,8 +111,12 @@
 (define %fp-remotes
   (list (flatpak-remote
          (name 'flathub)
-         (repository-url "https://dl.flathub.org/repo/")
-         (key-file "flathub.gpg"))))
+         (descriptor-url "https://dl.flathub.org/repo/flathub.flatpakrepo")
+         (repository-url "https://dl.flathub.org/repo/"))
+        (flatpak-remote
+         (name 'testremote)
+         (descriptor-url "https://example.invalid/foo.flatpakrepo")
+         (repository-url "https://mirror.example.invalid/foo"))))
 (define %fp-commit
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 (define %fp-apps
@@ -145,9 +149,9 @@
                   (not (fp-log-pred?
                         (lambda (line)
                           (not (string-contains line "--user"))))))
-     (test-assert "sync: remote-add when missing (bare transport URL)"
+     (test-assert "sync: remote-add via official descriptor URL (--from)"
                   (fp-log-has?
-                   "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/"))
+                   "flatpak remote-add --user --if-not-exists --from flathub https://dl.flathub.org/repo/flathub.flatpakrepo"))
      (test-assert "sync: remote URL pinned via remote-modify after add"
                   (fp-log-has?
                    "flatpak remote-modify --user --url=https://dl.flathub.org/repo/ flathub"))
@@ -195,7 +199,7 @@
    (fp-write-file %fp-list-app-out
                   "com.tencent.WeChat\norg.example.Pinned\norg.other.Unmanaged\norg.freedesktop.Platform\n")
    (fp-clear-log!)
-   (let ((missing (flatpak-sync #:remotes %fp-remotes
+   (let ((missing (flatpak-sync #:remotes (list (car %fp-remotes))
                                 #:applications %fp-apps
                                 #:selection '(wechat pinned))))
      (test-equal "sync: nothing missing"
@@ -215,7 +219,7 @@
    (fp-write-file %fp-list-app-out "")
    (fp-clear-log!)
    (test-error "sync: remote drift fails loudly" #t
-               (flatpak-sync #:remotes %fp-remotes
+               (flatpak-sync #:remotes (list (car %fp-remotes))
                              #:applications %fp-apps
                              #:selection '()))
    (test-assert "sync: drift never auto remote-modify/delete"
@@ -223,33 +227,32 @@
                      (not (fp-log-has? "remote-delete"))
                      (not (fp-log-has? "remote-add"))))
 
-   ;; ── 3b. vendored descriptor 引导（--from）+ 换源命令 ───────
-   ;; sync 带 flatpakrepo：missing remote 经 --from 本地 descriptor
-   ;; 添加（keyring 内嵌，零联网抓取）。
+   ;; ── 3b. arbitrary remote（无 flathub 硬编码）+ 换源命令 ─────
+   ;; 任意 remote 走同一 bootstrap：官方 descriptor URL + 自身
+   ;; repository-url canonicalize——reconcile 不得有 per-remote
+   ;; 分支。
    (fp-write-file %fp-remotes-out "")
    (fp-write-file %fp-list-app-out "")
    (fp-clear-log!)
-   (flatpak-sync #:remotes %fp-remotes
+   (flatpak-sync #:remotes (cdr %fp-remotes)
                  #:applications %fp-apps
-                 #:selection '()
-                 #:flatpakrepo "/tmp/fake.flatpakrepo")
-   (test-assert "sync: missing remote added via --from local descriptor"
+                 #:selection '())
+   (test-assert "arbitrary remote bootstraps with its own descriptor URL"
                 (fp-log-has?
-                 "flatpak remote-add --user --if-not-exists --from flathub /tmp/fake.flatpakrepo"))
-   (test-assert "sync: --from add also pins URL via remote-modify"
+                 "flatpak remote-add --user --if-not-exists --from testremote https://example.invalid/foo.flatpakrepo"))
+   (test-assert "arbitrary remote canonicalizes its own transport URL"
                 (fp-log-has?
-                 "flatpak remote-modify --user --url=https://dl.flathub.org/repo/ flathub"))
+                 "flatpak remote-modify --user --url=https://mirror.example.invalid/foo testremote"))
    ;; remote-replace：已有 remote → 显式 remote-delete + 重建。
    (fp-write-file %fp-remotes-out
                   "flathub\thttps://dl.flathub.org/repo/\n")
    (fp-clear-log!)
-   (flatpak-replace-remote! (car %fp-remotes)
-                            #:flatpakrepo "/tmp/fake.flatpakrepo")
+   (flatpak-replace-remote! (car %fp-remotes))
    (test-assert "remote-replace: explicit delete first"
                 (fp-log-has? "flatpak remote-delete --user flathub"))
-   (test-assert "remote-replace: rebuild via --from descriptor"
+   (test-assert "remote-replace: rebuild via official descriptor URL"
                 (fp-log-has?
-                 "flatpak remote-add --user --if-not-exists --from flathub /tmp/fake.flatpakrepo"))
+                 "flatpak remote-add --user --if-not-exists --from flathub https://dl.flathub.org/repo/flathub.flatpakrepo"))
    (test-assert "remote-replace: declared URL enforced via remote-modify"
                 (fp-log-has?
                  "flatpak remote-modify --user --url=https://dl.flathub.org/repo/ flathub"))
@@ -262,8 +265,7 @@
    ;; remote-replace：remote 缺失 → 无 delete，只有 add。
    (fp-write-file %fp-remotes-out "")
    (fp-clear-log!)
-   (flatpak-replace-remote! (car %fp-remotes)
-                            #:flatpakrepo "/tmp/fake.flatpakrepo")
+   (flatpak-replace-remote! (car %fp-remotes))
    (test-assert "remote-replace: no delete when remote missing"
                 (not (fp-log-has? "remote-delete")))
    (test-assert "remote-replace: adds when remote missing"
@@ -282,8 +284,7 @@
    (setenv "FP_FAKE_FAIL_ON" "remote-modify")
    (fp-clear-log!)
    (test-error "bootstrap: modify failure propagates" #t
-               (flatpak-bootstrap-remote! (car %fp-remotes)
-                                          #:flatpakrepo "/tmp/fake.flatpakrepo"))
+               (flatpak-bootstrap-remote! (car %fp-remotes)))
    (test-assert "bootstrap: failed canonicalize rolls back created remote"
                 (fp-log-has? "flatpak remote-delete --user flathub"))
    (test-assert "bootstrap: add still preceded rollback"
@@ -380,7 +381,7 @@
    (setenv "FP_FAKE_FAIL_ON" "install")
    (fp-clear-log!)
    (test-error "sync: install network failure propagates" #t
-               (flatpak-sync #:remotes %fp-remotes
+               (flatpak-sync #:remotes (list (car %fp-remotes))
                              #:applications %fp-apps
                              #:selection '(wechat pinned)))
    (test-assert "sync: failure stops before pinned deploy"

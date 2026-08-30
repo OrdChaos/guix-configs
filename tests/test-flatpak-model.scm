@@ -20,13 +20,13 @@
 (define %fp-remotes
   (list (flatpak-remote
          (name 'flathub)
+         (descriptor-url "https://dl.flathub.org/repo/flathub.flatpakrepo")
          (repository-url "https://dl.flathub.org/repo/")
-         (key-file "flathub.gpg")
          (comment "fixture"))
         (flatpak-remote
          (name 'internal)
-         (repository-url "https://example.invalid/repo/")
-         (key-file "internal.gpg"))))
+         (descriptor-url "https://example.invalid/repo/internal.flatpakrepo")
+         (repository-url "https://example.invalid/repo/"))))
 
 (define %fp-commit
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
@@ -57,8 +57,9 @@
 (test-equal "remote repository-url"
             "https://dl.flathub.org/repo/"
             (flatpak-remote-repository-url (car %fp-remotes)))
-(test-equal "remote key-file"
-            "flathub.gpg" (flatpak-remote-key-file (car %fp-remotes)))
+(test-equal "remote descriptor-url (bootstrap + trust authority)"
+            "https://dl.flathub.org/repo/flathub.flatpakrepo"
+            (flatpak-remote-descriptor-url (car %fp-remotes)))
 (test-assert "flatpak-application constructible"
              (flatpak-application? (car %fp-apps)))
 (test-equal "application default update-policy is track-branch"
@@ -218,13 +219,15 @@
 (test-assert "invalid remote: empty repository-url"
              (not (valid-flatpak-remote?
                    (flatpak-remote
-                    (name 'x) (repository-url "")
-                    (key-file "k.gpg")))))
-(test-assert "invalid remote: empty key-file"
+                    (name 'x)
+                    (descriptor-url "https://e/foo.flatpakrepo")
+                    (repository-url "")))))
+(test-assert "invalid remote: empty descriptor-url"
              (not (valid-flatpak-remote?
                    (flatpak-remote
-                    (name 'x) (repository-url "https://e/")
-                    (key-file "")))))
+                    (name 'x)
+                    (descriptor-url "")
+                    (repository-url "https://e/")))))
 
 ;; ── application 校验（remote 已知性）───────────────────────
 (test-assert "valid application"
@@ -262,10 +265,12 @@
                                         (remote 'flathub) (branch "stable")))))
 (test-error "catalog duplicate remote name" #t
             (validate-flatpak-catalog!
-             (list (flatpak-remote (name 'flathub) (repository-url "https://a/")
-                                   (key-file "a.gpg"))
-                   (flatpak-remote (name 'flathub) (repository-url "https://b/")
-                                   (key-file "b.gpg")))
+             (list (flatpak-remote (name 'flathub)
+                                   (descriptor-url "https://a/foo.flatpakrepo")
+                                   (repository-url "https://a/"))
+                   (flatpak-remote (name 'flathub)
+                                   (descriptor-url "https://b/foo.flatpakrepo")
+                                   (repository-url "https://b/")))
              %fp-apps))
 (test-error "catalog invalid app" #t
             (validate-flatpak-catalog!
@@ -355,18 +360,5 @@
             (flatpak-render-override-file
              (flatpak-override
               (session-bus '("org.freedesktop.secrets=talk")))))
-
-;; ── bootstrap descriptor 生成（单一事实源）─────────────────
-;; Url 直接从 record 派生——不存在手写第二份 URL；GPGKey 由 key
-;; bytes 生成。
-(test-assert "generated descriptor Url derives from record"
-             (string-contains
-              (flatpak-remote-descriptor-text (car %fp-remotes)
-                                              #vu8(1 2 3))
-              "Url=https://dl.flathub.org/repo/\n"))
-(test-equal "generated descriptor is complete"
-            "[Flatpak Repo]\nTitle=flathub\nUrl=https://dl.flathub.org/repo/\nComment=fixture\nDescription=fixture\nGPGKey=aGVsbG8=\n"
-            (flatpak-remote-descriptor-text (car %fp-remotes)
-                                            #vu8(104 101 108 108 111)))
 
 (test-end "flatpak-model")
