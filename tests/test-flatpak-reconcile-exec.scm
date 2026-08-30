@@ -147,7 +147,18 @@
                           (not (string-contains line "--user"))))))
      (test-assert "sync: remote-add when missing (descriptor location)"
                   (fp-log-has?
-                   "flatpak remote-add --user --if-not-exists --no-follow_redirect flathub https://dl.flathub.org/repo/flathub.flatpakrepo"))
+                   "flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo"))
+     (test-assert "sync: remote URL pinned via remote-modify after add"
+                  (fp-log-has?
+                   "flatpak remote-modify --user --url=https://dl.flathub.org/repo/ flathub"))
+     (test-assert "sync: remote-modify follows remote-add"
+                  (let ((lines (fp-log-lines)))
+                    (< (list-index (lambda (l)
+                                     (string-contains l "remote-add"))
+                                   lines)
+                       (list-index (lambda (l)
+                                     (string-contains l "remote-modify"))
+                                   lines))))
      (test-assert "sync: installs missing selected app"
                   (fp-log-has?
                    "flatpak install --user -y flathub com.tencent.WeChat//stable"))
@@ -224,7 +235,10 @@
                  #:flatpakrepo "/tmp/fake.flatpakrepo")
    (test-assert "sync: missing remote added via --from local descriptor"
                 (fp-log-has?
-                 "flatpak remote-add --user --if-not-exists --no-follow_redirect --from flathub /tmp/fake.flatpakrepo"))
+                 "flatpak remote-add --user --if-not-exists --from flathub /tmp/fake.flatpakrepo"))
+   (test-assert "sync: --from add also pins URL via remote-modify"
+                (fp-log-has?
+                 "flatpak remote-modify --user --url=https://dl.flathub.org/repo/ flathub"))
    ;; remotes-replace：已有 remote → 显式 remote-delete + 重建。
    (fp-write-file %fp-remotes-out
                   "flathub\thttps://dl.flathub.org/repo/\n")
@@ -235,7 +249,10 @@
                 (fp-log-has? "flatpak remote-delete --user flathub"))
    (test-assert "remotes-replace: rebuild via --from descriptor"
                 (fp-log-has?
-                 "flatpak remote-add --user --if-not-exists --no-follow_redirect --from flathub /tmp/fake.flatpakrepo"))
+                 "flatpak remote-add --user --if-not-exists --from flathub /tmp/fake.flatpakrepo"))
+   (test-assert "remotes-replace: declared URL enforced via remote-modify"
+                (fp-log-has?
+                 "flatpak remote-modify --user --url=https://dl.flathub.org/repo/ flathub"))
    (test-assert "remotes-replace: delete precedes add"
                 (let ((lines (fp-log-lines)))
                   (< (list-index (lambda (l) (string-contains l "remote-delete"))

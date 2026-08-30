@@ -101,36 +101,45 @@ FLATPAK_BINARY，install 时 desktop entry export 需要绝对路径）。
                    "Use an explicit remote maintenance operation \
 to replace or modify it."))))))
 
+(define (flatpak-remote-set-url! remote)
+  "把 remote 的 effective URL 强制设为声明的 repository-url。
+pinned 1.16.6 实测：remote-add --from 抓取 summary 时会【无条件】
+应用 summary 里的 xa.redirect-url（Flathub 的 summary 自带
+redirect 回 dl.flathub.org——镜像 URL 会被静默改写回官方；
+--no-follow_redirect flag 在 --from 路径上无效，VM -vv 实测），而
+remote-modify --url 不抓 summary、redirect 跟随是显式 opt-in
+（--follow-redirect，默认不跟）——因此 add 之后必须经此步骤
+落定声明 URL。已实测：落定后 install/update/remote-ls 的 summary
+抓取不会再次改写 URL。"
+  (invoke "flatpak" "remote-modify" "--user"
+          (string-append "--url="
+                         (flatpak-remote-repository-url remote))
+          (symbol->string (flatpak-remote-name remote))))
+
 (define* (flatpak-ensure-remote! remote #:key (flatpakrepo #f))
-  "remote 缺失 → remote-add --user --if-not-exists NAME LOCATION；
+  "remote 缺失 → remote-add + remote-modify --url 落定声明 URL；
 已存在 → drift 检查（见 flatpak-check-remote!），绝不自动修改。
 
 FLATPAKREPO 提供时（本地 vendored descriptor，内含 GPGKey 与
-effective Url）用 --from 引导：本地文件、零联网抓取、keyring 一次
-到位——裸 URL 引导不会自动导入 keyring（pinned 1.16.6 实测首次
-install 报 'public key not found'）。"
+effective Url）用 --from 引导：本地文件、keyring 一次到位——裸
+URL 引导不会自动导入 keyring（pinned 1.16.6 实测首次 install 报
+'public key not found'）。add 之后一律 remote-set-url!（理由见该
+函数：add 阶段的 summary redirect 会改写 URL）。"
   (unless (flatpak-check-remote! remote)
     (format #t "Adding Flatpak remote '~a'...~%"
             (symbol->string (flatpak-remote-name remote)))
-    ;; --no-follow_redirect（注意：remote-add 的该 flag 是下划线，
-    ;; flatpak 上游拼写；remote-modify 的同名 flag 才是连字符）：
-    ;; Flathub 的 summary 带 xa.redirect-url=https://dl.flathub.org/
-    ;; repo/，remote-add --from 抓取 summary 时默认跟随、会把镜像
-    ;; URL 静默改写回官方（VM 实测复现）——镜像场景必须显式关闭。
-    ;; 裸 URL add 不抓 summary（离线写配置），flag 同样加上以防御
-    ;; 未来行为变化。
     (if flatpakrepo
       ;; remote-add 语法：NAME 在前、LOCATION 在后；--from 时
       ;; LOCATION 是本地配置文件（顺序实测修正：文件在前会让
       ;; flatpak 把 name 当文件加载）。
       (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
-              "--no-follow_redirect" "--from"
+              "--from"
               (symbol->string (flatpak-remote-name remote))
               flatpakrepo)
       (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
-              "--no-follow_redirect"
               (symbol->string (flatpak-remote-name remote))
-              (flatpak-remote-location remote)))))
+              (flatpak-remote-location remote)))
+    (flatpak-remote-set-url! remote)))
 
 (define* (flatpak-replace-remote! remote #:key (flatpakrepo #f))
   "显式换源（唯一允许删除 remote 的入口；不自动调用——换源 = 修改
