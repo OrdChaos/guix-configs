@@ -138,7 +138,15 @@ production consumers：
   `/persist/data-app/onlyoffice/share`，自定义词典/插件/
   autosave/recovery；`~/.cache/onlyoffice` 保持 ephemeral；
   包层不生成 store symlink，mutable 配置由应用首次运行自建；
-  `apps/onlyoffice/definition.scm`）。
+  `apps/onlyoffice/definition.scm`）；
+- flatpak（`.local/share/flatpak` →
+  `/persist/data-app/flatpak/installation`，user installation 整体
+  ——repo/remotes/exports/overrides 内部结构由 Flatpak 自管；
+  `~/.var/app/<id>` → `/persist/data-app/flatpak/apps/<id>`，每个
+  Catalog app 一条——与 installation backing 平级，禁止 parent/child
+  嵌套；规则由 `modules/guixcfg/flatpak/service.scm` 从 Catalog 派生
+  （与 selection 无关）；`apps/<id>` 与 installation 的删除语义见
+  `docs/architecture/flatpak.md`（persistence/lifecycle））。
 
 后续应用按同一契约显式 adopt。
 

@@ -32,6 +32,7 @@
                #:use-module (guixcfg home fonts)    ; %fonts、%fontconfig-service、%home-fonts-xdg-link-service
                #:use-module (guixcfg home environment) ; %session-environment-service
                #:use-module (guixcfg home assets)   ; %user-assets-service
+               #:use-module (guixcfg flatpak service) ; %flatpak-home-services（override 文件 + XDG_DATA_DIRS）
                #:export (guix-home
                          %guix-home))
 
@@ -50,6 +51,10 @@ selection，不知道文件/路径）。"
                                   %home-fonts-xdg-link-service
                                   %session-environment-service
                                   %user-assets-service)
+                            ;; Flatpak 平台 Home 集成（override 完整文件
+                            ;; 生成 + XDG_DATA_DIRS exports 追加；零
+                            ;; flatpak CLI、零网络）。
+                            %flatpak-home-services
                             (application-configuration-selections->home-services
                              application-configuration-selections)
                             (applications-home-services %applications)))))

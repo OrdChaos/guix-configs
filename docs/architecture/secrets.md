@@ -90,8 +90,10 @@ provisioning 流程消费（credential-source / provision-password），
 ### 可变应用状态
 
 真实数据在 `/persist/data-app/<application>`，经 bind mount 或
-symlink 暴露到应用默认路径（如 `/persist/data-app/flatpak` →
-`~/.local/share/flatpak`）。不执行每次开机复制。映射由系统层
+symlink 暴露到应用默认路径（如 `/persist/data-app/flatpak/
+installation` → `~/.local/share/flatpak`，以及每 Catalog app 的
+`/persist/data-app/flatpak/apps/<id>` → `~/.var/app/<id>`——详见
+`architecture/flatpak.md`）。不执行每次开机复制。映射由系统层
 `file-systems` 声明（bind mount），在用户会话和依赖服务启动前完成；
 不使用 Home 层实现系统级挂载。
 

@@ -35,6 +35,7 @@
                #:use-module (guixcfg system dns smartdns) ; smartdns-service（system resolver）
                #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind + 系统集成
+               #:use-module (guixcfg flatpak service) ; flatpak-persistence-rules（installation + 每 Catalog app）
 
                #:use-module (gnu services guix)        ; guix-home-service-type
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
@@ -77,11 +78,14 @@
 
 ;; HOME persistence bind mounts（user data + app state；单一定义，
 ;; %vm-services 的 gvfs-mount-metadata 服务与 file-systems 字段共用）。
+;; app state 含 Flatpak 平台规则（installation + 每 Catalog app——
+;; 经 application-persistence generic engine，零专属 mount 代码）。
 (define %persistent-mount-file-systems
   (append (user-persistence-file-systems
            (user-profile-name %primary-user))
           (application-persistence-file-systems
-           (applications-persistence %applications)
+           (append (applications-persistence %applications)
+                   (flatpak-persistence-rules))
            (user-profile-name %primary-user))))
 
 ;; Mihomo 数据目录（providers cache + 选中节点/组状态）的 machine-state
@@ -187,9 +191,11 @@
          (user-persistence-service
           (user-profile-name %primary-user))
          ;; application persistence（generic executor；backing 创建 +
-         ;; consumer parent ownership；bind mounts 见 file-systems）
+         ;; consumer parent ownership；bind mounts 见 file-systems）。
+         ;; 规则含 Flatpak 平台（installation + 每 Catalog app）。
          (application-persistence-service
-          (applications-persistence %applications)
+          (append (applications-persistence %applications)
+                  (flatpak-persistence-rules))
           (user-profile-name %primary-user))
          ;; machine-state persistence（root-owned system state；
          ;; consumers：mihomo 数据目录、noctalia-greeter state dir。

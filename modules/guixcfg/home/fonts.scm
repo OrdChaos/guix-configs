@@ -2,7 +2,11 @@
 ;;; Home owns）。
 ;;;
 ;;; 职责划分（任务架构）：
-;;;   - %fonts：profile 安装哪些字体（“有哪些字体”）；
+;;;   - %fonts：profile 安装哪些字体（“有哪些字体”）——shared fact，
+;;;     现由中立模块 (guixcfg fonts) 拥有（System profile 的 Flatpak
+;;;     sandbox 字体投影消费同一份事实，避免 system→home import；
+;;;     docs/architecture/flatpak.md（fonts）），本模块 re-export
+;;;     保持既有 Home API 不变；
 ;;;   - home-fontconfig-service-type：generic family 映射与缺字
 ;;;     fallback（“如何回落”）；
 ;;;   应用层（GTK/Qt/browser/editor）配置不在本模块范围。
@@ -75,6 +79,17 @@
 ;;; 两层链接同构）。语义与 Home 其余资源一致：纯 store symlink、
 ;;; 随 Home generation 重建、不进 persistence、无 activation 复制。
 ;;;
+;;; Maple 系排除：CEF 渲染进程的 fallback 字体匹配不含 alias
+;;; 规则（其配置走 fontconfig 2.17 FcInitLoadOwnConfig 的
+;;; FC_TEMPLATEDIR 扫描/内嵌 fallback，无用户配置的 generic
+;;; 映射），bare match 按 family 名排序——"Maple Mono" 排在
+;;; "MiSans"/"Noto" 之前，会把文档/UI 正文匹配抢成等宽 CJK +
+;;; Nerd Font 字形（正文间隙过大、部分字形有误的直接原因；隐藏
+;;; maple 链接后实测 match 落到 MiSans/Noto Sans CJK）。排除后
+;;; 渲染进程的 bare match 首选 MiSans（sans）与 Noto CJK
+;;; fallback。桌面的 monospace 策略不受影响（farm 只服务环境
+;;; 清洗型渲染进程；正常链仍经 alias 显式匹配 Maple Mono）。
+;;;
 ;;; 已知权衡：同一字体文件经两条路径可见（profile share 经
 ;;; XDG_DATA_DIRS + 本农场），fc-list 文件级列表出现双份条目；
 ;;; 按 family 聚合的选择器（GTK/Chromium/ONLYOFFICE）天然去重，
@@ -84,32 +99,20 @@
 (define-module (guixcfg home fonts)
                #:use-module (gnu home services fontutils) ; home-fontconfig-service-type
                #:use-module (gnu home services) ; home-files-service-type
-               #:use-module (gnu packages fonts)          ; font-google-noto-*
-               #:use-module (gnu packages fontutils)      ; fontconfig
-               #:use-module (gnu services)                ; service、simple-service
-               #:use-module (guix gexp)                   ; file-append
-               #:use-module (guix packages)               ; package-name
-               #:use-module (virelith packages fonts)     ; 自定义字体
-               #:use-module (srfi srfi-1)                 ; append-map、delete
-               #:export (%fonts
-                         %fontconfig-service
-                         %home-fonts-xdg-link-service))
+               #:use-module (gnu services)      ; service、simple-service
+               #:use-module (guix gexp)         ; file-append
+               #:use-module (guix packages)     ; package-name
+               #:use-module (guixcfg fonts)     ; %fonts、%home-fonts-xdg-link-exclusions（re-export）
+               #:use-module (srfi srfi-1)       ; append-map、delete
+               #:export (%fontconfig-service
+                         %home-fonts-xdg-link-service)
+               #:re-export (%fonts
+                            %home-fonts-xdg-link-exclusions))
 
-;; ── 字体集合（profile 层：决定“有哪些字体”）─────────────────
-;; 自有 channel：MiSans Global（简体主字体 + script 变体）、
-;; Maple Mono Normal NL NF CN（等宽）；guix 官方：Noto 全 script、
-;; CJK sans/serif、emoji、Symbols、Unifont last resort、fontconfig
-;; （fc-* 工具 + 缓存再生）。
-(define %fonts
-  (list mi-sans-global
-        maple-mono-default-nf-cn
-        maple-mono-normal-nl-nf-cn
-        font-google-noto
-        font-google-noto-emoji
-        font-google-noto-sans-cjk
-        font-google-noto-serif-cjk
-        font-gnu-unifont
-        fontconfig))
+;; ── 字体集合（shared fact）─────────────────────────────────
+;; %fonts / %home-fonts-xdg-link-exclusions 由 (guixcfg fonts) 提供
+;; 并在此 re-export（single source；System 的 Flatpak 字体投影也
+;; 消费同一份——docs/architecture/flatpak.md（fonts））。
 
 ;; ── Fontconfig snippet 构造 ─────────────────────────────────
 ;; generic family 主链（无 lang 时的默认顺序；SC 在 JP 前，§6.1）。
@@ -259,8 +262,10 @@ CHAIN 替换为 VARIANT 置首的版本（mode=assign_replace——实测
 
 ;; ── XDG 字体链接农场（头部诊断链）──────────────────────────
 ;; 每个携带 share/fonts 的字体包 → ~/.local/share/fonts/<pkg-name>
-;; 的目录链接（fontconfig 跟随子目录 symlink）。fontconfig 本身
-;; 只携带 share/fontconfig，无字体目录，排除。
+;; 的目录链接（fontconfig 跟随子目录 symlink）。排除集来自共享
+;; 事实 (guixcfg fonts) 的 %home-fonts-xdg-link-exclusions：
+;; fontconfig（无字体目录）与 Maple 系（渲染进程 bare match 抢占
+;; 正文，见头部）。
 (define %home-fonts-xdg-link-service
   (simple-service 'home-fonts-xdg-links
                   home-files-service-type
@@ -268,4 +273,7 @@ CHAIN 替换为 VARIANT 置首的版本（mode=assign_replace——实测
                          (list (string-append ".local/share/fonts/"
                                               (package-name pkg))
                                (file-append pkg "/share/fonts")))
-                       (delete fontconfig %fonts))))
+                       (filter (lambda (pkg)
+                                 (not (member pkg
+                                              %home-fonts-xdg-link-exclusions)))
+                               %fonts))))

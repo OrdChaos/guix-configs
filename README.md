@@ -36,6 +36,15 @@ GUIX_CONFIG_FACTS=/tmp/facts.scm \
 
 # 日常更新（安装后）
 sudo tools/reconfigure.sh
+
+# Flatpak 显式运维（唯一联网入口；全部 --user scope，
+# 详见 docs/architecture/flatpak.md）
+guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- sync
+guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- status [--refresh]
+guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- update
+guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- update-runtimes
+guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remove <logical-name>
+guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- gc
 ```
 
 安装流程见 [operations/installation.md](docs/operations/installation.md)；

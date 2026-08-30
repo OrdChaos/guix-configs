@@ -89,7 +89,10 @@
              %fonts-xdg-link-svc)
 
 (test-equal "home fonts xdg links cover every font package"
-            (map package-name (delete fontconfig %fonts))
+            (map package-name
+                 (filter (lambda (pkg)
+                           (not (member pkg %home-fonts-xdg-link-exclusions)))
+                         %fonts))
             (map (lambda (entry)
                    (string-drop (car entry)
                                 (string-length ".local/share/fonts/")))

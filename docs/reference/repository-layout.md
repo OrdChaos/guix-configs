@@ -18,6 +18,16 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
                        app-private secrets colocate）
   boot/                initrd、UKI、TPM 解锁、boot-state、Recovery、
                        layout（ESP/部署路径固定事实的唯一 authority）
+  flatpak/             Flatpak 平台（docs/architecture/flatpak.md）：
+                       model.scm（remote/application/override 记录 +
+                       校验 + reconcile plan + override renderer）、
+                       registry.scm（Catalog %flatpak-applications +
+                       Selection %flatpak-selection，fail-fast）、
+                       service.scm（离线 Home 集成：override 完整
+                       文件 + XDG_DATA_DIRS + persistence rules；
+                       零 flatpak CLI）、reconcile.scm（sync/status/
+                       update/remove/gc 操作层，唯一联网面，只被
+                       tools/flatpak.scm 消费）
   home/                Guix Home 入口（薄 assembly，聚合 apps
                        registry；guix-home 接受 host 的 logical
                        application-configuration-selections）+ 会话
@@ -36,8 +46,15 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
   utils/               跨领域原语（atomic-file / process / spawn /
                        repository-source / home-path / mountinfo /
                        seed-once / paths / module-closure）
-tools/                 命令行工具（disk-install、secrets、secure-boot、reconfigure、
-                       tpm2-enroll、历史 E2E harness）
+  fonts.scm            共享字体包事实 %fonts +
+                       %home-fonts-xdg-link-exclusions（single source；
+                       Home profile 与 System profile 的 Flatpak
+                       sandbox 字体投影共同消费——system 层不 import
+                       home 层）
+tools/                 命令行工具（disk-install、flatpak（sync/status/
+                       update/remove/gc，Flatpak 唯一联网入口）、
+                       secrets、secure-boot、reconfigure、tpm2-enroll、
+                       历史 E2E harness）
 templates/            新组件模板（application/definition.scm）
 secrets 密文          密文与引用者同置：apps/<app>/secrets/、
                       modules/guixcfg/<域>/<组件>/secrets/、

@@ -111,12 +111,16 @@ readiness 命名 capability；provision 前必须验证最终可观察状态
 分类：
 
 - **系统级 Guix 软件**：`modules/guixcfg/system/packages.scm`
-  （configctl、flatpak、文件系统/恢复/硬件工具、所有用户需要的基础
+  （configctl、flatpak executable、共享 `%fonts` 投影——Flatpak
+  sandbox 字体暴露、文件系统/恢复/硬件工具、所有用户需要的基础
   工具）。服务自己依赖的软件尽量由 service 直接引用。
 - **用户级 Guix 软件**：`modules/guixcfg/apps/<name>/definition.scm`
   （application layer——纵向配置单元；home packages/services 经
   `apps/registry.scm` 聚合进 `%guix-home`）。见 `architecture/home.md`
   的 Application layer 一节。
+- **外部桌面软件子系统**：Flatpak——Guix 声明 policy/integration/
+  desired applications，Flatpak 拥有 mutable per-user installation
+  state；见 `architecture/flatpak.md`。
 - **项目专属工具链**：项目自身（manifest、channels.lock.scm），
   不放进全局用户软件列表。
 
@@ -130,3 +134,5 @@ readiness 命名 capability；provision 前必须验证最终可观察状态
 6. `architecture/desktop-authentication.md` — polkit authority 与
    Secret Service（PAM 登录 keyring）
 7. `architecture/secrets.md` — 秘密管理与威胁模型
+8. `architecture/flatpak.md` — Flatpak 子系统（Catalog/Selection、
+   persistence、overrides、显式运维）
