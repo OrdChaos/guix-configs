@@ -25,16 +25,20 @@
 ;; 显式 sync）；repository-url 是建立后的 effective repo URL，用于
 ;; drift 检查（flatpak remotes --user --columns=name,url），两者
 ;; 语义独立不可互相比较。信任决策：SJTU 镜像内容 = dl.flathub.org/
-;; repo 的同副本（同一份已签名 summary，GPG 验证不变），keyring
-;; 随仓库内容从镜像获取；项目不管理 key material、不建模
-;; fingerprint。
+;; repo 的同副本（同一份已签名 summary，GPG 验证不变）；公开
+;; keyring 已 vendor 进 flathub.flatpakrepo（provenance = 官方
+;; dl.flathub.org/repo/flathub.gpg），sync/remotes-replace 经 --from
+;; 引导（内嵌 GPGKey，裸 URL 引导不会自动导入 keyring）。
 ;;
 ;; 换源注意（flatpak.md（remotes））：
 ;;   - 镜像的 flathub.flatpakrepo 是官方 descriptor 的原样转发
-;;     （Url= 仍指向 dl.flathub.org），因此 location 必须用镜像的
-;;     裸 OSTree URL——用 descriptor 等于没换源；
-;;   - 裸 URL 的 remote-add 是离线写配置，keyring 首次 update 时
-;;     从镜像获取；
+;;     （Url= 仍指向 dl.flathub.org），因此 location/repository-url
+;;     必须用镜像的裸 OSTree URL——用镜像 descriptor 等于没换源；
+;;   - 换源 = 修改已有 mutable state：sync 永远 fail-loud 不自动改
+;;     trust root；唯一换源入口是显式命令
+;;     `tools/flatpak.scm remotes-replace <name>`（delete + 按声明
+;;     重建）。改本文件时必须同步 vendored descriptor 的 Url=
+;;     （tests/test-flatpak-service.scm 一致性回归）；
 ;;   - SJTU 是智能缓存：未缓存文件会重定向回官方源（NVIDIA 等
 ;;     受限内容必须走官方服务器），首次拉取冷门 runtime 时可能
 ;;     仍慢；同步间隔约 4 小时。

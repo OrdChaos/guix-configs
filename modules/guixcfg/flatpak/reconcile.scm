@@ -34,8 +34,10 @@
                #:use-module (srfi srfi-13) ; string-split、string-tokenize、string-trim-both、string-prefix?
                #:export (flatpak-binary
                          flatpak-remotes-alist
+                         flatpak-remote-by-name
                          flatpak-check-remote!
                          flatpak-ensure-remote!
+                         flatpak-replace-remote!
                          flatpak-list-installed-apps
                          flatpak-list-installed-runtime-refs
                          flatpak-install-app!
@@ -56,6 +58,14 @@ FLATPAK_BINARY，install 时 desktop entry export 需要绝对路径）。
 (is it installed in the system profile?)")))
 
 ;;; ── remotes ────────────────────────────────────────────────
+
+(define (flatpak-remote-by-name name)
+  "REMOTE name → <flatpak-remote>（registry 查表；未知名 fail-fast
+并列出可用名——remotes-replace 的解析入口）。"
+  (or (find (lambda (r) (eq? name (flatpak-remote-name r)))
+            %flatpak-remotes)
+      (error "unknown flatpak remote"
+             name (map flatpak-remote-name %flatpak-remotes))))
 
 (define (flatpak-remotes-alist)
   "已配置 user remotes 的 ((name . url) ...)（'flatpak remotes
@@ -91,16 +101,35 @@ FLATPAK_BINARY，install 时 desktop entry export 需要绝对路径）。
                    "Use an explicit remote maintenance operation \
 to replace or modify it."))))))
 
-(define (flatpak-ensure-remote! remote)
-  "remote 缺失 → remote-add --user --if-not-exists NAME LOCATION
-（.flatpakrepo descriptor 联网抓取只发生在显式 sync）；已存在 →
-drift 检查（见 flatpak-check-remote!）。"
+(define* (flatpak-ensure-remote! remote #:key (flatpakrepo #f))
+  "remote 缺失 → remote-add --user --if-not-exists NAME LOCATION；
+已存在 → drift 检查（见 flatpak-check-remote!），绝不自动修改。
+
+FLATPAKREPO 提供时（本地 vendored descriptor，内含 GPGKey 与
+effective Url）用 --from 引导：本地文件、零联网抓取、keyring 一次
+到位——裸 URL 引导不会自动导入 keyring（pinned 1.16.6 实测首次
+install 报 'public key not found'）。"
   (unless (flatpak-check-remote! remote)
     (format #t "Adding Flatpak remote '~a'...~%"
             (symbol->string (flatpak-remote-name remote)))
-    (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
-            (symbol->string (flatpak-remote-name remote))
-            (flatpak-remote-location remote))))
+    (if flatpakrepo
+      (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
+              "--from" flatpakrepo
+              (symbol->string (flatpak-remote-name remote)))
+      (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
+              (symbol->string (flatpak-remote-name remote))
+              (flatpak-remote-location remote)))))
+
+(define* (flatpak-replace-remote! remote #:key (flatpakrepo #f))
+  "显式换源（唯一允许删除 remote 的入口；不自动调用——换源 = 修改
+已有 mutable state，必须由用户显式发起）：remote-delete（如存在）
+→ 按声明重新 remote-add。trust 边界仍在：命令本身是显式的
+destructive acknowledgment，sync 永远走不到这里。"
+  (let ((name (symbol->string (flatpak-remote-name remote))))
+    (when (assoc-ref (flatpak-remotes-alist) name)
+      (format #t "Replacing Flatpak remote '~a' (explicit)...~%" name)
+      (invoke "flatpak" "remote-delete" "--user" name))
+    (flatpak-ensure-remote! remote #:flatpakrepo flatpakrepo)))
 
 ;;; ── installed state ────────────────────────────────────────
 
@@ -164,11 +193,15 @@ app pin 不隐含 runtime pin（不实现 dependency lockfile）。
 
 (define* (flatpak-sync #:key (remotes %flatpak-remotes)
                             (applications %flatpak-applications)
-                            (selection %flatpak-selection))
+                            (selection %flatpak-selection)
+                            (flatpakrepo #f))
   "ensure declared remotes + ensure selected apps installed。
 只增不删：不 update 已装 app、不 remove 未声明 app、不 gc。
-返回本次安装的 <flatpak-application> 列表。"
-  (for-each flatpak-ensure-remote! remotes)
+FLATPAKREPO（本地 vendored descriptor）传给 ensure-remote 做带
+keyring 的引导。返回本次安装的 <flatpak-application> 列表。"
+  (for-each (lambda (remote)
+              (flatpak-ensure-remote! remote #:flatpakrepo flatpakrepo))
+            remotes)
   (let* ((selected (flatpak-select-applications selection applications))
          (missing (flatpak-reconcile-plan
                    selected (flatpak-list-installed-apps))))

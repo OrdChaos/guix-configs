@@ -63,6 +63,9 @@
                            (display "  remotes)\n" p)
                            (display "    cat \"${FP_FAKE_REMOTES_OUT:-/dev/null}\" 2>/dev/null\n" p)
                            (display "    ;;\n" p)
+                           (display "  remote-delete)\n" p)
+                           (display "    : > \"${FP_FAKE_REMOTES_OUT:-/dev/null}\"\n" p)
+                           (display "    ;;\n" p)
                            (display "  remote-info)\n" p)
                            (display "    cat \"${FP_FAKE_REMOTE_INFO_OUT:-/dev/null}\" 2>/dev/null\n" p)
                            (display "    ;;\n" p)
@@ -208,6 +211,48 @@
                 (and (not (fp-log-has? "remote-modify"))
                      (not (fp-log-has? "remote-delete"))
                      (not (fp-log-has? "remote-add"))))
+
+   ;; ── 3b. vendored descriptor 引导（--from）+ 换源命令 ───────
+   ;; sync 带 flatpakrepo：missing remote 经 --from 本地 descriptor
+   ;; 添加（keyring 内嵌，零联网抓取）。
+   (fp-write-file %fp-remotes-out "")
+   (fp-write-file %fp-list-app-out "")
+   (fp-clear-log!)
+   (flatpak-sync #:remotes %fp-remotes
+                 #:applications %fp-apps
+                 #:selection '()
+                 #:flatpakrepo "/tmp/fake.flatpakrepo")
+   (test-assert "sync: missing remote added via --from local descriptor"
+                (fp-log-has?
+                 "flatpak remote-add --user --if-not-exists --from /tmp/fake.flatpakrepo flathub"))
+   ;; remotes-replace：已有 remote → 显式 remote-delete + 重建。
+   (fp-write-file %fp-remotes-out
+                  "flathub\thttps://dl.flathub.org/repo/\n")
+   (fp-clear-log!)
+   (flatpak-replace-remote! (car %fp-remotes)
+                            #:flatpakrepo "/tmp/fake.flatpakrepo")
+   (test-assert "remotes-replace: explicit delete first"
+                (fp-log-has? "flatpak remote-delete --user flathub"))
+   (test-assert "remotes-replace: rebuild via --from descriptor"
+                (fp-log-has?
+                 "flatpak remote-add --user --if-not-exists --from /tmp/fake.flatpakrepo flathub"))
+   (test-assert "remotes-replace: delete precedes add"
+                (let ((lines (fp-log-lines)))
+                  (< (list-index (lambda (l) (string-contains l "remote-delete"))
+                                 lines)
+                     (list-index (lambda (l) (string-contains l "remote-add"))
+                                 lines))))
+   ;; remotes-replace：remote 缺失 → 无 delete，只有 add。
+   (fp-write-file %fp-remotes-out "")
+   (fp-clear-log!)
+   (flatpak-replace-remote! (car %fp-remotes)
+                            #:flatpakrepo "/tmp/fake.flatpakrepo")
+   (test-assert "remotes-replace: no delete when remote missing"
+                (not (fp-log-has? "remote-delete")))
+   (test-assert "remotes-replace: adds when remote missing"
+                (fp-log-has? "flatpak remote-add"))
+   (test-error "remote-by-name: unknown remote fails fast" #t
+               (flatpak-remote-by-name 'nope))
 
    ;; ── 4. update：显式 unpinned selected targets ─────────────
    (fp-write-file %fp-remotes-out

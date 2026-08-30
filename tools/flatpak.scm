@@ -7,10 +7,14 @@
 ;;;   guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- update
 ;;;   guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- update-runtimes
 ;;;   guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remove <logical-name>
+;;;   guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remotes-replace <remote-name>
 ;;;   guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- gc
 ;;;
 ;;; 语义（reconcile.scm 头部）：sync 只增不删；status 默认离线；
 ;;; update 显式 ref 列表；remove ≠ purge；gc 显式维护。
+;;; remotes-replace 是唯一的换源入口：显式删除 + 按声明重建
+;;; （sync 的 drift 检查永远 fail-loud，绝不静默改 trust root——
+;;; 换源是修改已有 mutable state，必须由用户显式发起）。
 ;;; 一切操作 --user scope。reconfigure/boot/login 与网络零耦合。
 
 ;; guix repl 不提供 -L，这里显式把 modules/ 加入 load path（从仓库根目录运行）。
@@ -20,14 +24,21 @@
              (ice-9 format)
              (ice-9 match))
 
+;; vendored Flathub descriptor（Url = registry 的 repository-url，
+;; 内嵌官方 GPGKey——本地引导、零联网抓取、keyring 一次到位；
+;; 与 registry 声明的一致性由 tests/test-flatpak-service.scm 回归）。
+(define %flatpakrepo-file
+  (string-append (getcwd) "/modules/guixcfg/flatpak/flathub.flatpakrepo"))
+
 (define (usage)
   (format #t "Usage:
-  flatpak sync                  ensure declared remotes and selected apps (add-only)
-  flatpak status [--refresh]    show declared/installed state (offline; --refresh queries remotes)
-  flatpak update                update unpinned selected+installed apps (explicit refs only)
-  flatpak update-runtimes       update installed runtimes (explicit refs only)
-  flatpak remove <logical-name> uninstall one catalog application (user data preserved)
-  flatpak gc                    maintenance: remove unused runtimes + repair installation~%"))
+  flatpak sync                       ensure declared remotes and selected apps (add-only)
+  flatpak status [--refresh]         show declared/installed state (offline; --refresh queries remotes)
+  flatpak update                     update unpinned selected+installed apps (explicit refs only)
+  flatpak update-runtimes            update installed runtimes (explicit refs only)
+  flatpak remove <logical-name>      uninstall one catalog application (user data preserved)
+  flatpak remotes-replace <name>     explicit source switch: delete + rebuild remote from declaration
+  flatpak gc                         maintenance: remove unused runtimes + repair installation~%"))
 
 (define (main args)
   ;; install/export 时 flatpak 用 FLATPAK_BINARY 写绝对 Exec
@@ -35,12 +46,16 @@
   ;; activation 环境下也能启动）。
   (setenv "FLATPAK_BINARY" (flatpak-binary))
   (match (cdr args)
-         (("sync")           (flatpak-sync))
+         (("sync")           (flatpak-sync #:flatpakrepo %flatpakrepo-file))
          (("status")         (flatpak-status))
          (("status" "--refresh") (flatpak-status #:refresh? #t))
          (("update")         (flatpak-update))
          (("update-runtimes") (flatpak-update-runtimes))
          (("remove" name)    (flatpak-remove (string->symbol name)))
+         (("remotes-replace" name)
+          (flatpak-replace-remote! (flatpak-remote-by-name
+                                    (string->symbol name))
+                                   #:flatpakrepo %flatpakrepo-file))
          (("gc")             (flatpak-gc))
          (_ (usage) (exit 1))))
 

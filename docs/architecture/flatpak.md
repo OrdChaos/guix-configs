@@ -101,21 +101,37 @@ declaration removal 不是"永久销毁用户数据"的充分授权
 remote 不存在        → flatpak remote-add --user --if-not-exists NAME LOCATION
                        （.flatpakrepo descriptor 由 flatpak 抓取解析——
                         联网，只发生在显式 sync；裸 OSTree URL 是离线
-                        写配置，keyring 首次 update 时从仓库获取）
+                        写配置，但不导入 keyring）
 remote 存在且 url 一致  → no-op
 remote 存在但 url 不一致 → FAIL + actionable diagnostic
                        （绝不自动 remote-modify/delete，不静默改 trust root）
 ```
 
-**换源（镜像）操作路径**（两个字段必须同时改、且与已配置 remote
-的实际 URL 一致——否则 sync fail）：
+**keyring 引导（vendored descriptor）**：sync/remotes-replace 用
+`--from` 本地 vendored 的 `modules/guixcfg/flatpak/flathub.flatpakrepo`
+添加 remote——Url= 与 registry 的 repository-url 一致（一致性由
+`tests/test-flatpak-service.scm` 回归），GPGKey 内嵌官方密钥
+（pinned 1.16.6 实测：裸 URL remote 不会自动抓 keyring，首次
+install 直接报 "public key not found"；descriptor 引导无此问题）。
+key 文件同时含主密钥 `4184DD4D907A7CAE` 与其签名子密钥
+`562702E9E3ED7EE8`——summary 由子密钥签名，二者缺一不可。这是对
+"项目不管理 key material"记录的修正：vendored 的是**公开** keyring
+（非秘密），provenance = 官方 `dl.flathub.org/repo/flathub.gpg`
+（2026-08-30 抓取，与镜像副本逐字节一致）；flathub 若轮换密钥，
+随仓库更新此文件并 review。手工创建的 remote 若缺 keyring，恢复
+手段：`flatpak remote-modify --user --gpg-import=flathub.gpg flathub`。
+
+**换源（镜像）操作路径**（registry 的 location + repository-url
+与 vendored descriptor 的 Url= 三处一致——否则 sync fail）：
 
 ```text
-路径 A（重建，干净）：
-  registry 改 location + repository-url → 显式维护
-  flatpak remote-delete --user flathub → 重跑 sync（从镜像重建）
+推荐（一条命令）：
+  改 registry（两个字段）+ vendored descriptor 的 Url=
+  → flatpak remotes-replace flathub（显式 destructive acknowledgment：
+    remote-delete + 按声明 --from descriptor 重建，keyring 一次到位）
+  → flatpak sync
 
-路径 B（保 remote，保留已安装 keyring）：
+保 remote 手工路径（不推荐，供恢复用）：
   flatpak remote-modify --user --url=<镜像> flathub
   + registry 的 repository-url 同步改为镜像值 → sync 通过 drift 检查
 ```
@@ -126,10 +142,10 @@ NVIDIA 等受限内容必须走官方服务器；镜像站发布的 `.flatpakrep
 用镜像的**裸 OSTree URL**，用 descriptor 等于没换。恢复官方源 =
 同路径反向执行。信任语义不变：镜像服务同一份已签名 summary，GPG
 验证与 keyring 不因换源改变——这正是 drift 检查存在的意义。
-```
 
 信任决策：跟随 Flathub 官方签名（镜像内容 = 官方仓库同副本），
-GPG 签名验证由 flatpak 内置执行；项目不管理 key material、不建模
+GPG 签名验证由 flatpak 内置执行；项目 vendored **公开** keyring
+（非秘密，provenance 见上），不管理任何秘密 key material、不建模
 fingerprint。
 
 ## Overrides：complete-file ownership
@@ -164,6 +180,7 @@ guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- status [--re
 guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- update
 guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- update-runtimes
 guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remove <logical-name>
+guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remotes-replace <remote-name>
 guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- gc
 ```
 
@@ -174,6 +191,7 @@ guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- gc
 | `update` | 目标 = **selection ∩ installed ∩ unpinned**，显式 ref 列表；绝无无参全 installation update；commit pinned app 默认不进目标 |
 | `update-runtimes` | 枚举 installed runtimes → 显式 ref 更新（app pin 不隐含 runtime pin） |
 | `remove` | 显式 uninstall ref（logical name，catalog fail-fast 解析）；**userdata 与 persistence rule 保留（remove ≠ purge）** |
+| `remotes-replace <name>` | **唯一换源入口**：显式 destructive acknowledgment——remote-delete + 按声明经 vendored descriptor（--from，keyring 内嵌）重建；sync 的 drift 检查永远 fail-loud，绝不自动改 trust root |
 | `gc` | 显式维护：`uninstall --unused --user` + `repair --user`；不挂任何 hook |
 | `purge` | Phase 4（seam 已定义）：remove ref + 清空 userdata **内容**（绝不 `rm -rf` 仍 bind-mounted 的 backing root）；之后才允许从 Catalog 删除定义 |
 

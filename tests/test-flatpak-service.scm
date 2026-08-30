@@ -108,6 +108,25 @@
                           (file-system-device fs))))
                   (operating-system-file-systems %vm-os)))
 
+;; ── vendored descriptor 与 registry 一致性 ──────────────────
+;; flathub.flatpakrepo（本地引导物，含官方 GPGKey）的 Url= 必须与
+;; registry 声明的 repository-url 一致——两个地方，一个事实，
+;; 测试固定（换源时改 registry 必须同步改 descriptor，否则
+;; remotes-replace/sync 会以错误 URL 引导）。
+(define %vendored-descriptor
+  (call-with-input-file "modules/guixcfg/flatpak/flathub.flatpakrepo"
+                        (lambda (port) (read-string port))))
+
+(test-assert "vendored flatpakrepo Url matches declared repository-url"
+             (string-contains
+              %vendored-descriptor
+              (string-append "Url="
+                             (flatpak-remote-repository-url
+                              (car %flatpak-remotes))
+                             "\n")))
+(test-assert "vendored flatpakrepo embeds the official GPG key"
+             (string-contains %vendored-descriptor "GPGKey=mQINB"))
+
 ;; ── 静态回归：platform 模块零 flatpak CLI / 零 reconcile ────
 (define (module-source name)
   (call-with-input-file
