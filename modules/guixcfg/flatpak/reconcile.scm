@@ -112,15 +112,23 @@ install 报 'public key not found'）。"
   (unless (flatpak-check-remote! remote)
     (format #t "Adding Flatpak remote '~a'...~%"
             (symbol->string (flatpak-remote-name remote)))
+    ;; --no-follow_redirect（注意：remote-add 的该 flag 是下划线，
+    ;; flatpak 上游拼写；remote-modify 的同名 flag 才是连字符）：
+    ;; Flathub 的 summary 带 xa.redirect-url=https://dl.flathub.org/
+    ;; repo/，remote-add --from 抓取 summary 时默认跟随、会把镜像
+    ;; URL 静默改写回官方（VM 实测复现）——镜像场景必须显式关闭。
+    ;; 裸 URL add 不抓 summary（离线写配置），flag 同样加上以防御
+    ;; 未来行为变化。
     (if flatpakrepo
       ;; remote-add 语法：NAME 在前、LOCATION 在后；--from 时
       ;; LOCATION 是本地配置文件（顺序实测修正：文件在前会让
       ;; flatpak 把 name 当文件加载）。
       (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
-              "--from"
+              "--no-follow_redirect" "--from"
               (symbol->string (flatpak-remote-name remote))
               flatpakrepo)
       (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
+              "--no-follow_redirect"
               (symbol->string (flatpak-remote-name remote))
               (flatpak-remote-location remote)))))
 
