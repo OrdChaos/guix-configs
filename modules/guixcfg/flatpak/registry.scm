@@ -60,7 +60,7 @@
 ;; 未选中的 app 不产生 persistence mount（其 definition 里的
 ;; persistence intent 随 selection 生效）。
 (define %flatpak-selection
-  '(qq wechat onlyoffice mission-center))
+  '(qq wechat onlyoffice missioncenter))
 
 ;; fail-fast（模块加载即校验；apps/registry.scm 同款）。
 (validate-flatpak-catalog! %flatpak-remotes %flatpak-applications)
