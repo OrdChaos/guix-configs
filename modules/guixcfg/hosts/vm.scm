@@ -34,6 +34,7 @@
                #:use-module (guixcfg system dns ownership) ; system-dns-etc-service（DNS ownership）
                #:use-module (guixcfg system dns smartdns) ; smartdns-service（system resolver）
                #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
+               #:use-module (guixcfg system machine-identity) ; /etc/machine-id 持久化（先于 D-Bus activation）
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind + 系统集成
                #:use-module (guixcfg flatpak service) ; flatpak-persistence-rules（installation + 每 Catalog app）
 
@@ -324,12 +325,20 @@
 ;; 列表末尾 = user activation 中最早运行（紧随 essential 的
 ;; account 步骤之后），保证后续 user activation（如 user-persistence
 ;; 的 getpw）能看到完整数据库。
+;; machine-identity 紧随其后（列表倒数第二）：user activation 段最
+;; 先执行的顺序中排在第二，严格先于 %base-services 系 D-Bus
+;; activation 的 dbus-uuidgen --ensure=/etc/machine-id（D-Bus service
+;; 由 instantiate-missing-services 插到列表头部 = user activation 段
+;; 最后执行）——/etc/machine-id 在 D-Bus 之前就位
+;; （docs/architecture/persistence.md（Machine identity）；
+;; tests/test-machine-identity.scm 断言该顺序）。
 (define %vm-os
   (operating-system
    (inherit %os-without-account-databases)
    (services (append (operating-system-user-services
                       %os-without-account-databases)
-                     (list (account-databases-service
+                     (list (machine-identity-service)
+                           (account-databases-service
                             %vm-accounts+groups))))))
 
 ;; 末尾裸表达式：让本文件同时是 guix system 的入口文件——

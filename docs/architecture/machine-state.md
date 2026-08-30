@@ -124,6 +124,14 @@ path DSL。
 
 ## 现有 production rules
 
+- **machine-id**（system/machine-identity.scm + utils/machine-id.scm，
+  2026-08-30）：`/persist/system/machine-id` → `/etc/machine-id`
+  （activation 投影；不是 bind——单文件 atomic-replace 消费者）。
+  per-machine identity：首启 `dbus-uuidgen` 生成一次，之后跨 reboot
+  / root 重建稳定；绝不覆盖 canonical；必须先于 D-Bus activation 的
+  dbus-uuidgen --ensure 执行（host 组装置 services 列表末尾，
+  test-machine-identity.scm 断言时序）。详见
+  docs/architecture/persistence.md（Machine identity）。
 - **mihomo**（system/mihomo/service.scm）：providers cache + 选中
   节点/组状态，root-owned（0700，mihomo activation 强制）。
 - **noctalia-greeter**（system/noctalia-greeter.scm，2026-08-28）：

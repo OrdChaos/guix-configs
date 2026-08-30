@@ -38,12 +38,13 @@ atomic replace（write temp → rename）产生新 inode，破坏 hardlink；
 ## Persistence inventory
 
 | logical state | canonical backing | consumer | exposure | mutable | derived |
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | `/gnu/store` | `@persist-gnu-store` | `/gnu/store` | direct（subvol mount） | no | no |
 | `/var/guix` | `@persist-var-guix` | `/var/guix` | direct（安装期不挂） | yes | no |
 | user dirs | `/persist/data-home/<user>/<d>` | `/home/<user>/<d>` | directory bind | yes | no |
 | guix-configs | `/persist/data-home/<user>/guix-configs` | `/home/<user>/guix-configs` | directory bind | yes | no |
 | SSH host keys | `/persist/system/ssh/ssh_host_ed25519_key` | sshd HostKey | direct reference | yes | no |
+| **machine-id** | **`/persist/system/machine-id`** | **`/etc/machine-id`** | **activation projection** | **yes** | **no** |
 | age identity | `/persist/system/keys/age/identity` | secrets 解密 | direct reference | yes | no |
 | Secure Boot keys | `/persist/system/keys/secure-boot/*` | UKI 签名/enrollment | direct reference | yes | no |
 | TPM state | `/persist/system/tpm2` | tpm2-enroll | direct | yes | no |
@@ -188,6 +189,48 @@ authority（本机产生的 mutable state，独立于 repository）。
 
 当前无真实 production rule（NetworkManager 只作 canonical example，
 未启用——见 machine-state.md）。
+
+## Machine identity（/etc/machine-id）
+
+`/etc/machine-id` 是 **per-machine identity**，不是 declarative 内容：
+每台机器首次初始化时生成一次、此后所有 reboot / root 重建恢复同一个
+ID。实现：`modules/guixcfg/system/machine-identity.scm`（接线）+
+`modules/guixcfg/utils/machine-id.scm`（纯状态机）。
+
+```text
+/persist/system/machine-id          canonical（machine-owned identity）
+        ↓ activation 投影（每次 boot / reconfigure / init）
+/etc/machine-id                     consumer（FHS 读取点）
+```
+
+机制（与 SSH host keys 同族；machine-id 的 consumer 读 FHS 路径，
+不能像 sshd 那样 direct reference，因此需要投影——runtime
+materialization 例外，见上文）：
+
+1. canonical 缺失（新机器/首次安装）→ `dbus-uuidgen`（pinned dbus
+   包，语义正确的生成器）生成一次，原子写入（0444 root）；之后
+   永不重新生成；
+2. canonical 已存在 → 绝不覆盖（重新生成 = 悄悄更换机器身份）；
+3. canonical 损坏/非法 → fail closed（报错给处置方式，不自动重建）；
+4. `/etc/machine-id` ← canonical：缺失/空/损坏/不一致一律原子替换
+   ——同时自愈 reused root（recovery）里的旧/坏值（空/损坏的
+   `/etc/machine-id` 会让 pinned Guix D-Bus activation 的
+   `dbus-uuidgen --ensure` 因 INVALID_FILE_CONTENT 直接失败）。
+
+**时序不变量**：投影必须先于 D-Bus activation 的
+`dbus-uuidgen --ensure=/etc/machine-id`（否则每次 ephemeral boot 都
+生成新 ID——Flatpak QQ 等 machine-bound 登录态随之失效）。Guix
+activation 脚本按 fold-services 顺序执行 user services 的 activation
+gexp（列表末尾最先）；D-Bus service 由 instantiate-missing-services
+插到列表头部（最后执行）。因此 host 组装把 machine-identity 服务放
+在 services 列表末尾（紧随 account-databases 投影），并在
+`tests/test-machine-identity.scm` 断言该顺序（防止未来破坏时序）。
+
+**`/var/lib/dbus/machine-id`**：dbus 1.16.2 的
+`_dbus_read_local_machine_uuid` 先读它、再回退 `/etc/machine-id`；
+但 dbus-daemon 以 create_if_not_found=#f 调用、Guix activation 只
+ensure `/etc/machine-id`——本系统该文件永远不存在，`/etc/machine-id`
+就是实际生效来源。不额外创建它（避免第二份 dbus 优先读取的副本）。
 
 ## Mixed-authority state container（Phase A，2026-08）
 

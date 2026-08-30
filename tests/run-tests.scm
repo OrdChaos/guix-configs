@@ -128,6 +128,7 @@
                "tests/test-noctalia-seed.scm"
                "tests/test-source-hygiene.scm"
                "tests/test-machine-state-persistence.scm"
+               "tests/test-machine-identity.scm"
                "tests/test-mixed-authority.scm"
                "tests/test-gnome-keyring.scm"
                "tests/test-gnupg.scm"
