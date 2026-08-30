@@ -21,7 +21,7 @@
                #:use-module (guixcfg apps celluloid definition)
                #:use-module (guixcfg apps loupe definition)
                #:use-module (guixcfg apps gnome-text-editor definition)
-               #:use-module (guixcfg flatpak applications onlyoffice) ; %onlyoffice-desktop-entry
+               #:use-module (guixcfg flatpak applications wps) ; %wps-desktop-entry
                #:export (%xdg-default-applications
                          %xdg-default-apps-service
                          %xdg-user-dirs-service))
@@ -90,27 +90,26 @@
 (define %text-default-mime-types
   '("text/plain" "application/x-zerosize"))
 
-;; 办公文档 → ONLYOFFICE Desktop Editors（Flatpak；desktop entry 名
-;; 来自其 definition 的 %onlyoffice-desktop-entry——policy 不复制
-;; 应用专属字符串）。MIME 清单 = Flathub AppStream 对
-;; org.onlyoffice.desktopeditors 声明的 mimetype 全集（2026-08
-;; 核实），排除：
+;; 办公文档 → WPS Office 365（Flatpak；desktop entry 名来自其
+;; definition 的 %wps-desktop-entry——policy 不复制应用专属字符串）。
+;; MIME 清单按办公文档域策划（2026-08）：WPS 365 的 Flathub
+;; appstream 不含 mimetype 段（desktop 文件在 deb 包内，构建期才
+;; 生成），无法像 ONLYOFFICE 那样取 AppStream 全集——本表取
+;; OOXML 三件套全集（含宏启用与模板变体）+ 旧 MS 二进制格式 +
+;; ODF text/spreadsheet/presentation（含模板）+ WPS 原生格式
+;; （wps-office.*：wps/wpt 文档、et/ett 表格、dps/dpt 演示）+
+;; rtf/csv/tsv/pdf，排除：
 ;;   - text/plain、text/markdown（文本编辑器领域；text/plain 已有
 ;;     GNOME Text Editor 默认，不制造重复 key）
-;;   - 电子书/图像类（epub、fictionbook、djvu——非 office 文档，
-;;     留给各自领域应用）
-;;   - x-scheme-handler/oo-office（URL scheme handler，非文件类型）
-;; 注：application/pdf 一并默认到 ONLYOFFICE（当前无独立 PDF
-;; 查看器；引入专用查看器后把该行移出本表即可）。
+;;   - Apple/Visio/StarOffice 旧格式、XPS、HWP、ODF flat-xml
+;;     （WPS 不处理或过于边缘，留给 Open With）
+;; 注：application/pdf 一并默认到 WPS（当前无独立 PDF 查看器；
+;; 引入专用查看器后把该行移出本表即可）。
 (define %office-default-mime-types
   '("application/msword"
     "application/msword-template"
-    "application/oxps"
     "application/pdf"
     "application/rtf"
-    "application/vnd.apple.keynote"
-    "application/vnd.apple.numbers"
-    "application/vnd.apple.pages"
     "application/vnd.ms-excel"
     "application/vnd.ms-excel.sheet.binary.macroEnabled.12"
     "application/vnd.ms-excel.sheet.macroEnabled.12"
@@ -119,24 +118,13 @@
     "application/vnd.ms-powerpoint.presentation.macroEnabled.12"
     "application/vnd.ms-powerpoint.slideshow.macroEnabled.12"
     "application/vnd.ms-powerpoint.template.macroEnabled.12"
-    "application/vnd.ms-visio.drawing.macroEnabled.main+xml"
-    "application/vnd.ms-visio.drawing.main+xml"
-    "application/vnd.ms-visio.stencil.macroEnabled.main+xml"
-    "application/vnd.ms-visio.stencil.main+xml"
-    "application/vnd.ms-visio.template.macroEnabled.main+xml"
-    "application/vnd.ms-visio.template.main+xml"
     "application/vnd.ms-word.document.macroEnabled.12"
     "application/vnd.ms-word.template.macroEnabled.12"
-    "application/vnd.ms-xpsdocument"
-    "application/vnd.oasis.opendocument.graphics"
     "application/vnd.oasis.opendocument.presentation"
-    "application/vnd.oasis.opendocument.presentation-flat-xml"
     "application/vnd.oasis.opendocument.presentation-template"
     "application/vnd.oasis.opendocument.spreadsheet"
-    "application/vnd.oasis.opendocument.spreadsheet-flat-xml"
     "application/vnd.oasis.opendocument.spreadsheet-template"
     "application/vnd.oasis.opendocument.text"
-    "application/vnd.oasis.opendocument.text-flat-xml"
     "application/vnd.oasis.opendocument.text-template"
     "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     "application/vnd.openxmlformats-officedocument.presentationml.slideshow"
@@ -145,17 +133,12 @@
     "application/vnd.openxmlformats-officedocument.spreadsheetml.template"
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     "application/vnd.openxmlformats-officedocument.wordprocessingml.template"
-    "application/vnd.sun.xml.calc"
-    "application/vnd.sun.xml.impress"
-    "application/vnd.sun.xml.writer"
-    "application/vnd.sun.xml.writer.template"
     "application/wps-office.dps"
     "application/wps-office.dpt"
     "application/wps-office.et"
     "application/wps-office.ett"
     "application/wps-office.wps"
     "application/wps-office.wpt"
-    "application/x-hwp"
     "text/csv"
     "text/tab-separated-values"))
 
@@ -171,7 +154,7 @@
           (mime-defaults %text-default-mime-types
                          %gnome-text-editor-desktop-entry)
           (mime-defaults %office-default-mime-types
-                         %onlyoffice-desktop-entry)
+                         %wps-desktop-entry)
           (map (lambda (mime)
                  (cons mime (list %chrome-desktop-entry)))
                '("text/html"
