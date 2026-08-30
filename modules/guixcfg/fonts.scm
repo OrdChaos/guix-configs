@@ -18,8 +18,7 @@
                #:use-module (gnu packages fonts)     ; font-google-noto-*
                #:use-module (gnu packages fontutils) ; fontconfig、font-gnu-unifont
                #:use-module (virelith packages fonts) ; mi-sans-global、maple-mono-*
-               #:export (%fonts
-                         %home-fonts-xdg-link-exclusions))
+               #:export (%fonts))
 
 ;; 字体集合（profile 层：决定"有哪些字体"）。
 ;; 自有 channel：MiSans Global（简体主字体 + script 变体）、
@@ -36,12 +35,3 @@
         font-google-noto-serif-cjk
         font-gnu-unifont
         fontconfig))
-
-;; XDG 字体农场排除集（~/.local/share/fonts/<pkg> 链接农场，消费方
-;; (guixcfg home fonts)）：fontconfig（无字体目录）与 Maple 系
-;; （CEF 环境清洗型渲染进程的 bare match 会把 "Maple Mono" 抢成
-;; 正文等宽——完整诊断链见 (guixcfg home fonts) 头部）。
-(define %home-fonts-xdg-link-exclusions
-  (list fontconfig
-        maple-mono-default-nf-cn
-        maple-mono-normal-nl-nf-cn))

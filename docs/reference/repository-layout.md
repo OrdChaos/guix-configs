@@ -46,8 +46,7 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
   utils/               跨领域原语（atomic-file / process / spawn /
                        repository-source / home-path / mountinfo /
                        seed-once / paths / module-closure）
-  fonts.scm            共享字体包事实 %fonts +
-                       %home-fonts-xdg-link-exclusions（single source；
+  fonts.scm            共享字体包事实 %fonts（single source；
                        Home profile 与 System profile 的 Flatpak
                        sandbox 字体投影共同消费——system 层不 import
                        home 层）

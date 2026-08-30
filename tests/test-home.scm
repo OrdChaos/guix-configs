@@ -77,8 +77,9 @@
 
 ;; XDG 字体链接农场：CEF 环境清洗型渲染进程的唯一可达字体目录
 ;; （modules/guixcfg/home/fonts.scm 头部诊断链）。断言服务组合进
-;; %guix-home、覆盖全部字体包、target 均为 .local/share/fonts/
-;; 下以包名命名的目录链接。
+;; %guix-home、覆盖全部字体包（fontconfig 是工具包，无 share/fonts，
+;; 结构性跳过）、target 均为 .local/share/fonts/ 下以包名命名的
+;; 目录链接。
 (define %fonts-xdg-link-svc
   (find (lambda (s)
           (eq? 'home-fonts-xdg-links
@@ -89,10 +90,7 @@
              %fonts-xdg-link-svc)
 
 (test-equal "home fonts xdg links cover every font package"
-            (map package-name
-                 (filter (lambda (pkg)
-                           (not (member pkg %home-fonts-xdg-link-exclusions)))
-                         %fonts))
+            (map package-name (delete fontconfig %fonts))
             (map (lambda (entry)
                    (string-drop (car entry)
                                 (string-length ".local/share/fonts/")))

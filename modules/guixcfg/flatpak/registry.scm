@@ -20,9 +20,10 @@
 
 (define-module (guixcfg flatpak registry)
                #:use-module (guixcfg flatpak model)
-               #:use-module (guixcfg flatpak applications qq) ; %flatpak-qq
-               #:use-module (guixcfg flatpak applications wechat) ; %flatpak-wechat
-               #:use-module (guixcfg flatpak applications onlyoffice) ; %flatpak-onlyoffice
+               #:use-module (guixcfg flatpak applications qq)
+               #:use-module (guixcfg flatpak applications wechat)
+               #:use-module (guixcfg flatpak applications onlyoffice)
+               #:use-module (guixcfg flatpak applications missioncenter)
                #:export (%flatpak-remotes
                          %flatpak-applications
                          %flatpak-selection))
@@ -50,7 +51,8 @@
 (define %flatpak-applications
   (list %flatpak-qq
         %flatpak-wechat
-        %flatpak-onlyoffice))
+        %flatpak-onlyoffice
+        %flatpak-missioncenter))
 
 ;; Selection：sync 应 ensure 的 logical names（desired lifecycle ≠
 ;; persistence lifecycle 的结构分离；未来 per-host 差异时在
@@ -58,7 +60,7 @@
 ;; 未选中的 app 不产生 persistence mount（其 definition 里的
 ;; persistence intent 随 selection 生效）。
 (define %flatpak-selection
-  '(qq wechat onlyoffice))
+  '(qq wechat onlyoffice mission-center))
 
 ;; fail-fast（模块加载即校验；apps/registry.scm 同款）。
 (validate-flatpak-catalog! %flatpak-remotes %flatpak-applications)
