@@ -705,6 +705,104 @@ host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析�
                       (= 3 (length uids))
                       (every (lambda (u) (string=? "1000" u)) uids)))))
 
+;; ── BF1：bind-file activation + 真实 file→file bind mount ────
+;; generic (exposure 'bind-file) 的真实执行验证（fake root 内 uid
+;; 1000 与 boot 同构）：
+;;   - production activation 建出 backing regular file + consumer
+;;     regular-file 挂载点（不是 directory）+ consumer parent
+;;     ownership；同 activation 里 bind-directory 照常建目录
+;;     （coexistence）；
+;;   - 真实 mount(2)（MS_BIND，user namespace 内）把 backing file
+;;     bind 到 consumer file；
+;;   - 经 consumer open/truncate/write/fsync/close（应用写路径）；
+;;   - umount 后 backing 内容仍在（single-backing 不变量）。
+(define %bf-file-rule
+  (application-persistence-rule
+   (name 'bind-file-synthetic)
+   (backing "synthetic-bind-file/state.json")
+   (consumer ".config/synthetic-bind-file/state.json")
+   (exposure 'bind-file)
+   (lifecycle 'application-owned)))
+
+(define %bf-dir-rule
+  (application-persistence-rule
+   (name 'bind-dir-synthetic)
+   (backing "synthetic-bind-dir/state")
+   (consumer ".config/synthetic-bind-dir")
+   (exposure 'bind-directory)
+   (lifecycle 'application-owned)))
+
+(define %bf-program
+  (build-thing
+   (program-file
+    "bind-file-activation-test"
+    (with-imported-modules (source-module-closure
+                            '((guix build utils)
+                              (guix build syscalls)   ; mount/umount
+                              (ice-9 rdelim)))        ; read-string
+                           #~(begin
+                              (use-modules (guix build utils)
+                                           (guix build syscalls)
+                                           (ice-9 rdelim))
+                              ;; Linux MS_BIND（guix build syscalls 不导出
+                              ;; MS_* 常量——<sys/mount.h> 固定值）。
+                              (define MS_BIND 4096)
+                              #$(application-persistence-activation
+                                 (list %bf-file-rule %bf-dir-rule) "user")
+                              (define backing "/persist/data-app/synthetic-bind-file/state.json")
+                              (define consumer "/home/user/.config/synthetic-bind-file/state.json")
+                              (define (kind-of p)
+                                (let ((t (stat:type (stat p))))
+                                  (cond ((eq? 'regular t) 'regular)
+                                        ((eq? 'directory t) 'directory)
+                                        (else 'other))))
+                              ;; 类型断言：file backing/consumer 都是
+                              ;; regular；consumer parent（activation 职责）
+                              ;; 与 bind-directory backing（mkdir-p 分支）
+                              ;; 是 directory。注意 bind-directory 的
+                              ;; consumer 叶子由 shepherd 的
+                              ;; create-mount-point? 在挂载时创建，activation
+                              ;; 不建——此处不断言它（生产语义）。
+                              (format #t "TYPES ~a ~a ~a ~a~%"
+                                      (kind-of backing)
+                                      (kind-of consumer)
+                                      (kind-of "/home/user/.config/synthetic-bind-file")
+                                      (kind-of "/persist/data-app/synthetic-bind-dir/state"))
+                              ;; 真实 file→file bind mount。
+                              (mount backing consumer "none" MS_BIND)
+                              ;; 应用写路径：open/truncate/write/fsync/close。
+                              (let ((p (open consumer
+                                             (logior O_WRONLY O_TRUNC))))
+                                (display "persisted-through-bind\n" p)
+                                (fsync p)
+                                (close p))
+                              (umount consumer)
+                              ;; single-backing：consumer 只是 projection，
+                              ;; 内容落在 canonical backing。
+                              (format #t "BACKING ~a~%"
+                                      (call-with-input-file backing
+                                        read-string)))))))
+
+(let* ((root (make-fake-root "" #f))
+       (script (string-append
+                "unshare --user --map-root-user --map-users=auto "
+                "--map-groups=auto --mount --pid --fork sh -c '"
+                "mount --bind /gnu/store " root "/gnu/store; "
+                "chroot " root " " %guile " --no-auto-compile "
+                %bf-program " 2>&1'"))
+       (pipe (open-input-pipe script))
+       (all (get-string-all pipe)))
+  (close-pipe pipe)
+  (false-if-exception (delete-file-recursively root))
+  (test-assert "BF1 bind-file activation executes without unbound-variable"
+               (not (string-contains all "Unbound variable")))
+  (test-assert "BF1 backing and consumer are regular files (not directories); \
+parents and bind-directory backing are directories"
+               (string-contains all
+                                "TYPES regular regular directory directory"))
+  (test-assert "BF1 write through consumer survives unmount (backing content)"
+               (string-contains all "BACKING persisted-through-bind")))
+
 ;; ── EP：ephemeral-root-confirm（登录期 last-good promote）──────
 ;; 确认时机从 shepherd user-processes（登录前）移到 greetd PAM
 ;; session open（成功图形登录后）。在 fake root 内真实执行 confirm

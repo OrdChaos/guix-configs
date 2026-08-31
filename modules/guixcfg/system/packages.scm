@@ -7,7 +7,7 @@
                #:use-module (gnu packages cryptsetup)        ; cryptsetup
                #:use-module (gnu packages golang-crypto)     ; age
                #:use-module (gnu packages package-management) ; flatpak
-               #:use-module (guixcfg fonts)                  ; %fonts（shared fact；Flatpak sandbox 字体投影）
+               #:use-module (guixcfg fonts model)           ; %fonts（shared fact；Flatpak sandbox 字体投影）
                #:export (%system-packages))
 
 (define %system-packages
@@ -22,7 +22,7 @@
                                   ; docs/architecture/flatpak.md）
           ;; 字体投影：pinned Guix flatpak 的 flatpak-fix-fonts-icons.patch
           ;; 只把 /run/current-system/profile/share/fonts 暴露进 sandbox
-          ;; （Home profile 字体不可见）。同一份 (guixcfg fonts) 事实、
+          ;; （Home profile 字体不可见）。同一份 (guixcfg fonts model) 事实、
           ;; 零复制列表、无 system→home import（docs/architecture/
           ;; flatpak.md（fonts））。
           %fonts

@@ -15,7 +15,7 @@
 ;;; LD_LIBRARY_PATH/FHS（AGENT.md §7 Officialization——全部属
 ;;; channel/package 层职责）。
 ;;;
-;;; 配置与持久化边界（2026-08-25 决策，三层）：
+;;; 配置与持久化边界（2026-08-31 决策，四类）：
 ;;;   仓库管理（repo-owned，home-files 单向声明式，.config 前缀；
 ;;;   不持久化、不做启动复制/退出回写、VS Code 运行时改写失败属
 ;;;   预期——声明式边界）：
@@ -25,25 +25,57 @@
 ;;;     ~/.config/Code/User/snippets/          —— 暂不创建（无 snippet）；
 ;;;     ~/.config/Code/User/tasks.json         —— 暂不创建（无用户级任务）；
 ;;;     ~/.vscode/argv.json                   —— VS Code runtime args
-;;;       （home-files：~/.vscode 不在 XDG .config 下）。只声明
-;;;       "enable-crash-reporter": false——pinned 1.134.0 main.js 的
-;;;       updateCrashReporterEnablement 审计：argv.json 缺该键时 VS
-;;;       Code 会在启动时【重写整个文件】（注释 + 键），对只读 store
-;;;       symlink 会失败——显式声明后跳过重写路径；该键是 VS Code
-;;;       官方唯一自行管理的 argv 键（其注释 "Allows to disable crash
-;;;       reporting"），关闭崩溃上报与 update.mode=none 的无后台
-;;;       上报姿态一致。不添加 --no-sandbox / GPU 等未经验证的
-;;;       Electron flag（未来 Wayland/IME 参数走 desktop entry/
-;;;       launcher 层，argv.json 只支持部分 Electron switches）。
+;;;       （home-files：~/.vscode 不在 XDG .config 下）。三个字段：
+;;;       enable-crash-reporter = false
+;;;         禁止 crash reporter；同时避免 VS Code 因缺少该键尝试
+;;;         改写 repo-owned argv.json（pinned 1.134.0 main.js 的
+;;;         updateCrashReporterEnablement 审计：argv.json 缺该键时
+;;;         VS Code 会在启动时【重写整个文件】（注释 + 键），对只读
+;;;         store symlink 会失败——显式声明后跳过重写路径；该键是
+;;;         VS Code 官方唯一自行管理的 argv 键，关闭崩溃上报与
+;;;         update.mode=none 的无后台上报姿态一致）；
+;;;       password-store = gnome-libsecret
+;;;         使用 Secret Service / gnome-libsecret；
+;;;       locale = zh-cn
+;;;         请求简体中文 UI；但实际语言包解析仍依赖
+;;;         application-owned ~/.config/Code/languagepacks.json
+;;;         （见下）——locale 只是请求，语言包 metadata 缺失时 UI
+;;;         仍回退英语。
+;;;       不添加 --no-sandbox / GPU 等未经验证的 Electron flag
+;;;       （未来 Wayland/IME 参数走 desktop entry/launcher 层，
+;;;       argv.json 只支持部分 Electron switches）。
 ;;;   settings.json 内容（pinned vscode 1.134.0 构建产物核实——
 ;;;   out/vs/workbench 的 configuration 注册）：
 ;;;     "extensions.autoUpdate": false  —— 已审计 extension 不被后台
 ;;;        自行升级（改变运行边界）；
 ;;;     "update.mode": "none"           —— VS Code 二进制由 Guix
 ;;;        channel 更新，不由 VS Code 自更新（enum 含 none，核实）。
-;;;   持久化（application persistence，bind-directory）：
+;;;   应用自有持久化（application-owned persistent，application
+;;;   persistence；canonical backing 是 data-app root 下的
+;;;   vscode/...，consumer 是 HOME 相对 bind projection）：
 ;;;     ~/.vscode/extensions/                         —— 官方 extension
 ;;;        安装目录（marketplace/手动安装，非仓库声明式）；
+;;;     ~/.config/Code/languagepacks.json             —— bind-file
+;;;        （单文件）。installed language-pack metadata：VS Code 在
+;;;        很早的 NLS 初始化阶段（main 进程先于窗口的
+;;;        createNlsConfiguration）直接读它解析 locale 语言包；
+;;;        仅保留 ~/.vscode/extensions/ 不足以恢复非英语 UI
+;;;        （语言包 extension 存在但 metadata 文件缺失 → UI 回退
+;;;        英语——pinned 1.134.0 main.js 审计）。它是 VS Code 自己
+;;;        维护的 mutable application state，因此不能由仓库生成。
+;;;        其更新模型是直接写同一路径（fs writeFile 直写，非
+;;;        temp-file+rename 原子替换——pinned 1.134.0
+;;;        cliProcessMain.js languagePacksService 审计），单文件
+;;;        bind mount 合适（generic (exposure 'bind-file)，非
+;;;        VS Code 特例）；
+;;;     ~/.config/Code/clp/                           —— NLS compiled
+;;;        cache（bind-directory）。derived cache、可重建：缓存目录
+;;;        按 language-pack hash + locale + VS Code commit 版本隔离
+;;;        （clp/<hash>.<locale>/<commit>/nls.messages.json），
+;;;        stale 条目自然失效，corrupted.info marker 触发自愈重建
+;;;        （pinned 1.134.0 main.js 审计）。持久化只为消除 ephemeral
+;;;        HOME 重建后首次启动的 cold-start regeneration——不是
+;;;        不可丢失用户数据；
 ;;;     ~/.config/Code/User/globalStorage/            —— 全局用户/
 ;;;        extension 状态（state.vscdb 等，非 cache）；
 ;;;     ~/.config/Code/User/workspaceStorage/         —— 按 workspace
@@ -53,7 +85,7 @@
 ;;;     不持久化 profiles/（当前不采用 Profiles——profile-scoped
 ;;;     配置会造成第二套 ownership；VS Code 自行产生的 metadata 不
 ;;;     扩大任务，仅记录）。
-;;;   临时/可丢弃（随 ephemeral HOME 消失，不持久化）：
+;;;   临时/可丢弃（ephemeral，随 ephemeral HOME 消失，不持久化）：
 ;;;     ~/.config/Code/logs/、CachedData/、
 ;;;     CachedExtensionVSIXs/、Cache*/、GPUCache/、Dawn*/、
 ;;;     ~/.cache/Code/ 等可重建的 cache/runtime 数据。
@@ -61,8 +93,9 @@
 ;;; 职责边界（docs/architecture/applications.md）：
 ;;;   - 本模块只声明"vscode 是什么"：package 安装 + desktop entry
 ;;;     纯数据常量 + 声明式配置文件 + persistence rules；
-;;;   - MIME/default editor、language servers、extension 固定集合、
-;;;     argv.json 等均未配置（后续单独设计）；
+;;;   - argv.json 的稳定 early-startup/runtime 参数由本模块声明式
+;;;     管理；MIME/default editor、language servers、固定 extension
+;;;     集合等仍由其他模块决定；
 ;;;   - sandbox：包默认 Electron/Chromium 正常 user namespace
 ;;;     sandbox，配置层不加 --no-sandbox、不做 setuid
 ;;;     chrome-sandbox workaround（未来真实运行证明内核/userns
@@ -129,5 +162,23 @@
            (name 'local-history)
            (backing "vscode/local-history")
            (consumer ".config/Code/User/History")
+           (exposure 'bind-directory)
+           (lifecycle 'application-owned))
+          ;; installed language-pack metadata：VS Code 早期 NLS 初始化
+          ;; 直接读它解析 locale；app 自己维护 + 直写同一路径（非
+          ;; temp+rename）→ 单文件 bind（file→file）。
+          (application-persistence-rule
+           (name 'language-packs)
+           (backing "vscode/languagepacks.json")
+           (consumer ".config/Code/languagepacks.json")
+           (exposure 'bind-file)
+           (lifecycle 'application-owned))
+          ;; NLS compiled cache：derived/rebuildable（clp/<hash>.
+          ;; <locale>/<commit>/；corrupted.info 自愈重建）。持久化
+          ;; 只为消除 cold-start regeneration，非不可丢失用户数据。
+          (application-persistence-rule
+           (name 'language-pack-cache)
+           (backing "vscode/clp")
+           (consumer ".config/Code/clp")
            (exposure 'bind-directory)
            (lifecycle 'application-owned))))))

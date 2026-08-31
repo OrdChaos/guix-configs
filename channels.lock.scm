@@ -2,7 +2,7 @@
        (name 'guix)
        (url "https://codeberg.org/guix/guix.git")
        (branch "master")
-       (commit "9702274bc2aae2c5dd037729fd24edd9bbbd3e6f")
+       (commit "daefbb47995296ac55908a039fb0554e8cfe2523")
        (introduction
         (make-channel-introduction
          "9edb3f66fd807b096b48283debdcddccfea34bad"
@@ -32,7 +32,7 @@
        (name 'virelith)
        (url "https://github.com/ordchaos/virelith.git")
        (branch "master")
-       (commit "df537120bcd4afbfb667a407b866441d7a9e9cf9")
+       (commit "ca8d68e94c42b6ce3f5f5606a6f9cbab2e4bfabd")
        (introduction
         (make-channel-introduction
          "cae11b77a64f281cc9ab45e20567e59efc37e96b"

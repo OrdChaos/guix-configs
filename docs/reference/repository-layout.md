@@ -46,10 +46,12 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
   utils/               跨领域原语（atomic-file / process / spawn /
                        repository-source / home-path / mountinfo /
                        seed-once / paths / module-closure）
-  fonts.scm            共享字体包事实 %fonts（single source；
-                       Home profile 与 System profile 的 Flatpak
-                       sandbox 字体投影共同消费——system 层不 import
-                       home 层）
+  fonts/               共享字体事实（single source；中立域，system
+                       层不 import home 层）：model.scm（%fonts 包
+                       集合）+ fontconfig-policy.scm（generic-family/
+                       fallback 策略 SXML 数据）——Home profile、
+                       System profile 的 Flatpak sandbox 字体投影、
+                       ONLYOFFICE 兼容层（apps/onlyoffice）共同消费
 tools/                 命令行工具（disk-install、flatpak（sync/status/
                        update/remove/gc，Flatpak 唯一联网入口）、
                        secrets、secure-boot、reconfigure、tpm2-enroll、

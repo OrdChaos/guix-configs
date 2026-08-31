@@ -11,7 +11,7 @@
 
 (use-modules (guixcfg hosts vm)          ; %vm-os
              (guixcfg users user)        ; user-profile-name、%primary-user
-             (guixcfg fonts)             ; %fonts（shared fact）
+             (guixcfg fonts model)      ; %fonts（shared fact）
              (guixcfg storage model)     ; persist-mount-point
              (guixcfg system packages)   ; %system-packages
              (guixcfg flatpak model)
@@ -137,8 +137,7 @@
         (cons "registry.scm" (module-source "registry.scm"))
         (cons "service.scm" (module-source "service.scm"))
         (cons "applications/qq.scm" (module-source "applications/qq.scm"))
-        (cons "applications/wechat.scm" (module-source "applications/wechat.scm"))
-        (cons "applications/wps.scm" (module-source "applications/wps.scm"))))
+        (cons "applications/wechat.scm" (module-source "applications/wechat.scm"))))
 
 ;; 精确扫描：只禁止 (a) reconcile 模块的 import 形式；(b) Scheme 子
 ;; 进程调用原语。注释里出现 CLI 名词（如 remote-add 的文档性说明）

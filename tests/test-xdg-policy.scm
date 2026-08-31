@@ -1,14 +1,15 @@
 ;;; 统一 XDG/default-apps 策略测试（(guixcfg home xdg)）：
 ;;; mimeapps.list 默认应用表的结构不变量——每个 MIME 恰好一个
 ;;; default（跨组重复 key 会生成语义不确定的 mimeapps.list）、
-;;; 每个 default 值恰好一个 desktop entry、office 组指向 WPS
+;;; 每个 default 值恰好一个 desktop entry、office 组指向 ONLYOFFICE
 ;;; desktop entry、领域排除不变量（文本/电子书类不进 office 默认表）。
 ;;;
 ;;; 加应用不要求改本测试：断言只检查策略表的结构与领域边界，不枚举
-;;; per-app 关联清单（完整清单在 office 组注释里）。
+;;; per-app 关联清单（完整清单在 office 组注释里，由上游 desktop
+;;; entry 的 MimeType 实证）。
 
 (use-modules (guixcfg home xdg)
-             (guixcfg flatpak applications wps) ; %wps-desktop-entry
+             (guixcfg apps onlyoffice definition) ; %onlyoffice-desktop-entry
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -30,15 +31,15 @@
                            (null? (cddr entry))))
                     %xdg-default-applications))
 
-;; office 组 = 默认值恰为 WPS desktop entry 的 MIME 集合
+;; office 组 = 默认值恰为 ONLYOFFICE desktop entry 的 MIME 集合
 ;; （key 唯一性已断言，按值反查可靠）。
 (define %office-keys
   (filter (lambda (k)
             (equal? (assoc-ref %xdg-default-applications k)
-                    (list %wps-desktop-entry)))
+                    (list %onlyoffice-desktop-entry)))
           %keys))
 
-(test-assert "office mime types default to the WPS desktop entry"
+(test-assert "office mime types default to the ONLYOFFICE desktop entry"
              (pair? %office-keys))
 
 (test-assert "core office formats are covered (docx/xlsx/pptx/odt/pdf/csv)"
@@ -50,8 +51,8 @@
                       "application/pdf"
                       "text/csv")))
 
-;; WPS 原生格式覆盖（wps 文档/et 表格/dps 演示 + 模板）。
-(test-assert "wps-native formats are covered"
+;; ONLYOFFICE 声明集含 WPS 原生格式（wps/et/dps——它声明可打开）。
+(test-assert "wps-native formats are covered (onlyoffice declares them)"
              (every (lambda (m) (member m %office-keys))
                     '("application/wps-office.wps"
                       "application/wps-office.et"
@@ -67,10 +68,10 @@
                       "application/x-fictionbook+xml"
                       "image/vnd.djvu")))
 
-;; desktop entry 事实 single source：策略消费的常量由 definition 从
-;; Flatpak app-id 推导（exports 固定命名 <id>.desktop）。
-(test-equal "office desktop entry derives from the flatpak app id"
-            "cn.wps.wps_365.desktop"
-            %wps-desktop-entry)
+;; desktop entry 事实 single source：策略消费的常量来自应用
+;; definition（virelith 包 install-plan 实证）。
+(test-equal "office desktop entry is the onlyoffice one"
+            "onlyoffice-desktopeditors.desktop"
+            %onlyoffice-desktop-entry)
 
 (test-end "xdg-policy")

@@ -12,7 +12,8 @@ backing；禁止 boot copy → ephemeral、shutdown copy → persistent 的
 
 | primitive | 用途 |
 |---|---|
-| bind mount | 目录型 mutable data（用户目录、standalone file 容器）；对应用透明 |
+| bind mount（directory） | 目录型 mutable data（用户目录、standalone file 容器）；对应用透明 |
+| bind mount（file） | 单文件 mutable data（应用直接写同一路径、不 temp-file+rename 原子替换时）——generic engine 的 `bind-file` exposure |
 | symlink | 单文件引用（consumer 接受 symlink、不原子替换目标时） |
 | direct reference | consumer 配置直接指向 canonical path（如 sshd HostKey） |
 | hard link | 不作为 persistence deployment mechanism |
@@ -50,7 +51,7 @@ atomic replace（write temp → rename）产生新 inode，破坏 hardlink；
 | TPM state | `/persist/system/tpm2` | tpm2-enroll | direct | yes | no |
 | password.hash | `/persist/system/accounts/<user>/password.hash` | account projection | direct reference | yes | no |
 | root-generation state | `/persist/system/root-generations/state.scm` | initrd + confirm/cleanup | direct reference | yes | no |
-| application data | `/persist/data-app/<backing>` | `/home/<user>/<consumer>` | directory bind（generic engine） | yes | no |
+| application data | `/persist/data-app/<backing>` | `/home/<user>/<consumer>` | directory/file bind（generic engine） | yes | no |
 | runtime secrets | `/run/guixcfg-secrets*` | consumers | projection exception | ephemeral | decrypt |
 | Guix Home | `~/.guix-home` + dotfiles | — | symlink-manager | no | **yes** |
 
@@ -70,11 +71,44 @@ registry 聚合）。
 logical name
 backing      /persist/data-app 下相对路径（唯一 canonical backing）
 consumer     HOME 相对路径（bind projection）
-exposure     仅 bind-directory（第一版）
+exposure     bind-directory | bind-file
 lifecycle    仅 application-owned
-seeds        可选：首次初始状态（(target source) 列表，seed-once）
+seeds        可选：首次初始状态（(target source) 列表，seed-once；
+             仅 bind-directory——bind-file 的 backing 是单文件，
+             seed target 无从相对，组合被 validation 拒绝）
 owner        由 primary user / assembler 参数统一提供
 ```
+
+**exposure 语义（bind-directory / bind-file）**：
+
+```text
+bind-directory  backing = directory，consumer = directory
+bind-file       backing = regular file，consumer = regular file
+```
+
+`bind-file` 的最终执行语义等价于
+`mount --bind BACKING_FILE CONSUMER_FILE`（file→file bind）：
+
+- backing 文件与 consumer 挂载点都由 system activation 预建（首次
+  deployment：backing parent 自动创建、backing 不存在时建空 regular
+  file；consumer parent 自动创建、consumer 挂载点是 regular file
+  而非 directory）；类型错误（backing/consumer 已存在但非 regular
+  file）fail closed，绝不静默重建/替换已有 state；
+- file-system 声明 `create-mount-point? #f`：shepherd 对
+  `create-mount-point?` 的实现是预 `mkdir-p`（会建出 directory，
+  与 file→file bind 冲突）；pinned Guix 的 `mount-file-system`
+  对 bind mount + non-directory source 原生自动创建 regular-file
+  target（`gnu/build/file-systems.scm`）——防御第二层；
+- 挂载后应用可正常 open/truncate/write/fdatasync/close（同一
+  inode，内核级 bind 语义，对应用透明）。
+
+**bind-file 适用前提（必须逐应用审计后采用）**：应用对该文件的
+更新模型是【直接写同一路径】（`writeFile` 直写），而非
+temp-file + rename 原子替换——后者会替换 inode，破坏 bind 关系
+（这正是历史上一律拒绝 single-file bind 的原因）。第一生产
+consumer：VS Code `~/.config/Code/languagepacks.json`（pinned
+1.134.0 审计：`cliProcessMain.js` languagePacksService 的
+`withLanguagePacks` 直写同一路径）。
 
 **backup 是未来独立 concern**：contract 不要求 backup class；当前
 不存在 backup subsystem，不制造 backup taxonomy。
@@ -147,7 +181,16 @@ production consumers：
   Catalog app 一条——与 installation backing 平级，禁止 parent/child
   嵌套；规则由 `modules/guixcfg/flatpak/service.scm` 从 Catalog 派生
   （与 selection 无关）；`apps/<id>` 与 installation 的删除语义见
-  `docs/architecture/flatpak.md`（persistence/lifecycle））。
+  `docs/architecture/flatpak.md`（persistence/lifecycle））；
+- vscode（extensions/global-storage/workspace-storage/local-history
+  四条 directory bind + `languagepacks.json` 单文件 bind-file +
+  `clp/` NLS cache directory bind；边界四类划分见
+  `apps/vscode/definition.scm` 头注释——`languagepacks.json` 是
+  bind-file 的第一生产 consumer：VS Code 早期 NLS 初始化依赖它，
+  直写同一路径（非 temp+rename），因此单文件 bind 合适；
+  `clp/` 是 derived cache（hash+locale+commit 版本隔离、
+  corrupted.info 自愈重建），持久化只为消除 cold-start
+  regeneration）。
 
 后续应用按同一契约显式 adopt。
 
@@ -269,10 +312,14 @@ ensure `/etc/machine-id`——本系统该文件永远不存在，`/etc/machine-
 - mixed container 只允许 app-private namespace（`.config/<app>`、
   `.local/share/<app>`）；公共 XDG root（`.config`、`.local`、
   `.local/share`、`.cache`、`~`）禁止整体交给 persistence rule；
-- **single-file bind 不是标准机制**（第一版仍 directory bind only）：
-  应用普遍用 write-temp→fsync→rename 原子替换，单文件 mountpoint/
-  symlink target 会破坏 rename、被应用替换 symlink、触发 EXDEV/
-  EBUSY、破坏应用自身 crash-safety；
+- **single-file bind（`bind-file`）只适用于【直写同一路径】的
+  单文件状态**：应用普遍用 write-temp→fsync→rename 原子替换，
+  单文件 mountpoint/symlink target 会破坏 rename、被应用替换
+  symlink、触发 EXDEV/EBUSY、破坏应用自身 crash-safety——这类应用
+  一律不得使用 bind-file（逐应用审计：pinned 源码确认更新模型
+  是 writeFile 直写、非 temp+rename，见上文 exposure 语义）；
+  mixed container 的 declarative occupant 冲突也不靠 bind-file
+  解决；
 - **dual authority 是错误**：repo/Home 管理 config.toml 同时应用也
   改写它 = 非法；必须选择 repo-owned（应用禁用 auto-write）或
   app-owned（Home 停止声明），**不做自动 merge / conflict

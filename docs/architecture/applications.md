@@ -300,8 +300,10 @@ Is there a mutable subdirectory?
     no
 Same directory contains declarative + mutable files
     → mixed persistent container + declarative Home occupants
-    （仅 app-private namespace；dual authority 非法；single-file
-      bind 不是标准机制——详见 persistence.md（Mixed-authority））
+    （仅 app-private namespace；dual authority 非法；单文件状态用
+      generic engine 的 bind-file exposure——只限【直写同一路径】
+      的更新模型，temp+rename 原子替换的应用不适用——详见
+      persistence.md（exposure 语义 / Mixed-authority））
 ```
 
 ## Secret ownership

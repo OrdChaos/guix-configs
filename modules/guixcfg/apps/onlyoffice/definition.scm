@@ -50,14 +50,18 @@
                #:use-module (gnu packages virtualization)  ; bubblewrap
                #:use-module (gnu packages bash)            ; bash-minimal
                #:use-module (gnu packages fontutils)       ; fontconfig（无 share/fonts，结构性排除）
+               #:use-module (gnu packages fonts)           ; font-dejavu
                #:use-module (guix packages)          ; package、package-name、package-version
                #:use-module (guix build-system trivial)
-               #:use-module (guix gexp)              ; gexp、file-append
-               #:use-module (guixcfg fonts)          ; %fonts（唯一事实源）
+               #:use-module (guix gexp)              ; gexp、file-append、computed-file
+               #:use-module (guixcfg fonts model)   ; %fonts（包事实）
+               #:use-module (guixcfg fonts fontconfig-policy) ; %fontconfig-snippets（策略接口）
                #:use-module (guixcfg apps model)     ; application
                #:use-module (guixcfg system application-persistence) ; rule
+               #:use-module (sxml simple)            ; sxml->xml
                #:use-module (srfi srfi-1)            ; delete、append-map
-               #:export (%onlyoffice))
+               #:export (%onlyoffice
+                         %onlyoffice-desktop-entry))
 
 ;; ── 字体 bind 规格（从 %fonts 派生，不复制清单）────────────────
 ;; %fonts 是唯一事实源；下列 bind 规格基于已完成的结构审计生成：
@@ -72,6 +76,53 @@
                               (package-name pkg))))
        (delete fontconfig %fonts)))
 
+;; ── ONLYOFFICE 专属 fontconfig（UI 字体兼容层）────────────────
+;; 2026-08-31 审计链（全部 VM 实测）：ONLYOFFICE 进程解析
+;; FONTCONFIG_FILE 时只应用文件内的 <dir> 与内联规则，<include>
+;; 的 conf.d 与 50-user.conf（用户配置）都不生效——FC_DEBUG 实测
+;; pattern 无任何策略 prepend，sans-serif 的 Font 0 退化为 dejavu
+;; 目录扫描序首文件，CJK UI 文本落到扫描序里第一个 zh-cn 字体
+;; （农场在 Btrfs readdir 序下是 Maple Mono NF CN）。因此策略必须
+;; 【内联】进本文件（内联规则实证生效）。
+;;;
+;;; dir 集合与 virelith 默认配置一致（dejavu store + xdg fonts +
+;;; ~/.fonts——不改变字体可见集）；规则 = 仓库 generic 策略的同一
+;;; SXML 事实（(guixcfg fonts fontconfig-policy) 接口；(guixcfg home
+;;; fonts) 的用户
+;;; fontconfig 消费同一份——策略一处定义，两个渲染器）。
+;;;
+;;; 生效路径：virelith launcher 的 FONTCONFIG_FILE 是软默认
+;;; （${FONTCONFIG_FILE:-<store 默认>}），adapter 经 bwrap
+;;; --setenv 预置本文件（进程域限定，不进 session 环境）。
+
+;; 前缀/后缀在求值期渲染完成（SXML → XML 纯函数）；dejavu 的 store
+;; 路径在 build 期由 gexp 拼接。
+(define %onlyoffice-fontconfig-prefix
+  (string-append "<?xml version='1.0'?>\n"
+                 "<!DOCTYPE fontconfig SYSTEM 'fonts.dtd'>\n"
+                 "<fontconfig>\n"
+                 "<dir prefix=\"xdg\">fonts</dir>\n"
+                 "<dir>~/.fonts</dir>\n"))
+
+(define %onlyoffice-fontconfig-suffix
+  (string-append
+   (call-with-output-string
+    (lambda (port)
+      (for-each (lambda (snippet) (sxml->xml snippet port))
+                %fontconfig-snippets)))
+   "</fontconfig>\n"))
+
+(define onlyoffice-fontconfig-file
+  (computed-file
+   "onlyoffice-fonts.conf"
+   #~(call-with-output-file #$output
+       (lambda (port)
+         (display #$%onlyoffice-fontconfig-prefix port)
+         (display "<dir>" port)
+         (display #$(file-append font-dejavu "/share/fonts") port)
+         (display "</dir>\n" port)
+         (display #$%onlyoffice-fontconfig-suffix port)))))
+
 ;; bwrap argv（顺序是契约，见头部注释 3/4）：
 ;;   --bind / /            宿主视图（recursive，子挂载继承）
 ;;   --dev-bind /dev /dev  撤销 --bind 的 MS_NODEV（设备访问）
@@ -79,7 +130,8 @@
 ;;                         宿主 /usr=lower + 私有 tmpfs upper/work
 ;;   --dir …               虚拟字体根（overlay upper，namespace 私有）
 ;;   每包 --ro-bind         真实字体目录（零复制）
-;;   --setenv              CUSTOM_FONTS_PATH 只进该进程树
+;;   --setenv              CUSTOM_FONTS_PATH（scanner）与
+;;                         FONTCONFIG_FILE（UI 兼容层）只进该进程树
 (define %onlyoffice-bwrap-argv
   (append
    (list "--bind" "/" "/"
@@ -89,7 +141,8 @@
    (append-map (lambda (spec)
                  (list "--ro-bind" (cadr spec) (caddr spec)))
                %onlyoffice-font-bind-specs)
-   (list "--setenv" "CUSTOM_FONTS_PATH" "/usr/local/share/fonts")))
+   (list "--setenv" "CUSTOM_FONTS_PATH" "/usr/local/share/fonts"
+         "--setenv" "FONTCONFIG_FILE" onlyoffice-fontconfig-file)))
 
 ;; ── 私有 adapter package ─────────────────────────────────────
 ;; profile 只装 adapter（base 包不进 profile——desktop/bin 冲突）：
@@ -168,6 +221,12 @@ the upstream launcher inside a bubblewrap mount namespace that projects the
 Guix font packages as real directories under /usr/local/share/fonts (its
 built-in font scanner skips symlinks and never consults fontconfig).")
    (license (package-license onlyoffice-desktopeditors))))
+
+;; ONLYOFFICE 的 XDG desktop entry 名（virelith 包 install-plan 的
+;; share/applications/ 目标；adapter 原样保留该文件名）。纯数据常量：
+;; 供统一 XDG/default-apps 策略模块 (guixcfg home xdg) 引用，本模块
+;; 不决定默认应用。
+(define %onlyoffice-desktop-entry "onlyoffice-desktopeditors.desktop")
 
 (define %onlyoffice
   (application

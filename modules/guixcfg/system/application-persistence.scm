@@ -3,9 +3,13 @@
 ;;;
 ;;; 本模块是 generic mechanism，不知道 Firefox/Flatpak 等具体应用
 ;;; 名称——rule 由 application definition 提供（<application> 的
-;;; persistence 字段），host 经 registry 聚合。第一版只实现
-;;; directory bind；明确不实现 symlink/single-file/boot-copy/
-;;; backup/migration（docs/architecture/persistence.md）。
+;;; persistence 字段），host 经 registry 聚合。exposure 支持两种
+;;; bind 形态（docs/architecture/persistence.md）：
+;;;   bind-directory  backing/consumer 都是 directory；
+;;;   bind-file       backing/consumer 都是 regular file（file→file
+;;;                   bind；适用于直接写同一路径、不做 temp-file+
+;;;                   rename 原子替换的应用单文件状态）。
+;;; 明确不实现 symlink/boot-copy/backup/migration。
 ;;;
 ;;; seed-once（seeds 字段）：rule 可声明一次性初始状态（如
 ;;; settings.toml 的基础配置）。首次 activation 时目标不存在才写入
@@ -29,11 +33,14 @@
 ;;;      HOME 层级——【每一层】都必须归还 USER；只 chown 直接 parent
 ;;;      会留下 root-owned 的 ~/.local，USER 后续 mkdir ~/.local/share
 ;;;      等 EACCES，Home activation 整体失败）；
-;;;   6. 挂载属 file-systems topology——不新增 readiness capability。
+;;;   6. bind-file 的 backing/consumer 都必须是 regular file（首次
+;;;      deployment 由 activation 建空文件；类型错误 fail closed，
+;;;      绝不静默重建/替换已有 state）；
+;;;   7. 挂载属 file-systems topology——不新增 readiness capability。
 ;;;
-;;; 三路径安全性（pinned Guix 行为审计）：backing 目录创建走系统
-;;; activation（boot：activation 先于 shepherd file-systems 服务挂载；
-;;; system init / reconfigure：都会运行 activation），因此 bind
+;;; 三路径安全性（pinned Guix 行为审计）：backing 目录/文件创建走
+;;; 系统 activation（boot：activation 先于 shepherd file-systems 服务
+;;; 挂载；system init / reconfigure：都会运行 activation），因此 bind
 ;;; mount（file-systems 阶段）的 source 在挂载前已存在。
 
 (define-module (guixcfg system application-persistence)
@@ -72,9 +79,9 @@
 (define %forbidden-consumers
   '(".config" ".local" ".local/share" ".cache"))
 
-;; exposure / lifecycle 当前唯一合法值（契约显式；扩展必须改这里
+;; exposure / lifecycle 当前合法值（契约显式；扩展必须改这里
 ;; 和 docs）。
-(define %allowed-exposures '(bind-directory))
+(define %allowed-exposures '(bind-directory bind-file))
 (define %allowed-lifecycles '(application-owned))
 
 (define-record-type* <application-persistence-rule>
@@ -83,7 +90,7 @@
                      (name application-persistence-rule-name)            ; symbol
                      (backing application-persistence-rule-backing)      ; string：/persist/data-app 下相对路径
                      (consumer application-persistence-rule-consumer)    ; string：HOME 相对路径
-                     (exposure application-persistence-rule-exposure     ; symbol：仅 'bind-directory
+                     (exposure application-persistence-rule-exposure     ; symbol：'bind-directory | 'bind-file
                                (default 'bind-directory))
                      (lifecycle application-persistence-rule-lifecycle   ; symbol：仅 'application-owned
                                 (default 'application-owned))
@@ -137,6 +144,13 @@ docs/architecture/persistence.md 与 secrets.md 的 flatpak 例子）。"
     (unless (memq lifecycle %allowed-lifecycles)
       (error "unsupported application persistence lifecycle"
              (application-persistence-rule-name rule) lifecycle))
+    ;; seeds 语义是"backing 目录内相对 target 的首次初始化"——只对
+    ;; bind-directory 成立（bind-file 的 backing 本身就是单文件，
+    ;; seed target 无从相对）。fail closed 拒绝该组合。
+    (when (and (eq? exposure 'bind-file)
+               (pair? (application-persistence-rule-seeds rule)))
+      (error "application persistence bind-file rule must not declare seeds"
+             (application-persistence-rule-name rule)))
     (for-each validate-seed-spec (application-persistence-rule-seeds rule))
     #t))
 
@@ -149,11 +163,19 @@ docs/architecture/persistence.md 与 secrets.md 的 flatpak 例子）。"
 (define (application-persistence-file-systems rules user)
   "RULES 的 bind mount 声明（/persist/data-app/<backing> →
 /home/<USER>/<consumer>）。挂载点由 file-systems 阶段创建
-（create-mount-point? #t）；intermediate parent ownership 由
-activation 恢复。options 带桌面集成 metadata（x-gvfs-hide,
-x-gvfs-trash——共享常量 (guixcfg system mount-metadata)，与
-user-persistence 同一语义：GVfs 隐藏实现性挂载 + 允许 mount-local
-trash）。"
+（bind-directory：create-mount-point? #t）；intermediate parent
+ownership 由 activation 恢复。options 带桌面集成 metadata
+（x-gvfs-hide, x-gvfs-trash——共享常量 (guixcfg system mount-metadata)，
+与 user-persistence 同一语义：GVfs 隐藏实现性挂载 + 允许 mount-local
+trash）。
+
+bind-file 必须 create-mount-point? #f：shepherd 对
+create-mount-point? 的实现是预 mkdir-p（pinned Guix
+gnu/services/base.scm file-system-shepherd-service）——会建出
+directory，而 file→file bind 要求 regular-file 挂载点。regular-file
+挂载点由 activation 预建（三路径安全）；pinned Guix 的
+mount-file-system 对 bind mount + non-directory source 也原生自动
+创建 regular-file target（gnu/build/file-systems.scm——防御第二层）。"
   (map (lambda (rule)
          (validate-application-persistence-rule rule)
          (file-system
@@ -164,28 +186,33 @@ trash）。"
           (type "none")
           (flags '(bind-mount))
           (options %persistent-home-mount-options)
-          (create-mount-point? #t)
+          (create-mount-point? (eq? 'bind-directory
+                                    (application-persistence-rule-exposure
+                                     rule)))
           (check? #f)))
        rules))
 
 (define (application-persistence-activation rules user)
-  "activation gexp：创建 backing 目录（owner=USER）、恢复 consumer
-parent 层级 ownership，并对 rule 声明的 seeds 执行 seed-once（目标
-从未存在时原子写入初始状态；此后 repository 永久放弃 ownership——
-机制见 (guixcfg utils seed-once)）。create-mount-point? 以 root 建
-挂载点，本 activation 的 mkdir-p 也以 root 建出整条 parent 路径，
-必须把【所有中间层】都归还 USER。只 chown 直接 parent 会留下
-root-owned 的 ~/.local：后续以 USER 身份运行的 Guix Home activation
-（guix-home-user → he/activate → mkdir-p $XDG_DATA_HOME）会在
-root-owned 目录下 mkdir 时 EACCES，整个 Home activation 失败
-（boot 实测 2026-08-19；回归测试 test-runtime-exec.scm AP1）。
-只补缺失目录、不重建已有数据（persistence 不自动迁移/覆盖/删除
-consumer data）。seed 检查发生在 canonical backing 侧
-（/persist/data-app/<backing>，needed-for-boot 子卷挂载先于
-activation，绑定投影在 file-systems 阶段之后）——持久化状态与
-seed 判断天然同一位置：已有持久化 state 时 seed-once 直接看到
-目标已存在，不做任何事（生命周期顺序正确，无 restore/seed 竞态）。
-没有任何 rule 声明 seeds 时生成与旧版完全相同的 activation
+  "activation gexp：准备 backing 与 consumer 挂载点（bind-directory：
+backing 目录 + consumer parent 层级 ownership；bind-file：backing
+parent 目录 + backing regular file + consumer parent 层级 + consumer
+regular-file 挂载点——类型错误 fail closed，绝不静默重建/替换已有
+state），并对 rule 声明的 seeds 执行 seed-once（目标从未存在时原子
+写入初始状态；此后 repository 永久放弃 ownership——机制见
+(guixcfg utils seed-once)）。
+create-mount-point? 以 root 建挂载点，本 activation 的 mkdir-p 也以
+root 建出整条 parent 路径，必须把【所有中间层】都归还 USER。只
+chown 直接 parent 会留下 root-owned 的 ~/.local：后续以 USER 身份
+运行的 Guix Home activation（guix-home-user → he/activate → mkdir-p
+$XDG_DATA_HOME）会在 root-owned 目录下 mkdir 时 EACCES，整个 Home
+activation 失败（boot 实测 2026-08-19；回归测试
+test-runtime-exec.scm AP1）。只补缺失目录/文件、不重建已有数据
+（persistence 不自动迁移/覆盖/删除 consumer data）。seed 检查发生
+在 canonical backing 侧（/persist/data-app/<backing>，needed-for-boot
+子卷挂载先于 activation，绑定投影在 file-systems 阶段之后）——
+持久化状态与 seed 判断天然同一位置：已有持久化 state 时 seed-once
+直接看到目标已存在，不做任何事（生命周期顺序正确，无 restore/seed
+竞态）。没有任何 rule 声明 seeds 时生成与旧版完全相同的 activation
 （seed 代码按构造期条件拼接，不给无 seed 的 rule 增加运行时依赖）。"
   (define has-seeds?
     (any (lambda (rule)
@@ -226,24 +253,57 @@ seed 判断天然同一位置：已有持久化 state 时 seed-once 直接看到
          (lambda (spec)
            (let* ((backing (car spec))
                   (consumer (cadr spec))
-                  (seeds (caddr spec))
+                  (exposure (caddr spec))
+                  (seeds (cadddr spec))
                   (src (string-append
                         #$%application-persistence-root
-                        "/" backing)))
-             (mkdir-p src)
-             (chown src uid gid)
+                        "/" backing))
+                  (dst (string-append home "/" consumer)))
              ;; consumer parent 全层级归还 USER（共享原语：
              ;; (guixcfg utils home-path)；/home/USER 本身由
              ;; user-persistence activation 负责）。
              (ensure-home-parent-directories! home consumer uid gid)
-             ;; seed-once：目标从未存在才写入；seed 后 repo 永久
-             ;; 放弃 ownership（marker 记录；写出的文件归还 USER）。
-             #$seed-loop))
+             (case exposure
+               ((bind-directory)
+                (mkdir-p src)
+                (chown src uid gid)
+                ;; seed-once：目标从未存在才写入；seed 后 repo 永久
+                ;; 放弃 ownership（marker 记录；写出的文件归还 USER）。
+                #$seed-loop)
+               ((bind-file)
+                ;; backing parent（/persist/data-app/<app> 层级）先建
+                ;; ——call-with-output-file 不会建父目录。backing：
+                ;; canonical mutable state 唯一权威——不存在时建空
+                ;; regular file；存在但非 regular file → fail closed
+                ;; （绝不静默重建/替换已有 state）。
+                (mkdir-p (dirname src))
+                (if (file-exists? src)
+                    (unless (eq? 'regular (stat:type (stat src)))
+                      (error "application persistence bind-file backing \
+exists but is not a regular file"
+                             src))
+                    (begin
+                      (call-with-output-file src (lambda (p) #t))
+                      (chown src uid gid)))
+                ;; consumer mount point：regular file，不是 directory
+                ;; （file→file bind 要求；bind-directory 的 shepherd
+                ;; mkdir-p 语义在此不适用）。挂载已激活时该文件存在
+                ;; ——幂等 no-op；存在但非 regular → fail closed。
+                (if (file-exists? dst)
+                    (unless (eq? 'regular (stat:type (stat dst)))
+                      (error "application persistence bind-file consumer \
+mount point exists but is not a regular file"
+                             dst))
+                    (begin
+                      (call-with-output-file dst (lambda (p) #t))
+                      (chown dst uid gid)))))))
          (quote
            (#$@(map (lambda (rule)
                       (list (application-persistence-rule-backing
                              rule)
                             (application-persistence-rule-consumer
+                             rule)
+                            (application-persistence-rule-exposure
                              rule)
                             (map (lambda (s)
                                    (list (car s) (cadr s)))

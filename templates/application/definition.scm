@@ -45,10 +45,14 @@
    ;; (system-services (list ...))   ; system service（仅确有必要；greetd/elogind/
    ;;                                 ; accounts/SSH host keys/readiness/TPM/UKI/
    ;;                                 ; Secure Boot 等 core infrastructure 不迁进 apps）
-   ;; (persistence (list ...))       ; <application-persistence-rule>（bind-only；
+   ;; (persistence (list ...))       ; <application-persistence-rule>
+   ;;                                 ;   (exposure 'bind-directory | 'bind-file；
+   ;;                                 ;    bind-file 只限【直写同一路径】的单文件
+   ;;                                 ;    状态，temp+rename 原子替换不适用——
+   ;;                                 ;    docs/architecture/persistence.md）；
    ;;                                 ; 可选 seeds：首次初始状态（seed-once——
    ;;                                 ; 写入后 repo 永久放弃该文件 ownership；
-   ;;                                 ; docs/architecture/persistence.md）：
+   ;;                                 ; 仅 bind-directory；docs/architecture/persistence.md）：
    ;;                                 ;   (seeds `(("settings.toml"
    ;;                                 ;             ,(local-file "base-settings.toml"))))
    ;; (secrets (list ...))           ; <secret-decl>（source = 本目录 secrets/ 的

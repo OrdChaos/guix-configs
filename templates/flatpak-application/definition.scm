@@ -30,7 +30,8 @@
 ;;;     统一 XDG 模块 (guixcfg home xdg) 消费本模块导出的
 ;;;     desktop-entry 常量（<id>.desktop，Flatpak exports 固定
 ;;;     命名）——policy → app metadata，本模块不反向依赖 xdg
-;;;     （参考 applications/wps.scm）；
+;;;     （生产参考：apps/onlyoffice/definition.scm 的
+;;;     %onlyoffice-desktop-entry——原生与 Flatpak 同构）；
 ;;;   - 目录存在 != 应用启用：启用必须进 registry 与 selection。
 ;;;
 ;;; 生产参考：modules/guixcfg/flatpak/applications/qq.scm。

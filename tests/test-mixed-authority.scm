@@ -4,7 +4,8 @@
 ;;; 覆盖：
 ;;;   1.  app-private mixed container 合法（.config/<app>）
 ;;;   2.  公共 XDG root 非法（.config/.local/.local/share）
-;;;   3.  directory bind 仍是唯一 production exposure；无 bind-file
+;;;   3.  production exposure 只限 bind-directory / bind-file
+;;;      （symlink 等未知 exposure 仍拒绝）
 ;;;   4.  backing 仍在 /persist/data-app；consumer 从 user 参数派生
 ;;;   5.  no copy/sync / no implicit migration
 ;;;   6.  synthetic persistent container：Home-managed child +
@@ -61,11 +62,19 @@
                        (name 'bad) (backing "x") (consumer root))))))
  '(".config" ".local" ".local/share" ".cache"))
 
-(test-assert "bind-directory is the only allowed exposure"
+(test-assert "bind-file is a legal production exposure (file bind)"
+             (valid-application-persistence-rule?
+              (application-persistence-rule
+               (name 'ok) (backing "x/state.json")
+               (consumer ".config/x/state.json")
+               (exposure 'bind-file))))
+
+(test-assert "unknown exposures stay rejected (symlink not a production \
+exposure)"
              (not (valid-application-persistence-rule?
                    (application-persistence-rule
                     (name 'bad) (backing "x") (consumer ".config/x")
-                    (exposure 'bind-file)))))
+                    (exposure 'symlink)))))
 
 (test-assert "backing stays under /persist/data-app"
              (let ((fs (car (application-persistence-file-systems

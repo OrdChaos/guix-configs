@@ -81,9 +81,10 @@ lifecycle。**backup 是未来独立 concern**——contract 不要求 backup
 class，当前不制造 backup taxonomy。
 
 应用 persistence（`/persist/data-app`）：generic engine 已实现
-（`system/application-persistence.scm`，bind-only、严格 path
-validation、activation 恢复 consumer parent ownership）；新增
-production rule 必须走 `<application-persistence-rule>` 并满足
+（`system/application-persistence.scm`，bind-directory / bind-file
+两种 exposure——bind-file 只限【直写同一路径】的单文件状态；
+严格 path validation、activation 恢复 consumer parent ownership）；
+新增 production rule 必须走 `<application-persistence-rule>` 并满足
 persistence contract 全部字段。
 
 ## 12. Composite runtime DBs may be projections
