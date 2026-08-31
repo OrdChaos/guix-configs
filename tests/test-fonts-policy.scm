@@ -55,4 +55,12 @@
 (test-assert "onlyoffice config contains no include (inlining is the contract)"
              (not (string-contains %oo-content "<include")))
 
+;; 规范化 match（"sans serif"→"sans-serif" 等）：Qt 原生弹窗的默认
+;; family 是带空格写法，缺了这些规则会退化 fallback（2026-08-31 实证
+;; 弹窗落 Maple Mono）。兼容层私有，不进共享策略。
+(test-assert "onlyoffice config carries the family-name normalization matches"
+             (and (string-contains %oo-content "<string>sans serif</string>")
+                  (string-contains %oo-content "<string>mono</string>")
+                  (string-contains %oo-content "<string>system ui</string>")))
+
 (test-end "fonts-policy")

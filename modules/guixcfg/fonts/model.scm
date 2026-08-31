@@ -14,7 +14,7 @@
                #:use-module (gnu packages fonts)     ; font-google-noto-*
                #:use-module (gnu packages fontutils) ; fontconfig、font-gnu-unifont
                #:use-module (virelith packages fonts) ; mi-sans-global、maple-mono-*
-               #:use-module (virelith packages fonts-windows) ; font-microsoft-win11-fod-hans
+               #:use-module (virelith packages fonts-windows) ; font-microsoft-win11-fod-hans、font-microsoft-win11-office-core
                #:export (%fonts))
 
 ;; 字体集合（profile 层：决定"有哪些字体"）。
@@ -22,7 +22,10 @@
 ;; Maple Mono Normal NL NF CN（等宽）；guix 官方：Noto 全 script、
 ;; CJK sans/serif、emoji、Symbols、Unifont last resort、fontconfig
 ;; （fc-* 工具 + 缓存再生）；Windows 简体中文补充字体
-;; （DengXian/FangSong/KaiTi/SimHei，Microsoft payload）。
+;; （DengXian/FangSong/KaiTi/SimHei，Microsoft payload）；
+;; Windows Office 兼容字体（Arial/Calibri/Cambria/Courier New/
+;; Times New Roman/Symbol/Wingdings/YaHei/SimSun，Microsoft ESD
+;; payload——ONLYOFFICE 官方检测字体族齐全）。
 (define %fonts
   (list mi-sans-global
         maple-mono-default-nf-cn
@@ -33,4 +36,5 @@
         font-google-noto-serif-cjk
         font-gnu-unifont
         font-microsoft-win11-fod-hans
+        font-microsoft-win11-office-core
         fontconfig))

@@ -104,12 +104,40 @@
                  "<dir prefix=\"xdg\">fonts</dir>\n"
                  "<dir>~/.fonts</dir>\n"))
 
+;; 规范化 match（Qt 原生弹窗的默认 family 是带空格的 "Sans Serif"）。
+;; 这 4 条在 fontconfig 默认 fonts.conf 的【正文】里（不在 conf.d，
+;; 所以 include 失效时没有它们）：mono→monospace、sans serif→
+;; sans-serif、sans→sans-serif、system ui→system-ui。缺失时带空格
+;; 的 family 在字体集中无命中，退化 fallback 到扫描序首个 zh-cn
+;; 字体（2026-08-31 实证：弹窗落 Maple Mono；fc-match 三项对比
+;; 确认补上即回 MiSans）。属 ONLYOFFICE 兼容层私有——宿主链路的
+;; 默认 fonts.conf 自带这些规则，共享策略模块不含它们。
+(define %onlyoffice-fontconfig-normalizations
+  '((match (@ (target "pattern"))
+           (test (@ (qual "any") (name "family")) (string "mono"))
+           (edit (@ (name "family") (mode "assign") (binding "same"))
+                 (string "monospace")))
+    (match (@ (target "pattern"))
+           (test (@ (qual "any") (name "family")) (string "sans serif"))
+           (edit (@ (name "family") (mode "assign") (binding "same"))
+                 (string "sans-serif")))
+    (match (@ (target "pattern"))
+           (test (@ (qual "any") (name "family")) (string "sans"))
+           (edit (@ (name "family") (mode "assign") (binding "same"))
+                 (string "sans-serif")))
+    (match (@ (target "pattern"))
+           (test (@ (qual "any") (name "family")) (string "system ui"))
+           (edit (@ (name "family") (mode "assign") (binding "same"))
+                 (string "system-ui")))))
+
 (define %onlyoffice-fontconfig-suffix
   (string-append
    (call-with-output-string
     (lambda (port)
+      ;; 规范化规则在前（与默认 fonts.conf 的正文先于 conf.d 同序）。
       (for-each (lambda (snippet) (sxml->xml snippet port))
-                %fontconfig-snippets)))
+                (append %onlyoffice-fontconfig-normalizations
+                        %fontconfig-snippets))))
    "</fontconfig>\n"))
 
 (define onlyoffice-fontconfig-file
