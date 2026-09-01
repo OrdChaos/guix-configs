@@ -95,13 +95,28 @@ tests/test-user-persistence.scm 回归。
   `trash:///` 统一聚合展示。
 - **桌面集成 metadata**：HOME persistence bind mounts 带
   `x-gvfs-hide,x-gvfs-trash`（共享常量
-  `%persistent-home-mount-options`，`(guixcfg utils home-path)`）：
+  `%persistent-home-mount-options`，authority 是
+  `(guixcfg system mount-metadata)`——不是 `utils/home-path`，后者
+  只做 pathname/ownership 原语）：
   - bind mount 经 mount(2) 挂载时 x-* 不进 mountinfo，GIO 的 fstab
     fallback 对 bind 条目不可达——`(guixcfg system mount-metadata)`
     的 one-shot 服务在 file-systems 后就位后把
-    `SRC/TARGET/OPTS` 条目幂等写入 `/run/mount/utab`（libmount
-    解析 mountinfo 时合并 utab 的 user options，GIO 由此看到
+    `SRC/TARGET/ROOT/OPTS` 条目幂等写入 `/run/mount/utab`（libmount
+    解析 mountinfo 时合并 utab 的 user options——merge_user_fs 要求
+    SRC/TARGET/ROOT 三者都与 mountinfo 匹配才合并，GIO 由此看到
     x-gvfs-*）；
+  - **ownership marker**：utab 条目的 OPTS 附带
+    `x-guixcfg.home-persistence`（`(guixcfg utils mountinfo)` 的
+    `%guixcfg-utab-ownership-marker`）——desktop 语义
+    （x-gvfs-hide/x-gvfs-trash）与 ownership 分离。服务只重建带
+    marker 的条目；其它 owner 即使用相同桌面选项也保留；marker 在
+    `/run`（tmpfs）中随 reboot 自然重置（旧格式条目无需迁移逻辑）；
+  - **live reconfigure lifecycle**：本 one-shot 在每次
+    `guix system reconfigure` 的 upgrade-shepherd-services 落入
+    to-start（pinned guix 源码证实：已完成 one-shot 的 running 值
+    为 #f、auto-start? 默认 #t）——persistence declaration 增删 /
+    backing 变化在同一轮 reconfigure 后自动重跑，从当前
+    `/proc/self/mountinfo` 重建条目，无需 reboot 或显式 restart；
   - `x-gvfs-hide`：不作为独立挂载/卷出现在文件管理器侧边栏；
   - `x-gvfs-trash`：允许该 mount 的 trash（bind mount 默认被 GLib
     判为 system internal，trash 被拒）；

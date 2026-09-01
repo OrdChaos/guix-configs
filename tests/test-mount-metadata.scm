@@ -54,12 +54,29 @@
       "/home/user/.local/state/mpv" "/user/.local/state/mpv"))
    %persistent-home-mount-options))
 
-(test-equal "utab entry format (SRC TARGET ROOT OPTS)"
-            '("SRC=/persist/data-home/user/Documents TARGET=/home/user/Documents ROOT=/user/Documents OPTS=x-gvfs-hide,x-gvfs-trash"
-              "SRC=/persist/data-app/mpv/state TARGET=/home/user/.local/state/mpv ROOT=/user/.local/state/mpv OPTS=x-gvfs-hide,x-gvfs-trash")
+(test-equal "utab entry format (SRC TARGET ROOT OPTS + ownership marker)"
+            '("SRC=/persist/data-home/user/Documents TARGET=/home/user/Documents ROOT=/user/Documents OPTS=x-gvfs-hide,x-gvfs-trash,x-guixcfg.home-persistence"
+              "SRC=/persist/data-app/mpv/state TARGET=/home/user/.local/state/mpv ROOT=/user/.local/state/mpv OPTS=x-gvfs-hide,x-gvfs-trash,x-guixcfg.home-persistence")
             %sample-entries)
 
-;; ── ensure-gvfs-utab!：按 TARGET 重建本服务条目（parameter 化）──
+;; ── ownership marker（精确字段解析，非 substring 猜测）────────
+(test-assert "marker-owned entry recognized"
+             (owned-entry?
+              (car %sample-entries)))
+(test-assert "foreign entry with same desktop options but no marker is NOT owned"
+             (not (owned-entry?
+                   "SRC=/dev/sda1 TARGET=/mnt/other OPTS=x-gvfs-hide,x-gvfs-trash")))
+(test-assert "OPTS order changes do not change ownership"
+             (owned-entry?
+              "SRC=/p TARGET=/t ROOT=/r OPTS=x-guixcfg.home-persistence,x-gvfs-hide"))
+(test-assert "extra options alongside the marker keep ownership"
+             (owned-entry?
+              "SRC=/p TARGET=/t ROOT=/r OPTS=rw,x-guixcfg.home-persistence"))
+(test-assert "marker text in SRC/TARGET/ROOT fields does not claim ownership"
+             (not (owned-entry?
+                   "SRC=/persist/x-guixcfg.home-persistence TARGET=/t ROOT=/r OPTS=rw")))
+
+;; ── ensure-gvfs-utab!：按 marker 重建本服务条目（parameter 化）──
 (define %utab-test-dir
   (string-append "/tmp/guixcfg-utab-" (number->string (getpid))))
 (define %utab-test-path (string-append %utab-test-dir "/utab"))
@@ -67,12 +84,10 @@
 (parameterize ((%gvfs-utab-path %utab-test-path))
               ;; 首次：全部写入
               (test-equal "first run writes all service entries"
-                          2 (ensure-gvfs-utab! %sample-entries
-                                               %persistent-home-mount-options))
+                          2 (ensure-gvfs-utab! %sample-entries))
               ;; 重复：幂等（重建后仍是相同条目，无重复 TARGET）
               (test-equal "re-run is idempotent (same entry count)"
-                          2 (ensure-gvfs-utab! %sample-entries
-                                               %persistent-home-mount-options))
+                          2 (ensure-gvfs-utab! %sample-entries))
               (let ((content (call-with-input-file %utab-test-path
                                                    (lambda (p) (read-string p)))))
                 (test-assert "utab content contains both entries"
@@ -82,12 +97,13 @@
                              (= 1 (length (filter (lambda (l)
                                                     (string-contains l
                                                                      "TARGET=/home/user/Documents"))
-                                                  (string-split content #\newline))))))
+                                                  (string-split content #\newline)))))
+                (test-assert "utab content carries the ownership marker"
+                             (string-contains content %guixcfg-utab-ownership-marker)))
               ;; 场景 D：reconfigure 删除 consumer——旧 TARGET 随重建消失
               (test-equal "rebuild with fewer entries removes stale targets"
                           1 (ensure-gvfs-utab!
-                             (list (car %sample-entries))
-                             %persistent-home-mount-options))
+                             (list (car %sample-entries))))
               (let ((content (call-with-input-file %utab-test-path
                                                    (lambda (p) (read-string p)))))
                 (test-assert "stale target removed after rebuild"
@@ -100,12 +116,22 @@
                                        (display "SRC=/dev/sda1 TARGET=/mnt/other OPTS=rw,noatime\n"
                                                 p)))
               (test-equal "rebuild preserves other owners' entries"
-                          1 (ensure-gvfs-utab! (list (car %sample-entries))
-                                               %persistent-home-mount-options))
+                          1 (ensure-gvfs-utab! (list (car %sample-entries))))
+              ;; 场景 F：同桌面选项但无 marker 的外来条目也必须保留
+              (call-with-output-file %utab-test-path
+                                     (lambda (p)
+                                       (display (string-append
+                                                 "SRC=/dev/sdb1 TARGET=/mnt/foreign OPTS=x-gvfs-hide,x-gvfs-trash\n"
+                                                 "SRC=/dev/sda1 TARGET=/mnt/other OPTS=rw,noatime\n")
+                                                p)))
+              (test-equal "rebuild preserves same-options foreign entries"
+                          1 (ensure-gvfs-utab! (list (car %sample-entries))))
               (let ((content (call-with-input-file %utab-test-path
                                                    (lambda (p) (read-string p)))))
                 (test-assert "foreign entry preserved"
                              (string-contains content "TARGET=/mnt/other"))
+                (test-assert "same-options foreign entry preserved"
+                             (string-contains content "TARGET=/mnt/foreign"))
                 (test-assert "foreign entry not duplicated"
                              (= 1 (length (filter (lambda (l)
                                                     (string-contains l "TARGET=/mnt/other"))
@@ -121,6 +147,10 @@
                                    "/data home/My Docs"))
                                 %persistent-home-mount-options))))
                (string-contains entry "SRC=/persist/data\\040home/My\\040Docs")))
+
+(test-equal "mangle/unmangle round-trip (space tab newline backslash)"
+            "/persist/data home\twith\\slash\nend"
+            (unmangle (mangle "/persist/data home\twith\\slash\nend")))
 
 ;; ── mount-metadata 服务：只处理带 x-gvfs-trash 的 HOME bind ──
 (define %user-fss (user-persistence-file-systems "user"))
@@ -193,8 +223,7 @@
                     " (gvfs-utab-entries\n"
                     "  (mountinfo-entries-for\n"
                     "   '((\"" root "/persist/Documents\" . \"" root "/home/Documents\")))\n"
-                    "  %persistent-home-mount-options)\n"
-                    " %persistent-home-mount-options)\n"
+                    "  %persistent-home-mount-options))\n"
                     "SCM\n"
                     "guix time-machine -C channels.lock.scm -- repl -L modules "
                     gen-script " || exit 9; "

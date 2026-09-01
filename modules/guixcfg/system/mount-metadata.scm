@@ -5,12 +5,23 @@
 ;;; 职责（唯一 authority）：
 ;;;   - %persistent-home-mount-options：data-home/data-app bind mounts
 ;;;     的桌面 options 共享常量（file-system options 与 utab OPTS
-;;;     同源）；
+;;;     同源；desktop 语义，不含 ownership marker）；
 ;;;   - Shepherd one-shot 服务：file-systems 挂载后，运行时经
 ;;;     (guixcfg utils mountinfo) 从 /proc/self/mountinfo 提取
-;;;     SOURCE/ROOT，重建 /run/mount/utab 中本服务条目。
+;;;     SOURCE/ROOT，重建 /run/mount/utab 中本服务条目（ownership
+;;;     marker 判定，见 mountinfo.scm）。
 ;;;
-;;; 证据链（GLib 2.86 / libmount 2.40 / mount(2) 审计 + 实测，2026-08）：
+;;; live reconfigure lifecycle（pinned guix bc668b79 源码证实）：
+;;;   本 one-shot 在每次 `guix system reconfigure` 的
+;;;   upgrade-shepherd-services 里落入 to-start（auto-start? 默认 #t、
+;;;   已完成 one-shot 的 running 值为 #f、guix 对停止服务直接
+;;;   start-service）——mount topology 变化（persistence declaration
+;;;   增删/backing 变化）在同一轮 reconfigure 后自动重跑重建 utab，
+;;;   无需显式 herd restart 或 reboot。依赖 guix 的 to-start 语义
+;;;   （guix issue 33508 的 changed-service restart 不生效——我们
+;;;   依赖的不是 definition 变化重跑，而是停止态每轮重跑）。
+;;;
+;;; 证据链（GLib 2.86 / libmount 2.42 / mount(2) 审计 + 实测）：
 ;;;   - GIO 的 mount options 来自 mountinfo（libmount 解析），合并
 ;;;     utab user options（mnt_table_merge_user_fs）；
 ;;;   - Guix 经 mount(2) 挂载 bind：x-* 不进 mountinfo；fstab
@@ -76,11 +87,11 @@ file-systems——挂载后就位，运行时从 mountinfo 读 SOURCE/ROOT；
                             (guixcfg utils mountinfo))
                ;; 运行时从 /proc/self/mountinfo 提取 SOURCE/ROOT
                ;; （merge_user_fs 要求与 mountinfo 一致），构造带
-               ;; ROOT 的 utab 行后按 TARGET 重建本服务条目。
+               ;; ROOT 的 utab 行（OPTS 自动附 ownership marker）后
+               ;; 按 marker 重建本服务条目。
                (ensure-gvfs-utab!
                 (gvfs-utab-entries (mountinfo-entries-for '#$mount-pairs)
-                                   #$%persistent-home-mount-options)
-                #$%persistent-home-mount-options))))))
+                                   #$%persistent-home-mount-options)))))))
     (if (null? mount-pairs)
       #f
       (simple-service 'gvfs-mount-metadata shepherd-root-service-type

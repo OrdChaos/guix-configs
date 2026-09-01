@@ -2,7 +2,7 @@
 ;;; 供 (guixcfg system mount-metadata) 的 one-shot program 闭包，
 ;;; 避免把 gnu services 整棵树拖进 module-import）。
 ;;;
-;;; 证据链（GLib 2.86 / libmount 2.40 / mount(2) 审计 + 实测，2026-08）：
+;;; 证据链（GLib 2.86 / libmount 2.42 / mount(2) 审计 + 实测）：
 ;;;   - GIO 的 mount options 来自 /proc/self/mountinfo（libmount
 ;;;     mnt_table_parse_mountinfo），并合并 /run/mount/utab 的
 ;;;     user options（mnt_table_merge_user_fs）；
@@ -13,25 +13,43 @@
 ;;;   - 因此必须运行时从 /proc/self/mountinfo 提取真实 SOURCE/ROOT
 ;;;     （btrfs/subvolume/bind 场景下配置路径 ≠ mountinfo 值）。
 ;;;
-;;; utab 生命周期：ensure-gvfs-utab! 按"本服务条目特征"（OPTS 精确
-;;; 等于调用方提供的 options）识别并替换旧行，保留其他 owner 的
-;;; 条目；stale TARGET 随重建消失。
+;;; utab ownership（精确 marker，不做 substring 猜测）：
+;;;   本服务写入的条目 OPTS 以 %guixcfg-utab-ownership-marker
+;;;   （x-guixcfg.home-persistence）为 ownership token——desktop
+;;;   语义（x-gvfs-hide / x-gvfs-trash）与 ownership 分离：
+;;;   其它 owner 即使用相同桌面选项也必须保留；OPTS 顺序变化或
+;;;   额外 options 不改变归属判定；只解析 OPTS= 字段做 token 成员
+;;;   判定，绝不用整行 substring 猜 ownership。
+;;;   utab 位于 /run（tmpfs）：marker 引入前的旧格式条目在下次
+;;;   reboot 自然消失（无需迁移逻辑）。
+;;;
+;;; utab 生命周期：ensure-gvfs-utab! 按 marker 识别并替换本服务
+;;; 旧行，保留其他 owner 的条目；stale TARGET 随重建消失。
 
 (define-module (guixcfg utils mountinfo)
                #:use-module (guix build utils)        ; mkdir-p
                #:use-module (ice-9 rdelim)            ; read-string
                #:use-module (srfi srfi-1)             ; filter、find、append-map、list-index
-               #:use-module (srfi srfi-13)            ; string-trim
+               #:use-module (srfi srfi-13)            ; string-trim、string-split
                #:export (%gvfs-utab-path
+                         %guixcfg-utab-ownership-marker
+                         mangle
+                         unmangle
                          parse-mountinfo
                          mountinfo-entries-for
                          gvfs-utab-entries
+                         owned-entry?
                          ensure-gvfs-utab!))
 
 ;; /run/mount/utab（libmount 的 user options 文件）。parameter 化供
 ;; 测试覆盖（真实路径每 boot 重建）。
 (define %gvfs-utab-path
   (make-parameter "/run/mount/utab"))
+
+;; 本服务 utab 条目的 ownership marker（OPTS 字段的 token 成员）。
+;; desktop 语义选项（x-gvfs-hide/x-gvfs-trash）不是 ownership 判据。
+(define %guixcfg-utab-ownership-marker
+  "x-guixcfg.home-persistence")
 
 ;; ── escaping（util-linux lib/mangle.c 规则）───────────────────
 ;; mangle：空格/\t/\n/反斜杠 → \oct（\040 \011 \012 \134）；
@@ -114,24 +132,36 @@
 (define (gvfs-utab-entries mounts-with-root options)
   "把 MOUNTS-WITH-ROOT（(source target root) 三元组列表）转为 utab
 条目列表（SRC/TARGET/ROOT 按 libmount mangle 规则转义；OPTS=
-OPTIONS）。ROOT/SOURCE 必须来自 mountinfo（mnt_table_merge_user_fs
-要求与 mountinfo 一致才合并）。"
+OPTIONS + ',' + %guixcfg-utab-ownership-marker）。ROOT/SOURCE 必须
+来自 mountinfo（mnt_table_merge_user_fs 要求与 mountinfo 一致才
+合并）。marker 是 ownership token，与 OPTIONS 的 desktop 语义分离。"
   (map (lambda (m)
          (string-append "SRC=" (mangle (car m))
                         " TARGET=" (mangle (cadr m))
                         " ROOT=" (mangle (caddr m))
-                        " OPTS=" options))
+                        " OPTS=" options
+                        "," %guixcfg-utab-ownership-marker))
        mounts-with-root))
 
-(define (owned-entry? line options)
-  "LINE 是否本服务负责的 utab 条目（OPTS 精确等于 OPTIONS——
-调用方是唯一写者）。"
-  (string-contains line (string-append "OPTS=" options)))
+(define (owned-entry? line)
+  "LINE 是否本服务负责的 utab 条目：解析其 OPTS= 字段，按 ',' 切分
+后做 %guixcfg-utab-ownership-marker 的 token 成员判定。只检查 OPTS
+字段（SRC/TARGET/ROOT 恰好含 marker 文本不误判）；OPTS 顺序变化 /
+额外 options 不影响归属；无 marker 的外来条目（即使带相同桌面
+选项）不属本服务。"
+  (let ((opts-field (find (lambda (field)
+                           (string-prefix? "OPTS=" field))
+                         (string-split line #\space))))
+    (and opts-field
+         (member %guixcfg-utab-ownership-marker
+                 (string-split (substring opts-field
+                                          (string-length "OPTS="))
+                               #\,)))))
 
-(define (ensure-gvfs-utab! entries options)
-  "重建 %gvfs-utab-path 中本服务负责的条目：删除旧的（OPTS 精确等于
-OPTIONS 的行），追加 ENTRIES（当前声明 + 当前 mountinfo）；其他
-owner 的条目原样保留。内容无变化时不写文件。返回本服务当前条目数
+(define (ensure-gvfs-utab! entries)
+  "重建 %gvfs-utab-path 中本服务负责的条目：删除旧的（marker-owned
+的行），追加 ENTRIES（当前声明 + 当前 mountinfo）；其他 owner 的
+条目原样保留。内容无变化时不写文件。返回本服务当前条目数
 （幂等：重复调用结果一致）。"
   (let ((path (%gvfs-utab-path)))
     (mkdir-p (dirname path))
@@ -140,7 +170,7 @@ owner 的条目原样保留。内容无变化时不写文件。返回本服务�
                                              (lambda (p) (read-string p)))
                        ""))
            (kept (filter (lambda (line)
-                           (not (owned-entry? line options)))
+                           (not (owned-entry? line)))
                          (string-split existing #\newline)))
            (new-content (string-join
                          (append (filter (lambda (l)
