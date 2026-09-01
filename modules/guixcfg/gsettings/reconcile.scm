@@ -17,15 +17,20 @@
 ;;;
 ;;; dry-run 契约由 Blue 命令层实现：-n 下只跑 status/plan 的只读
 ;;; 查询，绝不 invoke dconf load。
+;;;
+;;; 唯一 runtime contract：五态/浅层校验/dconf load 的实现单一事实
+;;; 源是 runtime.scm（core-guile-only），本模块经 include-from-path
+;;; 内联后只做 thin 包装（record↔entries 转换、PATH 工具解析、
+;;; module API）——与 Home Shepherd wrapper 共享同一份实现
+;;; （见 runtime.scm 头部）。
 
 (define-module (guixcfg gsettings reconcile)
                #:use-module (guixcfg gsettings model)
                #:use-module (guixcfg gsettings serialize)
-               #:use-module (guixcfg utils process) ; invoke-capture / invoke-with-stdin
                #:use-module (guix build utils)      ; which
                #:use-module (ice-9 match)
-               #:use-module (srfi srfi-1)  ; member、filter、every
-               #:use-module (srfi srfi-13) ; string-tokenize、string-trim-both、string-join
+               #:use-module (srfi srfi-1)  ; member、filter
+               #:use-module (srfi srfi-13) ; string-join
                #:export (%gsettings-actions
                          gsettings-actions
                          gsettings-validate-action-arguments
@@ -33,6 +38,10 @@
                          gsettings-plan
                          gsettings-apply!
                          gsettings-status-format))
+
+;; 唯一 runtime contract（schema/key 校验 + 浅层值校验 + 五态 +
+;; dconf load + 输出格式）：与 generated wrapper 共享的同一份源码。
+(include-from-path "guixcfg/gsettings/runtime")
 
 ;;; ── action registry ────────────────────────────────────────
 
@@ -54,7 +63,8 @@
               (("apply") '(apply ()))
               (_ #f))))
 
-;;; ── tooling（PATH 解析，fail fast）─────────────────────────
+;;; ── tooling（PATH 解析，fail fast；wrapper 侧用 file-append
+;;;    绝对路径，不经此处）─────────────────────────────────────
 
 (define (gsettings-tool)
   (or (which "gsettings")
@@ -66,84 +76,19 @@
       (error "dconf executable not found in PATH \
 (install dconf in the home profile)")))
 
-;;; ── runtime 查询与浅层校验 ─────────────────────────────────
+;;; ── thin 包装（record ↔ entries，委托 runtime contract）──────
 
-(define (runtime-schema-keys schema)
-  "`gsettings list-keys SCHEMA` 的键名列表；schema 不存在（非零
-  退出）→ #f。"
-  (false-if-exception
-   (filter (negate string-null?)
-           (map string-trim-both
-                (string-split
-                 (invoke-capture (gsettings-tool) "list-keys" schema)
-                 #\newline)))))
-
-(define (runtime-value schema key)
-  "`gsettings get SCHEMA KEY` 的规范化文本；失败 → #f。"
-  (false-if-exception
-   (string-trim-both
-    (invoke-capture (gsettings-tool) "get" schema key))))
-
-(define (runtime-range-type schema key)
-  "`gsettings range SCHEMA KEY` 的浅层类型令牌；失败 → #f。形如
-  'type b'（glib 2.86 实测）——取第二个 token 做最小类型语法检查
-  （b/i/u/x/d/s）；其余类型（enum/flags/tuple 等）返回 #f 表示
-  '不检查'（Phase 1 不做 GVariant 类型系统，深校验由 dconf load
-  接受性兜底）。"
-  (false-if-exception
-   (let ((tokens (string-tokenize
-                  (invoke-capture (gsettings-tool) "range" schema key))))
-     (and (pair? tokens)
-          (string=? "type" (car tokens))
-          (pair? (cdr tokens))
-          (cadr tokens)))))
-
-(define (numeric-text? s)
-  (and (string->number s) #t))
-
-(define (shallow-value-valid? value type)
-  "Phase 1 最小 GVariant 文本校验：TYPE 为 #f（range 不可读或非
-  简单类型）→ 不检查（接受）；'b' → true/false；'i'/'u'/'x' →
-  整数文本；'d' → 数值文本；'s' → 单引号包裹的字符串文本；其余
-  类型不检查。"
-  (cond ((not type) #t)
-    ((string=? type "b") (member value '("true" "false")))
-    ((member type '("i" "u" "x")) (and (numeric-text? value)
-                                       (integer? (string->number value))))
-    ((string=? type "d") (numeric-text? value))
-    ((string=? type "s")
-     (and (>= (string-length value) 2)
-          (char=? #\' (string-ref value 0))
-          (char=? #\' (string-ref value (1- (string-length value))))))
-    (else #t)))
-
-;;; ── status / plan / apply ──────────────────────────────────
+(define (settings->entries settings)
+  (map (lambda (setting)
+         (list (gsettings-setting-schema setting)
+               (gsettings-setting-key setting)
+               (gsettings-setting-value setting)))
+       settings))
 
 (define (gsettings-status settings)
   "SETTINGS → ((schema key status desired current) ...)（deterministic：
-  按输入顺序；调用方用 gsettings-desired-state 提供排序输入）。"
-  (map (lambda (setting)
-         (let* ((schema (gsettings-setting-schema setting))
-                (key (gsettings-setting-key setting))
-                (desired (gsettings-setting-value setting))
-                (keys (runtime-schema-keys schema)))
-           (cond ((not keys)
-                  (list schema key 'missing-schema desired #f))
-             ((not (member key keys))
-              (list schema key 'missing-key desired #f))
-             ((not (shallow-value-valid?
-                    desired (runtime-range-type schema key)))
-              (list schema key 'invalid-desired-value desired #f))
-             (else
-              (let ((current (runtime-value schema key)))
-                (if (not current)
-                  (list schema key 'missing-key desired #f)
-                  (list schema key
-                        (if (string=? desired current)
-                          'synced
-                          'drifted)
-                        desired current)))))))
-       settings))
+按输入顺序；调用方用 gsettings-desired-state 提供排序输入）。"
+  (gsettings-runtime-status (gsettings-tool) (settings->entries settings)))
 
 (define (gsettings-plan settings)
   "SETTINGS 中 status 非 synced 的条目（apply 的作用面）。"
@@ -153,61 +98,27 @@
 
 (define (gsettings-apply! settings)
   "validate → serialize → `dconf load /`（stdin）。三类声明错误
-  （missing-schema / missing-key / invalid-desired-value）fail-loud
-  不 silent ignore；drifted 键由 dconf load 覆盖为 desired。
-  返回 managed 键数。空声明集 → 无操作（#t，不 invoke dconf）。"
-  (for-each (lambda (entry)
-              (let ((status (caddr entry)))
-                (unless (or (eq? status 'synced) (eq? status 'drifted))
-                  (let ((schema (car entry))
-                        (key (cadr entry)))
-                    (error
-                     (string-append "gsettings apply: " key
-                                    " (" schema ") " 
-                                    (case status
-                                      ((missing-schema) "schema not found")
-                                      ((missing-key) "key not found in schema")
-                                      ((invalid-desired-value) "invalid desired value (GVariant text)")
-                                      (else "unknown state")))
-                     (cadddr entry))))))
-            (gsettings-status settings))
+（missing-schema / missing-key / invalid-desired-value）fail-loud
+不 silent ignore；drifted 键由 dconf load 覆盖为 desired。
+返回 managed 键数。空声明集 → 无操作（#t，不 invoke dconf）。"
+  (for-each (lambda (problem)
+              (match problem
+                ((schema key text)
+                 (error (string-append "gsettings apply: " key
+                                       " (" schema ") " text)
+                        #f))))
+            (gsettings-runtime-problems (gsettings-tool)
+                                        (settings->entries settings)))
   (if (null? settings)
     #t
     (begin
-     (invoke-with-stdin (serialize-gsettings-keyfile settings)
-                        (dconf-tool) "load" "/")
-     (length settings))))
-
-;;; ── 输出格式（Blue 命令层共享）─────────────────────────────
+      (let ((status (gsettings-runtime-apply!
+                     (dconf-tool)
+                     (serialize-gsettings-keyfile settings))))
+        (unless (zero? status)
+          (error "gsettings apply: dconf load failed" status)))
+      (length settings))))
 
 (define (gsettings-status-format entries)
-  "ENTRIES → 逐键文本报告（schema 组 + '  key\n    desired / current
-/ status'），纯格式化、无 IO。空 → 单行 'no managed keys'。"
-  (if (null? entries)
-    '("no managed gsettings keys (empty declaration set)")
-    (let loop ((remaining entries)
-               (current-schema (car (car entries)))
-               (acc '()))
-      (if (null? remaining)
-        (reverse acc)
-        (let* ((entry (car remaining))
-               (schema (car entry)))
-          (if (string=? schema current-schema)
-            (loop (cdr remaining)
-                  schema
-                  (cons (string-append "  " (cadr entry)
-                                       " desired: " (cadddr entry)
-                                       " current: "
-                                       (or (car (cddddr entry)) "<none>")
-                                       " status: "
-                                       (symbol->string (caddr entry)))
-                        acc))
-            (loop (cdr remaining)
-                  schema
-                  (cons (string-append "  " (cadr entry)
-                                       " desired: " (cadddr entry)
-                                       " current: "
-                                       (or (car (cddddr entry)) "<none>")
-                                       " status: "
-                                       (symbol->string (caddr entry)))
-                        (cons schema acc)))))))))
+  "ENTRIES → 逐键文本报告行（runtime contract 的输出格式）。"
+  (gsettings-runtime-format-status entries))

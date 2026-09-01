@@ -38,14 +38,23 @@
                 (or (false-if-exception (scandir dir)) '()))))
 
 (define (module-name-of file)
-  "从 FILE 的 define-module 行提取模块名（符号列表）。"
+  "从 FILE 的 define-module 行提取模块名（符号列表）；非模块文件
+→ #f。"
   (let ((rx (make-regexp "\\(define-module \\(([a-z0-9-]+( [a-z0-9-]+)*)")))
     (let ((m (regexp-exec rx
                           (call-with-input-file file
                                                 (lambda (p) (read-string p))))))
-      (if m
-        (map string->symbol (string-split (match:substring m 1) #\space))
-        (error "no define-module in" file)))))
+      (and m (map string->symbol (string-split (match:substring m 1) #\space))))))
+
+;; 非模块的共享源文件（无 define-module，经 include-from-path /
+;; local-file + load 双消费——见 gsettings/runtime.scm 头部）。不
+;; 参与模块拓扑/编译；编译正确性由两种消费路径的测试覆盖
+;; （reconcile include + wrapper build + cross-path 加载执行）。
+(define %non-module-sources
+  '("modules/guixcfg/gsettings/runtime.scm"))
+
+(define (module-source-file? file)
+  (module-name-of file))
 
 (define (guixcfg-use-modules file)
   "FILE 中 #:use-module 引用的 guixcfg 模块名列表（跳过注释行）。"
@@ -106,7 +115,8 @@
           (loop remaining* ready* (cons n acc)))))))
 
 (define %all-modules
-  (let* ((files (scheme-files-under "modules/guixcfg"))
+  (let* ((files (filter module-source-file?
+                        (scheme-files-under "modules/guixcfg")))
          (nodes (map module-name-of files))
          (edges (map (lambda (f)
                        (cons (module-name-of f) (guixcfg-use-modules f)))
@@ -119,6 +129,12 @@
                  ".scm"))
 
 (test-begin "modules-compile")
+
+(test-equal "non-module source files are exactly the documented set"
+            %non-module-sources
+            (filter (lambda (f)
+                      (not (module-source-file? f)))
+                    (scheme-files-under "modules/guixcfg")))
 
 (test-assert "all modules compile and load without unbound-variable warnings"
              (let ((warnings (open-output-string)))

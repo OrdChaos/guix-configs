@@ -16,14 +16,17 @@
 
 (use-modules (guixcfg gsettings model)
              (guixcfg gsettings serialize)
-             (guixcfg gsettings home-service) ; %gsettings-reconcile-wrapper（core-guile 契约断言）
+             (guixcfg gsettings home-service) ; gsettings-reconcile-service（wrapper/契约断言）
              (guixcfg apps model)       ; make-application、applications-gsettings
              (guixcfg apps registry)    ; %applications（唯一启用事实源）
              (guixcfg apps gnome-text-editor definition) ; %gnome-text-editor（first consumer）
              (guixcfg home user)        ; %guix-home（service 结构断言）
              (gnu home services shepherd) ; home-shepherd-service-type
              (gnu services)             ; fold-services
-             (guix gexp)                ; gexp->approximate-sexp
+             (guix gexp)                ; gexp->approximate-sexp、lower-object
+             (guix store)               ; open-connection（store identity 断言）
+             (guix monads)              ; run-with-store
+             (guix derivations)         ; derivation-file-name
              (ice-9 rdelim)             ; read-string（wrapper 源码契约断言）
              (srfi srfi-1)
              (srfi srfi-13)
@@ -242,20 +245,77 @@
                             (and (string? x) (string-contains x "sh -c")))
                           sexp)))))
 
-(test-assert "service wrapper is core-guile only: no repository module imports"
-             ;; home derivation 在 daemon 侧 lowering 时 %load-path 没有
-             ;; 仓库 modules/——wrapper 里出现 (guixcfg …) 模块导入会
-             ;; 在运行时 no code for module（VM 实测：source-module-closure
-             ;; 闭包只剩 guix/）。源码级契约（OFF 系列同款）：wrapper
-             ;; 必须 open-pipe* + dconf load（stdin），绝不允许
-             ;; with-imported-modules / source-module-closure 引用仓库模块。
+;; ── wrapper 源码契约（daemon 侧 lowering 硬约束）────────────
+;; home derivation 在 daemon 侧 lowering 时 %load-path 没有仓库
+;; modules/——wrapper 不得出现 (guixcfg …) 模块导入或 gexp 模块闭包
+;; （VM 实测：闭包只剩 guix/，运行时 no code for module）。唯一
+;; runtime contract 经 local-file 按值嵌入。
+(test-assert "service wrapper embeds the shared runtime contract via local-file"
              (let ((s (call-with-input-file
                        "modules/guixcfg/gsettings/home-service.scm"
                        (lambda (p) (read-string p)))))
-               (and (string-contains s "open-pipe*")
-                    (string-contains s "\"load\"")
+               (and (string-contains s "(load #$%gsettings-runtime-source)")
+                    (string-contains s "(local-file \"runtime.scm\"")
                     (string-contains s "file-append")
                     (not (string-contains s "with-imported-modules"))
                     (not (string-contains s "source-module-closure")))))
+
+(test-assert "shared runtime contract is core-guile-only (no repository module imports)"
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/gsettings/runtime.scm"
+                       (lambda (p) (read-string p)))))
+               (and (string-contains s "open-pipe*")
+                    (string-contains s "\"load\"")
+                    (not (string-contains s "define-module"))
+                    (not (string-contains s "#:use-module (guixcfg"))
+                    (not (string-contains s "#:use-module (guix ")))))
+
+;; ── composition 边界：generic 服务不读全局 inventory ────────
+(test-assert "home-service module does not read the application registry"
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/gsettings/home-service.scm"
+                       (lambda (p) (read-string p)))))
+               (and (not (string-contains s "#:use-module (guixcfg apps"))
+                    (not (string-contains s "#:use-module (guixcfg users")))))
+
+;; ── 参数化构造器 ───────────────────────────────────────────
+(define %synthetic-desired
+  (list (gsettings-setting (schema "org.a.B") (key "k1") (value "true"))
+        (gsettings-setting (schema "org.a.B") (key "k2") (value "'x'"))))
+(define %synthetic-desired-alt
+  (list (gsettings-setting (schema "org.a.B") (key "k1") (value "false"))))
+
+(define %synthetic-svc
+  (gsettings-reconcile-service %synthetic-desired "/home/alice"))
+
+(test-assert "parameterized service: one-shot, no respawn, after dbus"
+             (let ((svc (car (service-value %synthetic-svc))))
+               (and (shepherd-service-one-shot? svc)
+                    (not (shepherd-service-respawn? svc))
+                    (equal? '(dbus) (shepherd-service-requirement svc))
+                    (equal? '(gsettings-reconcile)
+                            (shepherd-service-provision svc)))))
+
+;; ── build-time desired state 变化 → store identity 变化 ──────
+;; 相同 desired → 相同 derivation；desired 变 → 不同（wrapper 内嵌
+;; keyfile/entries，generation 重跑正是依赖这一 identity）。
+;; 探针 = wrapper program-file 本身（raw start gexp 含 shepherd 自由
+;; 变量 %user-log-dir，lower-object 会 invalid G-expression input）。
+(define %store (open-connection))
+
+(define (wrapper-file-name desired)
+  (let ((drv (run-with-store %store
+                             (lower-object
+                              (gsettings-reconcile-wrapper
+                               desired "/home/alice")))))
+    (derivation-file-name drv)))
+
+(test-equal "service store identity: same desired -> same derivation"
+            (wrapper-file-name %synthetic-desired)
+            (wrapper-file-name %synthetic-desired))
+
+(test-assert "service store identity: different desired -> different derivation"
+             (not (string=? (wrapper-file-name %synthetic-desired)
+                            (wrapper-file-name %synthetic-desired-alt))))
 
 (test-end)

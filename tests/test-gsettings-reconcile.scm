@@ -237,6 +237,48 @@
              (let ((result (gsettings-apply! '())))
                (and result (not (gs-log-contains? "dconf"))))))
 
+;; ── 双路径一致性：manual（reconcile module API，PATH 解析工具）与
+;;    Home wrapper（runtime contract 直接加载，二进制参数化）是同一
+;;    份实现——对同一 fixture 的五态与校验问题必须一致 ──────────
+;; runtime contract 经 (load ...) 进入本测试模块（与 wrapper 的
+;; local-file + load 同一加载方式）。load 的相对路径按 %load-path
+;; 解析——用仓库根绝对路径。
+(load (string-append (getcwd) "/modules/guixcfg/gsettings/runtime.scm"))
+
+(test-equal "cross-path: status agrees between module API and runtime contract"
+            (begin
+              (setenv "GS_FAKE_KEYS" "restore-session\n")
+              (setenv "GS_FAKE_GET_VALUE" "true")
+              (map (lambda (e)
+                     (list (caddr e) (cadddr e) (car (cddddr e))))
+                   (gsettings-status (list %k-restore))))
+            (map (lambda (e)
+                   (list (caddr e) (cadddr e) (car (cddddr e))))
+                 (gsettings-runtime-status
+                  (string-append %gs-bin "/gsettings")
+                  '(("org.gnome.TextEditor" "restore-session" "false")))))
+
+(test-equal "cross-path: missing-schema problem classification agrees"
+            (begin
+              (setenv "GS_FAKE_MISSING_SCHEMA" "org.gnome.TextEditor")
+              (map (lambda (e) (list (car e) (cadr e) (caddr e)))
+                   (gsettings-runtime-problems
+                    (string-append %gs-bin "/gsettings")
+                    '(("org.gnome.TextEditor" "restore-session" "false")))))
+            '(("org.gnome.TextEditor" "restore-session" "schema not found")))
+
+(test-equal "cross-path: invalid-desired-value classification agrees"
+            (begin
+              (unsetenv "GS_FAKE_MISSING_SCHEMA")
+              (setenv "GS_FAKE_KEYS" "restore-session\n")
+              (setenv "GS_FAKE_RANGE_TYPE" "b")
+              (map (lambda (e) (list (car e) (cadr e) (caddr e)))
+                   (gsettings-runtime-problems
+                    (string-append %gs-bin "/gsettings")
+                    '(("org.gnome.TextEditor" "restore-session" "notabool")))))
+            '(("org.gnome.TextEditor" "restore-session"
+               "invalid desired value (GVariant text)")))
+
 (test-end)
 
 ;; 恢复环境。

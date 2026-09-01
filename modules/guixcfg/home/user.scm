@@ -33,9 +33,17 @@
                #:use-module (guixcfg home environment) ; %session-environment-service
                #:use-module (guixcfg home assets)   ; %user-assets-service
                #:use-module (guixcfg flatpak service) ; %flatpak-home-services（override 文件 + XDG_DATA_DIRS）
-               #:use-module (guixcfg gsettings home-service) ; %gsettings-packages、%gsettings-reconcile-service
+               #:use-module (guixcfg gsettings home-service) ; %gsettings-packages、gsettings-reconcile-service
+               #:use-module (guixcfg gsettings model) ; gsettings-desired-state（desired state 聚合）
+               #:use-module (guixcfg users user) ; %primary-user、user-profile-home-directory
                #:export (guix-home
                          %guix-home))
+
+;; composition root：application registry → 聚合 desired GSettings
+;; → parameterized service（generic 服务不读全局 inventory——见
+;; gsettings/home-service.scm 头部 Composition 边界）。
+(define (%gsettings-desired-state)
+  (gsettings-desired-state (applications-gsettings %applications)))
 
 (define* (guix-home #:key (application-configuration-selections '()))
          "构造 home-environment：registry 应用聚合 + 统一策略服务。
@@ -53,7 +61,13 @@ selection，不知道文件/路径）。"
                                   %home-fonts-xdg-link-service
                                   %session-environment-service
                                   %user-assets-service
-                                  %gsettings-reconcile-service) ; 登录/热激活后的 GSettings→dconf 投影 one-shot
+                                  ;; 登录/热激活后的 GSettings→dconf 投影
+                                  ;; one-shot（desired state + HOME 事实
+                                  ;; 由本 composition 层显式传入）。
+                                  (gsettings-reconcile-service
+                                   (%gsettings-desired-state)
+                                   (user-profile-home-directory
+                                    %primary-user)))
                             ;; Flatpak 平台 Home 集成（override 完整文件
                             ;; 生成 + XDG_DATA_DIRS exports 追加；零
                             ;; flatpak CLI、零网络）。
