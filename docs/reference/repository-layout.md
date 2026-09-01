@@ -28,6 +28,14 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
                        零 flatpak CLI）、reconcile.scm（sync/status/
                        update/remove/gc 操作层，唯一联网面，只被
                        Blue 的 flatpak 命令消费）
+  gsettings/           Repository-derived GSettings（docs/architecture/
+                       gsettings.md）：model.scm（<gsettings-setting> +
+                       校验 + (schema,key) 单一 owner 硬规则 +
+                       appearance 保留域）、serialize.scm（schema→
+                       dconf path + 确定性 keyfile）、reconcile.scm
+                       （status/plan/apply!，PATH 解析工具）、
+                       home-service.scm（one-shot session service +
+                       wrapper；desired 声明 build-time 嵌入）
   home/                Guix Home 入口（薄 assembly，聚合 apps
                        registry；guix-home 接受 host 的 logical
                        application-configuration-selections）+ 会话

@@ -667,6 +667,94 @@ Dry-run (blue -n):
                 (%flatpak-command arguments))
 
 ;;; ============================================================
+;;; §3.7 GSettings namespace（repository-derived static app
+;;; preferences；docs/architecture/gsettings.md）
+;;; ============================================================
+;;; 域机制全部在 (guixcfg gsettings model)/(reconcile)/(serialize)，
+;;; 执行入口在 tools/gsettings.scm（pinned 子进程）。blueprint 只做
+;;; action 校验与调度（与 blue check → tests/run-tests.scm 同模式）。
+;;;
+;;; 为什么域执行必须进 pinned 子进程（决策记录，见
+;;; tools/gsettings.scm 头部）：
+;;;   1. desired state 事实源 apps registry 的 39 个 definition 中
+;;;      8 个依赖 channel 模块、且引用的 guix 包必须来自 pinned
+;;;      channels——`guix time-machine shell` 的 GUILE_LOAD_PATH 只
+;;;      带宿主机 guix current（宿主机 guix 已把 fastfetch 改名
+;;;      fastfetch-minimal，直接解析 registry 会 Unbound variable）；
+;;;   2. blueprint 编译期导入非平凡新模块会在外层 link 阶段触发
+;;;      guile out-of-range 崩溃（嵌套编译，实测）。
+;;; 因此 action 校验经 runtime resolve-interface（标准 loader 编译
+;;; 路径，与测试套件相同）；status/apply 一律 %exec 进 pinned repl。
+
+(define (%gsettings-validation-runtime)
+  ;; runtime 惰性解析（仅 action 集合/参数校验用；域执行在 pinned
+  ;; 子进程，不在此处）。gsettings-actions 是过程（reconcile 导出
+  ;; 签名），取回后调用得列表。
+  (let ((reconcile (resolve-interface '(guixcfg gsettings reconcile))))
+    (list ((module-ref reconcile 'gsettings-actions))
+          (module-ref reconcile 'gsettings-validate-action-arguments))))
+
+(define (%gsettings-script-argv action)
+  "ACTION（status | apply | dry-run-apply）的 pinned 执行 argv。"
+  `("guix" "time-machine" "-C"
+           ,(string-append (%repo-root) "/channels.lock.scm")
+           "--" "repl" ,(string-append (%repo-root) "/tools/gsettings.scm")
+           "--" ,action))
+
+(define (%gsettings-usage-error actions)
+  (format (current-error-port)
+          "Usage: blue gsettings ACTION~%actions: ~a~%"
+          (string-join actions ", "))
+  (primitive-exit 1))
+
+(define (%gsettings-command arguments)
+  (catch #t
+    (lambda ()
+      ;; root 拒绝（同 flatpak）：root 进程的 dconf 落在
+      ;; /root/.config/dconf，是与真实用户完全平行的错误作用域。
+      (when (zero? (getuid))
+        (format (current-error-port)
+                "gsettings: refusing to run as root (projection targets the user's runtime dconf; root would act on /root/.config/dconf, not your session).~%")
+        (primitive-exit 1))
+      (match (%gsettings-validation-runtime)
+             ((actions validate)
+              (match (validate
+                      (and (pair? arguments) (car arguments))
+                      (if (pair? arguments) (cdr arguments) '()))
+                     (#f (%gsettings-usage-error actions))
+                     ;; status 纯只读：dry-run 也真实执行（只读查询不拦截）。
+                     ;; apply：-n 下脚本走 dry-run-apply（真实 status/diff +
+                     ;; 零 mutation，绝不 invoke dconf load）；正常走 apply。
+                     ;; 一律 %exec（真实执行），dry-run 语义由脚本模式承担。
+                     (('status ())
+                      (%exec (%gsettings-script-argv "status")))
+                     (('apply ())
+                      (%exec (%gsettings-script-argv
+                              (if (dry-build?) "dry-run-apply" "apply"))))))))
+    (lambda (key . args)
+      (format (current-error-port) "gsettings: ~a~%"
+              (string-join (exception-strings args) " "))
+      (primitive-exit 1))))
+
+(define-command (gsettings-command arguments)
+                ((invoke "gsettings")
+                 (category 'applications)
+                 (synopsis "Inspect/apply repository-derived GSettings (runtime dconf projection)")
+                 (help "ACTION
+Repository-managed static application preferences (declarative
+desired state → disposable runtime dconf; ~/.config/dconf is never
+persisted, reboot is the reset boundary). Actions:
+  status                     real read-only per-key desired/current diff
+  apply                      validate → serialize → dconf load /
+                             (writes only managed keys; never resets
+                             unmanaged state)
+Dry-run (blue -n):
+  status                     real read-only execution
+  apply                      real status/diff + plan, zero mutation
+                             (never invokes dconf load)"))
+                (%gsettings-command arguments))
+
+;;; ============================================================
 ;;; §4 repository-tests testable（builtin blue check 的薄 adapter）
 ;;; ============================================================
 
@@ -710,4 +798,5 @@ Dry-run (blue -n):
                  reconfigure-command
                  reconfigure-root-command
                  update-command
-                 flatpak-command)))
+                 flatpak-command
+                 gsettings-command)))

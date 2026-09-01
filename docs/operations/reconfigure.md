@@ -109,6 +109,9 @@ root 进程的 Blue store 指向 /run 的项目命名空间，绝不向用户仓
   → guix time-machine … system reconfigure
   → shepherd 升级自动 restart 变化的 one-shot 服务
     （runtime secrets 代际发布、account verify、Home 热激活）
+  → Home generation 切换后，Home Shepherd 重跑 gsettings-reconcile
+    one-shot（desired 声明 build-time 嵌入 wrapper——声明变即重跑，
+    runtime dconf 立即更新；docs/architecture/gsettings.md）
   → 验证 Home 链接与 readiness capability 无 failed
   → 打开 gate
 ```

@@ -33,6 +33,7 @@
                #:use-module (guixcfg home environment) ; %session-environment-service
                #:use-module (guixcfg home assets)   ; %user-assets-service
                #:use-module (guixcfg flatpak service) ; %flatpak-home-services（override 文件 + XDG_DATA_DIRS）
+               #:use-module (guixcfg gsettings home-service) ; %gsettings-packages、%gsettings-reconcile-service
                #:export (guix-home
                          %guix-home))
 
@@ -44,13 +45,15 @@ selection> 列表）贡献（generic mechanism，host 只做 logical
 selection，不知道文件/路径）。"
          (home-environment
           (packages (append %fonts
+                            %gsettings-packages   ; gsettings/dconf CLI（GSettings 投影机制自备 runtime 依赖）
                             (applications-home-packages %applications)))
           (services (append (list %xdg-default-apps-service
                                   %xdg-user-dirs-service
                                   %fontconfig-service
                                   %home-fonts-xdg-link-service
                                   %session-environment-service
-                                  %user-assets-service)
+                                  %user-assets-service
+                                  %gsettings-reconcile-service) ; 登录/热激活后的 GSettings→dconf 投影 one-shot
                             ;; Flatpak 平台 Home 集成（override 完整文件
                             ;; 生成 + XDG_DATA_DIRS exports 追加；零
                             ;; flatpak CLI、零网络）。

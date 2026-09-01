@@ -3,10 +3,10 @@
 ;;;
 ;;; <application> 只是 contribution container——它声明这个应用贡献
 ;;; 哪些 home packages / home services / system services /
-;;; persistence rules / secrets / configuration variants；部署、
-;;; 挂载、发布一律由各自的 generic single-owner mechanism 执行
-;;; （Guix Home、file-systems、secrets publisher、selection
-;;; resolver）。
+;;; persistence rules / secrets / configuration variants / GSettings
+;;; 声明；部署、挂载、发布、投影一律由各自的 generic single-owner
+;;; mechanism 执行（Guix Home、file-systems、secrets publisher、
+;;; selection resolver、gsettings/dconf projection）。
 ;;;
 ;;; <application-configuration-variant>：application 自己声明的可选
 ;;; 配置变体（如 'laptop）——application 拥有配置资源与 variant
@@ -31,6 +31,7 @@
                          application-persistence
                          application-secrets
                          application-configuration-variants
+                         application-gsettings
                          <application-configuration-variant>
                          application-configuration-variant
                          make-application-configuration-variant
@@ -41,7 +42,8 @@
                          applications-home-services
                          applications-system-services
                          applications-persistence
-                         applications-secrets))
+                         applications-secrets
+                         applications-gsettings))
 
 (define-record-type* <application> application make-application
                      application?
@@ -58,7 +60,9 @@
                               (default '()))
                      (configuration-variants
                       application-configuration-variants        ; list of <application-configuration-variant>
-                      (default '())))
+                      (default '()))
+                     (gsettings application-gsettings            ; list of <gsettings-setting>（(guixcfg gsettings model)）
+                                (default '())))
 
 ;; 可选配置变体声明（application-owned）：NAME 是稳定 logical
 ;; identifier（如 'laptop）；FILES 是 (target source) 两元素列表
@@ -102,3 +106,15 @@ extension 贡献，canonical target 由 instantiate-missing-services
   "聚合 APPS 的全部 secret declarations（ciphertext source 已由
 application definition 解析为 file-like）。"
   (append-map application-secrets apps))
+
+(define (applications-gsettings apps)
+  "聚合 APPS 的全部 GSettings 声明，保留 owner 信息用于错误报告：
+返回 ((application-name . <gsettings-setting>) ...)。ownership 校验
+（(schema,key) 单一 owner + appearance 保留域）由
+(guixcfg gsettings model) 的 validate-gsettings-ownership! 执行，
+本聚合保持纯 concatenation。"
+  (append-map (lambda (app)
+                (map (lambda (setting)
+                       (cons (application-name app) setting))
+                     (application-gsettings app)))
+              apps))

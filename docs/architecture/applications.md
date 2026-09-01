@@ -136,7 +136,7 @@ apps/<app>/
 ## `<application>` contract
 
 定义在 `modules/guixcfg/apps/model.scm`（`(guixcfg apps model)`），
-五个贡献字段 + 名字：
+六个贡献字段 + 名字：
 
 ```scheme
 (application
@@ -145,7 +145,8 @@ apps/<app>/
  (home-services (list ...))  ; home service 实例
  (system-services (list ...)) ; 仅少数确需 system-level service 的 app
  (persistence (list ...))    ; <application-persistence-rule>（声明，不实现挂载）
- (secrets (list ...)))       ; <secret-decl>（声明，不实现解密）
+ (secrets (list ...))        ; <secret-decl>（声明，不实现解密）
+ (gsettings (list ...)))     ; <gsettings-setting>（声明，不实现投影）
 ```
 
 | 字段 | 语义 | 注意 |
@@ -156,6 +157,7 @@ apps/<app>/
 | `system-services` | 仅少数真正需要 system-level service 的 app | **不要**用它包装 greetd/accounts/readiness/TPM/UKI/Secure Boot 等核心基础设施 |
 | `persistence` | 声明 app-owned mutable canonical state | 只声明 rule，挂载由 `(guixcfg system application-persistence)` 执行 |
 | `secrets` | 声明 app 需要的 ciphertext/runtime secret | 只声明，解密/发布由 `(guixcfg security secrets)` 执行 |
+| `gsettings` | 声明 app 负责的静态 GSettings（schema/key/value，GVariant 文本） | 只声明，投影由 `(guixcfg gsettings …)` 执行到 runtime dconf；`(schema,key)` 全局单一 owner；appearance 6 键保留域不可声明（docs/architecture/gsettings.md） |
 
 聚合（registry → Home/System）：
 
@@ -165,6 +167,7 @@ apps/<app>/
 (applications-system-services %applications)
 (applications-persistence %applications)
 (applications-secrets %applications)
+(applications-gsettings %applications)   ; ((owner . <gsettings-setting>) ...)
 ```
 
 ## Application service rule

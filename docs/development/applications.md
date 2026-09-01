@@ -312,6 +312,53 @@ host 组装 home 时传入：
 - 无 selection 的机器（VM）用默认 `%guix-home`——应用侧配置把
   可选文件做成 optional include（niri 26.04 支持 `optional=true`）。
 
+## E11. 静态 GSettings（repository-derived gsettings）
+
+应用需要在 session 里固定的 GSettings 键（与外观无关的静态偏好）由
+application 自己声明，仓库聚合后投影到 runtime dconf
+（docs/architecture/gsettings.md）。**外观键（org.gnome.desktop.
+interface 的 color-scheme/gtk-theme/icon-theme/cursor-theme/
+cursor-size/font-name）属于 appearance-sync，绝不在这里声明。**
+
+**第一步：核实 schema**（以实际安装版本的 schema 为准，不凭记忆）
+
+```bash
+gsettings list-schemas | grep <app>
+gsettings list-keys <schema-id>
+gsettings range <schema-id> <key>
+```
+
+**第二步：application 声明（ownership 留在 definition）**
+
+```scheme
+;; apps/foo/definition.scm
+(use-modules (guixcfg gsettings model))
+
+(application
+ (name 'foo)
+ ...
+ (gsettings
+  (list (gsettings-setting
+         (schema "org.example.Foo")
+         (key "show-sidebar")
+         (value "true"))       ; GVariant 文本表示（见 gsettings.md）
+        ...)))
+```
+
+**硬规则**：
+
+- `(schema,key)` 全局单一 owner——两个 application 声明同一个键
+  （即使值相同）即 fail，错误列出全部 owner；
+- 不建集中式 gsettings 大表——declaration 留在各自 definition；
+- 删除声明后当前 boot 内旧 runtime 值可残留，reboot 自然回
+  schema default（不实现 managed-key tracking）；
+- 验证：`blue gsettings status`（五态 diff）/
+  `blue -n gsettings apply`（只读 diff + plan，零 mutation）。
+
+首个真实 consumer：`apps/gnome-text-editor/definition.scm`
+（org.gnome.TextEditor 的 7 个静态键，schema 以 VM 实测的 pinned
+48.3 为准；docs/architecture/gsettings.md（当前 consumer））。
+
 ## E10. Validation
 
 应用层没有 per-app 测试（配置内容/应用列表不做断言——加应用不应

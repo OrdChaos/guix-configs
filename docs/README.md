@@ -13,6 +13,8 @@ Guix System 配置工程的文档入口。
 5. [architecture/accounts-sessions.md](architecture/accounts-sessions.md) — 账户、登录、会话
 6. [architecture/home.md](architecture/home.md) — Guix Home 与用户数据
 7. [architecture/secrets.md](architecture/secrets.md) — 秘密管理与威胁模型
+8. [architecture/flatpak.md](architecture/flatpak.md) — Flatpak 子系统
+9. [architecture/gsettings.md](architecture/gsettings.md) — repository-derived GSettings → dconf 投影
 
 然后按需：
 

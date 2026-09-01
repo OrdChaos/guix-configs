@@ -35,9 +35,12 @@
 ;;;         应用自有目录，目录粒度下不可拆分（不做 single-file
 ;;;         bind：AGENT.md §12 非标准机制）；不新增 .cache 等
 ;;;         独立目录的持久化。
-;;;   - GSettings（org.gnome.TextEditor 等）声明式管理明确不在
-;;;     本任务范围（dconf 是 runtime derived state，由 apps/gtk
-;;;     的既有机制处理外观键）；不声明 editor preferences。
+;;;   - GSettings（org.gnome.TextEditor）：静态编辑偏好由本应用
+;;;     经 generic GSettings 机制声明（docs/architecture/
+;;;     gsettings.md）——schema/key 以 pinned 48.3 实测为准
+;;;     （gsettings list-keys / range）；value 为 GVariant 文本。
+;;;     外观键（org.gnome.desktop.interface 等）不在此声明
+;;;     （appearance-sync 独占，机制级强制）。
 ;;;
 ;;; 桌面集成：.desktop 经 profile share/applications 进
 ;;; XDG_DATA_DIRS（launcher 自动发现）；Wayland 原生；portal 由
@@ -47,6 +50,7 @@
                #:use-module (gnu packages gnome) ; gnome-text-editor
                #:use-module (guix records)
                #:use-module (guixcfg apps model)
+               #:use-module (guixcfg gsettings model) ; gsettings-setting
                #:use-module (guixcfg system application-persistence) ; rule
                #:export (%gnome-text-editor
                          %gnome-text-editor-desktop-entry))
@@ -55,6 +59,47 @@
 ;; share/applications/ 核实）。纯数据常量：供统一 XDG 策略模块
 ;; 引用，不在此决定默认应用。
 (define %gnome-text-editor-desktop-entry "org.gnome.TextEditor.desktop")
+
+;; 静态编辑偏好（org.gnome.TextEditor，pinned 48.3 schema 实测）：
+;;   custom-font          string  'Monospace 11'
+;;   highlight-current-line bool  true
+;;   indent-style         enum    'space'（'tab' | 'space'）
+;;   show-line-numbers    bool    true
+;;   show-right-margin    bool    false
+;;   style-scheme         string  'Adwaita'
+;;   use-system-font      bool    false
+;; restore-session 有意【不】声明：保持 schema default（true）——
+;; 未保存草稿经 application-data 持久化恢复（见上），不依赖
+;; session 恢复机制。
+(define %gnome-text-editor-gsettings
+  (list (gsettings-setting
+         (schema "org.gnome.TextEditor")
+         (key "custom-font")
+         (value "'Monospace 11'"))
+        (gsettings-setting
+         (schema "org.gnome.TextEditor")
+         (key "highlight-current-line")
+         (value "true"))
+        (gsettings-setting
+         (schema "org.gnome.TextEditor")
+         (key "indent-style")
+         (value "'space'"))
+        (gsettings-setting
+         (schema "org.gnome.TextEditor")
+         (key "show-line-numbers")
+         (value "true"))
+        (gsettings-setting
+         (schema "org.gnome.TextEditor")
+         (key "show-right-margin")
+         (value "false"))
+        (gsettings-setting
+         (schema "org.gnome.TextEditor")
+         (key "style-scheme")
+         (value "'Adwaita'"))
+        (gsettings-setting
+         (schema "org.gnome.TextEditor")
+         (key "use-system-font")
+         (value "false"))))
 
 (define %gnome-text-editor
   (application
@@ -66,4 +111,5 @@
            (backing "gnome-text-editor/app-data") ; backing root 相对（persistence.md）
            (consumer ".local/share/gnome-text-editor") ; HOME 相对（application data 目录）
            (exposure 'bind-directory)
-           (lifecycle 'application-owned))))))
+           (lifecycle 'application-owned))))
+   (gsettings %gnome-text-editor-gsettings)))

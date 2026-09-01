@@ -132,6 +132,8 @@
                "tests/test-flatpak-persistence.scm"
                "tests/test-flatpak-service.scm"
                "tests/test-flatpak-reconcile-exec.scm"
+               "tests/test-gsettings.scm"
+               "tests/test-gsettings-reconcile.scm"
                "tests/test-nushell.scm"
                "tests/test-seed-once.scm"
                "tests/test-noctalia-seed.scm"

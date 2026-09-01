@@ -136,3 +136,6 @@ readiness 命名 capability；provision 前必须验证最终可观察状态
 7. `architecture/secrets.md` — 秘密管理与威胁模型
 8. `architecture/flatpak.md` — Flatpak 子系统（Catalog/Selection、
    persistence、overrides、显式运维）
+9. `architecture/gsettings.md` — repository-derived GSettings →
+   dconf 投影（静态应用偏好的声明式管理；dconf 不持久化，reboot
+   是重置边界）
