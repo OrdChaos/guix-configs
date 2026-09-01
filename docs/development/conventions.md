@@ -17,8 +17,8 @@
 - 一个模块一句清晰职责描述（文件头注释）。
 - pure model（storage/root-generation、boot/boot-state 的读写分离）
   与 executor/service/tool 分开；model 不 mount/delete/spawn。
-- host-owned inventory（如 `%vm-secrets`）放 host 模块附近，不混入
-  generic mechanism。
+- host-owned inventory（如 `%vm-test-secrets`，hosts/vm.scm 内的
+  测试 sentinel）放 host 模块附近，不混入 generic mechanism。
 
 ## Exports
 

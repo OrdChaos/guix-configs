@@ -99,8 +99,9 @@ root 进程的 Blue store 指向 /run 的项目命名空间，绝不向用户仓
 的 .blue-store 写入 root 所有文件——否则之后普通用户运行 blue 会
 因打不开 .lock 报权限不足）→
 `(guixcfg system reconfigure)` gate transaction（Guile 实现，机制
-事实源）→ postflight 漂移检查。transaction 返回 0/1/2，Blue 原样
-传播。
+事实源；gate 的 path/close/open 唯一 authority 是
+(guixcfg system session-gate)）→ postflight 漂移检查。transaction
+返回 0/1/2，Blue 原样传播。
 
 事务语义（(guixcfg system reconfigure)）：
 
@@ -109,6 +110,9 @@ root 进程的 Blue store 指向 /run 的项目命名空间，绝不向用户仓
   → guix time-machine … system reconfigure
   → shepherd 升级自动 restart 变化的 one-shot 服务
     （runtime secrets 代际发布、account verify、Home 热激活）
+  → gvfs-mount-metadata one-shot 每轮落入 to-start 重跑（pinned guix
+    语义：停止态 one-shot 每轮 start-service）——mount topology 变化
+    同轮重建 utab，无需 reboot（docs/architecture/home.md）
   → Home generation 切换后，Home Shepherd 重跑 gsettings-reconcile
     one-shot（desired 声明 build-time 嵌入 wrapper——声明变即重跑，
     runtime dconf 立即更新；docs/architecture/gsettings.md）

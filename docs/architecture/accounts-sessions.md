@@ -92,8 +92,12 @@ readiness 命名 capability；provision 前必须验证最终可观察状态
 
 `/run/guixcfg/session-not-ready`：存在即拒绝普通 interactive 登录
 （pam_nologin 语义，root 豁免是标准行为——保留 console recovery）。
-gate 由 activation 创建，interactive-session-ready 打开。PAM 横切
-只作用于 login 与 sshd 的 account 段。
+gate 的 path / close / open / message 唯一 authority 是
+`(guixcfg system session-gate)`——boot activation 关闭端
+（session-gate-close-activation）、interactive-session-ready 打开端、
+live reconfigure 关闭/打开端（session-gate-close!/open!，reconfigure
+文案 `%session-gate-reconfigure-message`）、PAM 段全部引用该模块。
+PAM 横切只作用于 login 与 sshd 的 account 段。
 
 ## PAM / elogind
 

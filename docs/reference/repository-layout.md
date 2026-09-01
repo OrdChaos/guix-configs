@@ -32,23 +32,33 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
                        gsettings.md）：model.scm（<gsettings-setting> +
                        校验 + (schema,key) 单一 owner 硬规则 +
                        appearance 保留域）、serialize.scm（schema→
-                       dconf path + 确定性 keyfile）、reconcile.scm
-                       （status/plan/apply!，PATH 解析工具）、
-                       home-service.scm（one-shot session service +
-                       wrapper；desired 声明 build-time 嵌入）
+                       dconf path + 确定性 keyfile）、runtime.scm
+                       （唯一 runtime contract，core-guile-only——
+                       reconcile include-from-path + wrapper
+                       local-file/load 双消费）、reconcile.scm
+                       （manual 路径 thin 包装，PATH 解析工具）、
+                       home-service.scm（参数化 one-shot service；
+                       desired 声明 build-time 嵌入）
   home/                Guix Home 入口（薄 assembly，聚合 apps
                        registry；guix-home 接受 host 的 logical
                        application-configuration-selections）+ 会话
                        环境变量（environment.scm）
-  hosts/               host 组装点（vm / laptop）+ host-owned inventory
-                       （vm-secrets.scm）；host 对应用只做 logical
+  hosts/               host 组装点（vm / laptop）+ 共享组装算法
+                       common.scm（services / user-services / 基础 OS
+                       / account fold 的四个窄构造函数，deploy 枚举
+                       排除）；host-owned inventory = %vm-test-secrets
+                       （hosts/vm.scm 内的测试 sentinel，无独立
+                       secrets 文件）；host 对应用只做 logical
                        variant selection（不持有应用配置文件）
   security/            age、secrets、TPM2、证书
   services/            用户态 one-shot 服务（ephemeral-root）
   storage/             磁盘/子卷/generation 纯模型 + 安装器
   system/              OS 组装、readiness、accounts、ssh、
                        user-persistence、application-persistence、
-                       mihomo/（系统透明代理 service/config/template，
+                       session-gate（login gate 唯一 authority：
+                       path/close/open/message + activation gexp
+                       builder）、mihomo/（系统透明代理
+                       service/config/template，
                        docs/architecture/mihomo.md）
   users/               用户结构事实
   utils/               跨领域原语（atomic-file / process / spawn /

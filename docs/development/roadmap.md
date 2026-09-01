@@ -57,7 +57,8 @@ Level 1-4 测试，这三个文件可删。
   NVIDIA open module adapter + niri iGPU/offload 机器事实）；剩余：
   实机 firmware 选择、microcode revision 验收、实机运行验证清单
   （prime-run/vulkaninfo/nvidia-smi/powerd，见 graphics.md）。
-- Mihomo / Flatpak 应用管理（docs 已规划，未实现）。
+- Mihomo 系统服务与 Flatpak 应用管理已落地（mihomo.md /
+  flatpak.md）；剩余是运维面打磨，不再作为未实现条目追踪。
 
 
 ### SmartDNS（Phase 2 v1 已落地 ownership；剩余见 dns.md）

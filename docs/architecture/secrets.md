@@ -69,8 +69,10 @@ user 域 provisioning → modules/guixcfg/users/secrets/
 
 > 已取消的层：`secrets/hosts/<host>`（host-owned 层）、顶层
 > `secrets/` 目录。`system/user` 是 deployment target/scope，不是
-> repository ownership 类别；`hosts/vm-secrets.scm` 这类 host
-> inventory 模块不再存在——密文各归引用者。
+> repository ownership 类别；host 专属的 secrets inventory 文件
+> 模块（早期 vm-secrets 形态）不再存在——密文各归引用者，host
+> inventory 现为 `%vm-test-secrets`（hosts/vm.scm 内的测试
+> sentinel）。
 
 generic publisher（`(guixcfg security secrets)`）不知道任何具体
 inventory；`secret-decl-source` 是 **file-like**（ciphertext 由

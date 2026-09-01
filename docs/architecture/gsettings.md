@@ -138,8 +138,16 @@ application-data 持久化恢复，不依赖 session 恢复机制。
 modules/guixcfg/gsettings/model.scm         <gsettings-setting> + 校验 +
                                             ownership 硬规则 + appearance 保留域
 modules/guixcfg/gsettings/serialize.scm     schema→dconf path + 确定性 keyfile
-modules/guixcfg/gsettings/reconcile.scm     status/plan/apply!（PATH 解析工具，
+modules/guixcfg/gsettings/runtime.scm       唯一 runtime contract（core-guile-only：
+                                            schema/key 校验、range 浅层值校验、五态、
+                                            dconf load、输出格式）——reconcile 经
+                                            include-from-path 内联，wrapper 经
+                                            local-file + load 嵌入（同一份实现）
+modules/guixcfg/gsettings/reconcile.scm     manual 路径 thin 包装（PATH 解析工具，
                                             无 registry、无具体 app 设置）
-modules/guixcfg/gsettings/home-service.scm  one-shot session service + wrapper
+modules/guixcfg/gsettings/home-service.scm  参数化 one-shot service
+                                            （desired state + HOME 事实由
+                                            (guixcfg home user) 显式传入，
+                                            不读全局 inventory）
 tools/gsettings.scm                         pinned repl 执行入口（blue 调度）
 ```
