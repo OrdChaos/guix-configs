@@ -16,6 +16,7 @@
 
 (use-modules (guixcfg gsettings model)
              (guixcfg gsettings serialize)
+             (guixcfg gsettings home-service) ; %gsettings-reconcile-wrapper（core-guile 契约断言）
              (guixcfg apps model)       ; make-application、applications-gsettings
              (guixcfg apps registry)    ; %applications（唯一启用事实源）
              (guixcfg apps gnome-text-editor definition) ; %gnome-text-editor（first consumer）
@@ -23,6 +24,7 @@
              (gnu home services shepherd) ; home-shepherd-service-type
              (gnu services)             ; fold-services
              (guix gexp)                ; gexp->approximate-sexp
+             (ice-9 rdelim)             ; read-string（wrapper 源码契约断言）
              (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64))
@@ -239,5 +241,21 @@
                           (lambda (x)
                             (and (string? x) (string-contains x "sh -c")))
                           sexp)))))
+
+(test-assert "service wrapper is core-guile only: no repository module imports"
+             ;; home derivation 在 daemon 侧 lowering 时 %load-path 没有
+             ;; 仓库 modules/——wrapper 里出现 (guixcfg …) 模块导入会
+             ;; 在运行时 no code for module（VM 实测：source-module-closure
+             ;; 闭包只剩 guix/）。源码级契约（OFF 系列同款）：wrapper
+             ;; 必须 open-pipe* + dconf load（stdin），绝不允许
+             ;; with-imported-modules / source-module-closure 引用仓库模块。
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/gsettings/home-service.scm"
+                       (lambda (p) (read-string p)))))
+               (and (string-contains s "open-pipe*")
+                    (string-contains s "\"load\"")
+                    (string-contains s "file-append")
+                    (not (string-contains s "with-imported-modules"))
+                    (not (string-contains s "source-module-closure")))))
 
 (test-end)
