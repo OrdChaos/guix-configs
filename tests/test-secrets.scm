@@ -145,11 +145,16 @@
 
 ;; ── host assembly / wiring（A7-8/9/10）─────────────────────
 (test-assert "host assembly consumes applications-secrets (partitioned by domain)"
+             ;; composition 拆分为 host inventory（vm.scm：secret 集合
+             ;; 含 applications-secrets）与共享组装算法（common.scm：
+             ;; login-critical / ordinary domain 分区）。
              (let ((s (call-with-input-file "modules/guixcfg/hosts/vm.scm"
+                                            (lambda (p) (read-string p))))
+                   (c (call-with-input-file "modules/guixcfg/hosts/common.scm"
                                             (lambda (p) (read-string p)))))
                (and (string-contains s "applications-secrets %applications")
-                    (string-contains s "login-critical-secrets")
-                    (string-contains s "ordinary-secrets"))))
+                    (string-contains c "login-critical-secrets")
+                    (string-contains c "ordinary-secrets"))))
 
 (test-assert "ordinary deploy service with empty app-secret set is legal"
              (let ((svcs (service-value

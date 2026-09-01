@@ -8,9 +8,9 @@
 ;;;     是事务机制事实源；
 ;;;   - 不复制 facts resolver（复用 (guixcfg system machine-facts)）；
 ;;;   - 不持有 host 清单——host ID 事实来自 modules/guixcfg/hosts/*.scm
-;;;     的文件名 stem（目录枚举；新增 host 文件自动进入枚举）。
-;;;     本模块因此必须放在 hosts/ 之外：hosts/ 目录只允许 host 入口
-;;;     文件，任何辅助 .scm 都会被枚举误判为 host（实测教训）。
+;;;     的文件名 stem（目录枚举；新增 host 文件自动进入枚举；
+;;;     helper 文件经 %host-helper-file-stems 显式排除——
+;;;     hosts/common.scm 的共享组装算法不参与枚举）。
 ;;;
 ;;; 纯函数化的目的是让 tests/test-deploy.scm 在不跑真实 guix 的情况下
 ;;; 断言 argv 形态：pinned channels.lock.scm、绝对 -L、dry-run 语义、
@@ -60,13 +60,23 @@
 ;; 仓库根相对目录（唯一拼写处）；调用方负责解析仓库根。
 (define %hosts-directory "modules/guixcfg/hosts")
 
+;; hosts/ 下的 helper 文件 stem（非 host 入口）——枚举显式排除。
+;; hosts/common.scm 是 VM/Laptop 的共享 composition algorithm：
+;; 目录枚举把每个 .scm 的 stem 当 host ID，helper 必须在此登记
+;; （否则会被误判为 host "common"）。
+(define %host-helper-file-stems
+  '("common"))
+
 (define (host-candidate-file? name)
   "NAME 是否可作为 host ID 源文件：.scm 后缀，且非 dot 文件、非 ~ 备份、
-非 #…# autosave。"
-  (and (string-suffix? ".scm" name)
-       (not (string-prefix? "." name))
-       (not (string-suffix? "~" name))
-       (not (and (string-prefix? "#" name) (string-suffix? "#" name)))))
+非 #…# autosave，且 stem 不在 %host-helper-file-stems。"
+  (let ((stem (and (string-suffix? ".scm" name)
+                   (substring name 0 (- (string-length name) 4)))))
+    (and stem
+         (not (string-prefix? "." name))
+         (not (string-suffix? "~" name))
+         (not (and (string-prefix? "#" name) (string-suffix? "#" name)))
+         (not (member stem %host-helper-file-stems)))))
 
 (define (host-ids-in-directory dir)
   "DIR 下全部 host ID（排序）。DIR 不存在时由 scandir 报错（fail
