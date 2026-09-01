@@ -143,8 +143,15 @@
                   (not (any (cut string-contains <> "reconfigure.sh") reconfigure-dry-argv))))
 
 (test-equal "reconfigure privileged handoff: sudo re-executes the same blue with explicit blueprint"
-            '("sudo" "/store/blue" "-f" "/repo/blueprint.scm" ".reconfigure-root" "vm" "alice")
+            '("sudo" "/store/blue" "--store-directory=/run/guixcfg/.blue-store"
+                     "-f" "/repo/blueprint.scm" ".reconfigure-root" "vm" "alice")
             (reconfigure-privileged-argv "/store/blue" "/repo/blueprint.scm" "vm" "alice"))
+
+(test-assert "privileged blue store is outside the user repository (root-owned files never land in cwd)"
+             (not (string-contains (string-join
+                                    (reconfigure-privileged-argv
+                                     "/store/blue" "/repo/blueprint.scm" "vm" "alice"))
+                                   ".blue-store")))
 
 (test-assert "privileged handoff argv has no shell metacharacters"
              (no-shell-metacharacters?

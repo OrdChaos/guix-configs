@@ -92,8 +92,12 @@ WARNING）。真正从固定 commit 快照执行（Level 2）是未来工作，�
 ## 正式入口的机制
 
 `blue reconfigure HOST` = doctor preflight（含 git clean gate）→
-privilege handoff（`sudo <同一个 blue> -f <仓库 blueprint.scm>
-.reconfigure-root HOST HOME-USER`，root phase 非 root 直接拒绝）→
+privilege handoff（`sudo <同一个 blue>
+--store-directory=/run/guixcfg/.blue-store -f <仓库 blueprint.scm>
+.reconfigure-root HOST HOME-USER`，root phase 非 root 直接拒绝；
+root 进程的 Blue store 指向 /run 的项目命名空间，绝不向用户仓库
+的 .blue-store 写入 root 所有文件——否则之后普通用户运行 blue 会
+因打不开 .lock 报权限不足）→
 `(guixcfg system reconfigure)` gate transaction（Guile 实现，机制
 事实源）→ postflight 漂移检查。transaction 返回 0/1/2，Blue 原样
 传播。

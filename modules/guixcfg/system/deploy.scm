@@ -49,6 +49,12 @@
 (define %channels-lock-file "channels.lock.scm")
 (define %modules-dir "modules")
 
+;; privileged 模式（sudo 后 root 进程）的 Blue store 位置。与
+;; (guixcfg system reconfigure) 的 %gate-directory（/run/guixcfg）
+;; 同根：项目在 /run 的 privileged 运行时命名空间，root 所有、
+;; tmpfs、重启即清。
+(define %privileged-blue-store "/run/guixcfg/.blue-store")
+
 ;;; ---------- host ID 枚举与校验 ----------
 
 ;; 仓库根相对目录（唯一拼写处）；调用方负责解析仓库根。
@@ -130,8 +136,16 @@ host-source-relative-path 的权威相对路径。"
   ;; blue reconfigure 的 privilege handoff argv：sudo 重新执行【同一
   ;; 个】Blue executable（绝对路径，绝不依赖 root PATH 重新查找），
   ;; -f 显式指定仓库 blueprint.scm，内部模式 .reconfigure-root 分项
-  ;; 传递 HOST 与 HOME_USER。argv 列表，无 shell 拼接。
+  ;; 传递 HOST 与 HOME_USER。
+  ;;
+  ;; --store-directory 把 root 进程的 Blue store 指到
+  ;; /run/guixcfg/.blue-store：sudo 继承调用者 cwd，若沿用默认
+  ;; store（cwd/.blue-store）会在用户仓库里留下 root 所有的
+  ;; .lock / local-compile .go，之后普通用户运行 blue 会报权限
+  ;; 不足（make-store 每次启动都要以写模式打开 .lock）。
+  ;; argv 列表，无 shell 拼接。
   `("sudo" ,blue-executable
+            ,(string-append "--store-directory=" %privileged-blue-store)
             "-f" ,blueprint-path
             ".reconfigure-root" ,host ,home-user))
 
