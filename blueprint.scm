@@ -78,6 +78,69 @@
                %load-path))
   "/modules"))
 
+;; 引导 guix 自身的 Guile 模块树（source + compiled）：
+;; (guixcfg ...) 模块经 (guix records)/(guix gexp)/(guix build utils)
+;; 依赖 guix 的模块树。deployed system 的 login shell 与 time-machine
+;; shell 经 profile search paths（GUILE_LOAD_PATH /
+;; GUILE_LOAD_COMPILED_PATH）已提供；裸环境（PATH 上的 Home-installed
+;; blue、非 login shell）则按 guix 的标准安装位置在尾部追加。
+;; 尾部追加不会遮蔽 pinned 版本（search-path 按序命中在先的
+;; GUILE_LOAD_PATH 条目），因此无需"已提供则跳过"的展开期判断。
+;;
+;; 路径构造不写死版本号：profile 根（/run/current-system/profile 是
+;; guix system 常量，~/.guix-profile 与 ~/.config/guix/current 是
+;; guix 自身惯例）之下按 guile 标准布局拼接，版本分量取运行中
+;; guile 的 (effective-version)——与 guix 自己的 wrapper 脚本同款
+;; 拼法。这也正好是 ABI 语义：该目录下的 .go 只能被同 effective
+;; version 的 guile 加载，跟随 blue 运行的 guile 即跟随正确的树。
+;;
+;; 实现约束（guile 3.0.9/3.0.11 + blue 实测，最小复现二分）：
+;;   1. 必须展开期生效（blue 编译期 use-modules 解析），参数必须
+;;      展开期可求值：getenv/string-append/file-exists?/filter/
+;;      effective-version 实测安全，#%?srcdir 状态不可（见上）。
+;;   2. 只能用【内联】eval-when (expand load eval) + let/filter/
+;;      append 逐项实现。以下写法都会在 link 阶段触发 guile
+;;      out-of-range（(77 79 80) (80)，复现率 10/10）：
+;;        - 在本文件自定义的 eval-when 展开期 body 里读取
+;;          %load-path（内建 add-to-load-path 自身的展开期语义
+;;          豁免——见上方 modules/ 解析的 marker 扫描）；
+;;        - 用 define-syntax 自定义宏包 eval-when（with-syntax
+;;          拼接同理触发）；
+;;        - syntax-case 模板里 #` + #,pattern-var（该写法本身即
+;;          失效语法，报 "reference to pattern variable outside
+;;          syntax form"）。
+;;   3. 裸环境崩溃的触发链：use-modules 解析到 guix 源码 →
+;;      编译期嵌套 auto-compile guix 模块树 → 外层 link 阶段
+;;      out-of-range（用户 ccache 不在裸环境 %load-compiled-path
+;;      上，永远无法变热）。因此 compiled 路径必须与 source 路径
+;;      同时在展开期就位，让 guix 模块一律命中已编译 .go。
+;;   4. 目录按 deployed system → ~/.guix-profile → guix current
+;;      的顺序尾部追加，source 与 compiled 同序，保证 .scm/.go
+;;      配对来自同一棵树。
+(eval-when (expand load eval)
+  (let ((guile-version (effective-version))
+        (profile-roots
+         (filter (lambda (root)
+                   (and (string? root) (file-exists? root)))
+                 (list "/run/current-system/profile"
+                       (string-append (getenv "HOME") "/.guix-profile")
+                       (string-append (getenv "HOME") "/.config/guix/current")))))
+    (let ((src-dirs
+           (filter (lambda (dir)
+                     (and (string? dir) (file-exists? dir)))
+                   (map (lambda (root)
+                          (string-append root "/share/guile/site/" guile-version))
+                        profile-roots)))
+          (cmp-dirs
+           (filter (lambda (dir)
+                     (and (string? dir) (file-exists? dir)))
+                   (map (lambda (root)
+                          (string-append root "/lib/guile/" guile-version
+                                         "/site-ccache"))
+                        profile-roots))))
+      (set! %load-path (append %load-path src-dirs))
+      (set! %load-compiled-path (append %load-compiled-path cmp-dirs)))))
+
 (use-modules (guixcfg system deploy)        ; argv 构造 / 解析 / 只读检查素材 / host 枚举
              (guixcfg system reconfigure)   ; gate transaction（privileged mode 执行）
              (guixcfg utils channels)       ; channel 结构比较（update 摘要）
