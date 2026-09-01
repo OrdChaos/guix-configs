@@ -263,12 +263,30 @@ app pin 不隐含 runtime pin（不实现 dependency lockfile）。
 sync 对【全部 declared remotes】做 ensure（缺即 bootstrap——新
 remote 首次引入 sync 即自动建立；drift 则 fail-loud），不依赖
 selected apps 是否引用它们（声明即意图）。返回本次安装的
-<flatpak-application> 列表。"
+<flatpak-application> 列表。
+
+逐项报告（含 no-op）：已收敛时也要有输出——静默成功与失败在
+终端上不可区分，且会诱导用户误以为必须 sudo（sudo 落到 root
+的 user installation 反而「有输出」）。"
+         ;; remotes：已声明 → no-op 行；缺失 → ensure（bootstrap
+         ;; 自打印 Adding…）。
+         (for-each (lambda (remote)
+                     (when (flatpak-check-remote! remote)
+                       (format #t "remote ~a: already declared (no-op)~%"
+                               (flatpak-remote-name remote))))
+                   remotes)
          (for-each flatpak-ensure-remote! remotes)
          (let* ((selected (flatpak-select-applications selection applications))
-                (missing (flatpak-reconcile-plan
-                          selected (flatpak-list-installed-apps))))
+                (installed (flatpak-list-installed-apps))
+                (missing (flatpak-reconcile-plan selected installed)))
+           (for-each (lambda (app)
+                       (when (member (flatpak-application-id app) installed)
+                         (format #t "~a: already installed (no-op)~%"
+                                 (flatpak-application-ref app))))
+                     selected)
            (for-each flatpak-install-app! missing)
+           (format #t "sync complete: ~a remotes ensured, ~a application(s) installed~%"
+                   (length remotes) (length missing))
            missing))
 
 ;;; ── status ─────────────────────────────────────────────────

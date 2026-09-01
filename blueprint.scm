@@ -553,6 +553,14 @@ rewrite, no knowledge of future channel revisions."))
   ;; 含多字节注释的源文件会 out-of-range 崩溃（见 %usage-error 注释）。
   (catch #t
     (lambda ()
+      ;; flatpak 一切操作 --user scope：root 运行会把状态落到
+      ;; /root/.local/share/flatpak（root 自己的 user installation），
+      ;; 与真实用户状态完全平行、绝不正确，且"有输出"会诱导误判
+      ;; 成功——直接拒绝。
+      (when (zero? (getuid))
+        (format (current-error-port)
+                "flatpak: refusing to run as root (all operations are --user scope; root would act on /root/.local/share/flatpak, not your user installation).~%")
+        (primitive-exit 1))
       ;; flatpak-binary 显式回退到 guix 标准安装位置（VM system
       ;; profile），并把其目录前置进 PATH：reconcile 全程用 PATH
       ;; 解析子进程（invoke "flatpak" …），ssh 非 login shell 的

@@ -233,6 +233,30 @@
                     (not (any (lambda (argv) (member "sudo" argv)) all))
                     (every list? all))))
 
+;; sync 收敛契约：已声明 remote + 全部 selected 已装 → 只打印
+;; no-op 报告、零 mutation 命令、返回空安装列表（收敛的 sync 必须
+;; 有输出、绝不触发任何 install/remote-add/remote-modify）。
+(fp-write-file %fp-remotes-out
+               (string-append "flathub\t"
+                              (flatpak-remote-repository-url
+                               (car %flatpak-remotes))
+                              "\n"))
+(fp-write-file %fp-list-app-out
+               (string-join
+                (map flatpak-application-id
+                     (flatpak-select-applications
+                      %flatpak-selection %flatpak-applications))
+                "\n"))
+(test-assert "sync converged: zero mutation commands, empty install list"
+             (let ((result (flatpak-sync)))
+               (and (null? result)
+                    (let ((log (fp-log-lines)))
+                      (not (any (lambda (line)
+                                  (or (string-contains line "remote-add")
+                                      (string-contains line "remote-modify")
+                                      (string-contains line "install")))
+                                log))))))
+
 ;; flatpak-binary 解析契约：会话 PATH 优先（显式覆盖），随后 guix
 ;; 标准安装位置（VM system profile / 用户 profile）——ssh 非 login
 ;; shell 无 system profile PATH 也能解析（绝不依赖 /etc/profile）。
