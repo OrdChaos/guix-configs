@@ -54,6 +54,7 @@
              (guixcfg storage root-generation) ; EP: root-state、state->alist、read-state
              (gnu system accounts)     ; user-account、user-group
              (guixcfg system readiness)
+             (guixcfg system session-gate) ; SG: gate close activation 真实执行
              (ice-9 rdelim)
              (ice-9 popen)
              (ice-9 textual-ports)
@@ -1026,5 +1027,59 @@ secrets ordinary deploy 的产物形态）。"
                     (not (file-exists?
                           (string-append root "/run/mihomo/config.yaml")))))
   (false-if-exception (delete-file-recursively root)))
+
+;; ── SG：session-gate 真实执行（production close activation）────
+;; 直接执行 (guixcfg system session-gate) 的 close-activation gexp
+;; （production 同款 builder），目录经注入指向隔离 root——不触碰真实
+;; /run/guixcfg；同时 in-process 验证 runtime 契约过程 close!/open!
+;; （reconfigure 事务的生产路径）。
+(define %gate-close-program
+  (build-thing
+   (program-file
+    "gate-close-activation-exec"
+    #~(begin
+       #$(session-gate-close-activation #:directory "/run/guixcfg")
+       (exit 0)))))
+
+(let* ((root (string-append (or (getenv "TMPDIR") "/tmp")
+                            "/guixcfg-gate-" (number->string (getpid))
+                            "-" (number->string (random 100000)))))
+  (mkdir root)
+  (mkdir-p (string-append root "/gnu/store"))
+  (let ((code (run-in-root %gate-close-program root)))
+    (test-equal "SG1: production close activation executes (exit 0)"
+                0 code)
+    (test-assert "SG1: gate file created inside isolated root"
+                 (file-exists? (string-append root
+                                              "/run/guixcfg/session-not-ready")))
+    (test-equal "SG1: gate content is the authority's boot close message"
+                %session-gate-close-message
+                (call-with-input-file (string-append root
+                                                     "/run/guixcfg/session-not-ready")
+                  (lambda (p) (read-string p))))
+    (test-equal "SG1: gate directory is 0755"
+                #o755 (stat:perms (stat (string-append root "/run/guixcfg"))))
+    ;; open!/close!（runtime 契约，reconfigure 生产路径同款）：
+    ;; 在另一个隔离目录上验证 close→open 幂等。
+    (let ((dir2 (string-append (or (getenv "TMPDIR") "/tmp")
+                               "/guixcfg-gate-runtime-"
+                               (number->string (getpid))
+                               "-" (number->string (random 100000)))))
+      (session-gate-close! #:directory dir2
+                           #:message %session-gate-reconfigure-message)
+      (test-assert "SG2: runtime close! creates directory and gate file"
+                   (file-exists? (session-gate-path #:directory dir2)))
+      (session-gate-close! #:directory dir2
+                           #:message %session-gate-reconfigure-message)
+      (test-assert "SG2: close! is idempotent"
+                   (file-exists? (session-gate-path #:directory dir2)))
+      (session-gate-open! #:directory dir2)
+      (test-assert "SG2: open! removes the gate file"
+                   (not (file-exists? (session-gate-path #:directory dir2))))
+      (session-gate-open! #:directory dir2)
+      (test-assert "SG2: open! is idempotent"
+                   (not (file-exists? (session-gate-path #:directory dir2))))
+      (false-if-exception (delete-file-recursively dir2)))
+    (false-if-exception (delete-file-recursively root))))
 
 (test-end "runtime-exec")

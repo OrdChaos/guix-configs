@@ -7,6 +7,7 @@
 ;;; transaction 的 gate 状态机与 exit code 契约（0/1/2）。
 
 (use-modules (guixcfg system reconfigure)
+             (guixcfg system session-gate) ; gate 唯一 authority（alias 完整性断言）
              (guixcfg system deploy)      ; system-reconfigure-argv（断言 argv 形态）
              (ice-9 rdelim)
              (srfi srfi-64))
@@ -266,5 +267,11 @@
             '(guixcfg-secrets-deploy account-state-ready persistent-state-ready
                                      home-ready session-infra-ready interactive-session-ready)
             %readiness-capabilities)
+
+(test-assert "reconfigure gate facts alias the session-gate authority"
+             ;; 兼容导出名必须跟随 (guixcfg system session-gate) 的唯一
+             ;; 定义，不能再自成第二份路径事实。
+             (and (string=? %gate-directory %session-gate-directory)
+                  (string=? %gate-file-name %session-gate-file-name)))
 
 (test-end)

@@ -50,9 +50,9 @@
 (define %modules-dir "modules")
 
 ;; privileged 模式（sudo 后 root 进程）的 Blue store 位置。与
-;; (guixcfg system reconfigure) 的 %gate-directory（/run/guixcfg）
-;; 同根：项目在 /run 的 privileged 运行时命名空间，root 所有、
-;; tmpfs、重启即清。
+;; (guixcfg system session-gate) 的 %session-gate-directory
+;; （/run/guixcfg）同根：项目在 /run 的 privileged 运行时命名空间，
+;; root 所有、tmpfs、重启即清。
 (define %privileged-blue-store "/run/guixcfg/.blue-store")
 
 ;;; ---------- host ID 枚举与校验 ----------

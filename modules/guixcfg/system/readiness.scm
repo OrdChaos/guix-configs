@@ -18,10 +18,10 @@
                #:use-module (gnu services)              ; simple-service
                #:use-module (gnu services shepherd)   ; shepherd-service、user-processes-service-type
                #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
+               #:use-module (guixcfg system session-gate) ; login gate 唯一 authority（path/close/open/message）
                #:use-module (gnu system pam)           ; pam-extension、pam-entry、pam-service
                #:use-module (gnu services base)        ; mingetty-service-type
                #:use-module (guix gexp)
-               #:use-module (guix modules)            ; source-module-closure
                #:export (persistent-state-ready-service
                          home-ready-service
                          session-infra-ready-service
@@ -43,9 +43,10 @@
 
 ;; login gate 文件：存在即拒绝普通 interactive 登录（pam_nologin 语义；
 ;; root 豁免是 pam_nologin 的标准行为——保留 console recovery 路径）。
-;; 项目统一所有，不与系统其它 nologin owner 冲突。
-;; 单一来源：activation 关闭端、barrier 开启端、PAM 段都引用它。
-(define %login-gate-path "/run/guixcfg/session-not-ready")
+;; 兼容导出名；唯一权威定义在 (guixcfg system session-gate)——
+;; boot 关闭端（activation）、barrier 开启端、live reconfigure
+;; 关闭/打开端、PAM 段全部引用该模块，不再各自拼路径。
+(define %login-gate-path %session-gate-path)
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; persistent-state-ready：file-systems 的就绪 + 关键持久路径在位
@@ -123,13 +124,13 @@ is ready (provides session-infra-ready).")
 ;;; interactive-session-ready：纯 join barrier（systemd target 角色，
 ;;; Shepherd 原生机制）。不做业务工作：不 cp/chmod/部署/激活/启动
 ;;; 别的服务/轮询——只表达"所有 prerequisite 已成功"。
-;;; gate 的开启由本服务完成（它是 login gate 的唯一 owner 的打开端）。
+;;; gate 的开启由本服务完成（login gate 的 boot 打开端）。
 
 (define (interactive-session-ready-service)
   "纯 barrier：account-state-ready、interactive-secrets-ready、
 home-ready、session-infra-ready 全部成功后 provision
 interactive-session-ready 并原子打开 login gate
-（删除 /run/guixcfg/session-not-ready）。"
+（删除 (guixcfg system session-gate) 权威路径的 gate 文件）。"
   (simple-service 'interactive-session-ready shepherd-root-service-type
                   (list (shepherd-service
                          (provision '(interactive-session-ready))
@@ -141,10 +142,12 @@ interactive-session-ready 并原子打开 login gate
 the login gate (provides interactive-session-ready).")
                          (start
                           #~(lambda ()
-                              ;; gate 单一 owner：只有本服务创建/删除
-                              ;; gate 文件。
+                              ;; open 契约 = (guixcfg system session-gate)
+                              ;; 的 session-gate-open!；gexp 内以其
+                              ;; 权威路径的原始 delete-file 表达（同一
+                              ;; 事实、同一语义，不复制实现）。
                               (false-if-exception
-                               (delete-file #$%login-gate-path))
+                               (delete-file #$(session-gate-path)))
                               #t))
                          (stop #~(const #f))))))
 
@@ -166,17 +169,10 @@ user-processes——docs/architecture/accounts-sessions.md）。"
 ;;; Interactive login gate（docs/architecture/accounts-sessions.md）。
 
 (define (login-gate-activation)
-  "activation gexp：boot 早期关闭 gate（创建 gate 文件）。gate 由
-interactive-session-ready 服务在全部 prerequisite 成功后原子打开。"
-  (with-imported-modules (source-module-closure '((guix build utils)))
-                         #~(begin
-                            (use-modules (guix build utils))
-                            (mkdir-p "/run/guixcfg")
-                            (chmod "/run/guixcfg" #o755)
-                            (call-with-output-file #$%login-gate-path
-                                                   (lambda (p)
-                                                     (display "The system is not ready for interactive logins yet.\n"
-                                                              p))))))
+  "activation gexp：boot 早期关闭 gate（创建 gate 文件）。close 契约
+  唯一实现是 (guixcfg system session-gate) 的
+  session-gate-close-activation（本过程只是组合入口保留名）。"
+  (session-gate-close-activation))
 
 (define (login-gate-pam-service)
   "PAM gate：对 login frontends（login、sshd）的 account 段插入
@@ -201,7 +197,7 @@ pam-extension transformer（横切机制，同 elogind 的 pam_elogind
                                        (arguments
                                         (list (string-append
                                                "file="
-                                               %login-gate-path))))
+                                               (session-gate-path)))))
                                       (pam-service-account pam))))
                               pam)))))))
 

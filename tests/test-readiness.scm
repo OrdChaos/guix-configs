@@ -6,7 +6,10 @@
              (gnu services shepherd)
              (gnu system pam)           ; pam-service 访问器
              (guixcfg system readiness)
+             (guixcfg system session-gate) ; gate 唯一 authority
+             (ice-9 rdelim)             ; read-string（源码 authority 断言）
              (srfi srfi-1)
+             (srfi srfi-13)
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -15,6 +18,9 @@
 
 (define (shepherd-of svc)
   (car (service-value svc)))
+
+(define (read-source file)
+  (call-with-input-file file (lambda (p) (read-string p))))
 
 ;; persistent-state-ready：file-systems 后，检查 persist 关键路径
 (let ((s (shepherd-of (persistent-state-ready-service))))
@@ -56,9 +62,27 @@
             4 (length (readiness-services 'guix-home-user)))
 
 ;; ── login gate ────────────────────────────────────────────────
-;; gate 路径项目统一所有；activation 关闭 + PAM 横切仅 login/sshd。
+;; gate 的 path/close/open 唯一 authority 是 (guixcfg system
+;; session-gate)；readiness 只消费（activation 关闭 + PAM 横切
+;; 仅 login/sshd）。
 (test-equal "gate path is project-owned"
-            "/run/guixcfg/session-not-ready" %login-gate-path)
+            "/run/guixcfg/session-not-ready" %session-gate-path)
+(test-equal "gate path authority is the session-gate module"
+            %session-gate-path %login-gate-path)
+(test-equal "gate path builder honors directory injection"
+            "/tmp/guixcfg-gate-test/session-not-ready"
+            (session-gate-path #:directory "/tmp/guixcfg-gate-test"))
+
+;; 源码级单一 authority：gate 文件名的字符串字面量只允许出现在
+;; session-gate.scm（tests/ 与 docs/ 除外）。
+(test-assert "no second gate-path authority in readiness.scm"
+             (not (string-contains (read-source
+                                    "modules/guixcfg/system/readiness.scm")
+                                   "session-not-ready")))
+(test-assert "no second gate-path authority in reconfigure.scm"
+             (not (string-contains (read-source
+                                    "modules/guixcfg/system/reconfigure.scm")
+                                   "session-not-ready")))
 
 (define gate-pam-svc (login-gate-pam-service))
 ;; simple-service 的 value 即 extension compute 的结果（pam-extension 列表）

@@ -40,6 +40,7 @@
 
 (define-module (guixcfg system reconfigure)
                #:use-module (guixcfg system deploy)   ; system-reconfigure-argv
+               #:use-module (guixcfg system session-gate) ; gate 唯一 authority（path/close/open/message）
                #:use-module (guixcfg utils repository-source) ; repository-root
                #:use-module (guixcfg utils process)   ; invoke-capture
                #:use-module (guixcfg home pivot)      ; remove-stale-pivot!
@@ -52,9 +53,11 @@
                          %readiness-capabilities
                          reconfigure-transaction!))
 
-;; gate 路径/协议不变（accounts-sessions.md 的 readiness gate）。
-(define %gate-directory "/run/guixcfg")
-(define %gate-file-name "session-not-ready")
+;; 兼容导出名：gate 路径的权威定义在 (guixcfg system session-gate)
+;; （accounts-sessions.md 的 readiness gate）。本模块只消费，不再
+;; 定义路径 / mkdir / 写文案 / 删除。
+(define %gate-directory %session-gate-directory)
+(define %gate-file-name %session-gate-file-name)
 
 ;; 当前 authoritative capability 集合（原 tools/reconfigure.sh 列表；
 ;; guixcfg-password-project 是已删除的旧 provision，见
@@ -88,18 +91,17 @@
                                    (home-dir (string-append "/home/" home-user)))
          "执行完整 gate transaction，返回 exit code（0/1/2，语义见头部）。
 HOST 与 HOME-USER 由调用方显式传入（Blue 的 privilege handoff）。"
-         (define gate (string-append gate-dir "/" %gate-file-name))
          (define home-link (string-append home-dir "/.guix-home"))
          (define pivot (string-append home-dir "/.guix-home.new"))
          
+         ;; gate 契约唯一实现：(guixcfg system session-gate) 的
+         ;; close!/open!；这里只绑定注入的目录（单元测试 sandbox）。
          (define (close-gate!)
-           (unless (file-exists? gate-dir)
-             (mkdir gate-dir))
-           (call-with-output-file gate
-                                  (lambda (p) (display "A reconfigure is in progress.\n" p))))
+           (session-gate-close! #:directory gate-dir
+                                #:message %session-gate-reconfigure-message))
          
          (define (open-gate!)
-           (false-if-exception (delete-file gate)))
+           (session-gate-open! #:directory gate-dir))
          
          (close-gate!)
          (let ((old-home (symlink-target home-link)))
