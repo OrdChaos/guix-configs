@@ -92,6 +92,47 @@
             '(".local/share/flatpak/overrides/org.example.Managed")
             (map car %managed-override-files))
 
+;; ── override 随 selection 投影（与 persistence 同一事实）────
+;; fixture：catalog 三个 app（selected-external / selected-managed /
+;; unselected-managed），selection 只含前两个——只有
+;; selected-managed 生成 override；unselected-managed 即使
+;; managed 也不生成；selection 删除后下一 Home generation 清除
+;; declarative override symlink（projection 不再包含该 target）。
+(define %fp-selection-fixture-catalog
+  (list (flatpak-application
+         (name 'selected-external) (id "org.example.SelectedExternal")
+         (remote 'flathub) (branch "stable")
+         (override-policy 'external))
+        (flatpak-application
+         (name 'selected-managed) (id "org.example.SelectedManaged")
+         (remote 'flathub) (branch "stable")
+         (override-policy
+          (list 'managed-overrides
+                (flatpak-override (sockets '("wayland"))))))
+        (flatpak-application
+         (name 'unselected-managed) (id "org.example.UnselectedManaged")
+         (remote 'flathub) (branch "stable")
+         (override-policy
+          (list 'managed-overrides
+                (flatpak-override (devices '("dri"))))))))
+
+(define %fp-selection-fixture-selection
+  '(selected-external selected-managed))
+
+(define (override-targets-for selection)
+  (map car
+       (flatpak-override-files
+        (flatpak-select-applications selection
+                                     %fp-selection-fixture-catalog))))
+
+(test-equal "override projection follows selection: only selected-managed"
+            '(".local/share/flatpak/overrides/org.example.SelectedManaged")
+            (override-targets-for %fp-selection-fixture-selection))
+
+(test-equal "override projection with empty selection produces nothing"
+            '()
+            (override-targets-for '()))
+
 ;; ── %vm-os persistence wiring ─────────────────────────────────
 (define %fp-user (user-profile-name %primary-user))
 

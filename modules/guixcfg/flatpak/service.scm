@@ -128,9 +128,14 @@ home-files 的 (target source) 条目：.local/share/flatpak/overrides/
    apps))
 
 (define %flatpak-overrides-service
+  ;; override 与 persistence 使用同一个 selected definitions 事实
+  ;; （docs/architecture/flatpak.md）：unselected 的 catalog app 不
+  ;; 生成 declarative override 文件（selection 删除后下一 Home
+  ;; generation 即清除对应 symlink）。
   (simple-service 'flatpak-overrides
                   home-files-service-type
-                  (flatpak-override-files %flatpak-applications)))
+                  (flatpak-override-files
+                   (flatpak-selected-applications))))
 
 ;;; ── session env（XDG_DATA_DIRS）────────────────────────────
 
