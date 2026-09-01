@@ -80,7 +80,7 @@
                    (ice-9 string-fun) ; string-tokenize
                    (ice-9 match)
                    (srfi srfi-1))     ; member
-      (define gsettings-bin #$(file-append (list glib "bin") "/bin/gsettings"))
+      (define gsettings-bin #$(file-append (gexp-input glib "bin") "/bin/gsettings"))
       (define dconf-bin #$(file-append dconf "/bin/dconf"))
       (define entries '#$%managed-gsettings-entries)
       (define keyfile #$%gsettings-keyfile)
