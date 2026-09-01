@@ -34,6 +34,7 @@
                #:use-module (srfi srfi-1)  ; member、find、filter、filter-map
                #:use-module (srfi srfi-13) ; string-split、string-tokenize、string-trim-both、string-prefix?
                #:export (flatpak-binary
+                         flatpak-binary-candidates
                          flatpak-remotes-alist
                          flatpak-remote-by-name
                          flatpak-check-remote!
@@ -62,13 +63,30 @@
                          flatpak-replace-remote-plan
                          flatpak-gc-commands))
 
+(define (flatpak-binary-candidates)
+  ;; 有序候选：会话 PATH 解析优先（显式覆盖），随后 guix 标准安装
+  ;; 位置——VM 的 system profile（flatpak 由 system/packages.scm
+  ;; 声明于此）与用户 profile。
+  (cons (which "flatpak")
+        (list "/run/current-system/profile/bin/flatpak"
+              (string-append (getenv "HOME")
+                             "/.guix-profile/bin/flatpak"))))
+
 (define (flatpak-binary)
-  "flatpak 可执行文件绝对路径（PATH 解析；工具入口把它注入
-FLATPAK_BINARY，install 时 desktop entry export 需要绝对路径）。
-缺失 → fail fast。"
-  (or (which "flatpak")
-      (error "flatpak executable not found in PATH \
-(is it installed in the system profile?)")))
+  "flatpak 可执行文件绝对路径（工具入口把它注入 FLATPAK_BINARY，
+install 时 desktop entry export 需要绝对路径）。ssh 非 login shell
+不 source /etc/profile，PATH 里没有 system profile，只靠 PATH 解析
+会误报缺失（VM 内 sudo 的 secure_path 恰好有它，造成'加 sudo 才
+可用'的假象——而且 sudo 会把操作落到 root 的 user installation，
+完全错误）；因此按候选表显式回退到 guix 标准安装位置。本机没有
+flatpak（Flatpak 子系统只在 VM 内提供）：全部候选缺失 → fail
+fast。"
+  (or (find (lambda (path)
+              (and (string? path) (file-exists? path)))
+            (flatpak-binary-candidates))
+      (error "flatpak executable not found \
+(searched PATH, /run/current-system/profile and ~/.guix-profile); \
+flatpak operations are VM-side only")))
 
 ;;; ── remotes ────────────────────────────────────────────────
 

@@ -243,7 +243,7 @@ import `(guixcfg flatpak reconcile)`、不含 CLI 调用面
 
 | 集成点 | Owner | 说明 |
 |---|---|---|
-| flatpak executable | Guix System（`system/packages.scm`） | 一切安装走 `--user`；`FLATPAK_BINARY` 经 `/etc/profile` 进会话 |
+| flatpak executable | Guix System（`system/packages.scm`） | 一切安装走 `--user`；入口经 `flatpak-binary` 显式解析（PATH 优先覆盖，随后回退 `/run/current-system/profile/bin/flatpak` 与 `~/.guix-profile/bin/flatpak`，并把其目录前置进 PATH 供全部子调用）——**不依赖 login shell 的 `/etc/profile`**（ssh 非 login shell 不 source profile）。Flatpak 子系统只在 VM 内提供：本地机（无 flatpak）fail fast，`blue flatpak …` 一律在 VM 内运行、绝不 sudo |
 | XDG_DATA_DIRS | Flatpak 平台 Home service | `$XDG_DATA_DIRS:$HOME/.local/share/flatpak/exports/share`（追加不覆盖；launcher 经此发现 desktop entries） |
 | fonts | `(guixcfg fonts model)` 单一事实源 | `%fonts` 同时进 Home profile 与 System profile 投影——pinned flatpak 补丁只暴露 `/run/current-system/profile/share/fonts` 进 sandbox |
 | portal | 现有 niri 栈（零新增） | niri home profile 三件套 + repo-owned `niri-portals.conf`；Flatpak 只是 portal client |

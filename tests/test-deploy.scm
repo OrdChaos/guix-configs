@@ -147,11 +147,16 @@
                      "-f" "/repo/blueprint.scm" ".reconfigure-root" "vm" "alice")
             (reconfigure-privileged-argv "/store/blue" "/repo/blueprint.scm" "vm" "alice"))
 
-(test-assert "privileged blue store is outside the user repository (root-owned files never land in cwd)"
-             (not (string-contains (string-join
-                                    (reconfigure-privileged-argv
-                                     "/store/blue" "/repo/blueprint.scm" "vm" "alice"))
-                                   ".blue-store")))
+(test-assert "privileged blue store is an explicit /run location, never inside the user repository"
+             (let ((argv (reconfigure-privileged-argv
+                          "/store/blue" "/repo/blueprint.scm" "vm" "alice")))
+               (and (member "--store-directory=/run/guixcfg/.blue-store" argv)
+                    ;; 绝不允许 store 指向用户仓库（默认 getcwd/.blue-store
+                    ;; 的 root-所有文件污染根因）；其余元素只读引用仓库无妨。
+                    (not (any (lambda (elt)
+                                (and (string-prefix? "--store-directory=" elt)
+                                     (string-contains elt "/repo")))
+                              argv)))))
 
 (test-assert "privileged handoff argv has no shell metacharacters"
              (no-shell-metacharacters?

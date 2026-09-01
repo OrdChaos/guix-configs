@@ -233,6 +233,19 @@
                     (not (any (lambda (argv) (member "sudo" argv)) all))
                     (every list? all))))
 
+;; flatpak-binary 解析契约：会话 PATH 优先（显式覆盖），随后 guix
+;; 标准安装位置（VM system profile / 用户 profile）——ssh 非 login
+;; shell 无 system profile PATH 也能解析（绝不依赖 /etc/profile）。
+(test-equal "flatpak-binary-candidates: PATH first, then guix standard locations"
+            (list (string-append %fp-bin "/flatpak")
+                  "/run/current-system/profile/bin/flatpak"
+                  (string-append (getenv "HOME") "/.guix-profile/bin/flatpak"))
+            (flatpak-binary-candidates))
+
+(test-equal "flatpak-binary: resolves the PATH candidate when present"
+            (string-append %fp-bin "/flatpak")
+            (flatpak-binary))
+
 (test-end)
 
 ;; 恢复环境。
