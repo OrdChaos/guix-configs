@@ -86,9 +86,10 @@
                  "audio/x-pn-wav" "audio/x-speex" "audio/x-vorbis"
                  "audio/x-vorbis+ogg" "audio/x-wavpack" "audio/x-matroska"))
 
-;; 文本 → GNOME Text Editor（包声明的 text/plain + 空文件类型）。
+;; 文本 → GNOME Text Editor（包声明的 text/plain + 空文件类型 +
+;; Markdown——.md 用文本编辑器打开，而非 ONLYOFFICE）。
 (define %text-default-mime-types
-  '("text/plain" "application/x-zerosize"))
+  '("text/plain" "application/x-zerosize" "text/markdown"))
 
 ;; 办公文档 → ONLYOFFICE Desktop Editors（原生 virelith 包 + bwrap
 ;; adapter；desktop entry 名来自其 definition 的
@@ -96,7 +97,7 @@
 ;; MIME 清单 = 上游 desktop entry 声明的 MimeType 全集（virelith
 ;; 包安装的 share/applications/onlyoffice-desktopeditors.desktop
 ;; 实证），排除：
-;;   - text/plain、text/markdown（文本编辑器领域；text/plain 已有
+;;   - text/plain、text/markdown（文本编辑器领域；均有
 ;;     GNOME Text Editor 默认，不制造重复 key）
 ;;   - 电子书/图像类（epub、fictionbook、djvu——非 office 文档，
 ;;     留给各自领域应用）
