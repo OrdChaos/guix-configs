@@ -118,48 +118,48 @@ shell；URL 绝不进 argv/environment/日志（成功日志只报路径）。"
                              (ice-9 textual-ports))
                            #:select? guixcfg-module-select?)
     #~(begin
-        (use-modules (guixcfg system mihomo config)
-                     (guixcfg utils atomic-file)
-                     (srfi srfi-13)
-                     (ice-9 string-fun)
-                     (ice-9 match)
-                     (ice-9 textual-ports))
-        (define (fail! msg)
-          (format (current-error-port) "mihomo-config: ~a~%" msg)
-          (exit 1))
-        (let* ((template
-                (catch 'system-error
-                  (lambda ()
-                    (call-with-input-file #$%mihomo-template-file
-                      get-string-all))
-                  (lambda args
-                    (fail! (string-append "cannot read template "
-                                          #$%mihomo-template-file)))))
-               (secret
-                (catch 'system-error
-                  (lambda ()
-                    (call-with-input-file %mihomo-secret-path
-                      get-string-all))
-                  (lambda args
-                    (fail! (string-append "cannot read secret file "
-                                          %mihomo-secret-path))))))
-          (catch 'mihomo-config-error
-            (lambda ()
-              (let ((config (compose-mihomo-config template secret)))
-                (unless (file-exists? %mihomo-runtime-dir)
-                  (mkdir %mihomo-runtime-dir))
-                (chmod %mihomo-runtime-dir #o700)
-                ;; .new 与最终文件都在 0700 目录内：原子提交窗口
-                ;; 内（rename 与 chmod 之间）文件不可被他人穿越读取。
-                (atomic-write-file! %mihomo-runtime-config-path
-                                    (lambda (port)
-                                      (display config port)))
-                (chmod %mihomo-runtime-config-path #o600)
-                (display (string-append "mihomo-config: wrote "
-                                        %mihomo-runtime-config-path
-                                        "\n"))))
-            (lambda (key msg)
-              (fail! msg))))))))
+       (use-modules (guixcfg system mihomo config)
+                    (guixcfg utils atomic-file)
+                    (srfi srfi-13)
+                    (ice-9 string-fun)
+                    (ice-9 match)
+                    (ice-9 textual-ports))
+       (define (fail! msg)
+         (format (current-error-port) "mihomo-config: ~a~%" msg)
+         (exit 1))
+       (let* ((template
+               (catch 'system-error
+                 (lambda ()
+                   (call-with-input-file #$%mihomo-template-file
+                                         get-string-all))
+                 (lambda args
+                   (fail! (string-append "cannot read template "
+                                         #$%mihomo-template-file)))))
+              (secret
+               (catch 'system-error
+                 (lambda ()
+                   (call-with-input-file %mihomo-secret-path
+                                         get-string-all))
+                 (lambda args
+                   (fail! (string-append "cannot read secret file "
+                                         %mihomo-secret-path))))))
+         (catch 'mihomo-config-error
+           (lambda ()
+             (let ((config (compose-mihomo-config template secret)))
+               (unless (file-exists? %mihomo-runtime-dir)
+                 (mkdir %mihomo-runtime-dir))
+               (chmod %mihomo-runtime-dir #o700)
+               ;; .new 与最终文件都在 0700 目录内：原子提交窗口
+               ;; 内（rename 与 chmod 之间）文件不可被他人穿越读取。
+               (atomic-write-file! %mihomo-runtime-config-path
+                                   (lambda (port)
+                                     (display config port)))
+               (chmod %mihomo-runtime-config-path #o600)
+               (display (string-append "mihomo-config: wrote "
+                                       %mihomo-runtime-config-path
+                                       "\n"))))
+           (lambda (key msg)
+             (fail! msg))))))))
 
 ;; ────────────────────────────────────────────────────────────
 ;; Shepherd：materializer one-shot + mihomo daemon

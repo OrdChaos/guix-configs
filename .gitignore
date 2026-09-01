@@ -15,6 +15,9 @@ result-*
 .guix-profile
 .guix-profile-*
 
+# Blue 本地 store（blueprint.scm 运行时状态与 buildable 输出）
+.blue-store/
+
 # ── Node 临时脚本 ──────────────────────────────────────────
 # 防止随手写的 node 草稿混进仓库；
 *.mjs

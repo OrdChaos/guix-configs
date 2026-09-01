@@ -48,6 +48,7 @@
                #:use-module (guixcfg apps onlyoffice definition)
                #:use-module (guixcfg apps nushell definition)
                #:use-module (guixcfg apps starship definition)
+               #:use-module (guixcfg apps blue definition)
                #:export (%applications))
 
 (define %applications
@@ -90,7 +91,8 @@
         %vscode
         %onlyoffice
         %nushell
-        %starship))
+        %starship
+        %blue))
 
 ;; 完整性检查：启用集合的名字必须唯一（fail fast，加载即报错）。
 (define %application-names (map application-name %applications))

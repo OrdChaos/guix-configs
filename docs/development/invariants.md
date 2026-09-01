@@ -127,19 +127,19 @@ subprocess capture helper、第二个 persistence deployment mechanism、
     bind registry）；当前无 backup subsystem。
 14. 不把配置仓库直接软链接到应用运行路径。
 15. 不在开机时复制一份仓库配置到持久目录。
-16. 正式部署只消费已提交 Git commit 的只读快照。
+16. 正式部署只从干净的已提交工作区启动（Phase 1 clean-tree gate；
+    immutable snapshot execution 是 future work）。
 17. 频道更新和系统部署严格分离。
 18. Flatpak 是用户桌面层，不是仓库根级软件子系统。
 19. Flatpak 默认只补齐，不自动删除。
 20. Rust 多版本由项目 manifest 和频道锁管理，不使用 rustup。
-21. `configctl` 是独立 Rust 部署工具，不解析 Scheme。
-22. `mihomo-remote` 是独立 Rust 控制工具。
-23. 先完成 VM，再适配 Laptop。
-24. 在真实重复出现之后再进行抽象。
-25. 少量明确重复优于维护一个自制的 NixOS module system。
-26. 配置仓库随用户数据持久化，不单独拆分子卷。
-27. 驱动通过 kernel、firmware、module 和 service 声明进入 system
+21. `mihomo-remote` 是独立 Rust 控制工具。
+22. 先完成 VM，再适配 Laptop。
+23. 在真实重复出现之后再进行抽象。
+24. 少量明确重复优于维护一个自制的 NixOS module system。
+25. 配置仓库随用户数据持久化，不单独拆分子卷。
+26. 驱动通过 kernel、firmware、module 和 service 声明进入 system
     generation，不使用独立安装器。
-28. 打印机队列声明式创建，不持久化 CUPS 命令式状态。
-29. 自定义 record 使用 `(guix records)` 的 `define-record-type*`
+27. 打印机队列声明式创建，不持久化 CUPS 命令式状态。
+28. 自定义 record 使用 `(guix records)` 的 `define-record-type*`
     （具名字段、`default`、`inherit`），不使用裸 SRFI-9。

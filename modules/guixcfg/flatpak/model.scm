@@ -112,9 +112,9 @@
                      (update-policy flatpak-application-update-policy ; 'track-branch | (flatpak-commit-pin "<hex>")
                                     (default 'track-branch))
                      (override-policy flatpak-application-override-policy ; 'external | (managed-overrides <flatpak-override>)
-                                     (default 'external))
+                                      (default 'external))
                      (extra-persistence flatpak-application-extra-persistence ; list of (consumer . backing)
-                                       (default '())))
+                                        (default '())))
 
 ;;; ── override（只建模 v1 真实字段；非 Flatpak [Context] 全集）──
 ;;; 各字段是 string 列表：元素可为 "!xxx"（撤销 manifest 基线项）。
@@ -368,8 +368,8 @@ update/GC；runtime refs 不参与（INSTALLED 由 'flatpak list --user
    (lambda (c acc)
      (string-append acc
                     (cond ((char=? c #\\) "\\\\")
-                          ((char=? c #\;) "\\;")
-                          (else (string c)))))
+                      ((char=? c #\;) "\\;")
+                      (else (string c)))))
    "" s))
 
 (define (render-context-lines overrides)

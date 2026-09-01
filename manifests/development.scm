@@ -4,7 +4,8 @@
 
 (specifications->manifest
  (list "guile"          ; Scheme 解释器，运行和测试模块
-       "git"            ; 版本控制（部署快照依赖 git archive）
+       "blue"           ; BLUE 编排工具（blueprint.scm 的运行器；bluebox 频道）
+       "git"            ; 版本控制（部署 clean-tree gate）
        "qemu"           ; VM 测试
        "gptfdisk"       ; sgdisk：GPT 分区
        "cryptsetup"     ; LUKS2

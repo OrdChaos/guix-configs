@@ -34,18 +34,28 @@ guix time-machine -C channels.lock.scm -- repl tools/disk-install.scm -- plan vm
 GUIX_CONFIG_FACTS=/tmp/facts.scm \
   guix time-machine -C channels.lock.scm -- system build -L "$PWD/modules" modules/guixcfg/hosts/vm.scm
 
-# 日常更新（安装后）
-sudo tools/reconfigure.sh
+# 日常入口（安装后，Blue 来自已部署 Guix Home profile）
+blue doctor laptop
+blue build-os laptop
+blue reconfigure laptop
+blue update            # 重写 channels.lock.scm（见 docs/operations/reconfigure.md）
+blue check
+
+# bootstrap / rescue / Blue self-upgrade（Blue 来自当前仓库 lock）
+guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/development.scm -- blue help
+guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/development.scm -- blue reconfigure laptop
 
 # Flatpak 显式运维（唯一联网入口；全部 --user scope，
-# 详见 docs/architecture/flatpak.md）
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- sync
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- status [--refresh]
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- update
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- update-runtimes
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remove <logical-name>
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remote-replace <remote-name>
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- gc
+# 详见 docs/architecture/flatpak.md；机制在 (guixcfg flatpak reconcile)）
+guix time-machine -C channels.lock.scm -- shell -m manifests/development.scm -- blue flatpak sync
+... blue flatpak status [--refresh]
+... blue flatpak update
+... blue flatpak update-runtimes
+... blue flatpak remove <logical-name>
+... blue flatpak remote-replace <remote-name>
+... blue flatpak gc
 ```
 
 安装流程见 [operations/installation.md](docs/operations/installation.md)；
@@ -53,8 +63,9 @@ guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- gc
 
 ## 规则速记
 
-- 正式部署只消费**已提交 Git commit 的只读快照**，脏工作区只能
-  build 不能 switch；
+- 正式部署只从**干净的已提交工作区**启动（Phase 1 clean-tree gate；
+  immutable snapshot execution 是未来工作），脏工作区可以 build 不能
+  switch；
 - 运行时链接只指向 `/gnu/store`、`/run`、`/persist`，禁止指向本
   仓库 checkout；
 - 项目不变量见 [development/invariants.md](docs/development/invariants.md)。

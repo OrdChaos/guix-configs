@@ -278,25 +278,25 @@ test-runtime-exec.scm AP1）。只补缺失目录/文件、不重建已有数据
                 ;; （绝不静默重建/替换已有 state）。
                 (mkdir-p (dirname src))
                 (if (file-exists? src)
-                    (unless (eq? 'regular (stat:type (stat src)))
-                      (error "application persistence bind-file backing \
+                  (unless (eq? 'regular (stat:type (stat src)))
+                    (error "application persistence bind-file backing \
 exists but is not a regular file"
-                             src))
-                    (begin
-                      (call-with-output-file src (lambda (p) #t))
-                      (chown src uid gid)))
+                           src))
+                  (begin
+                   (call-with-output-file src (lambda (p) #t))
+                   (chown src uid gid)))
                 ;; consumer mount point：regular file，不是 directory
                 ;; （file→file bind 要求；bind-directory 的 shepherd
                 ;; mkdir-p 语义在此不适用）。挂载已激活时该文件存在
                 ;; ——幂等 no-op；存在但非 regular → fail closed。
                 (if (file-exists? dst)
-                    (unless (eq? 'regular (stat:type (stat dst)))
-                      (error "application persistence bind-file consumer \
+                  (unless (eq? 'regular (stat:type (stat dst)))
+                    (error "application persistence bind-file consumer \
 mount point exists but is not a regular file"
-                             dst))
-                    (begin
-                      (call-with-output-file dst (lambda (p) #t))
-                      (chown dst uid gid)))))))
+                           dst))
+                  (begin
+                   (call-with-output-file dst (lambda (p) #t))
+                   (chown dst uid gid)))))))
          (quote
            (#$@(map (lambda (rule)
                       (list (application-persistence-rule-backing

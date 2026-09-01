@@ -66,6 +66,14 @@ acceptance checklist）。
 # full tests（pinned Guix）
 guix time-machine -C channels.lock.scm -- repl tests/run-tests.scm
 
+# Blue 入口（等价，builtin check 经 repository-tests testable 薄包装
+# 上面的 runner；测试清单的事实源仍是 run-tests.scm）
+guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/development.scm -- blue check
+
+# blue -n check 不真正运行测试套件（Blue testable 的 builtin dry-run
+# 语义，有意为之：全量套件可能触发 kernel 本地编译）
+
 # system build dry-run / build
 GUIX_CONFIG_FACTS=/tmp/facts.scm \
   guix time-machine -C channels.lock.scm -- system build \

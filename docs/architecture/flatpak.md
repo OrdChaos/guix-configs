@@ -134,7 +134,7 @@ declaration removal 不是"永久销毁用户数据"的充分授权
 - **repository-url 是唯一 transport 事实**（drift 检查基线 +
   canonicalize 目标）；SJTU 镜像只改变 transport，不改变 identity
   与 trust。
-- 换源 = 改 `repository-url` → `tools/flatpak.scm remote-replace
+- 换源 = 改 `repository-url` → `blue flatpak remote-replace
   <name>`（显式）；换 trust authority = 改 `descriptor-url`。
 - **当前 declarative remote 契约要求官方提供 bootstrap descriptor**
   （Case A/B）；无 `.flatpakrepo` 的 remote（Case C）不在模型内，
@@ -208,16 +208,17 @@ declaration 恢复时 existing user file 会被移入
 7. reconfigure（repo 重新取得 authority）
 ```
 
-## Operations（唯一联网入口 = tools/）
+## Operations（唯一联网入口 = Blue flatpak 命令）
 
 ```bash
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- sync
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- status [--refresh]
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- update
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- update-runtimes
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remove <logical-name>
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- remote-replace <remote-name>
-guix time-machine -C channels.lock.scm -- repl tools/flatpak.scm -- gc
+guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/development.scm -- blue flatpak sync
+... blue flatpak status [--refresh]
+... blue flatpak update
+... blue flatpak update-runtimes
+... blue flatpak remove <logical-name>
+... blue flatpak remote-replace <remote-name>
+... blue flatpak gc
 ```
 
 | 命令 | 语义 |

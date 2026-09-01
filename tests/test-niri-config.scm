@@ -219,10 +219,10 @@
                               (lower-object %niri-portals-file-like))))
     ;; plain-file lower 直接得到 store 路径字符串（无 derivation）。
     (read-file (if (string? out)
-                   out
-                   (begin
-                     (build-derivations store (list out))
-                     (derivation->output-path out))))))
+                 out
+                 (begin
+                  (build-derivations store (list out))
+                  (derivation->output-path out))))))
 
 (test-assert "niri-portals.conf is declared in niri home-files config"
              (and %niri-portals-file-like #t))

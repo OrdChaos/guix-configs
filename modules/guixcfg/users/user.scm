@@ -2,6 +2,12 @@
 ;;; Host 只负责 select（(users (list %primary-user-account))），不再
 ;;; 定义 username/uid/groups/shell 等 user facts。
 ;;;
+;;; structural facts 已中立提取到 (guixcfg users facts)（channel-free，
+;;; 供 Blue 等轻量环境直接加载）；本模块以别名保持原有导出（同一
+;;; 对象/同语义，先例：hosts/vm.scm 对 storage policies 的别名），
+;;; 并持有需要 heavy import 的部分（<user-account> 构造与 shell
+;;; file-like 值——bash 模块毒化 blue 编译路径，见 facts.scm 头部）。
+;;;
 ;;; 边界：
 ;;;   - 这里是 structural configuration（Guix evaluation 必需的声明式
 ;;;     事实）——不含任何 secret 值；
@@ -13,47 +19,22 @@
 
 (define-module (guixcfg users user)
                #:use-module (gnu system accounts)  ; user-account
-               #:use-module (gnu packages bash)    ; bash
+               #:use-module (gnu packages bash)    ; bash（shell file-like 值）
                #:use-module (guix gexp)
                #:use-module (guix records)
-               #:export (user-profile
-                         user-profile?
-                         user-profile-name
-                         user-profile-uid
-                         user-profile-group
-                         user-profile-supplementary-groups
-                         user-profile-shell
-                         user-profile-home-directory
-                         user-profile-comment
-                         user-profile-password-secret
-                         %primary-user
-                         primary-user-account))
-
-(define-record-type* <user-profile> user-profile make-user-profile
-                     user-profile?
-                     (name                user-profile-name)                 ; string
-                     (uid                 user-profile-uid)                  ; integer
-                     (group               user-profile-group)                ; string
-                     (supplementary-groups user-profile-supplementary-groups) ; list of strings
-                     (shell               user-profile-shell)                ; file-like
-                     (home-directory      user-profile-home-directory)       ; string
-                     (comment             user-profile-comment)              ; string
-                     (password-secret     user-profile-password-secret))     ; symbol（logical name）
-
-;; 当前仓库是 root + one primary user 的单用户设计。
-(define %primary-user
-  (user-profile
-   (name "ordchaos")
-   (uid 1000)
-   (group "users")
-   (supplementary-groups '("wheel" "netdev"))
-   (shell (file-append bash "/bin/bash"))
-   (home-directory "/home/ordchaos")
-   (comment "A dragon who controls the Synfield.")
-   ;; 密码 hash 是 install secret（colocate users/secrets/，
-   ;; 见本目录 user-password.hash.age），
-   ;; 由 installer 在 LUKS 建立后注入目标系统 shadow；这里只保留逻辑名。
-   (password-secret 'primary-user-password)))
+               #:use-module (guixcfg users facts)  ; structural facts（re-export 原名）
+               #:re-export (user-profile
+                            user-profile?
+                            user-profile-name
+                            user-profile-uid
+                            user-profile-group
+                            user-profile-supplementary-groups
+                            user-profile-shell
+                            user-profile-home-directory
+                            user-profile-comment
+                            user-profile-password-secret
+                            %primary-user)
+               #:export (primary-user-account))
 
 (define (primary-user-account)
   "由 %primary-user 生成 <user-account>。password 恒为 #f——hash 不进入
@@ -68,5 +49,8 @@ docs/architecture/secrets.md 与 tests/test-users.scm）。"
      (supplementary-groups (user-profile-supplementary-groups u))
      (comment (user-profile-comment u))
      (home-directory (user-profile-home-directory u))
-     (shell (user-profile-shell u))
+     ;; shell 的 file-like 值权威在本模块（facts 无法 import bash——
+     ;; 毒化 blue 编译路径；值未被结构化，见 facts.scm 头部）。
+     (shell (or (user-profile-shell u)
+                (file-append bash "/bin/bash")))
      (password #f))))

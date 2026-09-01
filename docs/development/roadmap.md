@@ -14,10 +14,10 @@ public repo 只含 recipient + ciphertext、private identity 另存密码
 管理器/离线备份；或维持现状但 master passphrase 必须高熵、独立于
 登录密码（当前已独立）。不擅自迁移。
 
-### configctl passwd / password rotation
+### password rotation
 
-未来 `configctl passwd` 语义：generate hash → update encrypted
-provisioning source → atomically update installed persistent hash →
+未来密码轮换语义：generate hash → update encrypted provisioning
+source → atomically update installed persistent hash →
 trigger/revalidate account projection → preserve fail-closed。不能长期
 依赖运行期 `passwd user`（只改 ephemeral shadow，reboot 丢失）。
 
@@ -49,16 +49,10 @@ Level 1-4 测试，这三个文件可删。
 
 ## Future features
 
-- **configctl**（规划中，独立 Rust 部署工具，不解析 Scheme）：由
-  personal-channel 打包安装为系统级工具；默认仓库 `~/guix-configs`
-  （`GUIX_CONFIGS_REPO` 可覆盖，sudo 前解析绝对路径）；当前 host
-  读 `/etc/guix-configs/host`（安装环境显式 `--host`）。命令：
-  `check`、`system build/switch`、`home build/switch`、`channels
-  show/refresh`、`disk inspect/plan/apply`、`install`。权限：普通
-  用户负责编辑/Git/构建/检查，仅实际部署/磁盘/安装提权。**禁止**：
-  自动 git pull、自动 clone 丢失仓库、自动更新 channel、自动部署脏
-  工作区、后台监控、开机自动 reconfigure、自动删 Flatpak、自动选择
-  可破坏磁盘。
+- **Immutable committed snapshot execution（部署 Level 2）**：Phase 1
+  只保证 clean committed worktree gate（deployment starts only from a
+  clean committed worktree）；真正从固定 commit 快照（git archive /
+  detached worktree）执行部署并记录 deployed commit 是后续工作。
 - Laptop：host 组装点已落地（`(guixcfg hosts laptop)` 完整 OS +
   NVIDIA open module adapter + niri iGPU/offload 机器事实）；剩余：
   实机 firmware 选择、microcode revision 验收、实机运行验证清单

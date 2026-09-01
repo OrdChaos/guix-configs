@@ -125,23 +125,104 @@ interactive-session-ready（core readiness join barrier）
   （firmware/udev/nvidia-modprobe/linux-loadable-module/
   nvidia-prime/nvidia-powerd）、replace-mesa：全部由锁定版 Nonguix
   transformation 负责，本模块不重新实现；
-- 参数（laptop = RTX 4050 Laptop，Ada）：`#:driver nvda-580`、
-  `#:open-source-kernel-module? #t`（NVIDIA 自 R560 起推荐 Turing+
-  使用 open module）、`#:kernel-mode-setting? #t`、
-  `#:configure-xorg? #f`（纯 Wayland：greetd/niri，无 Xorg DM）、
-  `#:dynamic-boost? #t`（Ampere 起支持，`nvidia-powerd`）；
+- 参数（laptop = RTX 4050 Laptop，Ada）：`#:driver %nvidia-driver`
+  （rolling new-feature selector，见下）、`#:open-source-kernel-module? #t`
+  （NVIDIA 自 R560 起推荐 Turing+ 使用 open module）、
+  `#:kernel-mode-setting? #t`、`#:configure-xorg? #f`（纯 Wayland：
+  greetd/niri，无 Xorg DM）、`#:dynamic-boost? #t`（Ampere 起支持，
+  `nvidia-powerd`）；
 - per-machine：只在 `(guixcfg hosts laptop)` 最终 `%laptop-os` 上调用；
   VM/Intel-only 机器不调用，零 NVIDIA closure（test-nvidia N6 +
   K8 固定）；
 - Wayland：niri compositor 继续跑 Intel iGPU（`variants/laptop.kdl`
-  的 `render-drm-device`），NVIDIA dGPU 仅 PRIME Render Offload
-  （`prime-run`，由 nvidia-service-type 自动进 system profile）。
+  的 `render-drm-device`），NVIDIA dGPU 仅 PRIME Render Offload。
   无任何全局 NVIDIA/GBM 环境变量（禁止 `__GLX_VENDOR_LIBRARY_NAME`
-  等 session-global 设置；它们只由 `prime-run` per-app 设置）；
+  等 session-global 设置；它们只在 `prime-run` 作用域内出现，见下）；
 - Secure Boot：当前 kernel 配置 `CONFIG_MODULE_SIG=n` 且无
   lockdown，out-of-tree module 无需签名。未来若启用
   `CONFIG_MODULE_SIG_FORCE`/lockdown，需在 Guix build phase 内
   重新设计 module signing pipeline（私钥不入 store、不改 store
   内 `.ko`）——见模块头 TODO，本阶段不实现。
+
+### NVIDIA driver policy（rolling new-feature）
+
+```text
+channels.lock.scm（可复现性边界）
+    ↓ 精确 pin nonguix revision
+pinned nonguix
+    ↓
+nvda-new-feature（rolling selector，不固定 major）
+    ↓
+%nvidia-driver（唯一 driver authority，(guixcfg system graphics nvidia)）
+    ├── userspace（nvda-new-feature → 当前 realization，如 610.x）
+    ├── open kernel module（transformation 自动推导）
+    ├── firmware / modprobe / settings / nvidia-service-type
+    ├── prime-run host backend（版本无关，运行时解析）
+    └── future consumers（Steam/gamescope/Flatpak 同源引用）
+```
+
+- **selector stability ≠ realization version stability**：源代码里的
+  `%nvidia-driver` 永远引用 `nvda-new-feature`；它解析到的具体
+  NVIDIA 版本（610 → 615 → 620…）随 channels.lock 升级漂移，是
+  **预期行为**。可复现性来自 channels.lock.scm 的精确 pin，而不是
+  把 selector 固定成 `nvda-610`。禁止在任何 consumer 中出现
+  version-specific 字面量（580/595/610 等只允许出现在测试的
+  package metadata 断言与验证输出中）。
+- **配套一致性由 pinned Nonguix transformation 保证**：
+  `nonguix-transformation-nvidia` 根据同一 `#:driver %nvidia-driver`
+  自动推导 `nvidia-module-open-new-feature` /
+  `nvidia-firmware-new-feature` / `nvidia-modprobe-new-feature` /
+  `nvidia-settings-new-feature`（`nonguix/transformations.scm` 的
+  `%module`/`%firmware`/`%modprobe`/`%settings` mapping）——仓库
+  不维护任何 driver mapping table。userspace/open module/firmware
+  版本一致性由 `tests/test-nvidia.scm` N10 固定。
+- **caveat**：nonguix README 明确 `nvda-new-feature` 为
+  “not production-ready”（rolling branch 固有属性）；其 GPU 支持表
+  确认 Ada（RTX 40 系列，本机 RTX 4050）✅。kernel 兼容表确认
+  new-feature ✅ 至 linux-7.0；本仓库 %kernel = linux-7.2，需经
+  compatibility gate（open module 真实构建）确认。
+- **atomic compatibility gate**（升级 lock 或部署前逐项通过）：
+  1. repository invariants（N8-N10 / P2 / P8 / 全量套件）；
+  2. kernel compatibility：open module 针对 %kernel 构建成功；
+  3. PRIME policy 不变（%prime-offload-environment 与 wrapper 版本无关）；
+  4. hybrid Intel default 不变（无 session-global NVIDIA env）；
+  5. RTD3/runtime PM：nvidia-service-type 的 udev
+     `power/control=auto` policy 仍生效（部署后 runtime 验收）；
+  6. Flatpak GL/GL32 exact extension 可用（`org.freedesktop.Platform.GL[32].nvidia-<exact-version>`
+     与当前 realization 完全一致——Flatpak 兼容性审计，非本仓库测试）。
+- **升级流程**：更新 channels.lock → 跑 repository invariants →
+  构建 kernel module / system / home → 检查 Flatpak GL+GL32 exact
+  availability → 部署后 runtime PRIME/RTD3 acceptance → 全通过才
+  部署。
+
+### PRIME offload policy 与 host projection
+
+- **policy 单一 authority**：`%prime-offload-environment`
+  （`(guixcfg system graphics nvidia)`）——变量语义与 pinned
+  nonguix `nvidia-prime` 1.0-5 的 `prime-run` 脚本一致
+  （`__NV_PRIME_RENDER_OFFLOAD=1`、`__VK_LAYER_NV_optimus=NVIDIA_only`、
+  `__GLX_VENDOR_LIBRARY_NAME=nvidia`）。未来 Flatpak projection
+  消费同一数据渲染 `--env`（只投影环境语义，不投影 Guix store
+  路径/profile/动态链接器）——本轮不实现。
+- **host projection**：`%prime-run-wrapper`（Home profile，
+  laptop only，`hosts/laptop.scm` 组装；遮蔽 system profile 中
+  nvidia-service-type 注入的 upstream `nvidia-prime`）。用法保持
+  `prime-run COMMAND [ARGS...]`。
+  - 根因：pinned Guix mesa 是经典构建（`-Dglx=dri`，无 glvnd
+    dispatch），Home 应用闭包只有 Intel；wrapper 在【命令作用域内】
+    把 `libGL`/`libEGL` 入口经 `LD_LIBRARY_PATH` 切到 nvda 的
+    glvnd dispatch，并投影 `XDG_DATA_DIRS` /
+    `__EGL_VENDOR_LIBRARY_DIRS` / `__EGL_EXTERNAL_PLATFORM_CONFIG_DIRS`
+    / `GBM_BACKENDS_PATH` / `LIBVA_DRIVERS_PATH` /
+    `VDPAU_DRIVER_PATH`（glvnd 1.7.0 GLX 侧以裸名 dlopen
+    `libGLX_nvidia.so.0`，`LD_LIBRARY_PATH` 是唯一生效机制）。
+  - nvda store prefix 由 wrapper 运行时经
+    `/run/current-system/profile/bin/nvidia-smi` 符号链解析——
+    零 store 字面量、跨 generation 稳定；缺失时 fail-loud。
+  - wrapper 零 build-time driver input（derivation 平凡；nvda 的
+    GC 根 = system profile）。
+- **不变式**：默认应用仍走 Intel（经典 mesa，无 dispatch、无
+  NVIDIA 可见性）；`prime-run` 之外不存在任何 NVIDIA offload
+  变量；VM home 无 wrapper（`tests/test-prime-run.scm` 固定）。
 
 桌面层无需改动（GPU-neutral）。

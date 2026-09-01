@@ -34,8 +34,8 @@
 
 (define %oo-fonts-conf
   (let ((drv (run-with-store %store
-               (lower-object (@@ (guixcfg apps onlyoffice definition)
-                                 onlyoffice-fontconfig-file)))))
+                             (lower-object (@@ (guixcfg apps onlyoffice definition)
+                                             onlyoffice-fontconfig-file)))))
     (build-derivations %store (list drv))
     (derivation->output-path drv)))
 

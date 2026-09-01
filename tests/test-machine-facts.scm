@@ -7,9 +7,20 @@
 ;;; mapped-device 时抛出。
 
 (use-modules (srfi srfi-64)
+             (srfi srfi-1)                ; 字符串扁平化提取
+             (srfi srfi-13)               ; string-contains
              (ice-9 textual-ports)        ; get-string-all
              (gnu system mapped-devices)  ; mapped-device-source
              (gnu system uuid))           ; uuid、uuid=?
+
+;; guile 3.0.11 的 error 异常参数形态是 (key format-string irritants ...)，
+;; 消息可能嵌在 irritants 里；提取其中全部字符串做断言（对 misc-error
+;; 内部布局不敏感）。
+(define (exception-strings exn-args)
+  (let walk ((x exn-args))
+    (cond ((string? x) (list x))
+      ((pair? x) (append (walk (car x)) (walk (cdr x))))
+      (else '()))))
 
 (define %test-facts
   '((luks-uuid . "00000000-0000-0000-0000-000000000000")))
@@ -98,23 +109,25 @@
               (assq-ref (load-machine-facts default-file) 'luks-uuid))
   ;; 11. 错误消息必须可诊断（而不是 unbound variable 之类）
   (test-assert "error message includes path when override missing"
-               (let ((msg (catch #t
-                            (lambda ()
-                              (resolve-facts-path missing-file default-file)
-                              #f)
-                            (lambda (key . args)
-                              (cadr args)))))
-                 (and (string? msg)
-                      (string-contains msg "GUIX_CONFIG_FACTS points to a missing file"))))
+               (let ((msg (string-join
+                           (exception-strings
+                            (catch #t
+                              (lambda ()
+                                (resolve-facts-path missing-file default-file)
+                                '())
+                              (lambda (key . args) args)))
+                           " ")))
+                 (string-contains msg "GUIX_CONFIG_FACTS points to a missing file")))
   (test-assert "error message includes fact name when luks-uuid missing"
-               (let ((msg (catch #t
-                            (lambda ()
-                              (require-fact '() 'luks-uuid)
-                              #f)
-                            (lambda (key . args)
-                              (cadr args)))))
-                 (and (string? msg)
-                      (string-contains msg "missing required machine fact")))))
+               (let ((msg (string-join
+                           (exception-strings
+                            (catch #t
+                              (lambda ()
+                                (require-fact '() 'luks-uuid)
+                                '())
+                              (lambda (key . args) args)))
+                           " ")))
+                 (string-contains msg "missing required machine fact"))))
 
 ;; 12. 集成：正式 root LUKS mapped-device source 是 facts 中的 UUID，
 ;;     绝不是 /dev/disk/by-partlabel/ 字符串。

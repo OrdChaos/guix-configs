@@ -149,8 +149,10 @@ state**，由仓库 + 当前 system generation 重新生成——不持久化：
 ## Live reconfigure vs cold boot
 
 - cold boot：`guix-home-user` one-shot 重建链接；
-- live reconfigure：`tools/reconfigure.sh` 在 system reconfigure 后
-  显式 restart `guix-home-user` 并轮询验证链接指向 store（失败则
-  gate 保持关闭）。stale pivot（`~/.guix-home.new`）由
-  `tools/home-pivot.scm` 保守清理（只 unlink 指向 store home
-  generation 的 symlink）。
+- live reconfigure：`(guixcfg system reconfigure)` 事务（经
+  `blue reconfigure HOST`）在 system reconfigure 后显式 restart
+  `guix-home-user` 并轮询验证链接指向 store（失败则 gate 保持
+  关闭）。stale pivot（`~/.guix-home.new`）由 `(guixcfg home
+  pivot)` 直接 Scheme 调用保守清理（只 unlink 指向 store home
+  generation 的 symlink；针对 pinned Guix symlink-manager 的
+  stale pivot gap 的 narrow compatibility shim）。

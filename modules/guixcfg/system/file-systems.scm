@@ -4,6 +4,7 @@
 
 (define-module (guixcfg system file-systems)
                #:use-module (guixcfg storage model)
+               #:use-module (guixcfg system machine-facts)  ; facts 机制（提取出的 channel-free 层）
                #:use-module (guixcfg boot layout)       ; %esp-mount-point（ESP 布局 authority）
                #:use-module (guixcfg boot tpm-unlock)      ; tpm-unlock-in-initrd
                #:use-module (virelith packages tpm2)        ; tpm2-tools-compat
@@ -20,79 +21,13 @@
                          system-file-systems
                          %swap-spaces))
 
-;; 机器事实（docs/architecture/storage.md（固定命名事实））：安装器写入，可重新探测，不进 Git。
-;; 构建期读取，路径解析规则：
-;;   1. GUIX_CONFIG_FACTS（非空）→ 显式 override，必须存在且格式合法，
-;;      否则立即报错——显式指定不允许静默忽略；
-;;   2. 否则 /persist/system/facts/host.scm 存在 → 自动使用（已安装系统
-;;      reconfigure 无需环境变量）；
-;;   3. 否则 → 无 machine facts（boot-critical fact 缺失时在构造
-;;      mapped-device 处 fail-closed，不回退 by-partlabel）。
-(define %default-machine-facts-path
-  (string-append (persist-mount-point "@persist-system") "/facts/host.scm"))
-
-(define (regular-file? path)
-  "PATH 存在且是普通文件（目录等显式拒绝）。"
-  (and (file-exists? path)
-       (eq? (stat:type (stat path)) 'regular)))
-
-(define (resolve-facts-path override default)
-  "解析 facts 路径（纯函数，便于测试）。OVERRIDE 是 GUIX_CONFIG_FACTS
-的值（#f 或空串 = 未设置）。返回实际路径或 #f（无 facts）。"
-  (cond
-    ((and override (not (string-null? override)))
-     (cond
-       ((regular-file? override) override)
-       ((file-exists? override)
-        (error "GUIX_CONFIG_FACTS does not point to a regular file:" override))
-       (else
-        (error "GUIX_CONFIG_FACTS points to a missing file:" override))))
-    ((regular-file? default) default)
-    ((file-exists? default)
-     (error "default machine facts path is not a regular file:" default))
-    (else #f)))
-
-(define (machine-facts-path)
-  (resolve-facts-path (getenv "GUIX_CONFIG_FACTS") %default-machine-facts-path))
-
-(define (facts-alist? x)
-  (and (list? x) (every pair? x)))
-
-(define (load-machine-facts path)
-  "读取并校验 facts 文件：必须是可 read 的 alist，否则显式报错。"
-  (let ((facts (catch #t
-                 (lambda ()
-                   (call-with-input-file path read))
-                 (lambda (key . args)
-                   (error "cannot parse machine facts file:" path key args)))))
-    (unless (facts-alist? facts)
-      (error "malformed machine facts file (expected an alist):" path))
-    facts))
-
-;; 惰性求值：模块加载阶段不执行任何 I/O 或校验——guile 的
-;; resolve-module 会吞掉模块加载失败时的原始错误并留下半成品模块，
-;; 依赖方（hosts/vm.scm）只会看到 unbound variable。所有 facts 读取
-;; 与校验推迟到首次构造 mapped-device 时（force），届时错误在调用方
-;; 求值路径上抛出，信息清晰可诊断。
-(define %machine-facts
-  (delay (let ((path (machine-facts-path)))
-           (if path (load-machine-facts path) '()))))
-
-(define (machine-facts)
-  (force %machine-facts))
-
-(define (machine-fact key)
-  (assq-ref (machine-facts) key))
-
-(define (require-fact facts key)
-  "FACTS 中必须存在 KEY；缺失立即报错（fail-closed）——宁可
-reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
-  (or (assq-ref facts key)
-      (error "missing required machine fact:" key
-             "refusing to build a bootable system")))
-
-(define (require-machine-fact key)
-  (require-fact (machine-facts) key))
+;; 机器事实（facts）路径解析与读取机制已提取到
+;; (guixcfg system machine-facts)（channel-free，供 doctor 等复用）。
+;; 本模块经 use-modules 引入；**不 re-export**——实测 guile 3.0.11 对
+;; #:export 非本地绑定会创建 #<undefined> 本地变量遮蔽 import（
+;; cryptroot-mapped-devices 内 require-machine-fact 变 unbound）。
+;; tests/test-machine-facts.scm 经 module-ref（遍历 uses）仍可访问；
+;; 语义与文件内注释不变——见 machine-facts.scm。
 
 ;;; PCR7-aware mapped-device-kind：open 先试 TPM（tpm-unlock-in-initrd，
 ;;; 见 (guixcfg boot tpm-unlock)——initrd 运行时模块），失败走与

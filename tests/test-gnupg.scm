@@ -21,7 +21,7 @@
              (gnu home services)      ; home-environment-variables-service-type
              (gnu home services shepherd) ; home-shepherd-service-type、accessors
              (gnu services)           ; service-kind、service-value、
-                                      ; service-type-extensions、service-extension-target
+             ; service-type-extensions、service-extension-target
              (gnu services shepherd)  ; shepherd-service-*
              (ice-9 rdelim)           ; read-string
              (srfi srfi-1)

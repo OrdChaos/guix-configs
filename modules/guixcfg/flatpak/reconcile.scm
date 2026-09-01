@@ -1,9 +1,9 @@
 ;;; Flatpak 显式运维操作层（docs/architecture/flatpak.md（operations））。
 ;;;
-;;; 本模块是唯一允许调用联网 flatpak CLI 的地方，且只被 tools/ 入口
-;;; 消费——绝不 import 于 Home/System service/activation 模块
-;;; （composition 测试静态断言；reconfigure/boot/login 零网络
-;;; 不变量）。
+;;; 本模块是唯一允许调用联网 flatpak CLI 的地方，且只被 Blue 的
+;;; `flatpak` 命令消费（blueprint.scm 的 thin dispatch）——绝不
+;;; import 于 Home/System service/activation 模块（composition 测试
+;;; 静态断言；reconfigure/boot/login 零网络不变量）。
 ;;;
 ;;; 所有 repository-managed 操作显式 --user（无 system installation、
 ;;; 无 /var/lib/flatpak）；语义：
@@ -30,6 +30,7 @@
                #:use-module (guixcfg flatpak model)
                #:use-module (guixcfg flatpak registry)
                #:use-module (ice-9 format)
+               #:use-module (ice-9 match)
                #:use-module (srfi srfi-1)  ; member、find、filter、filter-map
                #:use-module (srfi srfi-13) ; string-split、string-tokenize、string-trim-both、string-prefix?
                #:export (flatpak-binary
@@ -48,7 +49,18 @@
                          flatpak-update
                          flatpak-update-runtimes
                          flatpak-remove
-                         flatpak-gc))
+                         flatpak-gc
+                         ;; Blue flatpak 命令的 invocation 契约与
+                         ;; dry-run plan（只读；不读 Blue state）
+                         %flatpak-actions
+                         flatpak-actions
+                         flatpak-validate-action-arguments
+                         flatpak-sync-plan
+                         flatpak-update-plan
+                         flatpak-update-runtimes-plan
+                         flatpak-remove-plan
+                         flatpak-replace-remote-plan
+                         flatpak-gc-commands))
 
 (define (flatpak-binary)
   "flatpak 可执行文件绝对路径（PATH 解析；工具入口把它注入
@@ -90,16 +102,16 @@ FLATPAK_BINARY，install 时 desktop entry export 需要绝对路径）。
   (let* ((name (symbol->string (flatpak-remote-name remote)))
          (url (assoc-ref (flatpak-remotes-alist) name)))
     (cond ((not url) #f)
-          ((string=? url (flatpak-remote-repository-url remote)) #t)
-          (else
-           (error (string-append
-                   "Flatpak remote '" name
-                   "' differs from the repository declaration.\n"
-                   "Expected: " (flatpak-remote-repository-url remote)
-                   "\n"
-                   "Actual:   " url "\n\n"
-                   "Refusing to modify an existing remote automatically.\n"
-                   "Use an explicit remote maintenance operation \
+      ((string=? url (flatpak-remote-repository-url remote)) #t)
+      (else
+       (error (string-append
+               "Flatpak remote '" name
+               "' differs from the repository declaration.\n"
+               "Expected: " (flatpak-remote-repository-url remote)
+               "\n"
+               "Actual:   " url "\n\n"
+               "Refusing to modify an existing remote automatically.\n"
+               "Use an explicit remote maintenance operation \
 to replace or modify it."))))))
 
 (define (flatpak-remote-set-url! remote)
@@ -117,7 +129,7 @@ remote-ls 的 summary 抓取不会再次改写 URL。"
           (symbol->string (flatpak-remote-name remote))))
 
 (define* (flatpak-bootstrap-remote! remote)
-  "领域操作：从零建立 remote 并落定为声明状态——封装 pinned
+         "领域操作：从零建立 remote 并落定为声明状态——封装 pinned
 Flatpak 1.16.6 的 bootstrap 细节，调用方不需要理解：
     1. remote-add --from NAME DESCRIPTOR-URL
        （flatpak 下载官方 descriptor、导入其当前 GPGKey——trust
@@ -133,17 +145,17 @@ Partial-failure rollback：modify 失败时只删除【本次调用刚创建】
 的 remote（调用前提 = flatpak-check-remote! 为 #f），避免留下
 redirect 改写后的非声明状态等下次 sync 才发现 drift。绝不删除
 本操作之前已存在的 remote。"
-  (let ((name (symbol->string (flatpak-remote-name remote))))
-    (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
-            "--from" name
-            (flatpak-remote-descriptor-url remote))
-    (catch #t
-      (lambda ()
-        (flatpak-remote-set-url! remote))
-      (lambda args
-        (false-if-exception
-         (invoke "flatpak" "remote-delete" "--user" name))
-        (apply throw args)))))
+         (let ((name (symbol->string (flatpak-remote-name remote))))
+           (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
+                   "--from" name
+                   (flatpak-remote-descriptor-url remote))
+           (catch #t
+             (lambda ()
+               (flatpak-remote-set-url! remote))
+             (lambda args
+               (false-if-exception
+                (invoke "flatpak" "remote-delete" "--user" name))
+               (apply throw args)))))
 
 (define (flatpak-ensure-remote! remote)
   "remote 缺失 → flatpak-bootstrap-remote!（建立 + canonicalize）；
@@ -226,78 +238,78 @@ app pin 不隐含 runtime pin（不实现 dependency lockfile）。
                 (string-append "--commit=" commit) ref)))))
 
 (define* (flatpak-sync #:key (remotes %flatpak-remotes)
-                            (applications %flatpak-applications)
-                            (selection %flatpak-selection))
-  "ensure declared remotes + ensure selected apps installed。
+                       (applications %flatpak-applications)
+                       (selection %flatpak-selection))
+         "ensure declared remotes + ensure selected apps installed。
 只增不删：不 update 已装 app、不 remove 未声明 app、不 gc。
 sync 对【全部 declared remotes】做 ensure（缺即 bootstrap——新
 remote 首次引入 sync 即自动建立；drift 则 fail-loud），不依赖
 selected apps 是否引用它们（声明即意图）。返回本次安装的
 <flatpak-application> 列表。"
-  (for-each flatpak-ensure-remote! remotes)
-  (let* ((selected (flatpak-select-applications selection applications))
-         (missing (flatpak-reconcile-plan
-                   selected (flatpak-list-installed-apps))))
-    (for-each flatpak-install-app! missing)
-    missing))
+         (for-each flatpak-ensure-remote! remotes)
+         (let* ((selected (flatpak-select-applications selection applications))
+                (missing (flatpak-reconcile-plan
+                          selected (flatpak-list-installed-apps))))
+           (for-each flatpak-install-app! missing)
+           missing))
 
 ;;; ── status ─────────────────────────────────────────────────
 
 (define* (flatpak-status #:key (refresh? #f)
-                              (applications %flatpak-applications)
-                              (selection %flatpak-selection))
-  "表格输出（catalog 顺序）。默认完全离线（本地 list/info）；
+                         (applications %flatpak-applications)
+                         (selection %flatpak-selection))
+         "表格输出（catalog 顺序）。默认完全离线（本地 list/info）；
 REFRESH? 才 remote-info（失败显示 unknown，不修改状态、不破坏
 本地输出）。"
-  (let ((installed (flatpak-list-installed-apps)))
-    (format #t "NAME\tID\tSELECTED\tINSTALLED\tBRANCH\tDECLARED-COMMIT\tINSTALLED-COMMIT~@[~a~]~%"
-            (if refresh? "\tREMOTE-COMMIT" ""))
-    (for-each
-     (lambda (app)
-       (let* ((id (flatpak-application-id app))
-              (selected? (memq (flatpak-application-name app) selection))
-              (installed? (member id installed))
-              (installed-commit (and installed?
-                                     (flatpak-installed-commit id)))
-              (remote-commit
-               (and refresh?
-                    (false-if-exception
-                     (string-trim-both
-                      (invoke-capture
-                       "flatpak" "remote-info" "--user" "--show-commit"
-                       (symbol->string (flatpak-application-remote app))
-                       (flatpak-application-ref app)))))))
-         (format #t "~a\t~a\t~a\t~a\t~a\t~a\t~a~@[~a~]~%"
-                 (flatpak-application-name app)
-                 id
-                 (if selected? "yes" "no")
-                 (if installed? "yes" "no")
-                 (flatpak-application-branch app)
-                 (or (flatpak-application-commit app) "-")
-                 (or installed-commit "-")
-                 (if refresh?
-                   (string-append "\t" (or remote-commit "unknown"))
-                   ""))))
-     applications)))
+         (let ((installed (flatpak-list-installed-apps)))
+           (format #t "NAME\tID\tSELECTED\tINSTALLED\tBRANCH\tDECLARED-COMMIT\tINSTALLED-COMMIT~@[~a~]~%"
+                   (if refresh? "\tREMOTE-COMMIT" ""))
+           (for-each
+            (lambda (app)
+              (let* ((id (flatpak-application-id app))
+                     (selected? (memq (flatpak-application-name app) selection))
+                     (installed? (member id installed))
+                     (installed-commit (and installed?
+                                            (flatpak-installed-commit id)))
+                     (remote-commit
+                      (and refresh?
+                           (false-if-exception
+                            (string-trim-both
+                             (invoke-capture
+                              "flatpak" "remote-info" "--user" "--show-commit"
+                              (symbol->string (flatpak-application-remote app))
+                              (flatpak-application-ref app)))))))
+                (format #t "~a\t~a\t~a\t~a\t~a\t~a\t~a~@[~a~]~%"
+                        (flatpak-application-name app)
+                        id
+                        (if selected? "yes" "no")
+                        (if installed? "yes" "no")
+                        (flatpak-application-branch app)
+                        (or (flatpak-application-commit app) "-")
+                        (or installed-commit "-")
+                        (if refresh?
+                          (string-append "\t" (or remote-commit "unknown"))
+                          ""))))
+            applications)))
 
 ;;; ── update ─────────────────────────────────────────────────
 
 (define* (flatpak-update #:key (applications %flatpak-applications)
-                              (selection %flatpak-selection))
-  "更新目标 = selection ∩ installed ∩ unpinned（commit #f），显式
+                         (selection %flatpak-selection))
+         "更新目标 = selection ∩ installed ∩ unpinned（commit #f），显式
 ref 列表逐个 update。绝无无参全 installation update；commit pinned
 app 默认不进目标；无目标 → clean no-op。"
-  (let* ((installed (flatpak-list-installed-apps))
-         (targets
-          (filter
-           (lambda (app)
-             (and (member (flatpak-application-id app) installed)
-                  (not (flatpak-application-commit app))))
-           (flatpak-select-applications selection applications))))
-    (if (null? targets)
-      (format #t "No unpinned selected applications to update.~%")
-      (apply invoke "flatpak" "update" "--user" "-y"
-             (map flatpak-application-ref targets)))))
+         (let* ((installed (flatpak-list-installed-apps))
+                (targets
+                 (filter
+                  (lambda (app)
+                    (and (member (flatpak-application-id app) installed)
+                         (not (flatpak-application-commit app))))
+                  (flatpak-select-applications selection applications))))
+           (if (null? targets)
+             (format #t "No unpinned selected applications to update.~%")
+             (apply invoke "flatpak" "update" "--user" "-y"
+               (map flatpak-application-ref targets)))))
 
 (define (flatpak-update-runtimes)
   "显式更新已安装 runtimes（pinned 1.16.6 无'更新全部 runtime'的
@@ -310,24 +322,119 @@ app 默认不进目标；无目标 → clean no-op。"
 ;;; ── remove / gc ────────────────────────────────────────────
 
 (define* (flatpak-remove name #:key (applications %flatpak-applications))
-  "显式 uninstall（logical name，catalog fail-fast 解析）。只卸
+         "显式 uninstall（logical name，catalog fail-fast 解析）。只卸
 ref：~/.var/app/<id> 数据与 persistence rule 保留（remove ≠ purge；
 catalog 删除是 purge 之后的 teardown 最后一步）。"
-  (let ((app (find (lambda (a) (eq? name (flatpak-application-name a)))
-                   applications)))
-    (unless app
-      (error "unknown flatpak application (remove takes a catalog \
+         (let ((app (find (lambda (a) (eq? name (flatpak-application-name a)))
+                          applications)))
+           (unless app
+             (error "unknown flatpak application (remove takes a catalog \
 logical name)"
-             name (map flatpak-application-name applications)))
-    (invoke "flatpak" "uninstall" "--user" "-y"
-            (flatpak-application-id app))
-    (format #t "Removed ~a (~a). User data under ~/.var/app/~a \
+                    name (map flatpak-application-name applications)))
+           (invoke "flatpak" "uninstall" "--user" "-y"
+                   (flatpak-application-id app))
+           (format #t "Removed ~a (~a). User data under ~/.var/app/~a \
 is preserved.~%"
-            name (flatpak-application-id app)
-            (flatpak-application-id app))))
+                   name (flatpak-application-id app)
+                   (flatpak-application-id app))))
 
 (define (flatpak-gc)
   "显式维护：orphan runtimes（uninstall --unused）+ installation
 repair。不挂 boot/reconfigure/activation hook。"
-  (invoke "flatpak" "uninstall" "--unused" "--user" "-y")
-  (invoke "flatpak" "repair" "--user"))
+  (for-each (lambda (argv) (apply invoke argv)) (flatpak-gc-commands)))
+
+;;; ── Blue flatpak 命令的 invocation 契约与 dry-run plan ────────
+;;;
+;;; 本小节是 Flatpak 域对外的调用契约（单一事实源）：action 集合、
+;;; 参数形态校验、以及 dry-run 需要的只读 plan。全部不读 Blue
+;;; state（dry-run 判定由 blueprint 做）；plan 函数只做真实只读
+;;; 查询 + 纯计算，绝不修改 Flatpak 状态——blue -n flatpak 的
+;;; “绝不 mutate”由它们保证。
+
+;; action 注册表：name → 是否纯只读查询（只有 status）。
+(define %flatpak-actions
+  '((sync . #f)
+    (status . #t)
+    (update . #f)
+    (update-runtimes . #f)
+    (remove . #f)
+    (remote-replace . #f)
+    (gc . #f)))
+
+(define (flatpak-actions)
+  "支持的全部 action 名（字符串，canonical 顺序）。"
+  (map (compose symbol->string car) %flatpak-actions))
+
+(define (flatpak-validate-action-arguments action rest)
+  "校验 ACTION 与剩余位置参数的形态，返回规范化形态或 #f（非法）。
+status 接受可选 --refresh；remove/remote-replace 恰好一个参数；其余
+零个。未知 action 不 fallback。"
+  (match (cons action rest)
+         (("status") '(status ()))
+         (("status" "--refresh") '(status (refresh)))
+         (("sync") '(sync ()))
+         (("update") '(update ()))
+         (("update-runtimes") '(update-runtimes ()))
+         (("remove" name) `(remove (,name)))
+         (("remote-replace" name) `(remote-replace (,name)))
+         (("gc") '(gc ()))
+         (_ #f)))
+
+(define (flatpak-sync-plan remotes applications selection)
+  "sync 的只读 plan：remote 缺失清单 + 待安装 app 清单（每项一行）。
+不修改任何状态；remote drift 由 flatpak-check-remote! 照常
+fail-loud（dry-run 也报 drift）。"
+  (append
+   (map (lambda (r)
+          (if (flatpak-check-remote! r)
+            (format #f "remote ~a: already declared (no-op)"
+                    (flatpak-remote-name r))
+            (format #f "would add remote ~a (descriptor ~a; transport ~a)"
+                    (flatpak-remote-name r)
+                    (flatpak-remote-descriptor-url r)
+                    (flatpak-remote-repository-url r))))
+        remotes)
+   (map (lambda (app)
+          (format #f "would install ~a from ~a~a"
+                  (flatpak-application-ref app)
+                  (flatpak-application-remote app)
+                  (if (flatpak-application-commit app)
+                    (format #f " (pin ~a)" (flatpak-application-commit app))
+                    "")))
+        (flatpak-reconcile-plan
+         (flatpak-select-applications selection applications)
+         (flatpak-list-installed-apps)))))
+
+(define (flatpak-update-plan applications selection)
+  "update 的只读 plan：selection ∩ installed ∩ unpinned 的 ref 列表。"
+  (let ((installed (flatpak-list-installed-apps)))
+    (map flatpak-application-ref
+         (filter (lambda (app)
+                   (and (member (flatpak-application-id app) installed)
+                        (not (flatpak-application-commit app))))
+                 (flatpak-select-applications selection applications)))))
+
+(define (flatpak-update-runtimes-plan)
+  "update-runtimes 的只读 plan：已安装 runtime 的 ref 列表。"
+  (flatpak-list-installed-runtime-refs))
+
+(define (flatpak-remove-plan name applications)
+  "remove 的只读 plan：catalog 解析目标 app；未知 logical name 与
+remove 相同的 fail-fast（dry-run 也必须参数校验）。"
+  (or (find (lambda (a) (eq? name (flatpak-application-name a)))
+            applications)
+      (error "unknown flatpak application (remove takes a catalog \
+logical name)"
+             name (map flatpak-application-name applications))))
+
+(define (flatpak-replace-remote-plan remote)
+  "remote-replace 的只读 plan：当前 effective url（未配置 → #f）。"
+  (assoc-ref (flatpak-remotes-alist)
+             (symbol->string (flatpak-remote-name remote))))
+
+(define (flatpak-gc-commands)
+  "gc 的两条 subprocess argv。pinned Flatpak 不提供 unused runtime
+枚举查询，dry-run 只能 command preview——因此 argv 是单一事实源
+（flatpak-gc 与 blueprint 的预览共用）。"
+  '(("flatpak" "uninstall" "--unused" "--user" "-y")
+    ("flatpak" "repair" "--user")))

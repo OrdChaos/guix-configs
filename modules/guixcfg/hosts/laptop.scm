@@ -29,7 +29,8 @@
 ;;;      实例化 wpa-supplicant——VM 无 WiFi 因而把 requirement 置空）；
 ;;;   2. secrets：无 %vm-test-secrets（那是 VM 测试机的机制 sentinel）；
 ;;;   3. guix-home：%laptop-guix-home（含 niri 'laptop variant
-;;;      selection，iGPU compositor + NVIDIA offload 的机器事实）；
+;;;      selection，iGPU compositor + NVIDIA offload 的机器事实；
+;;;      laptop-only host capability %prime-run-wrapper）；
 ;;;   4. NVIDIA：最终 %laptop-os 套 nvidia-system-transformation（open kernel
 ;;;      module + dynamic boost；kernel 不被替换）。
 ;;;
@@ -39,6 +40,7 @@
 
 (define-module (guixcfg hosts laptop)
                #:use-module (gnu)                          ; operating-system、user-account、service 等
+               #:use-module (gnu home)                     ; home-environment（laptop home 组装）
                #:use-module (gnu services networking)      ; network-manager-service-type、wpa-supplicant-service-type
                #:use-module (gnu system shadow)            ; account-service-type（折叠 account 列表）
                #:use-module (guixcfg storage model)
@@ -71,7 +73,7 @@
                #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
                #:use-module (guixcfg system machine-identity) ; /etc/machine-id 持久化（先于 D-Bus activation）
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind + 系统集成
-
+               
                #:use-module (gnu services guix)        ; guix-home-service-type
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:use-module (srfi srfi-1)              ; remove
@@ -95,11 +97,19 @@
          (variant 'laptop))))
 
 ;; laptop 的 Guix Home 组合：默认 home + logical selections（由
-;; generic resolver 解析为配置文件贡献）。
+;; generic resolver 解析为配置文件贡献）+ laptop-only host
+;; capability：NVIDIA PRIME offload 的 host projection
+;; （%prime-run-wrapper，Home profile 遮蔽 system profile 的
+;; upstream nvidia-prime prime-run）。VM 不获得该 capability
+;; （%guix-home 不含 wrapper；VM system 无 nvidia-service-type）。
 (define %laptop-guix-home
-  (guix-home
-   #:application-configuration-selections
-   %laptop-application-configuration-selections))
+  (let ((base (guix-home
+               #:application-configuration-selections
+               %laptop-application-configuration-selections)))
+    (home-environment
+     (inherit base)
+     (packages (cons %prime-run-wrapper
+                     (home-environment-packages base))))))
 
 ;; Primary user 来自 (guixcfg users user) 的 %primary-user（结构事实的
 ;; 唯一来源：username/uid/groups/shell/home）。密码 hash 不在此处——
@@ -151,24 +161,24 @@
     ;; wpa-supplicant-service-type（其 shepherd provision 正是
     ;; 'wireless-daemon）。VM 无 WiFi，把 requirement 置空并省略
     ;; wpa-supplicant。DNS 语义同 VM（docs/architecture/dns.md）。
-    (service network-manager-service-type)
-    (service wpa-supplicant-service-type)
-    ;; 系统 DNS ownership（Phase 2，docs/architecture/dns.md）：
-    ;; /etc/resolv.conf 静态 127.0.0.1 + resolvconf 重定向 /run。
-    (system-dns-etc-service)
-    ;; SmartDNS：唯一 system resolver（loopback 监听 + 固定 upstream；
-    ;; DHCP DNS metadata v1 只产出不消费）。
-    (smartdns-service)
-    ;; GVfs 桌面 metadata（x-gvfs-hide/x-gvfs-trash → utab）：
-    ;; 在 file-systems 挂载后注入，让 GIO 对 HOME persistence
-    ;; bind mounts 隐藏挂载并允许 mount-local trash。
-    (gvfs-mount-metadata-service %persistent-mount-file-systems)
-    ;; Mihomo 系统透明代理（Phase 1，docs/architecture/mihomo.md）：
-    ;; Shepherd 独占生命周期；runtime config 由 materializer 合成
-    ;; （secret URL 不进 store）；数据目录（providers cache +
-    ;; 选中节点/组状态）经 machine-state bind 持久化。不做 DNS
-    ;; （dns-hijack []）；SmartDNS upstream 经模板内 DIRECT 规则直连。
-    (mihomo-service))
+         (service network-manager-service-type)
+         (service wpa-supplicant-service-type)
+         ;; 系统 DNS ownership（Phase 2，docs/architecture/dns.md）：
+         ;; /etc/resolv.conf 静态 127.0.0.1 + resolvconf 重定向 /run。
+         (system-dns-etc-service)
+         ;; SmartDNS：唯一 system resolver（loopback 监听 + 固定 upstream；
+         ;; DHCP DNS metadata v1 只产出不消费）。
+         (smartdns-service)
+         ;; GVfs 桌面 metadata（x-gvfs-hide/x-gvfs-trash → utab）：
+         ;; 在 file-systems 挂载后注入，让 GIO 对 HOME persistence
+         ;; bind mounts 隐藏挂载并允许 mount-local trash。
+         (gvfs-mount-metadata-service %persistent-mount-file-systems)
+         ;; Mihomo 系统透明代理（Phase 1，docs/architecture/mihomo.md）：
+         ;; Shepherd 独占生命周期；runtime config 由 materializer 合成
+         ;; （secret URL 不进 store）；数据目录（providers cache +
+         ;; 选中节点/组状态）经 machine-state bind 持久化。不做 DNS
+         ;; （dns-hijack []）；SmartDNS upstream 经模板内 DIRECT 规则直连。
+         (mihomo-service))
    ;; 无状态根的用户态服务：登录确认（last-good promote 挂在 greetd
    ;; PAM session open——成功图形登录后）与旧 generation 清理
    ;; （docs/architecture/storage.md，Root generation 一节）。
@@ -285,22 +295,22 @@
    (host-name "guix-laptop")
    (timezone %common-timezone)
    (locale %common-locale)
-
+   
    ;; Limine + UKI + UEFI 直启（docs/architecture/boot.md）。
    ;; ESP 部署由 (guixcfg boot uki) 的部署脚本完成。
    (bootloader (bootloader-configuration
                 (bootloader uki-bootloader)
                 (targets (list %esp-mount-point))))
-
+   
    (mapped-devices (cryptroot-mapped-devices))
-
+   
    ;; Kernel platform（M1）：Nonguix standard Linux + linux-firmware +
    ;; Intel microcode。kernel/firmware/microcode 的唯一权威定义在
    ;; (guixcfg system kernel-platform)（docs/architecture/boot.md）。
    ;; NVIDIA 不改变此字段（adapter 只 consume，不另选 kernel）。
    (kernel %kernel)
    (firmware (list %kernel-firmware))
-
+   
    ;; 无状态根（docs/architecture/storage.md）：initrd 启动时按
    ;; @persist-system/root-generations/state.scm 选择/创建 @root-N，
    ;; 挂到 /selected-root 后由 boot-system bind 成系统根。
@@ -315,9 +325,9 @@
                          %mihomo-machine-state-file-systems
                          %noctalia-greeter-machine-state-file-systems
                          %base-file-systems))
-
+   
    (swap-devices %swap-spaces)
-
+   
    (users %laptop-users)
    ;; tpm2-tools-compat 显式加入 system profile：tpm2-enroll 工具
    ;; （guix repl tools/tpm2-enroll.scm）依赖

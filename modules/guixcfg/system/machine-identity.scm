@@ -72,16 +72,16 @@
 machine-id。幂等：重复 activation / reconfigure / 每次 boot 结果
 不变。"
   (with-imported-modules (source-module-closure '((guixcfg utils machine-id))
-                                               #:select? guixcfg-module-select?)
-    #~(begin
-       (use-modules (guixcfg utils machine-id))
-       (let ((canonical #$%machine-id-path))
-         (ensure-machine-id!
-          canonical
-          (lambda ()
-            (generate-machine-id
-             (string-append #$(file-append dbus "/bin/dbus-uuidgen")))))
-         (project-machine-id! canonical #$%etc-machine-id-path)))))
+                                                #:select? guixcfg-module-select?)
+                         #~(begin
+                            (use-modules (guixcfg utils machine-id))
+                            (let ((canonical #$%machine-id-path))
+                              (ensure-machine-id!
+                               canonical
+                               (lambda ()
+                                 (generate-machine-id
+                                  (string-append #$(file-append dbus "/bin/dbus-uuidgen")))))
+                              (project-machine-id! canonical #$%etc-machine-id-path)))))
 
 (define (machine-identity-service)
   "把 machine-id 初始化/恢复挂到系统 activation。必须排在 D-Bus

@@ -78,8 +78,8 @@
   backing 数据，machine-state 不变量 4）。"
   (with-imported-modules (source-module-closure
                           '((gnu build accounts)   ; read-passwd、password-entry-*
-                            (guix build utils)
-                            (srfi srfi-1)))        ; find
+                                                   (guix build utils)
+                                                   (srfi srfi-1)))        ; find
                          #~(begin
                             (use-modules (gnu build accounts)
                                          (guix build utils)
@@ -128,41 +128,41 @@ from /etc/passwd"))
   ;; pam.open_session 之前进入 PAM env，pam_elogind 读后按
   ;; wayland 注册会话。
   (package
-    (name "guixcfg-noctalia-greeter-sessions")
-    (version "0")
-    (source #f)
-    (build-system trivial-build-system)
-    (arguments
-     (list
-      ;; builder 环境：mkdir-p 需要 (guix build utils)——#:modules 入
-      ;; closure，body 内 use-modules 显式导入（gexp 不会自动导入）。
-      #:modules '((guix build utils))
-      #:builder
-      #~(begin
-          (use-modules (guix build utils))  ; mkdir-p
-          (mkdir-p (string-append #$output "/share/wayland-sessions"))
-          (call-with-output-file
-              (string-append #$output
-                             "/share/wayland-sessions/niri.desktop")
-            (lambda (port)
-              (display "[Desktop Entry]\n" port)
-              (display "Name=niri\n" port)
-              (display
-               "Comment=Scrollable-tiling Wayland compositor session \
+   (name "guixcfg-noctalia-greeter-sessions")
+   (version "0")
+   (source #f)
+   (build-system trivial-build-system)
+   (arguments
+    (list
+     ;; builder 环境：mkdir-p 需要 (guix build utils)——#:modules 入
+     ;; closure，body 内 use-modules 显式导入（gexp 不会自动导入）。
+     #:modules '((guix build utils))
+     #:builder
+     #~(begin
+        (use-modules (guix build utils))  ; mkdir-p
+        (mkdir-p (string-append #$output "/share/wayland-sessions"))
+        (call-with-output-file
+         (string-append #$output
+                        "/share/wayland-sessions/niri.desktop")
+         (lambda (port)
+           (display "[Desktop Entry]\n" port)
+           (display "Name=niri\n" port)
+           (display
+            "Comment=Scrollable-tiling Wayland compositor session \
 (Guix Home)\n"
-               port)
-              (format port "Exec=~a -l\n"
-                      #$(file-append bash "/bin/bash"))
-              (display "Type=Application\n" port)
-              (display "DesktopNames=niri\n" port))))))
-    (home-page "https://github.com/OrdChaos/guix-configs")
-    (synopsis "Wayland session entries for the noctalia-greeter login screen")
-    (description
-     "Provides share/wayland-sessions desktop entries so that the
+            port)
+           (format port "Exec=~a -l\n"
+                   #$(file-append bash "/bin/bash"))
+           (display "Type=Application\n" port)
+           (display "DesktopNames=niri\n" port))))))
+   (home-page "https://github.com/OrdChaos/guix-configs")
+   (synopsis "Wayland session entries for the noctalia-greeter login screen")
+   (description
+    "Provides share/wayland-sessions desktop entries so that the
 noctalia-greeter login screen can discover the host's Wayland sessions.
 The niri entry starts the user's login shell, letting Guix Home own the
 desktop session lifecycle.")
-    (license license:expat)))
+   (license license:expat)))
 
 (define (noctalia-greeter-session-profile-service)
   "把 repo-owned 会话发现数据（niri.desktop）发布到 system profile

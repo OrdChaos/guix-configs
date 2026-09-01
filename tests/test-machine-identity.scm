@@ -60,9 +60,9 @@
 (define (write-fake-uuidgen dir name content exit-code)
   (let ((p (string-append dir "/" name)))
     (call-with-output-file p
-                          (lambda (port)
-                            (format port "#!/bin/sh~%echo \"~a\"~%exit ~a~%"
-                                    content exit-code)))
+                           (lambda (port)
+                             (format port "#!/bin/sh~%echo \"~a\"~%exit ~a~%"
+                                     content exit-code)))
     (chmod p #o755)
     p))
 

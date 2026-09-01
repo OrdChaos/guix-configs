@@ -47,4 +47,10 @@
         (make-channel-introduction
          "12540f593092e9a177eb8a974a57bb4892327752"
          (openpgp-fingerprint
-          "3FFA 7335 973E 0A49 47FC  0A8C 38D5 96BE 07D3 34AB")))))
+          "3FFA 7335 973E 0A49 47FC  0A8C 38D5 96BE 07D3 34AB"))))
+      ;; BLUE 编排工具（blueprint.scm 的运行器）。上游未发布 introduction。
+      (channel
+       (name 'bluebox)
+       (url "https://codeberg.org/lapislazuli/bluebox")
+       (branch "main")
+       (commit "71628770c8612c041e06672f34c0c8e6fc67c13c")))

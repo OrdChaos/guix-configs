@@ -27,7 +27,7 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
                        文件 + XDG_DATA_DIRS + persistence rules；
                        零 flatpak CLI）、reconcile.scm（sync/status/
                        update/remove/gc 操作层，唯一联网面，只被
-                       tools/flatpak.scm 消费）
+                       Blue 的 flatpak 命令消费）
   home/                Guix Home 入口（薄 assembly，聚合 apps
                        registry；guix-home 接受 host 的 logical
                        application-configuration-selections）+ 会话
@@ -52,10 +52,10 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
                        fallback 策略 SXML 数据）——Home profile、
                        System profile 的 Flatpak sandbox 字体投影、
                        ONLYOFFICE 兼容层（apps/onlyoffice）共同消费
-tools/                 命令行工具（disk-install、flatpak（sync/status/
-                       update/remove/gc，Flatpak 唯一联网入口）、
-                       secrets、secure-boot、reconfigure、tpm2-enroll、
-                       历史 E2E harness）
+tools/                 独立领域 CLI（刻意留在 Blue 之外：disk-install、
+                       secrets、secure-boot、tpm2-enroll、历史 E2E
+                       harness；reconfigure 事务与 Flatpak 已迁入
+                       Blue/domain module，不再属于这里）
 templates/            新组件模板（application/definition.scm 原生应用、
                        flatpak-application/definition.scm Flatpak 应用）
 secrets 密文          密文与引用者同置：apps/<app>/secrets/、

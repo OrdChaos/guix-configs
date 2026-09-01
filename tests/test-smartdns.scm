@@ -38,8 +38,8 @@
      (if (string? out)
        out
        (begin
-         (build-derivations %store (list out))
-         (derivation->output-path out)))
+        (build-derivations %store (list out))
+        (derivation->output-path out)))
      get-string-all)))
 
 (define %smartdns-text (file-text %smartdns-config-file))

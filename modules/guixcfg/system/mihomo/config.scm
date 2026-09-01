@@ -84,10 +84,10 @@ URL 文件原文，可能带尾换行）→ 完整 runtime config 文本。
               (string-contains url "\n")
               (string-contains url (string #\nul)))
       (throw 'mihomo-config-error
-             "subscription URL contains CR, LF or NUL after trailing-newline strip"))
+        "subscription URL contains CR, LF or NUL after trailing-newline strip"))
     (unless (= (count-substring template %mihomo-subscription-placeholder) 1)
       (throw 'mihomo-config-error
-             "template placeholder must appear exactly once"))
+        "template placeholder must appear exactly once"))
     (string-replace-substring template
                               %mihomo-subscription-placeholder
                               (yaml-double-quote-escape url))))

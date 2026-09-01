@@ -63,13 +63,13 @@
   (let ((item (run-with-store %store (lower-object file-like))))
     (if (derivation? item)
       (begin
-        (build-derivations %store (list item))
-        (derivation->output-path item))
+       (build-derivations %store (list item))
+       (derivation->output-path item))
       item)))
 
 (define (read-bytes path n)
   (call-with-input-file path
-    (lambda (port) (get-bytevector-n port n))))
+                        (lambda (port) (get-bytevector-n port n))))
 
 (define %avatar-out (materialize-file (source-of %avatar-home-path)))
 (define %wallpaper-out (materialize-file (source-of %wallpaper-home-path)))

@@ -14,12 +14,12 @@
   (append (list btrfs-progs       ; 子卷/快照管理（恢复时必需）
                 cryptsetup        ; LUKS 维护（恢复时必需）
                 age               ; secrets 解密（guixcfg-secrets-deploy
-                                  ; 的运行时依赖；account projection 只
-                                  ; 读 persistent hash，不调 age）
+                ; 的运行时依赖；account projection 只
+                ; 读 persistent hash，不调 age）
                 flatpak)          ; Flatpak executable（overview.md 软件
-                                  ; 分类：system 提供 executable，一切
-                                  ; installation 走 --user scope；
-                                  ; docs/architecture/flatpak.md）
+          ; 分类：system 提供 executable，一切
+          ; installation 走 --user scope；
+          ; docs/architecture/flatpak.md）
           ;; 字体投影：pinned Guix flatpak 的 flatpak-fix-fonts-icons.patch
           ;; 只把 /run/current-system/profile/share/fonts 暴露进 sandbox
           ;; （Home profile 字体不可见）。同一份 (guixcfg fonts model) 事实、

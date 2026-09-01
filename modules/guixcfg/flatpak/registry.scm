@@ -36,7 +36,7 @@
 ;;   transport  = SJTU 镜像裸 OSTree URL（镜像内容 = 官方仓库同副本、
 ;;                同一份已签名 summary，GPG 验证不变）
 ;; 换源 = 改 repository-url（transport），然后
-;; tools/flatpak.scm remote-replace <name>（显式）；换 trust
+;; `blue flatpak remote-replace <name>`（显式）；换 trust
 ;; authority = 改 descriptor-url。drift 检查只针对 transport。
 (define %flatpak-remotes
   (list (flatpak-remote

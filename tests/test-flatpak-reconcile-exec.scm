@@ -97,7 +97,7 @@
    (filter (negate string-null?)
            (string-split
             (call-with-input-file %fp-log
-              (lambda (p) (read-string p)))
+                                  (lambda (p) (read-string p)))
             #\newline))))
 
 (define (fp-log-has? fragment)
@@ -192,7 +192,7 @@
                                (not (string-contains line "//")))))))
      (test-assert "sync: never uninstall"
                   (not (fp-log-has? "uninstall"))))
-
+   
    ;; ── 2. sync：全部已装 + unmanaged/runtime → no-op ─────────
    (fp-write-file %fp-remotes-out
                   "flathub\thttps://dl.flathub.org/repo/\n")
@@ -212,7 +212,7 @@
                   (not (fp-log-has? "org.other.Unmanaged")))
      (test-assert "sync: runtime refs never appear in any argv"
                   (not (fp-log-has? "org.freedesktop.Platform"))))
-
+   
    ;; ── 3. remote drift → fail，绝不 auto-modify ──────────────
    (fp-write-file %fp-remotes-out
                   "flathub\thttps://evil.example/repo/\n")
@@ -226,7 +226,7 @@
                 (and (not (fp-log-has? "remote-modify"))
                      (not (fp-log-has? "remote-delete"))
                      (not (fp-log-has? "remote-add"))))
-
+   
    ;; ── 3b. arbitrary remote（无 flathub 硬编码）+ 换源命令 ─────
    ;; 任意 remote 走同一 bootstrap：官方 descriptor URL + 自身
    ;; repository-url canonicalize——reconcile 不得有 per-remote
@@ -272,7 +272,7 @@
                 (fp-log-has? "flatpak remote-add"))
    (test-error "remote-by-name: unknown remote fails fast" #t
                (flatpak-remote-by-name 'nope))
-
+   
    ;; ── 3c. bootstrap partial-failure rollback ────────────────
    ;; remote 原本不存在 → remote-add 成功、remote-modify（URL
    ;; canonicalize）失败 → 只删除【本次调用创建】的 remote，避免
@@ -296,7 +296,7 @@
                                    (string-contains l "remote-delete"))
                                  lines))))
    (setenv "FP_FAKE_FAIL_ON" "")
-
+   
    ;; ── 4. update：显式 unpinned selected targets ─────────────
    (fp-write-file %fp-remotes-out
                   "flathub\thttps://dl.flathub.org/repo/\n")
@@ -316,7 +316,7 @@
    (flatpak-update #:applications %fp-apps #:selection '())
    (test-assert "update: no targets -> no bare update command"
                 (not (fp-log-has? "flatpak update")))
-
+   
    ;; ── 5. update-runtimes：枚举 + 显式 refs ──────────────────
    (fp-write-file %fp-list-runtime-out
                   "org.freedesktop.Platform\t23.08\norg.freedesktop.Platform\t24.08\n")
@@ -330,7 +330,7 @@
    (flatpak-update-runtimes)
    (test-assert "update-runtimes: none installed -> no update command"
                 (not (fp-log-has? "flatpak update")))
-
+   
    ;; ── 6. status：默认离线；--refresh 才 remote-info ─────────
    (fp-write-file %fp-list-app-out "com.tencent.WeChat\n")
    (fp-write-file %fp-info-out "Commit: 0123456789abcdef0123456789abcdef\n")
@@ -351,7 +351,7 @@
                 (string=?
                  "0123456789abcdef0123456789abcdef"
                  (flatpak-installed-commit "com.tencent.WeChat")))
-
+   
    ;; ── 7. remove：只 uninstall ref ───────────────────────────
    (fp-clear-log!)
    (flatpak-remove 'wechat #:applications %fp-apps)
@@ -363,7 +363,7 @@
                      (not (fp-log-has? "repair"))))
    (test-error "remove: unknown logical name fails fast" #t
                (flatpak-remove 'ghost #:applications %fp-apps))
-
+   
    ;; ── 8. gc：只有维护操作 ───────────────────────────────────
    (fp-clear-log!)
    (flatpak-gc)
@@ -374,7 +374,7 @@
    (test-assert "gc: nothing else"
                 (let ((lines (fp-log-lines)))
                   (= 2 (length lines))))
-
+   
    ;; ── 9. network failure：干净失败、无半成品操作 ────────────
    (fp-write-file %fp-remotes-out "")
    (fp-write-file %fp-list-app-out "")
@@ -394,8 +394,8 @@
    (for-each (lambda (var)
                (setenv var ""))
              '("FP_FAKE_LOG" "FP_FAKE_LIST_APP_OUT" "FP_FAKE_LIST_RUNTIME_OUT"
-               "FP_FAKE_INFO_OUT" "FP_FAKE_REMOTES_OUT" "FP_FAKE_REMOTE_INFO_OUT"
-               "FP_FAKE_FAIL_ON"))
+                             "FP_FAKE_INFO_OUT" "FP_FAKE_REMOTES_OUT" "FP_FAKE_REMOTE_INFO_OUT"
+                             "FP_FAKE_FAIL_ON"))
    (false-if-exception (delete-file-recursively %fp-dir))))
 
 (test-end "flatpak-reconcile-exec")

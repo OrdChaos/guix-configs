@@ -41,8 +41,8 @@
      (if (string? out)
        out
        (begin
-         (build-derivations %store (list out))
-         (derivation->output-path out)))
+        (build-derivations %store (list out))
+        (derivation->output-path out)))
      get-string-all)))
 
 ;; 最小模板片段（纯逻辑测试用；占位符恰好一次）。

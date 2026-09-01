@@ -323,5 +323,6 @@ assembly）自动覆盖新增 app：
 guix time-machine -C channels.lock.scm -- repl tests/run-tests.scm
 ```
 
-需要时 system reconfigure（`tools/reconfigure.sh`）；kernel 构建安全
+需要时 `blue reconfigure <host>`（Guile transaction，见
+`operations/reconfigure.md`）；kernel 构建安全
 规则见 AGENT.md §1（任何意外 `linux-*` 本地编译立即中止诊断）。

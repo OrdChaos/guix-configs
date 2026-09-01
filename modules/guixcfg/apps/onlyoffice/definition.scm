@@ -144,12 +144,12 @@
   (computed-file
    "onlyoffice-fonts.conf"
    #~(call-with-output-file #$output
-       (lambda (port)
-         (display #$%onlyoffice-fontconfig-prefix port)
-         (display "<dir>" port)
-         (display #$(file-append font-dejavu "/share/fonts") port)
-         (display "</dir>\n" port)
-         (display #$%onlyoffice-fontconfig-suffix port)))))
+                            (lambda (port)
+                              (display #$%onlyoffice-fontconfig-prefix port)
+                              (display "<dir>" port)
+                              (display #$(file-append font-dejavu "/share/fonts") port)
+                              (display "</dir>\n" port)
+                              (display #$%onlyoffice-fontconfig-suffix port)))))
 
 ;; bwrap argv（顺序是契约，见头部注释 3/4）：
 ;;   --bind / /            宿主视图（recursive，子挂载继承）
@@ -216,13 +216,13 @@
           (mkdir-p apps)
           ;; wrapper：每个 argv 一行（路径均无空格，无需转义）。
           (call-with-output-file wrapper
-            (lambda (port)
-              (format port "#!~a~%" #$(file-append bash-minimal "/bin/bash"))
-              (format port "exec ~a \\\n"
-                      #$(file-append bubblewrap "/bin/bwrap"))
-              (for-each (lambda (arg) (format port "  ~a \\\n" arg))
-                        (list #$@%onlyoffice-bwrap-argv))
-              (format port "  -- ~a \"$@\"~%" base-launcher)))
+                                 (lambda (port)
+                                   (format port "#!~a~%" #$(file-append bash-minimal "/bin/bash"))
+                                   (format port "exec ~a \\\n"
+                                           #$(file-append bubblewrap "/bin/bwrap"))
+                                   (for-each (lambda (arg) (format port "  ~a \\\n" arg))
+                                             (list #$@%onlyoffice-bwrap-argv))
+                                   (format port "  -- ~a \"$@\"~%" base-launcher)))
           (chmod wrapper #o755)
           ;; desktop entry：复制 base 后把 base launcher 路径换成
           ;; wrapper（主 Exec / TryExec / 4 个 new-document action
@@ -233,7 +233,7 @@
                  (string-append apps "/onlyoffice-desktopeditors.desktop")))
             (copy-file base-desktop desktop-out)
             (substitute* desktop-out
-              (((regexp-quote base-launcher)) wrapper)))
+                         (((regexp-quote base-launcher)) wrapper)))
           ;; icons：base 图标树的 per-file symlink（union-build）。
           (union-build icons
                        (list (string-append #$onlyoffice-desktopeditors

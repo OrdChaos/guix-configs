@@ -111,7 +111,7 @@ readiness 命名 capability；provision 前必须验证最终可观察状态
 分类：
 
 - **系统级 Guix 软件**：`modules/guixcfg/system/packages.scm`
-  （configctl、flatpak executable、共享 `%fonts` 投影——Flatpak
+  （flatpak executable、共享 `%fonts` 投影——Flatpak
   sandbox 字体暴露、文件系统/恢复/硬件工具、所有用户需要的基础
   工具）。服务自己依赖的软件尽量由 service 直接引用。
 - **用户级 Guix 软件**：`modules/guixcfg/apps/<name>/definition.scm`

@@ -40,11 +40,13 @@
 (define %virelith-store-dir (channel-store-dir 'virelith))
 (define %saayix-store-dir (channel-store-dir 'saayix))
 (define %rosenthal-store-dir (channel-store-dir 'rosenthal))
+(define %bluebox-store-dir (channel-store-dir 'bluebox))
 
 (add-to-load-path %nonguix-store-dir)
 (add-to-load-path %virelith-store-dir)
 (add-to-load-path %saayix-store-dir)
 (add-to-load-path %rosenthal-store-dir)
+(add-to-load-path %bluebox-store-dir)
 
 ;; 必须先设置 runner，再加载测试文件：
 ;; SRFI-64 的计数器都记录在“当前 runner”上。
@@ -107,6 +109,12 @@
                "tests/test-credential-source.scm"
                "tests/test-kernel-platform.scm"
                "tests/test-nvidia.scm"
+               "tests/test-prime-run.scm"
+               "tests/test-channels.scm"
+               "tests/test-deploy.scm"
+               "tests/test-reconfigure.scm"
+               "tests/test-blue-app.scm"
+               "tests/test-flatpak-actions.scm"
                "tests/test-substitutes.scm"
                "tests/test-desktop.scm"
                "tests/test-mihomo.scm"

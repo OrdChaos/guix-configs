@@ -6,7 +6,7 @@
 ;;;   activate 的 symlink 直接 EEXIST 抛错，activation 永久失败；
 ;;;   pinned revision 没有任何 stale pivot 处理（A/B 结论：保留）。
 ;;; removal condition：上游 symlink-manager 增加 stale pivot 清理后，
-;;;   本模块可删（连同 tools/home-pivot.scm 与相关测试）。
+;;;   本模块可删（连同相关测试）。
 ;;;
 ;;; Guix Home symlink-manager 的 stale pivot 保守判定与清理。
 ;;;
@@ -24,7 +24,8 @@
 ;;;
 ;;; cold boot 情形：ephemeral root 下 $HOME 每次启动从零创建，上一 boot
 ;;; 的 pivot 残留天然消失（H6），无需额外服务——本模块服务于
-;;; live reconfigure / hot activation 路径（tools/reconfigure.sh）。
+;;; live reconfigure / hot activation 路径（(guixcfg system reconfigure)
+;;; 事务直接 Scheme 调用）。
 
 (define-module (guixcfg home pivot)
                #:use-module (ice-9 regex)

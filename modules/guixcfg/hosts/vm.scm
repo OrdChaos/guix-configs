@@ -37,7 +37,7 @@
                #:use-module (guixcfg system machine-identity) ; /etc/machine-id 持久化（先于 D-Bus activation）
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind + 系统集成
                #:use-module (guixcfg flatpak service) ; flatpak-persistence-rules（installation + 每 Catalog app）
-
+               
                #:use-module (gnu services guix)        ; guix-home-service-type
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:use-module (srfi srfi-1)              ; remove
@@ -115,30 +115,30 @@
     ;; metadata），/etc/resolv.conf 归 (guixcfg system dns ownership) 静态
     ;; 声明（nameserver 127.0.0.1）。因此不再需要
     ;; resolvconf-bootstrap（签名接管问题随静态 ownership 消失）。
-    (service network-manager-service-type
-             ;; VM 无 WiFi：保留默认 '(wireless-daemon) requirement
-             ;; 会因缺服务 fail-fast（pinned network-manager-configuration
-             ;; 默认 '(wireless-daemon)）——显式置空；基础 requirement
-             ;; user-processes/dbus-system/loopback 由 pinned
-             ;; network-manager-shepherd-service 自带，不受本字段影响。
-             (network-manager-configuration
-              (shepherd-requirement '())))
-    ;; 系统 DNS ownership（Phase 2，docs/architecture/dns.md）：
-    ;; /etc/resolv.conf 静态 127.0.0.1 + resolvconf 重定向 /run。
-    (system-dns-etc-service)
-    ;; SmartDNS：唯一 system resolver（loopback 监听 + 固定 upstream；
-    ;; DHCP DNS metadata v1 只产出不消费）。
-    (smartdns-service)
-    ;; GVfs 桌面 metadata（x-gvfs-hide/x-gvfs-trash → utab）：
-    ;; 在 file-systems 挂载后注入，让 GIO 对 HOME persistence
-    ;; bind mounts 隐藏挂载并允许 mount-local trash。
-    (gvfs-mount-metadata-service %persistent-mount-file-systems)
-    ;; Mihomo 系统透明代理（Phase 1，docs/architecture/mihomo.md）：
-    ;; Shepherd 独占生命周期；runtime config 由 materializer 合成
-    ;; （secret URL 不进 store）；数据目录（providers cache +
-    ;; 选中节点/组状态）经 machine-state bind 持久化。不做 DNS（dns-hijack []）；SmartDNS upstream 经
-    ;; 模板内 DIRECT 规则直连（不绕经节点）。
-    (mihomo-service))
+         (service network-manager-service-type
+                  ;; VM 无 WiFi：保留默认 '(wireless-daemon) requirement
+                  ;; 会因缺服务 fail-fast（pinned network-manager-configuration
+                  ;; 默认 '(wireless-daemon)）——显式置空；基础 requirement
+                  ;; user-processes/dbus-system/loopback 由 pinned
+                  ;; network-manager-shepherd-service 自带，不受本字段影响。
+                  (network-manager-configuration
+                   (shepherd-requirement '())))
+         ;; 系统 DNS ownership（Phase 2，docs/architecture/dns.md）：
+         ;; /etc/resolv.conf 静态 127.0.0.1 + resolvconf 重定向 /run。
+         (system-dns-etc-service)
+         ;; SmartDNS：唯一 system resolver（loopback 监听 + 固定 upstream；
+         ;; DHCP DNS metadata v1 只产出不消费）。
+         (smartdns-service)
+         ;; GVfs 桌面 metadata（x-gvfs-hide/x-gvfs-trash → utab）：
+         ;; 在 file-systems 挂载后注入，让 GIO 对 HOME persistence
+         ;; bind mounts 隐藏挂载并允许 mount-local trash。
+         (gvfs-mount-metadata-service %persistent-mount-file-systems)
+         ;; Mihomo 系统透明代理（Phase 1，docs/architecture/mihomo.md）：
+         ;; Shepherd 独占生命周期；runtime config 由 materializer 合成
+         ;; （secret URL 不进 store）；数据目录（providers cache +
+         ;; 选中节点/组状态）经 machine-state bind 持久化。不做 DNS（dns-hijack []）；SmartDNS upstream 经
+         ;; 模板内 DIRECT 规则直连（不绕经节点）。
+         (mihomo-service))
    ;; 无状态根的用户态服务：登录确认（last-good promote 挂在 greetd
    ;; PAM session open——成功图形登录后）与旧 generation 清理
    ;; （docs/architecture/storage.md，Root generation 一节）。

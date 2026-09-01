@@ -21,6 +21,13 @@
 ;;;       nvidia-service-type 实例（packages/firmware 无 nvidia 已由
 ;;;       test-kernel-platform K8 覆盖）
 ;;;   N7  laptop %vm-os 实例化（services 字段为合法服务列表）
+;;;   N8  driver authority：%nvidia-driver = pinned rolling
+;;;       nvda-new-feature selector（不固定 major）
+;;;   N9  transformation authority：laptop service driver 版本与
+;;;       %nvidia-driver 一致
+;;;   N10 userspace/open module/firmware 版本一致 + module 为
+;;;       new-feature open 变体（防半迁移；版本从 package metadata
+;;;       动态取得）
 ;;;
 ;;; 由 tests/run-tests.scm 加载运行（GUIX_CONFIG_FACTS 已设、nonguix
 ;;; channel 源已加入 load path）；单独运行需先设 GUIX_CONFIG_FACTS
@@ -43,8 +50,10 @@
              (gnu system file-systems)    ; %base-file-systems
              (gnu services)               ; service-kind、service-value
              (nongnu services nvidia)     ; nvidia-service-type、nvidia-configuration-*
-             (nongnu packages nvidia)     ; nvidia-module-open-580、nvidia-firmware-580、nvda-580
+             (nongnu packages nvidia)     ; nvda-new-feature、nvidia-module-open-new-feature、
+             ; nvidia-firmware-new-feature
              (srfi srfi-1)                ; find、member、list-index
+             (srfi srfi-13)               ; string-prefix?
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -52,9 +61,9 @@
 ;; probe app：依赖 mesa 的应用，验证 replace-mesa grafting（N5）。
 (define nvidia-probe-app
   (package
-    (inherit hello)
-    (name "nvidia-probe-app")
-    (inputs (list mesa))))
+   (inherit hello)
+   (name "nvidia-probe-app")
+   (inputs (list mesa))))
 
 ;; probe：最小 OS，用于 adapter 语义测试（不依赖 host 组装）。
 ;; pinned Guix 的 operating-system 要求 bootloader/file-systems 字段。
@@ -141,15 +150,19 @@
              ;; replace-mesa 的 with-transformation 会递归重建
              ;; nvidia-configuration 内的 package 字段（package-
              ;; input-rewriting 的拷贝），因此不能 eq? 原绑定——
-             ;; 按 package name 断言：open 变体名为 "nvidia-module-open"
-             ;; （proprietary 为 "nvidia-module"）。
+             ;; 按 package name 断言：rolling %nvidia-driver
+             ;; （nvda-new-feature）经 transformation 推导的 open
+             ;; 变体名从 pinned binding 动态取得（nonguix 对
+             ;; new-feature/beta 分支使用带分支后缀的模块名，
+             ;; 与 production 分支的 "nvidia-module-open" 不同）。
              (and laptop-nvidia-service
                   (string=? (package-name
                              (nvidia-configuration-module
                               (service-value laptop-nvidia-service)))
-                            "nvidia-module-open")))
+                            (package-name
+                             nvidia-module-open-new-feature))))
 
-(test-assert "N4: driver is nvda and firmware is nvidia-firmware"
+(test-assert "N4: driver is nvda and firmware is the branch firmware"
              (and laptop-nvidia-service
                   (string=? (package-name
                              (nvidia-configuration-driver
@@ -158,7 +171,8 @@
                   (string=? (package-name
                              (nvidia-configuration-firmware
                               (service-value laptop-nvidia-service)))
-                            "nvidia-firmware")))
+                            (package-name
+                             nvidia-firmware-new-feature))))
 
 (test-assert "N4: dynamic boost enabled (powerd #t) and no Xorg settings"
              (and laptop-nvidia-service
@@ -172,7 +186,8 @@
 (test-assert "N5: mesa dependency of a package is grafted to nvda"
              ;; package-input-grafting 的 graft-package 保留原包名、
              ;; 通过 replacement 指向 nvda（mesa/nvda 名字长度相同，
-             ;; replacement 直接继承 nvda-580，package-name = "nvda"）。
+             ;; replacement 直接继承 rolling %nvidia-driver（nvda-new-feature），
+             ;; package-name = "nvda"）。
              (let* ((t (nvidia-system-transformation probe-os))
                     (app (find (lambda (p)
                                  (string=? (package-name p)
@@ -202,5 +217,60 @@
 ;; ── N7：laptop %vm-os 实例化 ───────────────────────────────────
 (test-assert "N7: laptop %vm-os instantiates (valid services field)"
              (list? (operating-system-services laptop:%laptop-os)))
+
+;; ── N8-N10：driver policy（rolling new-feature）────────────
+;; 不变式（docs/architecture/graphics.md（NVIDIA driver policy））：
+;;   N8  %nvidia-driver 是唯一 authority，绑定 pinned rolling
+;;       selector（nvda-new-feature），不固定任何 NVIDIA major；
+;;   N9  laptop 的 nvidia-service-type 配置由 transformation 从
+;;       %nvidia-driver 推导（driver 版本与 authority 一致）；
+;;   N10 userspace / open kernel module / firmware 三者版本一致，
+;;       且 module 是 new-feature branch 的 open 变体——即
+;;       transformation 的配套 mapping 生效，不存在
+;;       “userspace=new-feature + module=580” 半迁移状态。
+;;       版本号只从 package metadata 动态取得，不做字符串断言。
+;;       版本一致性断言同时覆盖未来 lock 升级：任何 branch 内漂移
+;;       （如 610 → 615）在三者同步的情况下保持通过。
+(test-assert "N8: %nvidia-driver is the rolling new-feature selector"
+             (eq? %nvidia-driver nvda-new-feature))
+
+(test-assert "N9: laptop service driver derives from %nvidia-driver (version match)"
+             (and laptop-nvidia-service
+                  (string=? (package-version
+                             (nvidia-configuration-driver
+                              (service-value laptop-nvidia-service)))
+                            (package-version %nvidia-driver))))
+
+(test-assert "N10: userspace / open module / firmware are version-consistent"
+             ;; nvda 的 version 字段被 nonguix 有意截断为
+             ;; mesa-for-nvda 版本长度（"610.57"），因此 userspace 的
+             ;; 完整版本以 nvda 的源 driver（nvidia-driver-new-feature）
+             ;; 为准；module 与 firmware 的 version 直接取自同一
+             ;; pinned nvidia-source-new-feature（610.57.04）——
+             ;; 三者同源即同版本，transformation 的配套 mapping 生效。
+             (and laptop-nvidia-service
+                  (let ((driver (nvidia-configuration-driver
+                                 (service-value laptop-nvidia-service)))
+                        (module (nvidia-configuration-module
+                                 (service-value laptop-nvidia-service)))
+                        (firmware (nvidia-configuration-firmware
+                                   (service-value laptop-nvidia-service))))
+                    (and (string=? (package-name module)
+                                   (package-name
+                                    nvidia-module-open-new-feature))
+                         (string=? (package-version nvidia-driver-new-feature)
+                                   (package-version module))
+                         (string=? (package-version nvidia-driver-new-feature)
+                                   (package-version firmware))
+                         (string-prefix? (package-version driver)
+                                         (package-version
+                                          nvidia-driver-new-feature))))))
+
+(test-assert "N10: open module is the new-feature branch realization (no half-migration)"
+             (and laptop-nvidia-service
+                  (string=? (package-version
+                             (nvidia-configuration-module
+                              (service-value laptop-nvidia-service)))
+                            (package-version nvidia-module-open-new-feature))))
 
 (test-end "nvidia")

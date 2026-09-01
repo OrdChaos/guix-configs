@@ -754,8 +754,8 @@ host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析�
                               (define (kind-of p)
                                 (let ((t (stat:type (stat p))))
                                   (cond ((eq? 'regular t) 'regular)
-                                        ((eq? 'directory t) 'directory)
-                                        (else 'other))))
+                                    ((eq? 'directory t) 'directory)
+                                    (else 'other))))
                               ;; 类型断言：file backing/consumer 都是
                               ;; regular；consumer parent（activation 职责）
                               ;; 与 bind-directory backing（mkdir-p 分支）
@@ -781,7 +781,7 @@ host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析�
                               ;; 内容落在 canonical backing。
                               (format #t "BACKING ~a~%"
                                       (call-with-input-file backing
-                                        read-string)))))))
+                                                            read-string)))))))
 
 (let* ((root (make-fake-root "" #f))
        (script (string-append
