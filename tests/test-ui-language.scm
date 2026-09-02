@@ -191,6 +191,25 @@ usage 帮助文本。"
       (delete-file tmp)
       (values out code))))
 
+(define (run-captured-pinned . args)
+  "以 pinned time-machine repl 运行（工具 import (virelith packages
+  secure-boot)——time-machine repl 的 load path 自带全部频道模块；
+  裸 guix repl 只有宿主 guix current，加载失败会以带非 ASCII 注释
+  的 backtrace 误报）。"
+  (let* ((tmp (string-append "/tmp/guixcfg-ui-scan-"
+                             (number->string (getpid))))
+         (cmd (string-append
+               "guix time-machine -C channels.lock.scm -- "
+               (string-join
+                (map (lambda (a) (string-append "'" a "'"))
+                     (cons "repl" args))
+                " ")
+               " > " tmp " 2>&1"))
+         (code (status:exit-val (system cmd))))
+    (let ((out (call-with-input-file tmp get-string-all)))
+      (delete-file tmp)
+      (values out code))))
+
 (define (violations->text viol)
   "违规列表 → 可读文本（无违规时返回空串）。"
   (string-join
@@ -257,7 +276,7 @@ usage 帮助文本。"
 
 (test-assert "secure-boot-enroll error path is printable ASCII"
              (call-with-values
-              (lambda () (run-captured "repl" "tools/secure-boot-enroll.scm"))
+              (lambda () (run-captured-pinned "tools/secure-boot-enroll.scm"))
               (lambda (out code)
                 (format #t "exit=~a~%" code)
                 (and (not (zero? code))
