@@ -53,6 +53,7 @@
                #:use-module (guixcfg users facts)        ; %primary-user（账户事实唯一来源）
                #:use-module (guix records)
                #:use-module (ice-9 match)
+               #:use-module (ice-9 popen)               ; open-pipe* / close-pipe（cryptsetup isLuks 退出码探针）
                #:use-module (ice-9 rdelim)
                #:use-module (ice-9 format)
                #:use-module (srfi srfi-1)
@@ -322,11 +323,13 @@
        ,(or (file-exists? esp-partlabel)
             (file-exists? sys-partlabel)))
       (luks-volume .
+       ;; cryptsetup isLuks 用退出码表态（0 = 是 LUKS），stdout 无输出
+       ;; ——绝不能用输出文本判断（resume 时误判 incompatible，实测）。
        ,(and (file-exists? sys-partlabel)
-             (let ((v (false-if-exception
-                       (first-command-line "cryptsetup" "isLuks"
-                                           sys-partlabel))))
-               (equal? v "true"))))
+             (let ((p (false-if-exception
+                       (open-pipe* OPEN_READ "cryptsetup" "isLuks"
+                                   sys-partlabel))))
+               (and p (zero? (status:exit-val (close-pipe p)))))))
       (luks-open . ,(file-exists? mapper))
       (btrfs-rootfs .
        ,(and (file-exists? mapper)
@@ -448,8 +451,12 @@
                   (cons 'fail
                         (string-append device " is a partition; the whole block device is required")))
                  ((device-facts-mounted? facts)
-                  (cons 'fail
-                        (string-append device " is currently mounted; refusing to touch it")))
+                  ;; resume：目标分区已存在且挂着（mounts 阶段已
+                  ;; 执行）是预期状态；空盘却挂载着才是异常。
+                  (if (file-exists? (by-partlabel-path "system"))
+                    '(ok . "already mounted (resume state)")
+                    (cons 'fail
+                          (string-append device " is currently mounted; refusing to touch it"))))
                  ((zero? (device-facts-size facts))
                   (cons 'fail "device reports zero size"))
                  (else
@@ -480,8 +487,13 @@
      (cons "LUKS mapper free"
            (lambda ()
              (if (file-exists? %luks-mapper-path)
-               (cons 'fail
-                     "cryptroot mapper already in use (an unfinished or active installation may exist)")
+               ;; mapper 已打开：resume 状态（目标分区已存在）是
+               ;; 预期且合法的；目标分区不存在却开着 mapper 才是
+               ;; 活动安装残留（fail closed）。
+               (if (file-exists? (by-partlabel-path "system"))
+                 '(ok . "already open (resume state)")
+                 (cons 'fail
+                       "cryptroot mapper already in use but no target partitions found (an unfinished or active installation may exist)"))
                '(ok . #f)))))))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -737,7 +749,7 @@
                             ;; 1. disk（fresh：完整磁盘阶段）
                             (run-stage 'disk
                                        (lambda ()
-                                         (set! mutated? #t)
+(set! mutated? #t)
                                          (let ((passphrase
                                                 (resolve-passphrase-reader!
                                                  root)))
@@ -814,7 +826,7 @@
                                          (run-checked-exec!
                                           exec 'commit-root
                                           (commit-root-tool-argv
-                                           root target))))
+                                           root target)))))
                             ;; 9. validate（总是执行）
                             (format #t "~%== stage validate~%")
                             (let ((problems
@@ -834,7 +846,7 @@
                                  (format (current-error-port)
                                          "~%Installation is incomplete; fix the issues above or re-run 'blue install ~a ~a' (resume is automatic where safe).~%"
                                           host device)
-                                  2)))
+                                  2))))
                         (lambda (key . args)
                           (format (current-error-port)
                                   "~%Installation stopped.~%error: ~s ~s~%"
@@ -842,7 +854,7 @@
                           (format (current-error-port)
                                   "~%Recovery: re-run 'blue install ~a ~a' — completed stages are detected and skipped; the disk is never re-formatted automatically.~%"
                                    host device)
-                           (if mutated? 2 1)))))))))))))))
+                           (if mutated? 2 1)))))))))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 安装后验证（§37；只读）

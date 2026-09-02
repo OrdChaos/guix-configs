@@ -213,17 +213,27 @@ host-source-relative-path 的权威相对路径。"
 (define (sb-keygen-tool-argv root keydir)
   ;; tools/secure-boot-keygen.scm 的官方调用形态（工具头部注释）：
   ;; pinned shell + keygen manifest 提供 ukify，guix repl 执行工具。
+  ;; -L 必需：工具自身不带 load path（2026-08 实测 no code for
+  ;; module (guixcfg storage model)；installation.md 阶段 4）。
   (guix-time-machine-argv root %channels-lock-file
                           `("shell" "-m" "manifests/secure-boot-keygen.scm"
                             "--" "guix" "repl"
+                            "-L" ,(string-append root "/" %modules-dir)
                             "tools/secure-boot-keygen.scm" ,keydir)))
 
 (define (sb-keystore-tool-argv root keydir)
   ;; tools/secure-boot-enroll.scm 的官方调用形态（工具头部注释）：
   ;; 构建 sbkeysync keystore（不写固件；固件写入归 blue enroll）。
+  ;; 外层 shell 提供 efitools/sbsigntools/openssl 二进制；内层用
+  ;; pinned repl（非 guix repl——工具 import (virelith packages
+  ;; secure-boot)，宿主 guix current 无频道模块时会
+  ;; no code for module，VM 实测）。
   (guix-time-machine-argv root %channels-lock-file
                           `("shell" "-m" "manifests/secure-boot-enroll.scm"
-                            "--" "guix" "repl"
+                            "--" "guix" "time-machine" "-C"
+                            ,(string-append root "/" %channels-lock-file)
+                            "--" "repl"
+                            "-L" ,(string-append root "/" %modules-dir)
                             "tools/secure-boot-enroll.scm" ,keydir)))
 
 (define (commit-root-tool-argv root target)

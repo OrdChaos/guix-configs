@@ -3,6 +3,7 @@
 
 (define-module (guixcfg storage subvolume)
                #:use-module (guixcfg storage model)
+               #:use-module (guixcfg storage device) ; first-command-line（mount-top 幂等探测）
                #:use-module (guix build utils)
                #:use-module (ice-9 format)
                #:export (%btrfs-top-mount
@@ -26,8 +27,14 @@
       %luks-mapper-path))
 
 (define (execute-mount-top)
+  "幂等：已挂载（resume 场景）时 no-op。探测失败（findmnt 缺失）
+  时按未挂载处理（保持原行为）。"
   (mkdir-p %btrfs-top-mount)
-  (invoke "mount" "-o" "subvolid=5" (mapper-path) %btrfs-top-mount))
+  (let ((already (false-if-exception
+                  (first-command-line "findmnt" "-no" "TARGET"
+                                      %btrfs-top-mount))))
+    (unless (and already (not (string-null? already)))
+      (invoke "mount" "-o" "subvolid=5" (mapper-path) %btrfs-top-mount))))
 
 (define (execute-make-subvolume name)
   (invoke "btrfs" "subvolume" "create"
