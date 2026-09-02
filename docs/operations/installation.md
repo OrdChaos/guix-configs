@@ -85,9 +85,11 @@ blue enroll laptop
                    secrets / commit state 逐项复核
 ```
 
-LUKS passphrase 来源：identity（runtime 或 installed）已就位时走
-`luks-recovery.age`（age 解密，不提示密码）；否则交互两次确认
-（credential-source 的同一 resolver，绝不静默回退）。
+identity unlock（runbook 阶段 1 的语义已并入 `blue install`）：runtime
+与 installed identity 都缺失时，事务前置会交互提示 master password
+解锁 stable S（失败 exit 1、未 mutation）。LUKS passphrase 来源：
+identity 已就位时走 `luks-recovery.age`（age 解密，不提示密码）；
+否则交互两次确认（credential-source 的同一 resolver，绝不静默回退）。
 
 `blue enroll` 的真实阶段（`blue -n enroll` 打印同一计划）：
 

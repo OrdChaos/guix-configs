@@ -164,27 +164,39 @@ primitive-exit 不做 Guile backtrace——非零退出是预期内失败。"
             code command)
     (primitive-exit code)))
 
-(define* (%run command #:key working-directory)
+(define* (%run command #:key working-directory input)
          "唯一允许启动子进程的通用出口。blue --dry-run 时只打印不执行；
 正常模式执行，非零退出即失败。WORKING-DIRECTORY 非 #f 时先 chdir
-（guix repl 的测试入口需要仓库根 CWD 解析相对路径）。"
+（guix repl 的测试入口需要仓库根 CWD 解析相对路径）。INPUT 非 #f 时
+作为子进程 stdin（blue 的 popen 默认 the-null-port——交互式命令
+（install 的破坏性确认 / master password 提示）必须显式转发
+(current-input-port) 才能读到用户输入）。"
          (if (dry-build?)
            (begin
             (format #t "  [dry-run] ~{ ~a~}~%" command)
             #t)
-           (let ((status (popen (car command) (cdr command)
-                                #:working-directory working-directory)))
+           (let ((status (if input
+                           (popen (car command) (cdr command)
+                                  #:input input
+                                  #:working-directory working-directory)
+                           (popen (car command) (cdr command)
+                                  #:working-directory working-directory))))
              (unless (zero? status)
                (%subprocess-fail! status command))
              #t)))
 
-(define (%exec command)
+(define* (%exec command #:key input)
   "总是真实执行（无 dry-run 短路）。只允许用于 Blue dry-run 映射到
 下游 Guix dry-run 的两个特殊路径：build-os -n / reconfigure -n——
 执行的命令自带 guix --dry-run，无副作用（pinned Guix 的 build-handler
-只累积请求不执行）。其余一切子进程必须走 %run。"
-  (let ((status (popen (car command) (cdr command)
-                       #:working-directory (%repo-root))))
+只累积请求不执行）。install/enroll 的 pinned CLI 子进程（含交互确认）
+也走这里；INPUT 语义同 %run。其余一切子进程必须走 %run。"
+  (let ((status (if input
+                  (popen (car command) (cdr command)
+                         #:input input
+                         #:working-directory (%repo-root))
+                  (popen (car command) (cdr command)
+                         #:working-directory (%repo-root)))))
     (unless (zero? status)
       (%subprocess-fail! status command))
     #t))
@@ -836,7 +848,8 @@ mutation, no sudo, no confirmation."))
                        (%run (install-privileged-argv
                               (car (program-arguments))
                               (string-append root "/blueprint.scm")
-                              host device)))))))
+                              host device)
+                             #:input (current-input-port)))))))
 
 ;; 内部 privileged mode（Blue self-reexec 的 root phase；与
 ;; .reconfigure-root 同一模型）。事务（含破坏性确认 UI）在 pinned
@@ -857,7 +870,8 @@ its exact status (0 success / 1 preflight / 2 partial mutation /
                 (match arguments
                        ((host device)
                         (%exec (install-cli-argv (%repo-root)
-                                                "run" host device)))
+                                                "run" host device)
+                               #:input (current-input-port)))
                        (_ (%usage-error
                            "usage (internal): HOST DEVICE"))))
 
@@ -890,7 +904,8 @@ mutation, no sudo, no confirmation."))
                      (%run (enroll-privileged-argv
                             (car (program-arguments))
                             (string-append root "/blueprint.scm")
-                            host))))))
+                            host)
+                           #:input (current-input-port))))))
 
 ;; 内部 privileged mode（Blue self-reexec 的 root phase；与
 ;; .reconfigure-root 同一模型）。事务（含固件写入确认 UI）在 pinned
@@ -910,7 +925,8 @@ validation) and exits with its exact status (0 success / 1 preflight
                    "privileged enroll mode requires root (effective UID 0)"))
                 (match arguments
                        ((host)
-                        (%exec (enroll-cli-argv (%repo-root) "run" host)))
+                        (%exec (enroll-cli-argv (%repo-root) "run" host)
+                               #:input (current-input-port)))
                        (_ (%usage-error
                            "usage (internal): HOST"))))
 

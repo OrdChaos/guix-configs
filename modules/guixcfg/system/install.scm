@@ -42,10 +42,10 @@
                #:use-module (guixcfg storage validate)   ; validate-policy / validate-target / check-failure-message
                #:use-module (guixcfg storage device)     ; probe-device / first-command-line
                #:use-module (guixcfg storage plan)       ; storage-plan / display-plan
-               #:use-module (guixcfg storage install)    ; %required-commands、preflight-environment!、execute-plan、execute-mounts!、write-machine-facts、warn-if-store-in-ram
+               #:use-module (guixcfg storage install)    ; %required-commands、preflight-environment!、execute-plan、execute-mounts!、write-machine-facts、warn-if-store-in-ram、read-secret-line
                #:use-module (guixcfg storage filesystem) ; execute-luks-open
                #:use-module (guixcfg storage commit)     ; commit-state
-               #:use-module (guixcfg security age)       ; runtime-identity-present?、ensure-installed-identity!、%installed-identity-path、%account-credentials-dir、provision-password-hash!
+               #:use-module (guixcfg security age)       ; runtime-identity-present?、age-unlock!、ensure-installed-identity!、%installed-identity-path、%account-credentials-dir、provision-password-hash!
                #:use-module (guixcfg security credential-source) ; resolve-luks-passphrase-source
                #:use-module (guixcfg system machine-facts) ; load-machine-facts（facts 内容校验）
                #:use-module (guixcfg system deploy)      ; system-init-argv / sb-keygen-tool-argv / sb-keystore-tool-argv / commit-root-tool-argv / channels-structure-ok?
@@ -268,8 +268,12 @@
     ((committed) '(complete . "root template + @root-0 + state are committed"))
     ((fresh) '(fresh . "root generation not committed yet"))
     (else
-     (cons 'incompatible
-           "commit state unknown: neither @root-installing/@root-0 nor state could be determined; inspect the Btrfs top level manually"))))
+     ;; 探针拿不到状态（如计划期目标盘尚未挂载）时，按挂载状态区分：
+     ;; 未挂载 = 尚未到提交阶段（fresh）；已挂载却读不到 = 异常（blocked）。
+     (if (assq-ref p 'targets-mounted)
+       (cons 'incompatible
+             "commit state unknown: neither @root-installing/@root-0 nor state could be determined; inspect the Btrfs top level manually")
+       '(fresh . "not applicable yet (target not mounted); will be committed after system init")))))
 
 (define (classify-install-probes probes)
   "把 PROBES（collect-install-probes 的 alist）分类为 <install-stage>
@@ -657,7 +661,35 @@
                         (disk-status (install-stage-status disk)))
                    (for-each (lambda (line) (format #t "~a~%" line))
                              (install-plan-lines state))
-                   (cond
+                   ;; ── 身份解锁（runbook 阶段 1 语义并入 blue
+                   ;;    install；spec §15）：无 runtime/installed
+                   ;;    identity 时交互解锁 master password——之后
+                   ;;    disk 阶段的 LUKS passphrase 可走
+                   ;;    luks-recovery.age（age 解密，无二次提示），
+                   ;;    secrets 阶段也才能安装 identity。失败 = 1
+                   ;;    （未 mutation）。已解锁/已安装则跳过。
+                   (let ((unlock-ok?
+                          (if (or (runtime-identity-present?)
+                                  (file-exists?
+                                   (install-identity-path target)))
+                            #t
+                            (begin
+                             (format #t "~%== identity unlock~%")
+                             (catch #t
+                               (lambda ()
+                                 (age-unlock!
+                                  root
+                                  (read-secret-line
+                                   "Master password: "))
+                                 #t)
+                               (lambda (key . args)
+                                 (format (current-error-port)
+                                         "~%identity unlock failed; nothing was modified.~%error: ~s ~s~%"
+                                         key args)
+                                 #f))))))
+                     (if (not unlock-ok?)
+                       1
+                       (cond
                      ((eq? disk-status 'incompatible)
                       (format (current-error-port)
                               "~%INSTALL BLOCKED: disk state is incompatible.~%  ~a~%"
@@ -810,7 +842,7 @@
                           (format (current-error-port)
                                   "~%Recovery: re-run 'blue install ~a ~a' — completed stages are detected and skipped; the disk is never re-formatted automatically.~%"
                                    host device)
-                           (if mutated? 2 1)))))))))))))
+                           (if mutated? 2 1)))))))))))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 安装后验证（§37；只读）

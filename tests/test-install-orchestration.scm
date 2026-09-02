@@ -152,9 +152,15 @@
             'complete
             (stage-of %complete-probes 'commit-root))
 
-(test-equal "commit unknown is incompatible (fail closed)"
-            'incompatible
+(test-equal "commit unknown before mounting is fresh (not yet applicable)"
+            'fresh
             (stage-of %empty-disk-probes 'commit-root))
+
+(test-equal "commit unknown with targets mounted is incompatible (fail closed)"
+            'incompatible
+            (stage-of (probes-with %complete-probes
+                                  '(commit . unknown))
+                      'commit-root))
 
 ;; 全部 9 个阶段都在（顺序 = %install-stage-ids）
 (test-equal "classification yields all stages in order"
