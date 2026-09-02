@@ -2,7 +2,7 @@
        (name 'guix)
        (url "https://codeberg.org/guix/guix.git")
        (branch "master")
-       (commit "bc668b7944a1f3e5bfa7940b738dfc66b8ab19a5")
+       (commit "5c217ab1361758851ac89bc523015fcd965c0a83")
        (introduction
         (make-channel-introduction
          "9edb3f66fd807b096b48283debdcddccfea34bad"
@@ -32,7 +32,7 @@
        (name 'virelith)
        (url "https://github.com/ordchaos/virelith.git")
        (branch "master")
-       (commit "266b8a8ee81a24c847276d50e50984fe887586bd")
+       (commit "e5bd08248095930675a2db15a5f8d2e0aa69c64e")
        (introduction
         (make-channel-introduction
          "cae11b77a64f281cc9ab45e20567e59efc37e96b"
@@ -48,7 +48,6 @@
          "12540f593092e9a177eb8a974a57bb4892327752"
          (openpgp-fingerprint
           "3FFA 7335 973E 0A49 47FC  0A8C 38D5 96BE 07D3 34AB"))))
-      ;; BLUE 编排工具（blueprint.scm 的运行器）。上游未发布 introduction。
       (channel
        (name 'bluebox)
        (url "https://codeberg.org/lapislazuli/bluebox")

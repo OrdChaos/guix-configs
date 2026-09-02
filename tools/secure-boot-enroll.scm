@@ -15,7 +15,8 @@
 ;;;
 ;;; keydir 默认为 /persist/system/keys/secure-boot（LiveCD 安装时指向
 ;;; /mnt/persist/...）。微软证书来自 (guixcfg security certificates)
-;;; （origin + 固定 sha256，经 store 取文件）；固件默认值
+;;; （source 为 virelith 频道 microsoft-secure-boot-certificates 包内
+;;; 文件，固定 sha256 在包内，经 store 取文件）；固件默认值
 ;;; （dbDefault/KEKDefault）经 efi-readvar 现读，读不到就跳过。
 
 ;; guix repl 不提供 -L，这里显式把 modules/ 加入 load path（从仓库根目录运行）。
@@ -23,9 +24,10 @@
 
 (use-modules (guixcfg storage model)     ; persist-mount-point（/persist 语义路径 authority）
              (guixcfg security certificates)
+             (guix packages)          ; package-derivation（构建证书包）
              (guix store)
              (guix monads)
-             (guix gexp)
+             (guix gexp)              ; lower-object、file-append?
              (guix derivations)     ; derivation->output-path
              (ice-9 format)
              (ice-9 match)
@@ -85,16 +87,27 @@
     (lambda _ #f)))
 
 (define (cert-store-paths certs)
-  "把 vendor 证书的 origin 构建为 store 输出并返回路径。
-fixed-output：已缓存则纯离线；缺失时由 daemon 下载（联网）。"
-  (let ((store (open-connection)))
-    (let ((drvs (run-with-store store
-                                (mapm %store-monad
-                                      (lambda (cert)
-                                        (lower-object (vendor-certificate-source cert)))
-                                      certs))))
-      (build-things store (map derivation-file-name drvs))
-      (map derivation->output-path drvs))))
+  "把 vendor 证书的 source（file-append 进包内文件）materialize 为
+store 文件路径。先构建证书数据包——repl 环境不会隐式构建依赖；包是
+轻量 data package（copy-build-system，fixed-output 源已缓存则纯离线，
+缺失时由 daemon 下载）。lower-object 对 file-append 只降级 base（包
+derivation），路径 = output + suffix，这里显式拼接。"
+  (let* ((store (open-connection))
+         (sources (map vendor-certificate-source certs))
+         (items (map (lambda (src)
+                       (unless (file-append? src)
+                         (error "vendor certificate source is not file-append"
+                                src))
+                       (cons src (package-derivation store
+                                                     (file-append-base src)
+                                                     #:graft? #f)))
+                     sources)))
+    (build-things store (map (compose derivation-file-name cdr) items))
+    (map (lambda (item)
+           (string-append (derivation->output-path (cdr item))
+                          (string-concatenate
+                           (file-append-suffix (car item)))))
+         items)))
 
 (define (build-variable! keydir work keystore guid var sign-key certs)
   "合并 我们 + vendor + 固件默认值，签名产出 VAR.auth 到 keystore。

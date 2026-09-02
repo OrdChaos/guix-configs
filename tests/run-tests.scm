@@ -111,6 +111,7 @@
                "tests/test-nvidia.scm"
                "tests/test-prime-run.scm"
                "tests/test-channels.scm"
+               "tests/test-certificates.scm"
                "tests/test-deploy.scm"
                "tests/test-reconfigure.scm"
                "tests/test-blue-app.scm"

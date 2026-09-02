@@ -4,14 +4,18 @@
 ;;; 在注册（enrollment）时合并进固件的 KEK/db，保留硬件兼容性
 ;;; （Windows Boot Manager、shim、显卡 Option ROM 等）。
 ;;;
-;;; 每张证书是 origin + 固定 sha256：来源可追溯、内容可校验、
-;;; 更新时代码 review 友好（docs 设计原则：外部事实固定哈希）。
+;;; 证书来源：virelith 频道的数据包 microsoft-secure-boot-certificates
+;;; （(virelith packages secure-boot)）——7 张 DER 在包内以
+;;; origin + 固定 sha256 从 Foxboron/sbctl 拉取（docs 设计原则：
+;;; 外部事实固定哈希），安装到 share/secure-boot/microsoft/{db,KEK}/。
+;;; 本模块只记录"哪张证书进哪个数据库、干什么用"，source 统一
+;;; file-append 指向包内文件。
 ;;; 固件自带 OEM 证书不进仓库——enrollment 时现读 dbDefault/KEKDefault。
 
 (define-module (guixcfg security certificates)
                #:use-module (guix records)      ; define-record-type*
-               #:use-module (guix packages)     ; origin
-               #:use-module (guix download)     ; url-fetch
+               #:use-module (guix gexp)         ; file-append
+               #:use-module (virelith packages secure-boot) ; microsoft-secure-boot-certificates
                #:export (<vendor-certificate>
                          vendor-certificate make-vendor-certificate vendor-certificate?
                          vendor-certificate-name
@@ -27,68 +31,56 @@
                      (name     vendor-certificate-name)     ; 符号
                      (database vendor-certificate-database) ; 'db 或 'KEK
                      (purpose  vendor-certificate-purpose)  ; 字符串
-                     (source   vendor-certificate-source)) ; <origin>（DER 证书）
+                     (source   vendor-certificate-source)) ; <file-append>（包内 DER）
 
-(define (ms-cert name db purpose path hash)
+(define (ms-cert name db purpose path)
+  "PATH 是包内 share/secure-boot/microsoft/ 下的相对路径（安装名与
+%microsoft-secure-boot-certs 的 install-name 一致；哈希固定于包内）。"
   (vendor-certificate
    (name name)
    (database db)
    (purpose purpose)
-   (source
-    (origin
-     (method url-fetch)
-     (uri (string-append
-           "https://raw.githubusercontent.com/Foxboron/sbctl/master/certs/microsoft/"
-           path))
-     ;; URL 里的 %20 不能进 derivation 名，显式指定
-     (file-name (string-append (symbol->string name) ".der"))
-     (sha256 (base32 hash))))))
+   (source (file-append microsoft-secure-boot-certificates
+                        (string-append "/share/secure-boot/microsoft/" path)))))
 
 ;;; db：镜像与 EFI 程序的信任链。
 
 (define microsoft-uefi-ca-2011
   (ms-cert 'microsoft-uefi-ca-2011 'db
            "shim and third-party UEFI drivers/programs"
-           "db/MicCorUEFCA2011_2011-06-27.der"
-           "01w54h03a3f479h8v7wv49a73i2q1bzrnna9c7vm5z2p3ycrpsa8"))
+           "db/microsoft-uefi-ca-2011.der"))
 
 (define microsoft-windows-production-pca-2011
   (ms-cert 'microsoft-windows-production-pca-2011 'db
            "Windows Boot Manager (2011)"
-           "db/MicWinProPCA2011_2011-10-19.der"
-           "0q8rqzfgsdb9g1mgmj5kckmgql9ww8z438g0gfnqnpm56c3mzsg8"))
+           "db/microsoft-windows-production-pca-2011.der"))
 
 (define microsoft-option-rom-uefi-ca-2023
   (ms-cert 'microsoft-option-rom-uefi-ca-2023 'db
            "PCIe/GPU Option ROM (compatibility-critical for real hardware)"
-           "db/microsoft%20option%20rom%20uefi%20ca%202023.der"
-           "1wfqm15w241c4r202fiammx5g1q7dl6wxppcawa2hsp6qrj3xgp5"))
+           "db/microsoft-option-rom-uefi-ca-2023.der"))
 
 (define microsoft-uefi-ca-2023
   (ms-cert 'microsoft-uefi-ca-2023 'db
            "shim and third-party UEFI drivers/programs (2023)"
-           "db/microsoft%20uefi%20ca%202023.der"
-           "00frv88xdvvq24r1m74jknyygh4igfm4wmwsszk3zvjv28s4w4pn"))
+           "db/microsoft-uefi-ca-2023.der"))
 
 (define microsoft-windows-uefi-ca-2023
   (ms-cert 'microsoft-windows-uefi-ca-2023 'db
            "Windows Boot Manager (2023)"
-           "db/windows%20uefi%20ca%202023.der"
-           "0c73k853a7j6r0nk1nlnw4dxs7szyy17dhbppxg1aadcj3m1yvq7"))
+           "db/microsoft-windows-uefi-ca-2023.der"))
 
 ;;; KEK：db/dbx 更新的授权链。
 
 (define microsoft-kek-ca-2011
   (ms-cert 'microsoft-kek-ca-2011 'KEK
            "Microsoft ecosystem db/dbx update authorization (2011)"
-           "KEK/MicCorKEKCA2011_2011-06-24.der"
-           "00x50bc6b7p0jswx1q4gprmzswkrm08cw6id7yxgrkijd98py4d1"))
+           "KEK/microsoft-kek-ca-2011.der"))
 
 (define microsoft-kek-2k-ca-2023
   (ms-cert 'microsoft-kek-2k-ca-2023 'KEK
            "Microsoft ecosystem db/dbx update authorization (2023)"
-           "KEK/microsoft%20corporation%20kek%202k%20ca%202023.der"
-           "17bgmkl9gpf9qf62x3r1spxw9zsakw6x8vcpg9v2iqnskqqg1lrw"))
+           "KEK/microsoft-kek-2k-ca-2023.der"))
 
 (define %vendor-certificates
   (list microsoft-uefi-ca-2011
