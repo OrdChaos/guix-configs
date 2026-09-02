@@ -17,7 +17,17 @@
                #:export (run-install
                          read-secret-line
                          read-luks-passphrase!
-                         make-luks-passphrase-source))
+                         make-luks-passphrase-source
+                         ;; 安装编排层复用（blue install 的 disk / mount /
+                         ;; facts 阶段拆分；行为与 run-install 完全一致，
+                         ;; 只是把执行单元暴露给事务编排——见
+                         ;; (guixcfg system install)）
+                         %required-commands
+                         preflight-environment!
+                         execute-plan
+                         execute-mounts!
+                         write-machine-facts
+                         warn-if-store-in-ram))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; LUKS passphrase 交互（docs/operations/installation.md）。
@@ -127,6 +137,19 @@ password（docs/architecture/boot.md（TPM2））。"
       (error "unknown plan step" (plan-step-id step)))
     (executor (plan-step-detail step) passphrase!)))
 
+;; mount 步骤（mount-top / mount-root / mount-subvolume / mount-esp）
+;; 不需要 passphrase。安装编排层 resume 用：磁盘布局已存在、mount
+;; 图尚未建立时（如安装中途重启了 LiveCD）只重放 mount 步骤。
+;; LUKS 卷必须先打开（调用方负责 execute-luks-open）。
+(define %mount-step-ids '(mount-top mount-root mount-subvolume mount-esp))
+
+(define* (execute-mounts! plan)
+  "重放 PLAN 中的 mount 步骤（其余步骤跳过）。用于 resume 场景。"
+  (for-each (lambda (step)
+              (when (memq (plan-step-id step) %mount-step-ids)
+                (execute-step step (lambda () #t))))
+            plan))
+
 ;;; ────────────────────────────────────────────────────────────
 ;;; 人工确认：必须输入完整设备路径（docs/architecture/storage.md）。
 
@@ -143,13 +166,16 @@ password（docs/architecture/boot.md（TPM2））。"
 ;;; 失败即停（docs/architecture/storage.md）：
 ;;; 任何一步抛异常，立即报告并退出非零，不做任何自动清理或续跑。
 
-(define* (execute-plan plan #:key (passphrase-reader read-luks-passphrase!))
+(define* (execute-plan plan #:key (passphrase-reader read-luks-passphrase!)
+                               (on-failure #f))
          "逐步执行计划（失败即停）。
 LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值；
 它只存在于本次 apply session（不进 plan、不落盘、不进 argv/env）。
 PASSPHRASE-READER 默认交互读取；也可是 age secret reader（installer
 用 --luks-secret 时经 stable S 解密 modules/guixcfg/security/secrets/luks-recovery.age，
-见 tools/secrets.scm 与 docs/architecture/secrets.md）——两种来源共用 stdin 语义。"
+见 tools/secrets.scm 与 docs/architecture/secrets.md）——两种来源共用 stdin 语义。
+ON-FAILURE 非 #f 时是 (lambda (key args) ...) 失败处理器：安装编排层
+用它分类失败阶段（默认行为不变：打印 + exit 1）。"
          (let ((passphrase! (make-luks-passphrase-source passphrase-reader)))
            (catch #t
              (lambda ()
@@ -161,10 +187,13 @@ PASSPHRASE-READER 默认交互读取；也可是 age secret reader（installer
                 (map (lambda (i) (+ i 1)) (iota (length plan))))
                (format #t "~%Disk installation complete.~%"))
              (lambda (key . args)
-               (format (current-error-port)
-                       "~%Step failed; stopped immediately (incomplete operations will not continue automatically).~%error: ~s ~s~%"
-                       key args)
-               (exit 1)))))
+               (if on-failure
+                 (on-failure key args)
+                 (begin
+                  (format (current-error-port)
+                          "~%Step failed; stopped immediately (incomplete operations will not continue automatically).~%error: ~s ~s~%"
+                          key args)
+                  (exit 1)))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 执行前环境检查：在任何破坏性操作之前拦下环境问题

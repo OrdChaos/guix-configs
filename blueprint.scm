@@ -10,8 +10,9 @@
 ;;;   §0 子进程出口 —— %run（统一 dry-run 短路）/ %exec / %capture
 ;;;   §1 命令构造复用层 —— 直接使用 (guixcfg system deploy) 的纯 argv
 ;;;   §2 preflight —— doctor（含 git clean gate）与 build preflight（不含）
-;;;   §3 命令定义 —— doctor / build-os / reconfigure（+ 内部
-;;;                    privileged mode）/ update / flatpak
+;;;   §3 命令定义 —— doctor / build-os / reconfigure / install /
+;;;                    enroll（+ 内部 privileged mode）/ update /
+;;;                    flatpak / gsettings
 ;;;   §4 repository-tests testable —— 薄包装 tests/run-tests.scm
 ;;;   §5 入口 —— (blueprint ...) 注册
 ;;;
@@ -151,10 +152,17 @@
              (guixcfg users facts))         ; %primary-user（HOME_USER 默认权威源；channel-free）
 
 (define (%subprocess-fail! status command)
-  "子进程非零退出的统一出口：以子进程退出码终止（primitive-exit 不做
-Guile backtrace——非零退出是预期内失败）。"
-  (format (current-error-port) "command failed (exit ~a): ~{ ~a~}~%" status command)
-  (primitive-exit (or status 1)))
+  "子进程非零退出的统一出口：以【解码后的】子进程退出码终止。
+blue 的 popen 返回 raw wait status（子进程 exit 1 → 256）——直接
+primitive-exit raw 值会让 shell 截断为 0（256 mod 256），把失败
+伪装成成功（install/enroll 的退出码契约 0/1/2/3 依赖精确传播）。
+primitive-exit 不做 Guile backtrace——非零退出是预期内失败。"
+  (let ((code (if (number? status)
+                (or (status:exit-val status) 1)
+                (or status 1))))
+    (format (current-error-port) "command failed (exit ~a): ~{ ~a~}~%"
+            code command)
+    (primitive-exit code)))
 
 (define* (%run command #:key working-directory)
          "唯一允许启动子进程的通用出口。blue --dry-run 时只打印不执行；
@@ -248,8 +256,10 @@ preflight（git status / describe 等）——blue -n 下也真实执行，以�
 ;;; §2 preflight
 ;;; ============================================================
 
-;; checks 是 ((label . thunk)) 列表；thunk 返回 (ok . detail) 或
-;; (fail . detail)。全部失败时打印汇总并 exit 1（fail closed）。
+;; checks 是 ((label . thunk)) 列表；thunk 返回 (ok . detail)、
+;; (info . detail) 或 (fail . detail)。'info 是不阻塞的信息项（如
+;; enroll user 态的 root-only 状态读取）。全部失败时打印汇总并
+;; exit 1（fail closed）。
 (define (%run-checks title checks)
   (format #t "~a~%" title)
   (let loop ((checks checks) (failures 0))
@@ -267,11 +277,14 @@ preflight（git status / describe 等）——blue -n 下也真实执行，以�
         (match result
                ((status . detail)
                 (format #t "  [~a] ~a~a~%"
-                        (if (eq? status 'ok) "OK" "FAIL")
+                        (case status
+                          ((ok) "OK")
+                          ((info) "--")
+                          (else "FAIL"))
                         (car check)
                         (if detail (string-append ": " detail) ""))
                 (loop (cdr checks)
-                      (+ failures (if (eq? status 'ok) 0 1)))))))))
+                      (+ failures (if (eq? status 'fail) 1 0)))))))))
 
 (define (%root-level-checks root)
   "与 host 无关的构建/部署公共前置（不含 git clean）。"
@@ -755,6 +768,153 @@ Dry-run (blue -n):
                 (%gsettings-command arguments))
 
 ;;; ============================================================
+;;; §3.8 install / enroll（安装生命周期 orchestration）
+;;; ============================================================
+;;; Blue owns orchestration（argv / dry-run 分发 / privilege handoff /
+;;; 退出码传播）；域机制唯一 authority 仍是 (guixcfg system install) /
+;;; (guixcfg security enroll) 与 disk / TPM / Secure Boot / secrets /
+;;; UKI domains。
+;;;
+;;; 域执行一律走 pinned 子进程（tools/install-cli.scm /
+;;; tools/enroll-cli.scm，time-machine repl）：blueprint 进程内加载
+;;; 大模块图会在外层 link 阶段触发 guile out-of-range 崩溃
+;;; （gsettings 同款决策；enroll 模块图已实测触发）。CLI 自加仓库
+;;; modules/，time-machine repl 自带全部频道模块 load path。
+;;;
+;;; 退出码契约（install/enroll 共用；文档 docs/operations/installation.md）：
+;;;   0 = 成功 / 已合规（skip/resume 收敛到完整状态）
+;;;   1 = 前置/配置失败，未发生任何 mutation
+;;;   2 = 已发生部分 mutation，无法安全自动继续
+;;;   3 = 用户显式中止（破坏性确认未通过）
+
+(define (%require-install-arguments arguments)
+  "位置参数必须恰好是 HOST DEVICE（spec：HOST/DEVICE 均显式，
+绝不 fallback / 自动检测）。"
+  (match arguments
+         ((host device)
+          (if (host-id? (known-host-ids (%repo-root)) host)
+            (list host device)
+            (%usage-error
+             (format #f "unknown host: ~a~%known hosts: ~a~%usage: blue install HOST DEVICE"
+                     host (string-join (known-host-ids (%repo-root)) ", ")))))
+         (_ (%usage-error
+             (format #f "expected HOST DEVICE; known hosts: ~a~%usage: blue install HOST DEVICE"
+                     (string-join (known-host-ids (%repo-root)) ", "))))))
+
+(define-command (install-command arguments)
+                ((invoke "install")
+                 (category 'deployment)
+                 (synopsis "Install HOST onto DEVICE from an installer environment (destructive)")
+                 (help "HOST DEVICE
+Install the complete bootable system for HOST onto the whole block
+device DEVICE, from a LiveCD/installer environment. Orchestrates:
+disk layout -> mounts -> machine facts -> Secure Boot keys ->
+secrets -> Secure Boot keystore -> guix system init -> commit-root
+-> validation. Resume: completed stages are detected and skipped;
+ambiguous/incompatible partial states fail closed (the disk is
+never re-formatted automatically).
+Destructive confirmation: the full device path must be typed before
+the disk is touched. Not included: TPM enrollment and firmware
+PK enrollment (run 'blue enroll HOST' after the first boot).
+Exit codes: 0 success/already complete; 1 preflight failure (no
+mutation); 2 partial mutation, cannot continue safely; 3 user abort.
+With blue -n: read-only preflight + installation plan only; zero
+mutation, no sudo, no confirmation."))
+                (let* ((root (%repo-root))
+                       (host+device (%require-install-arguments arguments)))
+                  (let ((host (car host+device))
+                        (device (cadr host+device)))
+                    (if (dry-build?)
+                      (begin
+                       (%exec (install-cli-argv root "plan" host device))
+                       (format #t "  [dry-run] no mutation; no sudo; no confirmation.~%"))
+                      (begin
+                       ;; 用户态只读前置（fail early），然后 privilege
+                       ;; handoff（sudo 重新执行同一 Blue；root phase
+                       ;; 重新做环境类检查并执行事务）。
+                       (%exec (install-cli-argv root "plan" host device))
+                       (%run (install-privileged-argv
+                              (car (program-arguments))
+                              (string-append root "/blueprint.scm")
+                              host device)))))))
+
+;; 内部 privileged mode（Blue self-reexec 的 root phase；与
+;; .reconfigure-root 同一模型）。事务（含破坏性确认 UI）在 pinned
+;; 子进程执行，退出码原样传播（%exec 非零即以其状态退出）。
+(define-command (install-root-command arguments)
+                ((invoke ".install-root")
+                 (category 'internal)
+                 (synopsis "Internal privileged install transaction (root only)")
+                 (help "HOST DEVICE
+Internal mode for blue install's sudo handoff. Requires effective
+UID 0. Runs the pinned install transaction (tools/install-cli.scm:
+confirmation UI, stage detection/resume, validation) and exits with
+its exact status (0 success / 1 preflight / 2 partial mutation /
+3 user abort)."))
+                (unless (zero? (getuid))
+                  (%usage-error
+                   "privileged install mode requires root (effective UID 0)"))
+                (match arguments
+                       ((host device)
+                        (%exec (install-cli-argv (%repo-root)
+                                                "run" host device)))
+                       (_ (%usage-error
+                           "usage (internal): HOST DEVICE"))))
+
+(define-command (enroll-command arguments)
+                ((invoke "enroll")
+                 (category 'deployment)
+                 (synopsis "Bind the installed system to this machine (TPM + Secure Boot firmware enrollment)")
+                 (help "HOST
+Machine-bound enrollment on the already-installed target system:
+Secure Boot firmware enrollment (db/KEK first, PK last — writing PK
+exits Setup Mode; requires explicit confirmation) then TPM
+enrollment (PolicyPCR sha256:7; idempotent — already-enrolled parts
+are detected and skipped, never replaced automatically). Fails
+closed outside the target environment.
+Exit codes: 0 success/already compliant; 1 preflight failure (no
+mutation); 2 partial mutation, cannot continue safely; 3 user abort.
+With blue -n: read-only preflight + enrollment plan only; zero
+mutation, no sudo, no confirmation."))
+                (let* ((root (%repo-root))
+                       (host (%require-host-argument arguments)))
+                  (if (dry-build?)
+                    (begin
+                     (%exec (enroll-cli-argv root "plan" host))
+                     (format #t "  [dry-run] no mutation; no sudo; no confirmation.~%"))
+                    (begin
+                     ;; 用户态只读前置（fail early），然后 privilege
+                     ;; handoff（sudo 重新执行同一 Blue；root phase
+                     ;; 重新做环境类检查并执行事务）。
+                     (%exec (enroll-cli-argv root "plan" host))
+                     (%run (enroll-privileged-argv
+                            (car (program-arguments))
+                            (string-append root "/blueprint.scm")
+                            host))))))
+
+;; 内部 privileged mode（Blue self-reexec 的 root phase；与
+;; .reconfigure-root 同一模型）。事务（含固件写入确认 UI）在 pinned
+;; 子进程执行，退出码原样传播。
+(define-command (enroll-root-command arguments)
+                ((invoke ".enroll-root")
+                 (category 'internal)
+                 (synopsis "Internal privileged enroll transaction (root only)")
+                 (help "HOST
+Internal mode for blue enroll's sudo handoff. Requires effective
+UID 0. Runs the pinned enrollment transaction (tools/enroll-cli.scm:
+firmware enrollment confirmation UI, TPM enrollment, post-enrollment
+validation) and exits with its exact status (0 success / 1 preflight
+/ 2 partial mutation / 3 user abort)."))
+                (unless (zero? (getuid))
+                  (%usage-error
+                   "privileged enroll mode requires root (effective UID 0)"))
+                (match arguments
+                       ((host)
+                        (%exec (enroll-cli-argv (%repo-root) "run" host)))
+                       (_ (%usage-error
+                           "usage (internal): HOST"))))
+
+;;; ============================================================
 ;;; §4 repository-tests testable（builtin blue check 的薄 adapter）
 ;;; ============================================================
 
@@ -797,6 +957,10 @@ Dry-run (blue -n):
                  build-os-command
                  reconfigure-command
                  reconfigure-root-command
+                 install-command
+                 install-root-command
+                 enroll-command
+                 enroll-root-command
                  update-command
                  flatpak-command
                  gsettings-command)))

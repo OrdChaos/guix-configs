@@ -7,6 +7,7 @@
                #:use-module (gnu packages cryptsetup)        ; cryptsetup
                #:use-module (gnu packages golang-crypto)     ; age
                #:use-module (gnu packages package-management) ; flatpak
+               #:use-module (gnu packages efi)               ; sbsigntools（blue enroll 固件注册）
                #:use-module (guixcfg fonts model)           ; %fonts（shared fact；Flatpak sandbox 字体投影）
                #:export (%system-packages))
 
@@ -16,10 +17,14 @@
                 age               ; secrets 解密（guixcfg-secrets-deploy
                 ; 的运行时依赖；account projection 只
                 ; 读 persistent hash，不调 age）
-                flatpak)          ; Flatpak executable（overview.md 软件
-          ; 分类：system 提供 executable，一切
-          ; installation 走 --user scope；
-          ; docs/architecture/flatpak.md）
+                flatpak           ; Flatpak executable（overview.md 软件
+                ; 分类：system 提供 executable，一切
+                ; installation 走 --user scope；
+                ; docs/architecture/flatpak.md）
+                sbsigntools)      ; sbkeysync/sbsign：blue enroll 的固件
+          ; 注册执行器（目标系统离线可用——不依赖
+          ; LiveCD manifest / channel fetch；
+          ; docs/architecture/boot.md（Secure Boot））
           ;; 字体投影：pinned Guix flatpak 的 flatpak-fix-fonts-icons.patch
           ;; 只把 /run/current-system/profile/share/fonts 暴露进 sandbox
           ;; （Home profile 字体不可见）。同一份 (guixcfg fonts model) 事实、

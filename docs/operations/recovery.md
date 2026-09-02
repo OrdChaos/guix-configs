@@ -2,6 +2,13 @@
 
 LiveCD 救援流程。系统坏了从这里开始。
 
+> 底层工具是恢复/诊断的权威入口，保留手工能力（Blue install/enroll
+> 的失败恢复也落到这里）：`disk-install inspect/plan`、
+> `secrets unlock/verify/decrypt`、`secure-boot-keygen/enroll`、
+> `tpm2-enroll preflight/status/enroll/replace`。安装中途失败的
+> resume 语义见 `installation.md`（`blue install` 重跑自动跳过已完成
+> 阶段，绝不自动重新格式化）。
+
 ## 日常回滚（无需 LiveCD）
 
 - **Recovery**：boot 菜单（Limine）选择 `GNU Guix (Recovery)`。

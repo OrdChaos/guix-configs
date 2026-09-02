@@ -26,9 +26,19 @@ guix time-machine -C channels.lock.scm -- shell -m manifests/development.scm
 # 测试（pinned Guix）
 guix time-machine -C channels.lock.scm -- repl tests/run-tests.scm
 
-# 磁盘安装器（inspect/plan 只读）
+# 磁盘安装器（inspect/plan 只读；诊断/恢复用，主路径走 blue install）
 guix time-machine -C channels.lock.scm -- repl tools/disk-install.scm -- inspect /dev/vda
 guix time-machine -C channels.lock.scm -- repl tools/disk-install.scm -- plan vm /dev/vda
+
+# 安装生命周期（LiveCD / installer 环境；HOST 与 DEVICE 均显式）
+#  dry-run：只读 preflight + 完整安装计划，零 mutation、无 sudo
+guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/development.scm -- blue -n install laptop /dev/nvme0n1
+guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/development.scm -- blue install laptop /dev/nvme0n1
+# → reboot into the installed system
+blue -n enroll laptop
+blue enroll laptop
 
 # 构建 VM 系统配置（已装系统外需要 facts 文件，见 development/testing.md）
 GUIX_CONFIG_FACTS=/tmp/facts.scm \

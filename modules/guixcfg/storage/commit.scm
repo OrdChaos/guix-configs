@@ -28,7 +28,8 @@
                #:use-module (guix build utils)  ; mkdir-p、delete-file-recursively
                #:use-module (srfi srfi-13)  ; string-contains
                #:use-module (ice-9 format)
-               #:export (commit-root-generation))
+               #:export (commit-state
+                         commit-root-generation))
 
 (define (top-path name)
   (string-append %btrfs-top-mount "/" name))

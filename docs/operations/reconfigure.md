@@ -11,6 +11,15 @@ channel）：
 
 ```bash
 blue help
+
+# 生命周期入口一览
+blue doctor HOST             # 部署就绪检查（离线只读）
+blue build-os HOST           # 构建系统配置（允许脏工作树）
+blue reconfigure HOST        # 部署（干净提交的工作树）
+blue install HOST DEVICE     # 安装生命周期（LiveCD；见 installation.md）
+blue enroll HOST             # 机器绑定 enrollment（目标系统上；见 installation.md）
+blue update                  # 重写 channels.lock.scm
+blue check                   # 测试套件
 ```
 
 **两个 Blue 来源的语义边界**：

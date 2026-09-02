@@ -114,6 +114,8 @@
                "tests/test-certificates.scm"
                "tests/test-deploy.scm"
                "tests/test-reconfigure.scm"
+               "tests/test-install-orchestration.scm"
+               "tests/test-enroll-orchestration.scm"
                "tests/test-blue-app.scm"
                "tests/test-flatpak-actions.scm"
                "tests/test-substitutes.scm"

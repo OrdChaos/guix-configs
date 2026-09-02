@@ -34,7 +34,15 @@
                          system-build-argv
                          system-reconfigure-argv
                          system-reconfigure-dry-run-argv
+                         system-init-argv
                          reconfigure-privileged-argv
+                         install-privileged-argv
+                         enroll-privileged-argv
+                         install-cli-argv
+                         enroll-cli-argv
+                         sb-keygen-tool-argv
+                         sb-keystore-tool-argv
+                         commit-root-tool-argv
                          channel-lock-refresh-argv
                          git-status-porcelain-argv
                          git-head-commit-argv
@@ -142,6 +150,14 @@ host-source-relative-path 的权威相对路径。"
   (guix-time-machine-argv root %channels-lock-file
                           (system-subcommand-argv root host "reconfigure" '("--dry-run"))))
 
+(define (system-init-argv root host)
+  ;; blue install 的 guix system init argv：pinned channels.lock.scm、
+  ;; 绝对 -L、显式 host 文件、目标 /mnt（docs/operations/installation.md
+  ;; 阶段 6 的 argv 形态）。调用方负责已挂好 /mnt 并设置
+  ;; GUIX_CONFIG_FACTS。
+  (guix-time-machine-argv root %channels-lock-file
+                          (system-subcommand-argv root host "init" '("/mnt"))))
+
 (define (reconfigure-privileged-argv blue-executable blueprint-path host home-user)
   ;; blue reconfigure 的 privilege handoff argv：sudo 重新执行【同一
   ;; 个】Blue executable（绝对路径，绝不依赖 root PATH 重新查找），
@@ -158,6 +174,65 @@ host-source-relative-path 的权威相对路径。"
             ,(string-append "--store-directory=" %privileged-blue-store)
             "-f" ,blueprint-path
             ".reconfigure-root" ,host ,home-user))
+
+(define (install-privileged-argv blue-executable blueprint-path host device)
+  ;; blue install 的 privilege handoff（与 reconfigure 同一模型）：
+  ;; sudo 重新执行【同一个】Blue executable（绝对路径），-f 同一
+  ;; blueprint，内部模式 .install-root 分项传递 HOST 与 DEVICE。
+  ;; --store-directory 语义与 reconfigure-privileged-argv 相同。
+  ;; argv 列表，无 shell 拼接；DEVICE 是独立 argv 项。
+  `("sudo" ,blue-executable
+            ,(string-append "--store-directory=" %privileged-blue-store)
+            "-f" ,blueprint-path
+            ".install-root" ,host ,device))
+
+(define (enroll-privileged-argv blue-executable blueprint-path host)
+  ;; blue enroll 的 privilege handoff（同一模型）。enroll 在目标系统
+  ;; 上运行，HOST 同样显式传递，绝不自动检测。
+  `("sudo" ,blue-executable
+            ,(string-append "--store-directory=" %privileged-blue-store)
+            "-f" ,blueprint-path
+            ".enroll-root" ,host))
+
+(define (install-cli-argv root mode host device)
+  ;; blue install 的 pinned 执行入口 argv（tools/install-cli.scm）：
+  ;; 域执行在子进程（blueprint 进程内加载大模块图会 link 阶段
+  ;; out-of-range——gsettings 同款决策）。MODE ∈ plan | run。
+  ;; time-machine repl 自带全部频道模块 load path，工具自行加入
+  ;; 仓库 modules/（从仓库根运行）。
+  (guix-time-machine-argv root %channels-lock-file
+                          `("repl" "tools/install-cli.scm" "--"
+                            ,mode ,host ,device)))
+
+(define (enroll-cli-argv root mode host)
+  ;; blue enroll 的 pinned 执行入口 argv（tools/enroll-cli.scm）。
+  (guix-time-machine-argv root %channels-lock-file
+                          `("repl" "tools/enroll-cli.scm" "--"
+                            ,mode ,host)))
+
+(define (sb-keygen-tool-argv root keydir)
+  ;; tools/secure-boot-keygen.scm 的官方调用形态（工具头部注释）：
+  ;; pinned shell + keygen manifest 提供 ukify，guix repl 执行工具。
+  (guix-time-machine-argv root %channels-lock-file
+                          `("shell" "-m" "manifests/secure-boot-keygen.scm"
+                            "--" "guix" "repl"
+                            "tools/secure-boot-keygen.scm" ,keydir)))
+
+(define (sb-keystore-tool-argv root keydir)
+  ;; tools/secure-boot-enroll.scm 的官方调用形态（工具头部注释）：
+  ;; 构建 sbkeysync keystore（不写固件；固件写入归 blue enroll）。
+  (guix-time-machine-argv root %channels-lock-file
+                          `("shell" "-m" "manifests/secure-boot-enroll.scm"
+                            "--" "guix" "repl"
+                            "tools/secure-boot-enroll.scm" ,keydir)))
+
+(define (commit-root-tool-argv root target)
+  ;; tools/disk-install.scm 的 commit-root 子命令（安装阶段的 root
+  ;; 提交走独立子进程：commit-root-generation 失败时是硬 exit，
+  ;; 子进程隔离才能做退出码分类——(guixcfg system install)）。
+  (guix-time-machine-argv root %channels-lock-file
+                          `("repl" "tools/disk-install.scm" "--"
+                            "commit-root" ,target)))
 
 (define (channel-lock-refresh-argv root)
   ;; blue update 的 argv：channels.scm:6-9 的文档化流程——用可变频道

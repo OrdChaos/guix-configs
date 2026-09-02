@@ -1,17 +1,117 @@
 # Installation
 
-可直接照抄执行的安装 runbook。架构原理见
-`architecture/{overview,storage,boot,persistence,accounts-sessions,home,secrets}.md`。
+安装生命周期（Blue 主路径）：
+
+```text
+LiveCD / installer environment
+  ↓
+blue -n install HOST DEVICE     # 只读 preflight + 完整安装计划（零 mutation）
+blue install HOST DEVICE        # 破坏性确认后一次性完成可启动安装
+  ↓
+reboot（绝不自动 reboot）
+  ↓
+installed system（首次正常启动）
+  ↓
+blue -n enroll HOST             # 只读 enrollment 计划（零 mutation）
+blue enroll HOST                # TPM / Secure Boot 固件注册（固件写入需显式确认）
+  ↓
+normal operation
+```
+
+- `blue install HOST DEVICE` = 从空白/可复用磁盘到「可启动、完整配置、
+  已验证」的目标系统；**不包含** TPM final enrollment 与固件 PK
+  enrollment（归 `blue enroll`）。
+- `blue enroll HOST` = 在目标系统已正常启动后，把这台实际机器绑定到
+  系统（Secure Boot 固件注册 → TPM enrollment → post-enrollment 验证）。
+- HOST 与 DEVICE 均显式：无 fallback、无 hostname/machine-id 自动检测。
+- dry-run（`blue -n`）零 mutation、不 sudo、不要求确认。
+- 退出码：`0` 成功/已合规；`1` 前置失败（未 mutation）；`2` 部分
+  mutation 无法安全自动继续；`3` 用户显式中止。
+- resume：已完成的阶段按可观察事实检测并跳过；ambiguous /
+  incompatible 部分状态 fail closed（绝不自动重新格式化）。
+
+本文档主体是 Blue 主路径；下方「手动 runbook」是同一流程的底层阶段
+细节（专家 / 恢复参考，`blue install` 按此顺序编排），出问题时的手工
+入口见 `recovery.md` 与各 tools（disk-install / secrets /
+secure-boot-keygen / secure-boot-enroll / tpm2-enroll）。
 
 ## 前置
 
-- 仓库位于 LiveCD `/root/guix-configs`（VM 9p 共享或 clone）。
-- LiveCD 根是内存盘；磁盘安装完成、目标挂到 `/mnt` 后、任何
-  time-machine / `system init` 之前必须先 `herd start cow-store /mnt`
-  （否则构建写满内存盘）。
+- 仓库位于 installer 环境可读位置（如 LiveCD 的 `/root/guix-configs`，
+  VM 9p 共享或 clone）。Blue 经 development manifest 提供：
+  `guix time-machine -C channels.lock.scm -- shell -m manifests/development.scm -- blue …`。
+- 阶段 5（安装 stable identity 到 persist）必须先于 system init（
+  `blue install` 的 secrets 阶段自动保证此顺序；AGENT.md §5）。
 - `@persist-var-guix` 在 init 期间刻意不挂载（`mount-at-install? #f`）
   ——init 会删除目标的 /var/guix 重新注册，挂载点删不掉（EBUSY）；
   commit-root 在快照前把内容收进子卷。
+- LiveCD 根是内存盘：`blue install` 的 system-init 阶段会自动检测
+  `/gnu/store` 在 tmpfs 并先 `herd start cow-store /mnt`（herd 缺失
+  即 fail closed）。
+
+## Blue 主路径
+
+```bash
+# installer 环境（LiveCD）
+guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/development.scm -- \
+  blue -n install laptop /dev/nvme0n1
+
+guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/development.scm -- \
+  blue install laptop /dev/nvme0n1
+
+# 关机重启进入已安装系统（安装完成绝不自动 reboot）
+
+blue -n enroll laptop
+blue enroll laptop
+```
+
+`blue install` 的真实阶段（`blue -n install` 打印同一计划；已完成的
+阶段自动 skip）：
+
+```text
+  preflight        installer 环境检查（root/工具/设备/host policy/UEFI）
+  disk             GPT + LUKS2 + Btrfs 布局（fresh 才执行；
+                   破坏性确认 = 逐字输入完整 DEVICE）
+  mounts           resume：打开 LUKS + 重放 mount 步骤
+  facts            /mnt/persist/system/facts/host.scm（幂等重写）
+  sb-keys          Secure Boot keygen（db.key/db.crt 供 init 期 UKI 签名）
+  secrets          stable identity + 用户密码 hash 安装到 /mnt/persist
+  sb-keystore      sbkeysync keystore 构建（不写固件）
+  system-init      GUIX_CONFIG_FACTS + guix system init → /mnt
+  commit-root      @root-template 只读发布 + @root-0（幂等 + 中断恢复）
+  validate         /mnt 布局 / facts / system generation / ESP artifacts /
+                   secrets / commit state 逐项复核
+```
+
+LUKS passphrase 来源：identity（runtime 或 installed）已就位时走
+`luks-recovery.age`（age 解密，不提示密码）；否则交互两次确认
+（credential-source 的同一 resolver，绝不静默回退）。
+
+`blue enroll` 的真实阶段（`blue -n enroll` 打印同一计划）：
+
+```text
+  preflight        目标系统环境（/run/current-system、/persist、ESP、
+                   TPM 设备、SB keys/keystore、sbkeysync、facts）
+  firmware         Setup Mode 时：显式确认 → sbkeysync db/KEK →
+                   sbkeysync --pk（写 PK 退出 Setup Mode）
+                   （SecureBoot=1 && SetupMode=0 时 skip）
+  tpm              absent → tpm2-enroll enroll --luks-secret（幂等自动）；
+                   compatible → skip；incomplete → fail closed（不自动 replace）
+  validate         TPM compatible + firmware 状态 + artifacts 复核
+```
+
+固件写入确认：打印当前固件状态、计划操作与回滚/恢复影响，逐字输入
+`ENROLL-FIRMWARE` 才继续（其他输入/EOF 一律中止）。TPM enrollment
+是幂等的，自动执行，不额外确认。
+
+---
+
+# 手动 runbook（专家 / 恢复参考）
+
+以下阶段是 `blue install` 编排的底层细节（机制 authority 不变）；
+主路径用户不需要手工执行，恢复/诊断时按需使用。
 
 ## 阶段 1：解锁 stable identity S
 

@@ -50,14 +50,21 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
                        （hosts/vm.scm 内的测试 sentinel，无独立
                        secrets 文件）；host 对应用只做 logical
                        variant selection（不持有应用配置文件）
-  security/            age、secrets、TPM2、证书
+  security/            age、secrets、TPM2、证书；enroll.scm
+                       （blue enroll 的 machine-bound enrollment
+                       编排：TPM/SB 状态探测、计划、幂等判定、
+                       固件写入确认——TPM/SB mutation 机制仍归
+                       tools/tpm2-enroll.scm 与 secure-boot 工具）
   services/            用户态 one-shot 服务（ephemeral-root）
   storage/             磁盘/子卷/generation 纯模型 + 安装器
   system/              OS 组装、readiness、accounts、ssh、
                        user-persistence、application-persistence、
                        session-gate（login gate 唯一 authority：
                        path/close/open/message + activation gexp
-                       builder）、mihomo/（系统透明代理
+                       builder）、install.scm（blue install 的安装
+                       编排：preflight/阶段检测/resume/事务/验证——
+                       disk mutation 机制仍归 storage/install）、
+                       mihomo/（系统透明代理
                        service/config/template，
                        docs/architecture/mihomo.md）
   users/               用户结构事实
