@@ -21,6 +21,7 @@
              (guixcfg apps registry)    ; %applications（唯一启用事实源）
              (guixcfg apps gnome-text-editor definition) ; %gnome-text-editor（first consumer）
              (guixcfg home user)        ; %guix-home（service 结构断言）
+             (gnu home)                 ; home-environment-services（standalone 自足，不依赖套件模块上下文）
              (gnu home services shepherd) ; home-shepherd-service-type
              (gnu services)             ; fold-services
              (guix gexp)                ; gexp->approximate-sexp、lower-object
