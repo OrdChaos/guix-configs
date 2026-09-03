@@ -96,7 +96,8 @@ blue enroll laptop
                    guix-configs（runbook 阶段 10 机制化；tar 排除
                    vms/*.log + chown -R 归还 USER ownership）
   validate         /mnt 布局 / facts / system generation / ESP artifacts /
-                   secrets / commit state / repo copy 逐项复核
+                   secrets / commit state / SB key material / repo copy
+                   逐项复核
 ```
 
 repo 阶段语义：检测 = `channels.lock.scm`/`modules`/`tools`/`docs`/

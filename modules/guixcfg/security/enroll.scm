@@ -141,6 +141,16 @@ artifacts 齐全）/ 'incomplete（state 存在但 artifacts 缺失——
   (every (lambda (f) (file-exists? (string-append %sb-keystore "/" f)))
          %keystore-auth-paths))
 
+(define (sb-keydir-readable?)
+  "keydir 内容可读（scandir 成功）。root 恒成功；普通用户对 0700
+root 目录失败——user 态必须区分「不可读」与「不存在」：EACCES 与
+ENOENT 都被 scandir 折叠为 #f，存在性由 file-exists? 单独判定
+（不可读 ≠ 不存在，不得把 root-only 状态误报成 missing）。"
+  (false-if-exception (scandir %sb-keydir)))
+
+(define (sb-keystore-readable?)
+  (false-if-exception (scandir %sb-keystore)))
+
 (define (facts-ok?)
   "machine facts 可解析且含 boot-critical luks-uuid。"
   (let ((path (false-if-exception
@@ -235,20 +245,33 @@ info；#f（root 事务）全部硬性。"
            (lambda ()
              (cond
                ((enrollment-status-keys status) '(ok . #f))
-               (persist-ok?
+               ;; 目录确实不存在 = 真缺失（ENOENT 非权限伪影），soft 态
+               ;; 也 fail——不把真缺失伪装成「需 root」。
+               ((not (file-exists? %sb-keydir))
                 (cons 'fail
                       (format #f "SB key material missing under ~a (run blue install or tools/secure-boot-keygen.scm)"
                               %sb-keydir)))
-               (else '(info . "requires root to read")))))
+               ;; 目录在但内容不可读（普通用户 vs 0700 root）→ info。
+               ((and soft? (not (sb-keydir-readable?)))
+                '(info . "requires root to read"))
+               (else
+                (cons 'fail
+                      (format #f "SB key material missing under ~a (run blue install or tools/secure-boot-keygen.scm)"
+                              %sb-keydir))))))
      (cons "Secure Boot keystore"
            (lambda ()
              (cond
                ((enrollment-status-keystore status) '(ok . #f))
-               (persist-ok?
+               ((not (file-exists? %sb-keystore))
                 (cons 'fail
                       (format #f "SB keystore missing under ~a (run blue install or tools/secure-boot-enroll.scm)"
                               %sb-keystore)))
-               (else '(info . "requires root to read")))))
+               ((and soft? (not (sb-keystore-readable?)))
+                '(info . "requires root to read"))
+               (else
+                (cons 'fail
+                      (format #f "SB keystore missing under ~a (run blue install or tools/secure-boot-enroll.scm)"
+                              %sb-keystore))))))
      (cons "sbkeysync available"
            (lambda ()
              (if (enrollment-status-sbkeysync status)

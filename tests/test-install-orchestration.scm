@@ -427,6 +427,46 @@
                                      (install-repo-path "/mnt"))))))))
 
 ;;; ────────────────────────────────────────────────────────────
+;;; SB keydir 完整性（validate 共用；安装后 SB 材料缺失必须暴露）
+
+(define %sb-fixture-target
+  (string-append "/tmp/guixcfg-test-sb-material-"
+                 (number->string (getpid))))
+
+(define (sb-fixture-keydir)
+  (string-append %sb-fixture-target
+                 (persist-mount-point "@persist-system")
+                 "/keys/secure-boot"))
+
+(define (sb-fixture! complete?)
+  (false-if-exception (delete-file-recursively %sb-fixture-target))
+  (when complete?
+    (for-each (lambda (f)
+                (let ((p (string-append (sb-fixture-keydir) "/" f)))
+                  (mkdir-p (dirname p))
+                  (call-with-output-file p
+                                         (lambda (port)
+                                           (display "" port)))))
+              (append %sb-key-file-names %keystore-auth-paths))))
+
+(test-assert "sb key material complete when all key files and auth artifacts exist"
+             (begin (sb-fixture! #t)
+                    (sb-key-material-complete? %sb-fixture-target)))
+
+(test-assert "sb key material incomplete when a key file is missing"
+             (begin
+              (sb-fixture! #t)
+              (delete-file (string-append (sb-fixture-keydir) "/KEK.key"))
+              (not (sb-key-material-complete? %sb-fixture-target))))
+
+(test-assert "sb key material incomplete when a keystore auth is missing"
+             (begin
+              (sb-fixture! #t)
+              (delete-file (string-append (sb-fixture-keydir)
+                                          "/keystore/db/db.auth"))
+              (not (sb-key-material-complete? %sb-fixture-target))))
+
+;;; ────────────────────────────────────────────────────────────
 ;;; 事务 root gate（非 root 立即 1，绝不触碰 exec / confirm）
 
 (define (exploding-exec . argv)
@@ -475,3 +515,4 @@
 
 (false-if-exception (delete-file %facts-file))
 (false-if-exception (delete-file-recursively %repo-fixture-target))
+(false-if-exception (delete-file-recursively %sb-fixture-target))

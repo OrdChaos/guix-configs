@@ -88,6 +88,10 @@
                          install-repo-path
                          repo-copy-present?
                          install-repository!
+                         ;; SB keydir 完整性（validate 共用；导出供测试）
+                         %sb-key-file-names
+                         %keystore-auth-paths
+                         sb-key-material-complete?
                          ;; 安装后验证（只读）
                          validate-installation
                          install-next-step-lines))
@@ -155,6 +159,20 @@
   (every (lambda (m)
            (file-exists? (string-append (install-repo-path target) "/" m)))
          %repo-copy-markers))
+
+(define (sb-key-material-complete? target)
+  "TARGET 下 SB keydir 的 6 密钥 + keystore 3 .auth 是否完整。validate
+共用：install 以不完整的 SB 材料收尾会静默产出无法 enroll 的系统
+（密钥被外部删除时 sb-keys/sb-keystore 阶段已 skip，validate 必须
+fail loud——2026-09 VM 实测：4 个密钥文件在安装窗口内消失，旧
+validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
+  (let ((keydir (install-keydir target)))
+    (and (every (lambda (f)
+                  (file-exists? (string-append keydir "/" f)))
+                %sb-key-file-names)
+         (every (lambda (f)
+                  (file-exists? (string-append keydir "/" f)))
+                %keystore-auth-paths))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 阶段记录与状态符号
@@ -990,7 +1008,9 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
           "repository checkout missing under @persist-data-home (repo stage incomplete)")
     (cons (not (file-exists?
                 (string-append (install-repo-path target) "/vms")))
-          "vms/ leaked into the persistent repository copy"))))
+          "vms/ leaked into the persistent repository copy")
+    (cons (sb-key-material-complete? target)
+          "Secure Boot key material incomplete (key files or keystore missing)"))))
 
 (define (install-next-step-lines host)
   "§39 的收尾文案（绝不自动 reboot）。"

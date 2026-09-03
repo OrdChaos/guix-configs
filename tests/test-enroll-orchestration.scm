@@ -120,7 +120,10 @@
              (not (firmware-confirmed? "")))
 
 (test-assert "firmware confirmation rejects EOF"
-             (not (firmware-confirmed? (eof-object))))
+             ;; EOF object 经空字符串端口 read 得到——不依赖
+             ;; run-tests.scm 模块上下文的 eof-object 绑定。
+             (not (firmware-confirmed?
+                   (call-with-input-string "" read))))
 
 (test-assert "firmware confirmation rejects non-string input"
              (not (firmware-confirmed? #f)))
@@ -181,6 +184,32 @@
                                (and (pair? r)
                                     (memq (car r) '(ok info fail))))))
                       checks)))
+
+;; SB 材料检查的 fail/info 边界（2026-09 VM 实测教训：普通用户面对
+;; 0700 root keydir 曾被误报为 missing——不可读 ≠ 不存在；但真缺失
+;; 必须 fail，soft 态也不得伪装成「需 root」）。本机 /persist 不存在
+;; = 真缺失 → fail。
+(define* (enroll-check-status label #:key (soft? #t))
+  (let ((check (find (lambda (c) (string=? (car c) label))
+                     (enroll-readonly-checks "/repo" "laptop"
+                                             #:soft? soft?))))
+    (car ((cdr check)))))
+
+(test-equal "SB keys check fails closed when the keydir is truly absent (soft mode)"
+            'fail
+            (enroll-check-status "Secure Boot keys"))
+
+(test-equal "SB keystore check fails closed when the keystore is truly absent (soft mode)"
+            'fail
+            (enroll-check-status "Secure Boot keystore"))
+
+(test-equal "SB keys check fails closed in hard (root) mode when absent"
+            'fail
+            (enroll-check-status "Secure Boot keys" #:soft? #f))
+
+(test-equal "SB keystore check fails closed in hard (root) mode when absent"
+            'fail
+            (enroll-check-status "Secure Boot keystore" #:soft? #f))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 事务 root gate（非 root 立即 1，绝不触碰 exec / confirm）
