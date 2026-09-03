@@ -201,7 +201,10 @@ ON-FAILURE 非 #f 时是 (lambda (key args) ...) 失败处理器：安装编排�
 
 (define %required-commands
   '("sgdisk" "udevadm" "mkfs.vfat" "cryptsetup" "mkfs.btrfs"
-             "btrfs" "mount" "umount" "mkdir" "lsblk" "findmnt" "readlink"))
+             "btrfs" "mount" "umount" "mkdir" "lsblk" "findmnt" "readlink"
+             ;; repo 复制阶段（installation.md 阶段 10：tar 两段复制 +
+             ;; chown -R 归还 USER ownership）
+             "tar" "chown"))
 
 (define (preflight-environment! device)
   "检查安装环境本身；任何问题直接报错退出。"

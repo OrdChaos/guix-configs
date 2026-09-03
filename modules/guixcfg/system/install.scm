@@ -20,11 +20,13 @@
 ;;;
 ;;; 阶段顺序以真实依赖为准（与 disk-install + installation.md 一致）：
 ;;;   disk → mounts → facts → sb-keys → secrets → sb-keystore
-;;;   → system-init → commit-root → validate。
+;;;   → system-init → commit-root → repo → validate。
 ;;;   关键依赖：sb-keys 在 system-init 前（部署期 UKI 签名需要
 ;;;   db.key/db.crt）；secrets 在 system-init 前（AGENT.md §5：阶段 5
 ;;;   必须先于 system init）；identity 解锁在 disk 前（让 LUKS
-;;;   passphrase 走 luks-recovery.age 而非交互）。
+;;;   passphrase 走 luks-recovery.age 而非交互）；repo 在 commit-root
+;;;   后（/mnt/persist/data-home 挂载且系统已可启动，runbook 阶段 10
+;;;   的相对顺序）。
 ;;;
 ;;; 退出码契约（docs/operations/installation.md）：
 ;;;   0 = 成功 / 已合规（skip/resume 收敛到完整状态）
@@ -81,6 +83,11 @@
                          install-confirmed?
                          ;; 事务（root 阶段执行；dry-run 绝不调用）
                          install-transaction!
+                         ;; repo 复制机制（事务 repo 阶段；导出供测试）
+                         %repo-copy-markers
+                         install-repo-path
+                         repo-copy-present?
+                         install-repository!
                          ;; 安装后验证（只读）
                          validate-installation
                          install-next-step-lines))
@@ -128,6 +135,27 @@
 (define %esp-markers '("/limine.conf" "/EFI/Guix/A/CURRENT.EFI"
                        "/EFI/Guix/A/RECOVERY.EFI"))
 
+;; 仓库 checkout 复制（installation.md 手动 runbook 阶段 10 的机制化）：
+;; 目标 = @persist-data-home/<user>/guix-configs（与
+;; (guixcfg system user-persistence) 的 guix-configs bind backing
+;; 一致——首次 boot 即 bind 到 ~/guix-configs）。检测与验证共用同一
+;; 标记集合；.git 必须保留（已装系统上用户 git pull 的入口）。
+(define %repo-copy-markers
+  '("channels.lock.scm" "modules" "tools" "docs" "manifests" ".git"))
+
+(define (install-repo-path target)
+  "TARGET（/mnt）下仓库 checkout 的目标路径。"
+  (string-append target
+                 (persist-mount-point "@persist-data-home")
+                 "/" (user-profile-name %primary-user)
+                 "/guix-configs"))
+
+(define (repo-copy-present? target)
+  "复制标记是否全部在位（resume 检测 + validate 共用）。"
+  (every (lambda (m)
+           (file-exists? (string-append (install-repo-path target) "/" m)))
+         %repo-copy-markers))
+
 ;;; ────────────────────────────────────────────────────────────
 ;;; 阶段记录与状态符号
 
@@ -158,7 +186,7 @@
 ;; 阶段 id 顺序 = 展示/执行顺序（真实依赖顺序，见模块头）。
 (define %install-stage-ids
   '(disk mounts facts sb-keys secrets sb-keystore system-init
-          commit-root validate))
+          commit-root repo validate))
 
 (define (stage-status state id)
   "STATE 中 id 阶段的 <install-stage>（缺省 #f）。"
@@ -284,6 +312,11 @@
              "commit state unknown: neither @root-installing/@root-0 nor state could be determined; inspect the Btrfs top level manually")
        '(fresh . "not applicable yet (target not mounted); will be committed after system init")))))
 
+(define (classify-repo p)
+  (if (assq-ref p 'repo-copied)
+    '(complete . "repository checkout present under @persist-data-home")
+    '(resumable . "repo copy is idempotent; it will be re-run")))
+
 (define (classify-install-probes probes)
   "把 PROBES（collect-install-probes 的 alist）分类为 <install-stage>
   列表（%install-stage-ids 顺序）。纯函数，无 IO。"
@@ -294,7 +327,8 @@
          (secrets (classify-secrets probes))
          (keystore (classify-keystore probes))
          (init (classify-init probes))
-         (commit (classify-commit probes)))
+         (commit (classify-commit probes))
+         (repo (classify-repo probes)))
     (list
      (install-stage (id 'disk) (status disk-status)
                     (detail (cdr (classify-disk probes))))
@@ -312,6 +346,8 @@
                     (detail (cdr init)))
      (install-stage (id 'commit-root) (status (car commit))
                     (detail (cdr commit)))
+     (install-stage (id 'repo) (status (car repo))
+                    (detail (cdr repo)))
      (install-stage (id 'validate) (status 'fresh)
                     (detail "always re-run at the end")))))
 
@@ -397,7 +433,8 @@
           (case c
             ((committed) 'committed)
             ((interrupted-after-rename not-committed) 'fresh)
-            (else 'unknown)))))))
+            (else 'unknown))))
+      (repo-copied . ,(repo-copy-present? target)))))
 
 (define* (detect-install-state root host device)
          "探测 DEVICE 并分类安装阶段（只读）。返回 <install-state>。"
@@ -645,6 +682,41 @@
     (unless (zero? status)
       (error "subprocess failed" stage status argv))))
 
+(define (resolve-primary-user-gid)
+  "numeric gid of %primary-user 的 group，从安装器自身 group 数据库
+解析（pinned Guix 的 system group id 自上而下确定分配，安装器与目标
+系统同值；runbook 的 998 语义）。解析失败 fail closed——绝不猜测。"
+  (let ((gid (false-if-exception
+              (group:gid (getgrnam (user-profile-group %primary-user))))))
+    (unless gid
+      (error "cannot resolve gid for group" (user-profile-group %primary-user)))
+    gid))
+
+(define (install-repository! exec root target)
+  "把仓库 checkout 复制到 /mnt/persist/data-home/USER/guix-configs
+（installation.md 手动 runbook 阶段 10 的同一语义：tar 排除 vms/ 与
+*.log，保留 .git）。两段 tar 经 staging 文件（/tmp）——EXEC 是单
+argv 子进程，不经 shell 管道（无引号风险）。chown -R 归还 USER
+ownership：boot 期 user-persistence activation 只 chown 顶层目录、
+绝不递归（AGENT.md §5），内容 ownership 必须安装期定死。失败语义
+与 secrets 阶段一致：幂等可重放，resume 自动重跑。"
+  (let* ((dest (install-repo-path target))
+         (staging (string-append (or (getenv "TMPDIR") "/tmp")
+                                 "/guixcfg-repo-copy-"
+                                 (number->string (getpid)) ".tar"))
+         (owner (format #f "~a:~a"
+                        (user-profile-uid %primary-user)
+                        (resolve-primary-user-gid))))
+    (run-checked-exec! exec 'repo `("mkdir" "-p" ,dest))
+    (run-checked-exec! exec 'repo
+                       `("tar" "cf" ,staging
+                              "--exclude=./vms" "--exclude=*.log"
+                              "-C" ,root "."))
+    (run-checked-exec! exec 'repo `("tar" "xf" ,staging "-C" ,dest))
+    (false-if-exception (delete-file staging))
+    (run-checked-exec! exec 'repo `("chown" "-R" ,owner ,dest))
+    (format #t "  repository copied to ~a~%" dest)))
+
 (define* (install-transaction! root host device
                                #:key exec on-confirm
                                      (target "/mnt"))
@@ -839,8 +911,14 @@
                                          (run-checked-exec!
                                           exec 'commit-root
                                           (commit-root-tool-argv
-                                           root target)))))
-                            ;; 9. validate（总是执行）
+                                           root target))))
+                            ;; 9. repo（runbook 阶段 10 机制化：
+                            ;;    checkout → @persist-data-home；幂等）
+                            (run-stage 'repo
+                                       (lambda ()
+                                         (install-repository!
+                                          exec root target))))
+                            ;; 10. validate（总是执行）
                             (format #t "~%== stage validate~%")
                             (let ((problems
                                    (validate-installation target device)))
@@ -907,14 +985,19 @@
            (string-append target
                           (persist-mount-point "@persist-system")
                           "/root-generations/state.scm"))
-          "root generation not committed (state.scm missing)"))))
+          "root generation not committed (state.scm missing)")
+    (cons (repo-copy-present? target)
+          "repository checkout missing under @persist-data-home (repo stage incomplete)")
+    (cons (not (file-exists?
+                (string-append (install-repo-path target) "/vms")))
+          "vms/ leaked into the persistent repository copy"))))
 
 (define (install-next-step-lines host)
   "§39 的收尾文案（绝不自动 reboot）。"
   (list ""
         "Installation complete."
         ""
-        "Next step: reboot into the installed system, then run:"
-        (format #f "  blue enroll ~a" host)
+        "Next step: shut down, reboot into the installed system, then run:"
+        (format #f "  blue firstboot ~a" host)
         ""
         "Do not reboot automatically; shut down the installer cleanly first."))

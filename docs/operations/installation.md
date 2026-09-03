@@ -12,17 +12,24 @@ reboot（绝不自动 reboot）
   ↓
 installed system（首次正常启动）
   ↓
-blue -n enroll HOST             # 只读 enrollment 计划（零 mutation）
-blue enroll HOST                # TPM / Secure Boot 固件注册（固件写入需显式确认）
+blue -n firstboot HOST          # 只读：reconfigure 推导 plan + enrollment 计划
+blue firstboot HOST             # 首次启动收敛：reconfigure（system + Home）
+                                #   → enroll（TPM / Secure Boot 固件注册）
   ↓
 normal operation
 ```
 
 - `blue install HOST DEVICE` = 从空白/可复用磁盘到「可启动、完整配置、
-  已验证」的目标系统；**不包含** TPM final enrollment 与固件 PK
-  enrollment（归 `blue enroll`）。
-- `blue enroll HOST` = 在目标系统已正常启动后，把这台实际机器绑定到
-  系统（Secure Boot 固件注册 → TPM enrollment → post-enrollment 验证）。
+  已验证」的目标系统（含仓库 checkout 复制到
+  `/persist/data-home/<user>/guix-configs`）；**不包含** TPM final
+  enrollment 与固件 PK enrollment（归 `blue enroll`）。
+- `blue firstboot HOST` = 首次正常启动后的一键收敛：先
+  `reconfigure`（把 system + Home 收敛到本 checkout），再 `enroll`
+  （把实际机器绑定到系统）。任一相位失败即整体失败（该相位退出码）。
+- `blue enroll HOST` = 单独重跑机器绑定（Secure Boot 固件注册 → TPM
+  enrollment → post-enrollment 验证）——Secure Boot policy 变化后的
+  `replace`、TPM 重建等场景；`blue firstboot` 的 enroll 相位与它
+  完全同机制。
 - HOST 与 DEVICE 均显式：无 fallback、无 hostname/machine-id 自动检测。
 - dry-run（`blue -n`）零 mutation、不 sudo、不要求确认。
 - 退出码：`0` 成功/已合规；`1` 前置失败（未 mutation）；`2` 部分
@@ -63,6 +70,10 @@ guix time-machine -C channels.lock.scm -- \
 
 # 关机重启进入已安装系统（安装完成绝不自动 reboot）
 
+blue -n firstboot laptop
+blue firstboot laptop          # = reconfigure + enroll（见「首次启动」一节）
+
+# 单独重跑机器绑定（policy 变化后的 replace / TPM 重建等）：
 blue -n enroll laptop
 blue enroll laptop
 ```
@@ -81,9 +92,19 @@ blue enroll laptop
   sb-keystore      sbkeysync keystore 构建（不写固件）
   system-init      GUIX_CONFIG_FACTS + guix system init → /mnt
   commit-root      @root-template 只读发布 + @root-0（幂等 + 中断恢复）
+  repo             仓库 checkout 复制到 /mnt/persist/data-home/<user>/
+                   guix-configs（runbook 阶段 10 机制化；tar 排除
+                   vms/*.log + chown -R 归还 USER ownership）
   validate         /mnt 布局 / facts / system generation / ESP artifacts /
-                   secrets / commit state 逐项复核
+                   secrets / commit state / repo copy 逐项复核
 ```
+
+repo 阶段语义：检测 = `channels.lock.scm`/`modules`/`tools`/`docs`/
+`manifests`/`.git` 全部在位 → complete（skip）；缺失/部分 → 幂等重放
+tar 复制（resume 安全）。`.git` 刻意保留——已装系统上用户
+`git pull` 更新仓库的入口；install 的 repo 复制只做 bootstrap，后续
+更新走正常 git 流程（AGENT.md §5 的 ownership 收尾语义在复制时一次
+性完成，boot 期 user-persistence activation 只 chown 顶层目录）。
 
 identity unlock（runbook 阶段 1 的语义已并入 `blue install`）：runtime
 与 installed identity 都缺失时，事务前置会交互提示 master password
@@ -107,6 +128,45 @@ identity 已就位时走 `luks-recovery.age`（age 解密，不提示密码）�
 固件写入确认：打印当前固件状态、计划操作与回滚/恢复影响，逐字输入
 `ENROLL-FIRMWARE` 才继续（其他输入/EOF 一律中止）。TPM enrollment
 是幂等的，自动执行，不额外确认。
+
+## 首次启动（blue firstboot）
+
+第一次正常启动时**自动**发生的事情（无需手动步骤）：
+
+- boot readiness 链（persistent-state-ready → account-state-ready →
+  interactive-secrets-ready → home-ready → session-infra-ready）完成
+  后 login gate 打开——首次 boot 即完整系统；
+- **Guix Home 首次投影由官方 `guix-home-service-type` 在 boot 时
+  自动激活**（pinned Guix gnu/services/guix.scm：shepherd 以 USER
+  身份运行 Home generation 的 `/activate`，provision
+  `guix-home-<user>`）。因此仓库派生的用户资源（assets/ 的
+  avatar/wallpaper → `~/.local/share/avatars|backgrounds/`）在首次
+  boot 就位——**既不在 `blue install` 里复制，也不需要手动
+  reconfigure**；install 期它们被编入 system generation closure，
+  boot 期投影到 $HOME（`(guixcfg home assets)` 的
+  home-files-service-type 链接）。仓库内 assets 更新后走
+  `blue firstboot` / `blue reconfigure`（Home 热激活）生效。
+
+之后的一键收敛：
+
+```bash
+blue -n firstboot laptop   # 只读：reconfigure 推导 plan + enrollment 计划
+blue firstboot laptop
+```
+
+两个相位顺序固定：
+
+1. **reconfigure 相位** = `blue reconfigure HOST` 的完整机制（doctor
+   含 git clean gate → gate transaction：system reconfigure → Home
+   热激活 → readiness 复查 → gate 重开）。作用：把系统收敛到当前
+   checkout（安装后仓库如有新提交——如 `git pull` 之后——在这一步
+   部署）。失败（exit 1/2）即整体失败，enroll 不执行。
+2. **enroll 相位** = `blue enroll HOST` 的完整机制（固件状态
+   preflight → Setup Mode 时显式确认写 db/KEK/PK → TPM enrollment
+   → validate）。失败（exit 1/2/3）整体失败。
+
+之后日常更新只用 `blue reconfigure HOST`；机器绑定重做只用
+`blue enroll HOST`。
 
 ---
 
@@ -262,6 +322,9 @@ guix time-machine -C channels.lock.scm -- \
 失败不阻塞普通安装（可稍后在目标系统补做）。
 
 ## 阶段 10：仓库复制到 persistent user data
+
+> `blue install` 的 repo 阶段已把本段自动化（检测/复制/chown/验证，
+> 见 Blue 主路径）；以下为机制细节与恢复/专家参考。
 
 ```bash
 mkdir -p /mnt/persist/data-home/ordchaos/guix-configs

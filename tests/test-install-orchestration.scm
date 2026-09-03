@@ -8,9 +8,13 @@
 (use-modules (guixcfg system install)
              (guixcfg system deploy)
              (guixcfg security enroll)
+             (guixcfg storage model)      ; persist-mount-point（repo 目标路径断言）
+             (guixcfg users facts)        ; %primary-user / user-profile-name（fixture 免硬编码）
+             (guix build utils)           ; mkdir-p / delete-file-recursively（repo fixture）
              (srfi srfi-64)
              (srfi srfi-1)
-             (srfi srfi-13))
+             (srfi srfi-13)
+             (ice-9 regex))
 
 (test-runner-current (test-runner-simple))
 
@@ -37,7 +41,7 @@
     (sb-keys . none) (keystore . #f)
     (identity . #f) (password-hash . #f)
     (init-markers . #f) (esp-markers . #f)
-    (commit . unknown)))
+    (commit . unknown) (repo-copied . #f)))
 
 ;; 真实 facts 文件（classify-facts 会 load-machine-facts 实际读取——
 ;; 必须指向存在的文件；内容 UUID 与 %complete-probes 的 luks-uuid 一致）。
@@ -59,7 +63,7 @@
     (sb-keys . complete) (keystore . #t)
     (identity . #t) (password-hash . #t)
     (init-markers . #t) (esp-markers . #t)
-    (commit . committed)))
+    (commit . committed) (repo-copied . #t)))
 
 (test-begin "install-orchestration")
 
@@ -167,7 +171,16 @@
                                   '(commit . unknown))
                       'commit-root))
 
-;; 全部 9 个阶段都在（顺序 = %install-stage-ids）
+(test-equal "repo complete when the checkout markers are present"
+            'complete
+            (stage-of %complete-probes 'repo))
+
+(test-equal "repo resumable (idempotent copy re-run) when markers are missing"
+            'resumable
+            (stage-of (probes-with %complete-probes '(repo-copied . #f))
+                      'repo))
+
+;; 全部 10 个阶段都在（顺序 = %install-stage-ids）
 (test-equal "classification yields all stages in order"
             %install-stage-ids
             (map install-stage-id (classify-install-probes %empty-disk-probes)))
@@ -221,7 +234,11 @@
              (not (install-confirmed? "" "/dev/nvme0n1")))
 
 (test-assert "confirmation rejects EOF"
-             (not (install-confirmed? (eof-object) "/dev/nvme0n1")))
+             ;; EOF object 经空字符串端口 read 得到——不依赖 run-tests.scm
+             ;; 模块上下文的 eof-object 绑定（standalone 运行时 unbound）。
+             (not (install-confirmed?
+                   (call-with-input-string "" read)
+                   "/dev/nvme0n1")))
 
 (test-assert "confirmation rejects non-string input"
              (not (install-confirmed? #f "/dev/nvme0n1")))
@@ -328,6 +345,88 @@
             (cddr (member "tools/enroll-cli.scm" enroll-cli)))
 
 ;;; ────────────────────────────────────────────────────────────
+;;; repo 复制机制（installation.md 阶段 10 的机制化）
+
+(test-equal "repo path is the user-persistence guix-configs backing"
+            (string-append "/mnt"
+                           (persist-mount-point "@persist-data-home")
+                           "/" (user-profile-name %primary-user)
+                           "/guix-configs")
+            (install-repo-path "/mnt"))
+
+(define %repo-fixture-target
+  (string-append "/tmp/guixcfg-test-repo-copy-"
+                 (number->string (getpid))))
+
+(define (repo-fixture! present?)
+  "在 fake target 下创建（或清空）repo 复制标记集合。"
+  (false-if-exception (delete-file-recursively %repo-fixture-target))
+  (when present?
+    (for-each (lambda (m)
+                (let ((p (string-append (install-repo-path
+                                         %repo-fixture-target)
+                                        "/" m)))
+                  (mkdir-p (dirname p))
+                  ;; .git 是目录，其余是文件——只验证 file-exists? 语义。
+                  (if (string=? m ".git")
+                    (mkdir-p p)
+                    (call-with-output-file p
+                                           (lambda (port)
+                                             (display "" port))))))
+              %repo-copy-markers)))
+
+(test-assert "repo-copy-present? true when all markers exist"
+             (begin (repo-fixture! #t)
+                    (repo-copy-present? %repo-fixture-target)))
+
+(test-assert "repo-copy-present? false when a marker is missing"
+             (begin
+              (repo-fixture! #t)
+              (delete-file (string-append (install-repo-path
+                                           %repo-fixture-target)
+                                          "/docs"))
+              (not (repo-copy-present? %repo-fixture-target))))
+
+(test-assert "repo copy replays the runbook stage 10 sequence via exec (no shell)"
+             (let ((log '()))
+               (install-repository!
+                (lambda (argv) (set! log (cons argv log)) 0)
+                "/repo-src" "/mnt")
+               (let ((seq (reverse log)))
+                 (and (= 4 (length seq))
+                      (equal? (list-ref seq 0)
+                              `("mkdir" "-p" ,(install-repo-path "/mnt")))
+                      (let ((create (list-ref seq 1))
+                            (extract (list-ref seq 2))
+                            (chown (list-ref seq 3)))
+                        (and (equal? (list-ref create 0) "tar")
+                             (equal? (list-ref create 1) "cf")
+                             (member "--exclude=./vms" create)
+                             (member "--exclude=*.log" create)
+                             (equal? (take-right create 3)
+                                     '("-C" "/repo-src" "."))
+                             ;; 两段 tar 用同一个 staging 文件
+                             (equal? (list-ref create 2)
+                                     (list-ref extract 2))
+                             (equal? (list-ref extract 0) "tar")
+                             (equal? (list-ref extract 1) "xf")
+                             (equal? (list-ref extract 3) "-C")
+                             (equal? (list-ref extract 4)
+                                     (install-repo-path "/mnt"))
+                             ;; chown -R <uid>:<numeric-gid> dest——
+                             ;; gid 安装期动态解析，宿主无关断言
+                             (equal? (list-ref chown 0) "chown")
+                             (equal? (list-ref chown 1) "-R")
+                             (string-match
+                              (string-append "^"
+                                             (number->string
+                                              (user-profile-uid %primary-user))
+                                             ":[0-9]+$")
+                              (list-ref chown 2))
+                             (equal? (list-ref chown 3)
+                                     (install-repo-path "/mnt"))))))))
+
+;;; ────────────────────────────────────────────────────────────
 ;;; 事务 root gate（非 root 立即 1，绝不触碰 exec / confirm）
 
 (define (exploding-exec . argv)
@@ -375,3 +474,4 @@
 (test-end "install-orchestration")
 
 (false-if-exception (delete-file %facts-file))
+(false-if-exception (delete-file-recursively %repo-fixture-target))
