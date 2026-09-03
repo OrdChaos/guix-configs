@@ -14,6 +14,10 @@
 ;;;        显式传会话环境（environ + GNUPGHOME）；
 ;;;   GN4  源码边界：无 --enable-ssh-support、无 gpg-agent 二进制
 ;;;        的 --daemon 自 spawn 残留。
+;;;   GN5  pinentry 权威配置：agent conf 是生成物（mixed-text-file
+;;;        内嵌 pinentry-gtk-2 build-time store 路径作
+;;;        pinentry-program）——本 key 带 passphrase，缺失时签名
+;;;        失败 "No pinentry"（2026-09 VM 实测根因）。
 
 (use-modules (guixcfg apps model)
              (guixcfg apps registry)
@@ -144,5 +148,20 @@ with 0700 directory permissions (no ssh/browser/extra sockets)"
                        "modules/guixcfg/apps/gnupg/definition.scm"
                        (lambda (p) (read-string p)))))
                (not (string-contains s "gpg-agent \""))))
+
+;; ── GN5：pinentry 权威配置（2026-09 签名失败根因修复）───────
+;; 本 key 带 passphrase：agent conf 必须携带 pinentry-program（缺失
+;; 时 agent 报 "No pinentry"，所有签名失败）；conf 必须是生成物——
+;; 静态文件无法携带版本相关的 store 路径（mixed-text-file 在
+;; build-time 解析 pinentry-gtk-2 的 /bin/pinentry-gtk-2）。
+(test-assert "GN5: agent conf is generated (mixed-text-file) with a \
+pinentry-program resolved from pinentry-gtk2 at build time"
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/apps/gnupg/definition.scm"
+                       (lambda (p) (read-string p)))))
+               (and (string-contains s "pinentry-program")
+                    (string-contains s "pinentry-gtk-2")
+                    (string-contains s "mixed-text-file")
+                    (not (string-contains s "local-file \"gpg-agent.conf\"")))))
 
 (test-end "gnupg")
