@@ -52,11 +52,19 @@ NOCOW、不压缩、预分配；@persist-swap 不做快照，swapfile 不进备�
 (define (execute-unmount-top)
   (invoke "umount" %btrfs-top-mount))
 
+(define (mount-point-mounted? target)
+  "TARGET 已挂载？（resume 幂等探测；findmnt 缺失/失败按未挂载处理）。"
+  (let ((r (false-if-exception
+            (first-command-line "findmnt" "-no" "TARGET" target))))
+    (and r (not (string-null? r)))))
+
 (define (mount-subvol name target options)
+  "幂等：TARGET 已挂载时 no-op（resume 场景重复重放 mount 步骤）。"
   (mkdir-p target)
-  (let ((opts (cons (string-append "subvol=" name) options)))
-    (apply invoke "mount" "-o" (string-join opts ",")
-      (mapper-path) target '())))
+  (unless (mount-point-mounted? target)
+    (let ((opts (cons (string-append "subvol=" name) options)))
+      (apply invoke "mount" "-o" (string-join opts ",")
+        (mapper-path) target '()))))
 
 (define (execute-mount-root name target)
   (mount-subvol name target '()))
@@ -66,4 +74,5 @@ NOCOW、不压缩、预分配；@persist-swap 不做快照，swapfile 不进备�
 
 (define (execute-mount-esp target)
   (mkdir-p target)
-  (invoke "mount" (by-partlabel-path %esp-partlabel) target))
+  (unless (mount-point-mounted? target)
+    (invoke "mount" (by-partlabel-path %esp-partlabel) target)))

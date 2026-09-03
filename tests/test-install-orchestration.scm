@@ -53,7 +53,7 @@
 
 (define %complete-probes
   `((partition-table . #t) (luks-volume . #t) (luks-open . #t)
-    (btrfs-rootfs . #t) (targets-mounted . #t)
+    (btrfs-rootfs . #t) (targets-mounted . #t) (top-mounted . #t)
     (facts-file . ,%facts-file)
     (luks-uuid . "11111111-1111-1111-1111-111111111111")
     (sb-keys . complete) (keystore . #t)
@@ -103,6 +103,11 @@
 (test-equal "mounts resumable when disk complete but unmounted"
             'resumable
             (stage-of (probes-with %complete-probes '(targets-mounted . #f))
+                      'mounts))
+
+(test-equal "mounts resumable when targets mounted but the btrfs top is not"
+            'resumable
+            (stage-of (probes-with %complete-probes '(top-mounted . #f))
                       'mounts))
 
 (test-equal "facts complete when facts match the device UUID"

@@ -44,6 +44,7 @@
                #:use-module (guixcfg storage plan)       ; storage-plan / display-plan
                #:use-module (guixcfg storage install)    ; %required-commands、preflight-environment!、execute-plan、execute-mounts!、write-machine-facts、warn-if-store-in-ram、read-secret-line
                #:use-module (guixcfg storage filesystem) ; execute-luks-open
+               #:use-module (guixcfg storage subvolume)  ; %btrfs-top-mount（top mount 探针）
                #:use-module (guixcfg storage commit)     ; commit-state
                #:use-module (guixcfg security age)       ; runtime-identity-present?、age-unlock!、ensure-installed-identity!、%installed-identity-path、%account-credentials-dir、provision-password-hash!
                #:use-module (guixcfg security credential-source) ; resolve-luks-passphrase-source
@@ -167,6 +168,7 @@
 ;;;   luks-open        #t/#f —— /dev/mapper/cryptroot 存在
 ;;;   btrfs-rootfs     #t/#f —— btrfs filesystem show mapper 含 rootfs
 ;;;   targets-mounted  #t/#f —— /mnt 与 /mnt/efi 均已挂载
+;;;   top-mounted      #t/#f —— btrfs 顶层已挂载（commit 探针依赖）
 ;;;   facts-file       path/#f
 ;;;   luks-uuid        uuid 字符串/#f（cryptsetup luksUUID）
 ;;;   sb-keys          'none | 'partial | 'complete
@@ -200,8 +202,9 @@
 
 (define (classify-mounts p disk-status)
   (cond
-    ((assq-ref p 'targets-mounted)
-     '(complete . "/mnt and /mnt/efi are mounted"))
+    ((and (assq-ref p 'targets-mounted)
+          (assq-ref p 'top-mounted))
+     '(complete . "/mnt, /mnt/efi and the btrfs top are mounted"))
     ((eq? disk-status 'fresh)
      '(fresh . "nothing to mount yet"))
     ((eq? disk-status 'complete)
@@ -347,6 +350,11 @@
                                              (string-append target
                                                             %esp-mount-point)))))
                (and src (not (string-null? src))))))
+      (top-mounted .
+       ,(let ((r (false-if-exception
+                  (first-command-line "findmnt" "-no" "TARGET"
+                                      %btrfs-top-mount))))
+          (and r (not (string-null? r)))))
       (facts-file .
        ,(and (file-exists? (install-facts-path target))
              (install-facts-path target)))
