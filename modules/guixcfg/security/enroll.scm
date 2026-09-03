@@ -420,7 +420,12 @@ site 与仓库 modules。ACTION ∈ preflight|status|enroll|replace。"
   "在 PATH 找 guix（sudo 的 secure_path 不含 system profile 时回退到
   /run/current-system/profile/bin/guix——目标系统的确定性位置），读其
   shebang 得到同 store 的 guile 绝对路径；返回 (values guile
-  guix-site-dir)。找不到即抛错（fail closed）。"
+  guix-site-dir)。找不到即抛错（fail closed）。
+
+guix-site-dir 必须从 GUIX-BIN 所在的 profile 推导（profile 聚合了
+guix + guile-json 等全部模块），不能从 guile 二进制路径推导：guix
+的 shebang 是 <guix包>/libexec/guix/guile，且 guile 包自身目录没有
+guix 模块——VM 实测 'no code for module (guix records)/(json)'。"
   (let ((guix-bin
          (or (search-path
               (string-split (or (getenv "PATH") "") #\:)
@@ -440,7 +445,7 @@ site 与仓库 modules。ACTION ∈ preflight|status|enroll|replace。"
                  shebang))
         (values guile
                 (string-append
-                 (dirname (dirname guile))
+                 (dirname (dirname guix-bin))
                  "/share/guile/site/" (effective-version)))))))
 
 (define (tpm2-enroll-argv root action flags)
