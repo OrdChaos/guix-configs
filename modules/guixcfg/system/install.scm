@@ -118,7 +118,12 @@
                                "keystore/KEK/KEK.auth"
                                "keystore/db/db.auth"))
 
-(define %init-markers '("/etc" "/var/guix/profiles/system-1-link"))
+;; commit-root 会把 /var/guix 收养进 @persist-var-guix（mount-at-install?
+;; #f 的刻意设计）——system-1-link 在 commit 后不再位于 /mnt/var/guix；
+;; /run/current-system 则是 boot 期产物（init 不创建）。init 完成标记
+;; 用 /etc + /boot/deploy-uki（system derivation 的 boot 输出，rename
+;; 到 @root-0 后仍可见，VM 实测）。
+(define %init-markers '("/etc" "/boot/deploy-uki"))
 
 (define %esp-markers '("/limine.conf" "/EFI/Guix/A/CURRENT.EFI"
                        "/EFI/Guix/A/RECOVERY.EFI"))
@@ -877,9 +882,8 @@
    (list
     (cons (file-exists? (string-append target "/etc"))
           (format #f "~a/etc missing (system init incomplete)" target))
-    (cons (file-exists?
-           (string-append target "/var/guix/profiles/system-1-link"))
-          "system-1-link missing (system init incomplete)")
+    (cons (file-exists? (string-append target "/boot/deploy-uki"))
+          "boot/deploy-uki missing (system init incomplete)")
     (cons (file-exists? (install-facts-path target))
           "machine facts file missing")
     (cons (and (file-exists? (install-facts-path target))
@@ -899,8 +903,11 @@
            (install-password-hash-path target
                                        (user-profile-name %primary-user)))
           "password hash missing")
-    (cons (eq? (false-if-exception (commit-state)) 'committed)
-          "root generation not committed (@root-template/@root-0/state)"))))
+    (cons (file-exists?
+           (string-append target
+                          (persist-mount-point "@persist-system")
+                          "/root-generations/state.scm"))
+          "root generation not committed (state.scm missing)"))))
 
 (define (install-next-step-lines host)
   "§39 的收尾文案（绝不自动 reboot）。"
