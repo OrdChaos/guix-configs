@@ -107,7 +107,9 @@
 ;; 传给 agent，agent 再传给 pinentry。pinentry-gtk-2 是
 ;; FALLBACK_CURSES 构建——无 DISPLAY 时走 curses 路径（依赖 agent
 ;; dup 的客户端 tty），因此图形会话（GTK 窗口）与带 pty 的 SSH
-;; 会话（curses 终端）两条路径都可用（2026-09 VM 实测）。
+;; 会话（curses 终端）两条路径都可用（2026-09 VM 实测）。无 tty 且
+;; 无 DISPLAY 的上下文（如非交互 ssh 单行命令）无处可提示，签名
+;; 失败 "Inappropriate ioctl for device"——预期行为，非配置缺陷。
 (define %gnupg-agent-conf
   (mixed-text-file
    "gpg-agent.conf"
