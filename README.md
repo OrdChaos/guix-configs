@@ -1,4 +1,4 @@
-# guix-configs
+# Guix Configs
 
 个人设备的 Guix System 配置、安装与维护工程。面向 VM 与 Laptop：
 
