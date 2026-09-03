@@ -1,57 +1,9 @@
-# Noctalia 初始配置 seed（repository authority，seed-once 模型）。
-#
-# 语义（docs/architecture/persistence.md（seed-once））：
-#   - 本文件只在 ~/.local/state/noctalia/settings.toml 从未存在时被
-#     首次写入（system activation，原子落盘 + marker 记录）；
-#   - 写入后 repository 永久放弃该文件 ownership——文件完全由
-#     Noctalia/用户运行时管理；后续 reconfigure 绝不覆盖/同步/修正
-#     （包括本 seed 本身的更新）；
-#   - seed-once != declarative management：不要把它改写成"每次同步
-#     默认配置"。
-#
-# 键名依据 virelith channel 固定版本（v5.0.0-beta.10）Noctalia 的
-# example.toml / config schema（settings.toml 是 overrides 格式，
-# 与 declarative config 同 schema）。未列出的项保持 Noctalia 内置
-# 默认值。bump 版本时对照新 schema 重新核对本文件。
-#
-# 可移植性规则：seed 不得含用户绝对路径（用 ~/）、机器专属输出
-# （显示器名等）、运行时产生的状态（wallpaper.last、widget 实例
-# ID）——它不是任何一台机器 live settings.toml 的快照。
-
-# 当前 schema config version（channel 固定版本 v5.0.0-beta.10
-# src/config/config_migrations.cpp：kPluginAutoUpdateModeMigrationVersion
-# = 13）：避免首启时 Noctalia 对无版本 overrides 表执行迁移回写。
 config_version = 13
-
-[shell]
-# Guix 负责完成首次初始化，Noctalia 不应再跑交互式 setup wizard
-# 做第二轮初始化。.setup-complete 由 Noctalia 自己管理（不伪造），
-# 随整个 state 目录持久化。
-setup_wizard_enabled = false
-telemetry_enabled = false
-app_icon_color = "primary"
-font_family = "Segoe UI"
-avatar_path = "~/Pictures/avatar.png"
-settings_show_advanced = false
-
-[shell.screenshot]
-save_to_file = true
-copy_to_clipboard = true
-freeze_screen = true
-directory = "~/Pictures/Screenshots"
-
-[shell.launcher]
-categories = true
-show_icons = true
-sort_by_usage = false
-
-[shell.panel]
-open_near_click_control_center = true
 
 [bar.default]
 center = [ "clock", "weather" ]
 concave_edge_corners = false
-end = [ "tray", "notifications", "network", "bluetooth", "volume", "brightness", "battery", "session" ]
+end = [ "tray", "notifications", "widget", "network", "bluetooth", "volume", "brightness", "battery", "session" ]
 margin_edge = 6
 margin_ends = 6
 padding = 4
@@ -83,56 +35,135 @@ sidebar_section = "none"
     type = "power_profile"
 
 [location]
-auto_locate = false
 address = "Wuhan,China"
+auto_locate = false
 
 [lockscreen]
 enabled = true
+
+[lockscreen_widgets]
+enabled = false
+schema_version = 2
+widget_order = [ "lockscreen-login-box@Virtual-1" ]
+
+    [lockscreen_widgets.grid]
+    cell_size = 16
+    major_interval = 4
+    visible = true
+
+    [lockscreen_widgets.widget."lockscreen-login-box@Virtual-1"]
+    box_height = 196.0
+    box_width = 810.0
+    cx = 907.00006103515625
+    cy = 871.0
+    output = "Virtual-1"
+    placement_height = 1053.0
+    placement_width = 1813.0
+    rotation = 0.0
+    type = "login_box"
+
+        [lockscreen_widgets.widget."lockscreen-login-box@Virtual-1".settings]
+        background_color = "surface_variant"
+        background_opacity = 0.88
+        background_radius = 12.0
+        center_password_text = false
+        input_opacity = 1.0
+        input_radius = 6.0
+        layout = "regular"
+        show_caps_lock = true
+        show_keyboard_layout = true
+        show_login_button = true
+        show_media = true
+        show_session_buttons = true
+        show_unlock_hint = true
+        show_weather = true
+
+[notification]
+enable_daemon = true
 
 [osd]
 position = "top_right"
 position_vertical = "top_right"
 
-[notification]
-# org.freedesktop.Notifications 唯一 owner = Noctalia（mako 应用
-# 单元已移除）。默认即 true；显式声明以固定归属语义。
-enable_daemon = true
+[plugin_settings."mdj2812/mihomo-control"]
+panel_placement = "attached"
+
+[plugins]
+enabled = [ "mdj2812/mihomo-control" ]
+
+    [[plugins.source]]
+    kind = "git"
+    location = "https://github.com/noctalia-dev/official-plugins"
+    name = "official"
+
+    [[plugins.source]]
+    kind = "git"
+    location = "https://github.com/noctalia-dev/community-plugins"
+    name = "community"
+
+    [[plugins.source]]
+    kind = "git"
+    location = "https://github.com/ordchaos/custom-noctalia-plugins"
+    name = "custom-plugins"
+
+[shell]
+app_icon_color = "primary"
+avatar_path = "/home/ordchaos/.local/share/avatars/avatar.png"
+settings_show_advanced = false
+setup_wizard_enabled = false
+telemetry_enabled = false
+
+    [shell.launcher]
+    categories = true
+    show_icons = true
+    sort_by_usage = false
+
+    [shell.panel]
+    open_near_click_control_center = true
+
+    [shell.screenshot]
+    copy_to_clipboard = true
+    directory = "~/Pictures/Screenshots"
+    freeze_screen = true
+    save_to_file = true
 
 [system.monitor]
 enabled = false
 
 [theme]
+builtin = "Noctalia"
+custom_palette = "fluent-blue"
 mode = "light"
 source = "custom"
-custom_palette = "fluent-blue"
 wallpaper_scheme = "m3-fruit-salad"
 
-[theme.templates]
-# 内置 gtk3/gtk4 已移除：其 stock post-hook（apply.sh）会在
-# gtk.css 缺 import 时 rm 重建 Guix Home 的 store symlink——不允许
-# 触碰 repo-owned 文件。GTK 动态配色改由下方 user template 承载
-# （vendored 输入 + 窄职责 post-hook；见 apps/gtk 头部）。
-builtin_ids = [ "ghostty", "kcolorscheme", "niri", "qt", "starship" ]
-community_ids = [ "obsidian", "vscode", "discord", "obs", "steam", "telegram" ]
+    [theme.templates]
+    builtin_ids = [ "ghostty", "kcolorscheme", "niri", "qt", "starship" ]
+    community_ids = [ "obsidian", "vscode", "discord", "obs", "steam", "telegram" ]
 
-# GTK 动态配色 user template（pinned schema：[theme.templates.user.
-# <id>]，键 input_path/output_path/post_hook——config_schema.cpp）。
-# 只生成 gtk-{3,4}/noctalia.css；post-hook 经 /bin/sh -lc 执行
-# （PATH 解析 appearance-sync——apps/gtk）。{{ mode }} = dark|light。
-[theme.templates.user.gtk3]
-input_path = "$XDG_CONFIG_HOME/noctalia/templates/gtk3.css"
-output_path = "$XDG_CONFIG_HOME/gtk-3.0/noctalia.css"
-post_hook = "appearance-sync {{ mode }}"
+        [theme.templates.user.gtk3]
+        input_path = "$XDG_CONFIG_HOME/noctalia/templates/gtk3.css"
+        output_path = "$XDG_CONFIG_HOME/gtk-3.0/noctalia.css"
+        post_hook = "appearance-sync {{ mode }}"
 
-[theme.templates.user.gtk4]
-input_path = "$XDG_CONFIG_HOME/noctalia/templates/gtk4.css"
-output_path = "$XDG_CONFIG_HOME/gtk-4.0/noctalia.css"
-post_hook = "appearance-sync {{ mode }}"
+        [theme.templates.user.gtk4]
+        input_path = "$XDG_CONFIG_HOME/noctalia/templates/gtk4.css"
+        output_path = "$XDG_CONFIG_HOME/gtk-4.0/noctalia.css"
+        post_hook = "appearance-sync {{ mode }}"
 
 [wallpaper]
+directory = "/home/ordchaos/.local/share/backgrounds"
 enabled = true
 fill_mode = "crop"
-directory = "~/Pictures/Wallpapers"
+
+    [wallpaper.default]
+    path = "/home/ordchaos/.local/share/backgrounds/wallpaper.jpg"
+
+    [wallpaper.last]
+    path = "/home/ordchaos/.local/share/backgrounds/wallpaper.jpg"
+
+    [wallpaper.monitors.Virtual-1]
+    path = "/home/ordchaos/.local/share/backgrounds/wallpaper.jpg"
 
 [widget.battery]
 capsule = true
@@ -172,3 +203,7 @@ pinned = [ "fcitx5" ]
 
 [widget.volume]
 capsule = true
+
+[widget.widget]
+capsule = true
+type = "mdj2812/mihomo-control:widget"
