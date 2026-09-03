@@ -262,10 +262,20 @@ info；#f（root 事务）全部硬性。"
            (lambda ()
              (cond
                ((enrollment-status-keystore status) '(ok . #f))
+               ;; 关键：普通用户无法遍历 0700 root keydir 时，对
+               ;; keystore 的 stat 是 EACCES 不是 ENOENT——file-exists?
+               ;; 同样返回 #f。绝不能把权限伪影判成"真缺失"：
+               ;; keydir 在但不可遍历 → soft 态降级 info。
+               ((and soft?
+                     (file-exists? %sb-keydir)
+                     (not (sb-keydir-readable?)))
+                '(info . "requires root to read"))
+               ;; 可遍历（root，或 keydir 权限宽松）时的真缺失。
                ((not (file-exists? %sb-keystore))
                 (cons 'fail
                       (format #f "SB keystore missing under ~a (run blue install or tools/secure-boot-enroll.scm)"
                               %sb-keystore)))
+               ;; keystore 在但 0700 不可读（权限伪影，非缺失）。
                ((and soft? (not (sb-keystore-readable?)))
                 '(info . "requires root to read"))
                (else
