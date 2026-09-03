@@ -15,14 +15,14 @@
 ;;;   1. 网络：NetworkManager 默认 shepherd-requirement
 ;;;      '(wireless-daemon) + 显式 wpa-supplicant 实例（pinned Guix
 ;;;      不会自动实例化 wpa-supplicant-service-type）；
-;;;   2. persistence：application rules 不含 Flatpak 平台（Flatpak
-;;;      当前只在 VM 启用）；
-;;;   3. secrets：%laptop-secrets = mihomo + applications（无测试
+;;;   2. secrets：%laptop-secrets = mihomo + applications（无测试
 ;;;      sentinel）；
-;;;   4. home：%laptop-guix-home（niri 'laptop variant selection +
+;;;   3. home：%laptop-guix-home（niri 'laptop variant selection +
 ;;;      laptop-only host capability %prime-run-wrapper）；
-;;;   5. NVIDIA：最终 OS 套 nvidia-system-transformation（open kernel
+;;;   4. NVIDIA：最终 OS 套 nvidia-system-transformation（open kernel
 ;;;      module + dynamic boost；kernel 不被替换）。
+;;; （Flatpak 与 application persistence 规则自 2026-09 起在 common
+;;; 共享——不再是 host 差异。）
 ;;;
 ;;; 构建（需要 machine facts，见 (guixcfg system file-systems) 头注释）：
 ;;;   GUIX_CONFIG_FACTS=<facts> guix time-machine -C channels.lock.scm \
@@ -40,10 +40,8 @@
                #:use-module (guixcfg home user)            ; guix-home（挂入 system）
                #:use-module (guixcfg security secrets)     ; secrets 部署机制
                #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
-               #:use-module (guixcfg apps model)      ; applications-secrets、applications-persistence
+               #:use-module (guixcfg apps model)      ; applications-secrets
                #:use-module (guixcfg apps selection)  ; application-configuration-selection
-               #:use-module (guixcfg system user-persistence)  ; selected user persistence
-               #:use-module (guixcfg system application-persistence) ; application persistence generic executor
                #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind
                #:use-module (guixcfg system mihomo service) ; %mihomo-secrets、%mihomo-data-persistence-rule
@@ -89,13 +87,10 @@
 
 ;; HOME persistence bind mounts（user data + app state；单一定义，
 ;; %laptop-services 的 gvfs-mount-metadata 服务与 file-systems 字段
-;; 共用）。Flatpak 当前只在 VM 启用——无平台规则。
+;; 共用）。列表本身是 common 的共享事实（含 Flatpak 平台规则——
+;; 所有 host 都用，2026-09 起不再是 host 差异）。
 (define %persistent-mount-file-systems
-  (append (user-persistence-file-systems
-           (user-profile-name %primary-user))
-          (application-persistence-file-systems
-           (applications-persistence %applications)
-           (user-profile-name %primary-user))))
+  (host-persistent-mount-file-systems))
 
 ;; Mihomo 数据目录（providers cache + 选中节点/组状态）的 machine-state
 ;; bind（root-owned system state；backing/consumer 0700 由 mihomo
@@ -127,8 +122,6 @@
 (define %laptop-user-services
   (make-host-user-services
    #:system-services %laptop-services
-   #:application-persistence-rules
-   (applications-persistence %applications)
    #:secrets %laptop-secrets
    #:home-environment %laptop-guix-home))
 

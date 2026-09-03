@@ -10,7 +10,8 @@
 ;;;   network services          VM：NM 空 requirement；Laptop：NM
 ;;;                             默认 + wpa-supplicant
 ;;;   storage policy            keep-root-generations 参数
-;;;   persistence rules         VM 含 Flatpak 平台规则，Laptop 不含
+;;;   persistence rules         Flatpak 平台规则共享（2026-09：从
+;;;                             VM-only 提升到 common——所有 host 都用）
 ;;;   secrets composition       VM 含测试 sentinel，Laptop 不含
 ;;;   home environment          %guix-home vs %laptop-guix-home
 ;;;   final OS transformation   Laptop：nvidia-system-transformation；
@@ -56,12 +57,37 @@
                #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
                #:use-module (guixcfg system machine-identity) ; /etc/machine-id 持久化（先于 D-Bus activation）
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind + 系统集成
+               #:use-module (guixcfg flatpak service) ; flatpak-persistence-rules（installation + 每 selected app，所有 host 共享）
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:use-module (srfi srfi-1)              ; remove
                #:export (make-host-services
                          make-host-user-services
                          make-base-host-operating-system
-                         make-host-operating-system))
+                         make-host-operating-system
+                         ;; Flatpak 应用 persistence（共享结构事实：
+                         ;; 2026-09 从 VM-only 提升到 common 层）
+                         host-application-persistence-rules
+                         host-persistent-mount-file-systems))
+
+;;; ── 共享 application persistence 事实（Flatpak 是所有 host 的结构
+;;; 事实，2026-09 从 VM-only 提升到 common 层——不再由 host 各自
+;;; append：application rules + Flatpak 平台规则 + HOME persistence
+;;; bind 列表在 common 单一构造，host 只消费）。
+
+(define (host-application-persistence-rules)
+  "全部 application persistence 规则：applications + Flatpak 平台
+（installation + 每 selected app）。所有 host 共享。"
+  (append (applications-persistence %applications)
+          (flatpak-persistence-rules)))
+
+(define (host-persistent-mount-file-systems)
+  "HOME persistence bind 列表（user data + app state，含 Flatpak）。
+gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
+  (append (user-persistence-file-systems
+           (user-profile-name %primary-user))
+          (application-persistence-file-systems
+           (host-application-persistence-rules)
+           (user-profile-name %primary-user))))
 
 ;;; ── TTY login prompt 的强语义（docs/architecture/accounts-sessions.md）
 ;;; login: 出现 = interactive-session-ready 已过——mingetty 延迟到
@@ -120,15 +146,17 @@
 
 (define* (make-host-user-services #:key
                                   system-services
-                                  application-persistence-rules
+                                  (application-persistence-rules
+                                   (host-application-persistence-rules))
                                   secrets
                                   home-environment)
   "共享 user services 列表（不含 account-databases 投影本身）。
 SYSTEM-SERVICES 是 host 的 system services 列表（make-host-services
-的产物）；APPLICATION-PERSISTENCE-RULES 是 application persistence
-规则（host 决定是否含 Flatpak 平台规则）；SECRETS 是全部声明式
-secrets（host 的 inventory：测试 sentinel + mihomo + applications）；
-HOME-ENVIRONMENT 是挂入 system 的 Guix Home。"
+的产物）；APPLICATION-PERSISTENCE-RULES 默认 = 全部 application +
+Flatpak 平台规则（host-application-persistence-rules，所有 host
+共享）；SECRETS 是全部声明式 secrets（host 的 inventory：测试
+sentinel + mihomo + applications）；HOME-ENVIRONMENT 是挂入 system
+的 Guix Home。"
   (append
    (list (secure-ssh-service)
          (ssh-host-key-service)

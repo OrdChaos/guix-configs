@@ -79,14 +79,14 @@ install 时 desktop entry export 需要绝对路径）。ssh 非 login shell
 会误报缺失（VM 内 sudo 的 secure_path 恰好有它，造成'加 sudo 才
 可用'的假象——而且 sudo 会把操作落到 root 的 user installation，
 完全错误）；因此按候选表显式回退到 guix 标准安装位置。本机没有
-flatpak（Flatpak 子系统只在 VM 内提供）：全部候选缺失 → fail
-fast。"
+flatpak（Flatpak 子系统对所有 host 提供，缺失即异常）：全部候选
+缺失 → fail fast。"
   (or (find (lambda (path)
               (and (string? path) (file-exists? path)))
             (flatpak-binary-candidates))
       (error "flatpak executable not found \
 (searched PATH, /run/current-system/profile and ~/.guix-profile); \
-flatpak operations are VM-side only")))
+install flatpak on this system first")))
 
 ;;; ── remotes ────────────────────────────────────────────────
 
