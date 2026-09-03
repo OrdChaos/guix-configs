@@ -152,11 +152,15 @@ host-source-relative-path 的权威相对路径。"
 
 (define (system-init-argv root host)
   ;; blue install 的 guix system init argv：pinned channels.lock.scm、
-  ;; 绝对 -L、显式 host 文件、目标 /mnt（docs/operations/installation.md
-  ;; 阶段 6 的 argv 形态）。调用方负责已挂好 /mnt 并设置
-  ;; GUIX_CONFIG_FACTS。
+  ;; 绝对 -L、显式 host 文件、目标 /mnt。guix system init 的语法是
+  ;; FILE 在选项之后、TARGET 最后——/mnt 必须放末尾（放前面会被当
+  ;; 成 FILE：failed to load '/mnt': Is a directory，VM 实测）。
+  ;; 调用方负责已挂好 /mnt 并设置 GUIX_CONFIG_FACTS。
   (guix-time-machine-argv root %channels-lock-file
-                          (system-subcommand-argv root host "init" '("/mnt"))))
+                          `("system" "init"
+                            "-L" ,(string-append root "/" %modules-dir)
+                            ,(host-source-relative-path host)
+                            "/mnt")))
 
 (define (reconfigure-privileged-argv blue-executable blueprint-path host home-user)
   ;; blue reconfigure 的 privilege handoff argv：sudo 重新执行【同一

@@ -240,9 +240,9 @@
              (equal? "/repo/modules"
                     (and=> (member "-L" init-argv) cadr)))
 
-(test-equal "system init targets the explicit host file and /mnt"
-            '("system" "init" "/mnt" "-L" "/repo/modules"
-              "modules/guixcfg/hosts/laptop.scm")
+(test-equal "system init puts FILE after options and /mnt last"
+            '("system" "init" "-L" "/repo/modules"
+              "modules/guixcfg/hosts/laptop.scm" "/mnt")
             (cdr (member "--" init-argv)))
 
 (define privileged (install-privileged-argv "/bin/blue"
