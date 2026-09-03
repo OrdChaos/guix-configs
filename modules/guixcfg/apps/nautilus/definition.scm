@@ -13,16 +13,36 @@
 ;;;     （user-persistence 的 .local/share/Trash，docs/architecture/
 ;;;     home.md）。
 ;;;
+;;;   - "在此处打开终端"：nautilus-open-any-terminal（virelith 包，
+;;;     连同其 nautilus-python 绑定——pinned Guix 无此二者，
+;;;     docs/architecture/nautilus-extension 审计）经 XDG_DATA_DIRS
+;;;     的 share/nautilus-python/extensions 被 nautilus 加载；终端
+;;;     经 gsettings 声明（com.github.stunkymonkey.nautilus-open-any-
+;;;     terminal / terminal = ghostty——本仓库唯一 terminal 事实，
+;;;     (guixcfg apps ghostty)），schema 随 home profile 投影，
+;;;     gsettings reconcile 的 runtime dconf 投影统一应用。
+;;;
 ;;; 无 persistence 规则（nautilus 状态属用户数据层）。
 
 (define-module (guixcfg apps nautilus definition)
                #:use-module (gnu packages gnome) ; nautilus、gvfs
+               #:use-module (virelith packages nautilus) ; python-nautilus、nautilus-open-any-terminal
                #:use-module (guix records)
                #:use-module (guixcfg apps model)
+               #:use-module (guixcfg gsettings model) ; gsettings-setting
                #:export (%nautilus))
 
 (define %nautilus
   (application
    (name 'nautilus)
    ;; gvfs：trash 的 D-Bus activation 服务文件所在包（见上）。
-   (home-packages (list nautilus gvfs))))
+   ;; python-nautilus + nautilus-open-any-terminal：右键"打开终端"扩展
+   ;; （gtk/pygobject 经扩展的 propagated-inputs 随闭包进入 profile）。
+   (home-packages (list nautilus gvfs
+                        python-nautilus nautilus-open-any-terminal))
+   ;; 扩展的终端选择：ghostty（本仓库唯一 terminal）。
+   (gsettings
+    (list (gsettings-setting
+           (schema "com.github.stunkymonkey.nautilus-open-any-terminal")
+           (key "terminal")
+           (value "'ghostty'"))))))
