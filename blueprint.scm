@@ -11,8 +11,8 @@
 ;;;   §1 命令构造复用层 —— 直接使用 (guixcfg system deploy) 的纯 argv
 ;;;   §2 preflight —— doctor（含 git clean gate）与 build preflight（不含）
 ;;;   §3 命令定义 —— doctor / build-os / reconfigure / install /
-;;;                    enroll（+ 内部 privileged mode）/ update /
-;;;                    flatpak / gsettings
+;;;                    enroll / firstboot（+ 内部 privileged mode）/
+;;;                    update / flatpak / gsettings
 ;;;   §4 repository-tests testable —— 薄包装 tests/run-tests.scm
 ;;;   §5 入口 —— (blueprint ...) 注册
 ;;;
@@ -26,6 +26,8 @@
 ;;;                    绝不进入 privileged transaction（无 sudo、无
 ;;;                    gate、无 herd、无 Home 热激活）
 ;;;   update -n     → command preview only（不联网、不写锁、无未来 revision）
+;;;   firstboot -n  → 下游 guix system reconfigure --dry-run +
+;;;                   enrollment plan（只读；不进入任何事务）
 ;;;   check -n      → Blue 内建语义：不真正运行测试套件
 ;;;   doctor        → 本身只读，检查照常执行
 ;;;   flatpak -n    → status 真实执行（只读）；sync/update/
@@ -404,6 +406,37 @@ preflight（git status / describe 等）——blue -n 下也真实执行，以�
        (format (current-error-port)
                "WARNING: worktree became dirty during reconfigure~%")))))
 
+;;; ────────────────────────────────────────────────────────────
+;;; §2.5 部署相位（reconfigure / enroll / firstboot 共用的非 dry 主体；
+;;; 单一实现——firstboot 编排复用，不复制逻辑）
+
+(define (%reconfigure-host root host)
+  "reconfigure 的部署相位（非 dry）：doctor → privilege handoff →
+postflight 漂移检查。子进程非零退出经 %run 原样传播（0/1/2）。"
+  (%doctor root host)
+  (let ((head-before (%head-commit root)))
+    ;; privilege handoff：sudo 重新执行【同一个】Blue executable
+    ;;（绝对路径），root phase 运行 Guile transaction 并原样返回
+    ;; exit code（0/1/2）。
+    (%run (reconfigure-privileged-argv
+           (car (program-arguments))
+           (string-append root "/blueprint.scm")
+           host
+           (or (let ((hu (getenv "HOME_USER")))
+                 (and hu (not (string-null? hu)) hu))
+               (user-profile-name %primary-user))))
+    (%postflight-drift root head-before)))
+
+(define (%enroll-host root host)
+  "enroll 的部署相位（非 dry）：用户态只读计划（fail early）→
+privilege handoff。子进程非零退出经 %run 原样传播（0/1/2/3）。"
+  (%exec (enroll-cli-argv root "plan" host))
+  (%run (enroll-privileged-argv
+         (car (program-arguments))
+         (string-append root "/blueprint.scm")
+         host)
+        #:input (current-input-port)))
+
 ;;; ============================================================
 ;;; §3 命令定义
 ;;; ============================================================
@@ -461,20 +494,7 @@ Shepherd restart, no Home hot activation)."))
                     (begin
                      (%doctor root host)        ; 只读前置（含 git clean）在 -n 下照常执行
                      (%exec (system-reconfigure-dry-run-argv root host)))
-                    (begin
-                     (%doctor root host)
-                     (let ((head-before (%head-commit root)))
-                       ;; privilege handoff：sudo 重新执行【同一个】Blue
-                       ;; executable（绝对路径），root phase 运行 Guile
-                       ;; transaction 并原样返回 exit code（0/1/2）。
-                       (%run (reconfigure-privileged-argv
-                              (car (program-arguments))
-                              (string-append root "/blueprint.scm")
-                              host
-                              (or (let ((hu (getenv "HOME_USER")))
-                                    (and hu (not (string-null? hu)) hu))
-                                  (user-profile-name %primary-user))))
-                       (%postflight-drift root head-before))))))
+                    (%reconfigure-host root host))))
 
 ;; 内部 privileged mode（Blue self-reexec 的 root phase）。
 ;; dot 前缀：blue help 默认过滤 dot command，不作为用户命令宣传；
@@ -822,12 +842,14 @@ Install the complete bootable system for HOST onto the whole block
 device DEVICE, from a LiveCD/installer environment. Orchestrates:
 disk layout -> mounts -> machine facts -> Secure Boot keys ->
 secrets -> Secure Boot keystore -> guix system init -> commit-root
--> validation. Resume: completed stages are detected and skipped;
-ambiguous/incompatible partial states fail closed (the disk is
-never re-formatted automatically).
+-> repository copy (@persist-data-home/<user>/guix-configs, so the
+installed system can manage itself) -> validation. Resume: completed
+stages are detected and skipped; ambiguous/incompatible partial
+states fail closed (the disk is never re-formatted automatically).
 Destructive confirmation: the full device path must be typed before
 the disk is touched. Not included: TPM enrollment and firmware
-PK enrollment (run 'blue enroll HOST' after the first boot).
+PK enrollment (run 'blue firstboot HOST' after the first boot:
+reconfigure then machine enrollment).
 Exit codes: 0 success/already complete; 1 preflight failure (no
 mutation); 2 partial mutation, cannot continue safely; 3 user abort.
 With blue -n: read-only preflight + installation plan only; zero
@@ -896,16 +918,7 @@ mutation, no sudo, no confirmation."))
                     (begin
                      (%exec (enroll-cli-argv root "plan" host))
                      (format #t "  [dry-run] no mutation; no sudo; no confirmation.~%"))
-                    (begin
-                     ;; 用户态只读前置（fail early），然后 privilege
-                     ;; handoff（sudo 重新执行同一 Blue；root phase
-                     ;; 重新做环境类检查并执行事务）。
-                     (%exec (enroll-cli-argv root "plan" host))
-                     (%run (enroll-privileged-argv
-                            (car (program-arguments))
-                            (string-append root "/blueprint.scm")
-                            host)
-                           #:input (current-input-port))))))
+                    (%enroll-host root host))))
 
 ;; 内部 privileged mode（Blue self-reexec 的 root phase；与
 ;; .reconfigure-root 同一模型）。事务（含固件写入确认 UI）在 pinned
@@ -929,6 +942,41 @@ validation) and exits with its exact status (0 success / 1 preflight
                                #:input (current-input-port)))
                        (_ (%usage-error
                            "usage (internal): HOST"))))
+
+;;; ============================================================
+;;; §3.9 firstboot（首次启动收敛：reconfigure → enroll 的一键入口）
+;;; ============================================================
+;;; 纯编排：两个相位都是既有命令的非 dry 主体（%reconfigure-host /
+;;; %enroll-host，单一实现——不复制逻辑）。顺序固定：先把系统收敛到
+;;; 本 checkout（system + Home），再绑定机器（固件 PK + TPM）——
+;;; 固件/TPM enrollment 针对已收敛的系统执行。任一相位失败即整体
+;;; 失败（该相位的退出码原样传播），绝不跳过失败继续。
+
+(define-command (firstboot-command arguments)
+                ((invoke "firstboot")
+                 (category 'deployment)
+                 (synopsis "First-boot convergence for a freshly installed system: reconfigure then machine enrollment")
+                 (help "HOST
+One-click first-boot entry for a freshly installed system:
+  1. reconfigure phase  -- converge system + Home onto this checkout
+     (doctor incl. the git clean gate, then the gate transaction)
+  2. enroll phase       -- bind this machine: Secure Boot firmware
+     enrollment (explicit confirmation) + TPM enrollment
+Stops at the first failing phase; that phase's exit code is
+propagated (reconfigure: 0/1/2; enroll: 0/1/2/3).
+With blue -n: system reconfigure derivation dry-run + enrollment
+plan only; zero mutation, no sudo, no confirmation."))
+                (let* ((root (%repo-root))
+                       (host (%require-host-argument arguments)))
+                  (if (dry-build?)
+                    (begin
+                     (%doctor root host)
+                     (%exec (system-reconfigure-dry-run-argv root host))
+                     (%exec (enroll-cli-argv root "plan" host))
+                     (format #t "  [dry-run] no mutation; no sudo; no confirmation.~%"))
+                    (begin
+                     (%reconfigure-host root host)
+                     (%enroll-host root host)))))
 
 ;;; ============================================================
 ;;; §4 repository-tests testable（builtin blue check 的薄 adapter）
@@ -977,6 +1025,7 @@ validation) and exits with its exact status (0 success / 1 preflight
                  install-root-command
                  enroll-command
                  enroll-root-command
+                 firstboot-command
                  update-command
                  flatpak-command
                  gsettings-command)))

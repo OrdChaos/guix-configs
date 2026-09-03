@@ -17,6 +17,7 @@ blue doctor HOST             # 部署就绪检查（离线只读）
 blue build-os HOST           # 构建系统配置（允许脏工作树）
 blue reconfigure HOST        # 部署（干净提交的工作树）
 blue install HOST DEVICE     # 安装生命周期（LiveCD；见 installation.md）
+blue firstboot HOST          # 首次启动收敛：reconfigure + enroll（见 installation.md）
 blue enroll HOST             # 机器绑定 enrollment（目标系统上；见 installation.md）
 blue update                  # 重写 channels.lock.scm
 blue check                   # 测试套件
@@ -53,6 +54,9 @@ blue -n build-os laptop   # 构建 dry-run（derivation plan，不产 store）
 
 blue reconfigure laptop   # 部署（前置 doctor + git clean gate）
 blue -n reconfigure laptop
+
+blue firstboot laptop     # 首次启动收敛：reconfigure 相位 + enroll 相位
+blue -n firstboot laptop  # 只读：reconfigure 推导 plan + enrollment 计划
 
 blue check                # 测试套件（薄包装 tests/run-tests.scm）
 blue update               # 重写 channels.lock.scm（见下）
@@ -138,6 +142,12 @@ system 成功 + Home 失败   → gate 保持关闭，exit 2；
                             恢复（无需 reboot）
 ```
 
+`blue firstboot HOST` = 同一 reconfigure 机制（doctor → handoff →
+gate transaction → drift check）成功后，接着执行 `blue enroll HOST`
+的完整机制（installation.md「首次启动」）。两个相位与两个单命令
+共用同一实现（blueprint 的 %reconfigure-host / %enroll-host），
+任一相位失败即整体失败（该相位退出码），绝不跳过失败继续。
+
 ## 什么时候需要 reboot
 
 - 内核/initrd/UKI 变化：boot 才生效。
@@ -184,6 +194,7 @@ channels.scm 与 channels.lock.scm 结构兼容
 | --- | --- |
 | `blue -n build-os HOST` | 下游 `guix system build --dry-run`：真实 derivation/build plan（保留 facts/module lowering 验证），不构建 store object |
 | `blue -n reconfigure HOST` | 只读前置照常执行（含 git clean gate），然后 `guix system reconfigure --dry-run`。**只验证 system derivation/build plan**——不模拟 gate 事务、shepherd restart、Home 热激活；**绝不进入 privileged transaction（无 sudo、无 gate、无 herd）** |
+| `blue -n firstboot HOST` | reconfigure 相位 dry-run（同 `-n reconfigure`）+ enroll 相位只读计划（同 `-n enroll`）；零 mutation、无 sudo、无确认 |
 | `blue -n update` | **command preview only**：不联网、不解析新 revision、不写锁；只打印将执行的命令与目标文件。无法预告"将更新到什么 commit" |
 | `blue -n check` | 不真正运行测试套件（Blue testable builtin dry-run 语义，有意为之） |
 | `blue doctor` | 本身只读，检查照常执行 |

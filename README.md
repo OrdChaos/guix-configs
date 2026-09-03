@@ -37,6 +37,9 @@ guix time-machine -C channels.lock.scm -- \
 guix time-machine -C channels.lock.scm -- \
   shell -m manifests/development.scm -- blue install laptop /dev/nvme0n1
 # → reboot into the installed system
+blue -n firstboot laptop   # 只读：reconfigure 推导 plan + enrollment 计划
+blue firstboot laptop      # 首次启动收敛：reconfigure + enroll（TPM/固件）
+# 单独重跑机器绑定（policy 变化 replace / TPM 重建）：
 blue -n enroll laptop
 blue enroll laptop
 
