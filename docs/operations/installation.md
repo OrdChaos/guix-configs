@@ -14,7 +14,11 @@ installed system（首次正常启动）
   ↓
 blue -n firstboot HOST          # 只读：reconfigure 推导 plan + enrollment 计划
 blue firstboot HOST             # 首次启动收敛：reconfigure（system + Home）
-                                #   → enroll（TPM / Secure Boot 固件注册）
+                                #   → enroll 相位 1（固件 PK/KEK/db）
+  ↓
+reboot（Secure Boot 在此 boot 激活；LUKS 密码人工输入一次）
+  ↓
+blue enroll HOST                # enroll 相位 2：固件已注册（skip）→ TPM
   ↓
 normal operation
 ```
@@ -25,11 +29,16 @@ normal operation
   enrollment 与固件 PK enrollment（归 `blue enroll`）。
 - `blue firstboot HOST` = 首次正常启动后的一键收敛：先
   `reconfigure`（把 system + Home 收敛到本 checkout），再 `enroll`
-  （把实际机器绑定到系统）。任一相位失败即整体失败（该相位退出码）。
-- `blue enroll HOST` = 单独重跑机器绑定（Secure Boot 固件注册 → TPM
-  enrollment → post-enrollment 验证）——Secure Boot policy 变化后的
-  `replace`、TPM 重建等场景；`blue firstboot` 的 enroll 相位与它
-  完全同机制。
+  相位 1（固件 PK/KEK/db 注册，显式确认）。任一相位失败即整体失败
+  （该相位退出码）。
+- `blue enroll HOST` = 机器绑定 enrollment，**两个相位、中间隔一次
+  reboot**：相位 1（Setup Mode）写固件 db/KEK/PK（写 PK 退出 Setup
+  Mode），exit 0 并要求 reboot——**TPM 在同一轮被跳过**（TPM policy
+  必须对「以最终 Secure Boot 状态启动」的那次 boot 密封，SecureBoot
+  恒在下次 boot 才置 1）；reboot 后（SecureBoot=1，LUKS 密码人工输入
+  一次）再跑一次，固件 detected as enrolled → skip，TPM enrollment
+  执行（PolicyPCR sha256:7，幂等）→ validate。之后 policy 变化的
+  `replace`、TPM 重建等场景同样走 `blue enroll`。
 - HOST 与 DEVICE 均显式：无 fallback、无 hostname/machine-id 自动检测。
 - dry-run（`blue -n`）零 mutation、不 sudo、不要求确认。
 - 退出码：`0` 成功/已合规；`1` 前置失败（未 mutation）；`2` 部分
@@ -71,11 +80,12 @@ guix time-machine -C channels.lock.scm -- \
 # 关机重启进入已安装系统（安装完成绝不自动 reboot）
 
 blue -n firstboot laptop
-blue firstboot laptop          # = reconfigure + enroll（见「首次启动」一节）
+blue firstboot laptop          # = reconfigure + enroll 相位 1（固件 PK/KEK/db）
 
-# 单独重跑机器绑定（policy 变化后的 replace / TPM 重建等）：
-blue -n enroll laptop
-blue enroll laptop
+# reboot（Secure Boot 激活；LUKS 密码人工输入一次）
+
+blue enroll laptop             # enroll 相位 2：固件 skip → TPM enrollment
+# 之后 policy 变化的 replace / TPM 重建等，同样走 blue enroll laptop
 ```
 
 `blue install` 的真实阶段（`blue -n install` 打印同一计划；已完成的
@@ -113,16 +123,21 @@ identity unlock（runbook 阶段 1 的语义已并入 `blue install`）：runtim
 identity 已就位时走 `luks-recovery.age`（age 解密，不提示密码）；
 否则交互两次确认（credential-source 的同一 resolver，绝不静默回退）。
 
-`blue enroll` 的真实阶段（`blue -n enroll` 打印同一计划）：
+`blue enroll` 的真实阶段（`blue -n enroll` 打印同一计划；已完成的
+阶段自动 skip）：
 
 ```text
   preflight        目标系统环境（/run/current-system、/persist、ESP、
                    TPM 设备、SB keys/keystore、sbkeysync、facts）
   firmware         Setup Mode 时：显式确认 → sbkeysync db/KEK →
                    sbkeysync --pk（写 PK 退出 Setup Mode）
-                   （SecureBoot=1 && SetupMode=0 时 skip）
-  tpm              absent → tpm2-enroll enroll --luks-secret（幂等自动）；
-                   compatible → skip；incomplete → fail closed（不自动 replace）
+                   （SecureBoot=1 && SetupMode=0 时 skip；
+                   PK 已写入但 SecureBoot 待 boot 激活时 skip）
+  tpm              SecureBoot 已激活（本 boot）时：absent →
+                   tpm2-enroll enroll --luks-secret（幂等自动）；
+                   compatible → skip；incomplete → fail closed。
+                   SecureBoot 未激活（固件刚写完、尚未 reboot）时
+                   跳过并 exit 0 提示 reboot——TPM 天然是第二阶段
   validate         TPM compatible + firmware 状态 + artifacts 复核
 ```
 
@@ -163,8 +178,12 @@ blue firstboot laptop
    checkout（安装后仓库如有新提交——如 `git pull` 之后——在这一步
    部署）。失败（exit 1/2）即整体失败，enroll 不执行。
 2. **enroll 相位** = `blue enroll HOST` 的完整机制（固件状态
-   preflight → Setup Mode 时显式确认写 db/KEK/PK → TPM enrollment
-   → validate）。失败（exit 1/2/3）整体失败。
+   preflight → Setup Mode 时显式确认写 db/KEK/PK → Secure Boot
+   待 boot 激活 → exit 0 提示 reboot）。失败（exit 1/2/3）整体失败。
+   **reboot 之后再跑一次 `blue enroll HOST`** 完成 TPM enrollment
+   （TPM policy 必须对以最终 Secure Boot 状态启动的那次 boot 密封，
+   且该次 boot 的 LUKS 密码需人工输入一次——TPM 自动解锁从下下个
+   boot 起生效）。
 
 之后日常更新只用 `blue reconfigure HOST`；机器绑定重做只用
 `blue enroll HOST`。

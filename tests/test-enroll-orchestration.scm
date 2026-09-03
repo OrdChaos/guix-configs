@@ -51,6 +51,11 @@
             'unclear
             (enrollment-status-firmware (status-of '(firmware . unclear))))
 
+(test-equal "pending-reboot firmware state passes through classification"
+            'pending-reboot
+            (enrollment-status-firmware
+             (status-of '(firmware . pending-reboot))))
+
 (test-equal "TPM absent"
             'absent
             (enrollment-status-tpm (status-of '(tpm . absent))))
@@ -106,6 +111,15 @@
                            (status-of '(firmware . unclear)) "laptop")
                           "\n")))
                (string-contains text "BLOCKED (firmware state unclear)")))
+
+(test-assert "enroll plan marks pending-reboot firmware as awaiting reboot (not blocked)"
+             (let ((text (string-join
+                          (enroll-plan-lines
+                           (status-of '(firmware . pending-reboot)) "laptop")
+                          "\n")))
+               (and (string-contains text
+                                     "reboot to activate Secure Boot")
+                    (not (string-contains text "BLOCKED")))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 固件确认匹配（§23/§36）

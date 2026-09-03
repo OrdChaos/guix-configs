@@ -105,13 +105,17 @@
 
 (define (secure-boot-firmware-state)
   "固件状态：'enrolled（SecureBoot=1 且 SetupMode=0，注册完成）/
-'setup-mode（SB=0 且 SetupMode=1，待注册）/ 'unclear（其余组合或
-efivarfs 不可读——fail closed，绝不猜）。"
+'setup-mode（SB=0 且 SetupMode=1，待注册）/ 'pending-reboot（SB=0、
+SetupMode=0 但 PK 已写入——固件已注册、Secure Boot 待下次 boot 激活
+的正常中间态）/ 'unclear（其余组合或 efivarfs 不可读——fail closed，
+绝不猜）。"
   (let ((sb (efi-variable-byte "SecureBoot"))
-        (sm (efi-variable-byte "SetupMode")))
+        (sm (efi-variable-byte "SetupMode"))
+        (pk (efi-variable-byte "PK")))
     (cond
       ((and (= sb 1) (= sm 0)) 'enrolled)
       ((and (= sb 0) (= sm 1)) 'setup-mode)
+      ((and (= sb 0) (= sm 0) pk) 'pending-reboot)
       (else 'unclear))))
 
 (define (esp-tpm2-artifacts-present?)
@@ -306,9 +310,11 @@ info；#f（root 事务）全部硬性。"
              (case (enrollment-status-firmware status)
                ((enrolled) '(ok . "Secure Boot active, Setup Mode off"))
                ((setup-mode) '(ok . "Setup Mode (SecureBoot=0, SetupMode=1)"))
+               ((pending-reboot)
+                '(ok . "firmware enrolled; Secure Boot activates at the next boot (reboot, then re-run)"))
                (else
                 (cons 'fail
-                      "firmware state unclear (efivarfs unreadable or SecureBoot/SetupMode combination unexpected); put the firmware in Setup Mode and retry"))))))))
+                      "firmware state unclear (efivarfs unreadable or SecureBoot/SetupMode combination unexpected)"))))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 计划输出与固件确认（纯）
@@ -317,6 +323,7 @@ info；#f（root 事务）全部硬性。"
   (case (enrollment-status-firmware status)
     ((enrolled) "already enrolled (skip)")
     ((setup-mode) "enroll PK/KEK/db (sbkeysync; PK last — exits Setup Mode)")
+    ((pending-reboot) "already written this boot (reboot to activate Secure Boot)")
     (else "BLOCKED (firmware state unclear)")))
 
 (define (tpm-action status)
@@ -516,28 +523,40 @@ site 与仓库 modules。ACTION ∈ preflight|status|enroll|replace。"
                                                    "--verbose" "--pk"))))
                         (unless (zero? s2)
                           (error "sbkeysync (PK) failed" s2)))))
+                   ((pending-reboot)
+                    (format #t "~%firmware was enrolled in a previous run; Secure Boot activates at the next boot.~%"))
                    (else
                     (format (current-error-port)
                             "~%firmware state unclear; put the firmware in Setup Mode (SecureBoot=0, SetupMode=1) and re-run.~%")
                     (throw 'enroll-exit 1)))
-                 ;; ── 2. TPM enrollment（idempotent 自动；incompatible
-                 ;;        fail closed）──
-                 (case (enrollment-status-tpm status)
-                   ((compatible)
-                    (format #t "~%TPM already enrolled; skipping (no mutation).~%"))
-                   ((absent)
-                    (format #t "~%enrolling TPM (PolicyPCR sha256:7)...~%")
-                    (set! mutated? #t)
-                    (let ((s (exec (tpm2-enroll-argv root "enroll"
-                                                     '("--luks-secret")))))
-                      (unless (zero? s)
-                        (error "tpm2-enroll failed" s))))
-                   ((incomplete)
-                    (format (current-error-port)
-                            "~%TPM enrollment exists but artifacts are incomplete; refusing to replace automatically.~%Recovery: inspect 'guix repl tools/tpm2-enroll.scm -- status' and run replace explicitly (or repair artifacts).~%")
-                    (throw 'enroll-exit 2))
-                   (else
-                    (error "TPM state unreadable")))
+                 ;; ── 2. TPM enrollment（幂等自动；incompatible fail
+                 ;;        closed）。硬性前置：本 boot 必须已以 Secure
+                 ;;        Boot 启动（tpm2-enroll preflight 要求
+                 ;;        SecureBoot=1 && SetupMode=0；固件刚写完的
+                 ;;        同一轮里 SecureBoot 恒为 0，重启后才置 1——
+                 ;;        TPM 相位因此天然是第二阶段）。──
+                 (if (eq? (secure-boot-firmware-state) 'enrolled)
+                   (case (enrollment-status-tpm status)
+                     ((compatible)
+                      (format #t "~%TPM already enrolled; skipping (no mutation).~%"))
+                     ((absent)
+                      (format #t "~%enrolling TPM (PolicyPCR sha256:7)...~%")
+                      (set! mutated? #t)
+                      (let ((s (exec (tpm2-enroll-argv root "enroll"
+                                                       '("--luks-secret")))))
+                        (unless (zero? s)
+                          (error "tpm2-enroll failed" s))))
+                     ((incomplete)
+                      (format (current-error-port)
+                              "~%TPM enrollment exists but artifacts are incomplete; refusing to replace automatically.~%Recovery: inspect 'guix repl tools/tpm2-enroll.scm -- status' and run replace explicitly (or repair artifacts).~%")
+                      (throw 'enroll-exit 2))
+                     (else
+                      (error "TPM state unreadable")))
+                   (begin
+                    (format #t "~%Secure Boot is not active yet (it activates at the next boot).~%")
+                    (format #t "TPM enrollment is skipped for now: its policy must be~%sealed against a boot with the final Secure Boot state.~%")
+                    (format #t "Reboot, then re-run: blue enroll ~a~%" host)
+                    (throw 'enroll-exit 0)))
                  ;; ── 3. post-enrollment 验证（§38：不止看 exit 0）──
                  (let ((after (classify-enrollment-probes
                                (collect-enrollment-probes))))

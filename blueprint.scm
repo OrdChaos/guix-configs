@@ -902,12 +902,18 @@ its exact status (0 success / 1 preflight / 2 partial mutation /
                  (category 'deployment)
                  (synopsis "Bind the installed system to this machine (TPM + Secure Boot firmware enrollment)")
                  (help "HOST
-Machine-bound enrollment on the already-installed target system:
-Secure Boot firmware enrollment (db/KEK first, PK last — writing PK
-exits Setup Mode; requires explicit confirmation) then TPM
-enrollment (PolicyPCR sha256:7; idempotent — already-enrolled parts
-are detected and skipped, never replaced automatically). Fails
-closed outside the target environment.
+Machine-bound enrollment on the already-installed target system. Two
+phases, one reboot apart:
+  1. Secure Boot firmware enrollment: Setup Mode only, explicit
+     confirmation, db/KEK first then PK (writing PK exits Setup
+     Mode). Secure Boot becomes active at the NEXT boot; the run
+     exits 0 and asks for a reboot (TPM is skipped: its policy must
+     seal against a boot with the final Secure Boot state).
+  2. after that reboot: firmware is detected as enrolled and skipped;
+     TPM enrollment runs (PolicyPCR sha256:7; idempotent —
+     already-enrolled parts are detected and skipped, never replaced
+     automatically).
+Fails closed outside the target environment.
 Exit codes: 0 success/already compliant; 1 preflight failure (no
 mutation); 2 partial mutation, cannot continue safely; 3 user abort.
 With blue -n: read-only preflight + enrollment plan only; zero
@@ -961,7 +967,11 @@ One-click first-boot entry for a freshly installed system:
   1. reconfigure phase  -- converge system + Home onto this checkout
      (doctor incl. the git clean gate, then the gate transaction)
   2. enroll phase       -- bind this machine: Secure Boot firmware
-     enrollment (explicit confirmation) + TPM enrollment
+     enrollment (explicit confirmation). Secure Boot activates at
+     the next boot; the run then asks for a reboot. After rebooting,
+     run 'blue enroll HOST' once more to complete TPM enrollment
+     (its policy must seal against a boot with the final Secure
+     Boot state).
 Stops at the first failing phase; that phase's exit code is
 propagated (reconfigure: 0/1/2; enroll: 0/1/2/3).
 With blue -n: system reconfigure derivation dry-run + enrollment
