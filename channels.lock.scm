@@ -29,10 +29,10 @@
          (openpgp-fingerprint
           "13E7 6CD6 E649 C28C 3385  4DF5 5E5A A665 6149 17F7"))))
       (channel
-       (name 'virelith)
-       (url "https://github.com/ordchaos/virelith.git")
-       (branch "master")
-       (commit "e5bd08248095930675a2db15a5f8d2e0aa69c64e")
+      (name 'virelith)
+      (url "https://github.com/ordchaos/virelith.git")
+      (branch "master")
+      (commit "e1c263e3db6eaea86740ffaa1084f5c6ff958299")
        (introduction
         (make-channel-introduction
          "cae11b77a64f281cc9ab45e20567e59efc37e96b"
