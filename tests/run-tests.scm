@@ -85,6 +85,7 @@
    (for-each run-file
              '("tests/test-atomic-file.scm"
                "tests/test-home-path.scm"
+               "tests/test-bash.scm"
                "tests/test-appearance.scm"
                "tests/test-boot-state.scm"
                "tests/test-process.scm"

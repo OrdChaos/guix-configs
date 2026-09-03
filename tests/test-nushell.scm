@@ -123,4 +123,18 @@
                        (lambda (p) (read-string p)))))
                (not (string-contains s "/gnu/store/"))))
 
+;; ── N8：GPG_TTY 转发（2026-09 根因修复）────────────────────
+;; git 签名以 pipe_command 喂数据给 gpg（gpg fd0=管道，ttyname(0)
+;; 回退失效），GPG_TTY 环境变量是 tty 到达 agent 的唯一通道；
+;; Wayland-only 会话（无 DISPLAY）时 pinentry 退 curses 在终端画
+;; 密码框。nu 是 ghostty 的默认 shell——env.nu 每次启动求值，
+;; do -i 容忍无 tty 上下文（不能进静态 home-environment-variables）。
+(test-assert "N8: env.nu exports GPG_TTY with a no-tty guard"
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/apps/nushell/env.nu"
+                       (lambda (p) (read-string p)))))
+               (and (string-contains s "$env.GPG_TTY")
+                    (string-contains s "do -i")
+                    (string-contains s "^tty"))))
+
 (test-end "nushell")

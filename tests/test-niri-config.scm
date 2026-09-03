@@ -265,6 +265,18 @@
                      (read-file (string-append %laptop-config-dir
                                                "/host.kdl"))))
 
+;; ── 9b. Xwayland satellite 前置条件（2026-09 根因修复）───────
+;; niri 26.x 对已存在的 /tmp/.X11-unix 要求 group+other 可写 +
+;; sticky；自己创建时 mkdir(1777) & ~umask = 1755 → 重登录循环
+;; 禁用 Xwayland。session wrapper 每次启动前幂等收敛 1777。
+(test-assert "niri session wrapper converges /tmp/.X11-unix to 1777 \
+before exec (Xwayland satellite prerequisite)"
+             (let ((s (read-file
+                       "modules/guixcfg/apps/niri/definition.scm")))
+               (and (string-contains s "\"/tmp/.X11-unix\"")
+                    (string-contains s "chmod")
+                    (string-contains s "#o1777"))))
+
 ;; ── 10. niri validate：真实解析最终配置树（store 有二进制时）─
 (define (find-niri-binary)
   "store 中 pinned niri-26.04 的可执行路径；不存在时返回 #f

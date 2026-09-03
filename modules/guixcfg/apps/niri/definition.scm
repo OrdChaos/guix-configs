@@ -91,6 +91,17 @@
       ;; 清理上次 stop 竞态遗留的 guard marker。
       (when (file-exists? guard)
         (delete-file guard))
+      ;; Xwayland satellite 前置条件（2026-09 VM 实测根因）：niri
+      ;; 26.x 启动时对【已存在】的 /tmp/.X11-unix 要求 group+other
+      ;; 可写（mode & 0o022）+ sticky；但它自己创建目录时是
+      ;; mkdir(1777) & ~umask(022) = 1755——首次会话通过、重登录
+      ;; 时检查失败，Xwayland 集成被禁用（/tmp 不随用户会话清理，
+      ;; 目录跨登录残留 → "重启一次、重登录必坏"循环）。wrapper
+      ;; 每次会话启动前幂等收敛为 1777（sticky 防篡改；目录属主
+      ;; 无需变更——niri 接受 user-owned；root-owned 时 chmod 静默
+      ;; 失败，状态已正确）。
+      (false-if-exception (mkdir "/tmp/.X11-unix"))
+      (false-if-exception (chmod "/tmp/.X11-unix" #o1777))
       (let ((pid (primitive-fork)))
         (if (zero? pid)
           ;; child：exec niri（file-append 绝对路径）。
