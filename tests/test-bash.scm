@@ -61,6 +61,23 @@
                        (lambda (p) (read-string p)))))
                (string-contains s "GPG_TTY")))
 
+;; ── BS3：bashrc ownership（2026-09 登录链审计）──────────────
+;; 本 app 唯一拥有 ~/.bashrc（guix-defaults? #f）；非交互 SSH
+;; （bash 被 sshd 调用时读 bashrc）分支 source 系统 /etc/profile +
+;; home 的唯一激活机制 setup-environment——系统 /etc/profile 不再
+;; 触碰 home profile（guixcfg system profile policy）。
+(test-assert "BS3: repo owns the bashrc (guix defaults off)"
+             (not ((bash-field 'guix-defaults?) %bash-config)))
+
+(test-assert "BS3: non-interactive SSH branch sources /etc/profile and the \
+home setup-environment (single Guix Home activation)"
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/apps/bash/bashrc"
+                       (lambda (p) (read-string p)))))
+               (and (string-contains s "SSH_CLIENT")
+                    (string-contains s "/etc/profile")
+                    (string-contains s "setup-environment"))))
+
 (test-assert "BS2: GPG_TTY stays dynamic (bashrc), not a static env var"
              (let ((vars ((bash-field 'environment-variables) %bash-config)))
                (not (any (lambda (pair)

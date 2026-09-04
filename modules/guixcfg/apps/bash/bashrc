@@ -1,0 +1,41 @@
+# Bash-specific initialization — guixcfg bash app owns ~/.bashrc
+# (guix-defaults? #f).  Mirrors the pinned guix %default-bashrc, with
+# the ownership-correct addition for non-interactive SSH: after the
+# system /etc/profile, source the home-owned setup-environment — the
+# single Guix Home activation mechanism (the system /etc/profile no
+# longer touches the home profile; 2026-09 login-chain audit).
+
+# Provide a default prompt.
+PS1='\u@\h \w${GUIX_ENVIRONMENT:+ [env]}\$ '
+
+# Export 'SHELL' to child processes.  Programs such as 'screen'
+# honor it and otherwise use /bin/sh.
+export SHELL
+
+if [[ $- != *i* ]]
+then
+    # We are being invoked from a non-interactive shell (as in
+    # "ssh host command": bash reads ~/.bashrc when run by sshd).
+    # /etc/profile covers the system environment; the Guix Home
+    # environment comes from its single owner, setup-environment
+    # (HOME_ENVIRONMENT contract, same as ~/.profile).
+    [[ -n "$SSH_CLIENT" ]] && {
+        source /etc/profile
+        if [ -f "$HOME/.guix-home/setup-environment" ]; then
+            HOME_ENVIRONMENT=$HOME/.guix-home
+            . "$HOME/.guix-home/setup-environment"
+            unset HOME_ENVIRONMENT
+        fi
+    }
+
+    # Don't do anything else.
+    return 0
+fi
+
+for i in /etc/bashrc.d/*.sh; do
+    [[ -r $i ]] && source "$i"
+done
+unset i
+
+# Increase the history size (default is 500 entries).
+HISTSIZE=10000

@@ -56,7 +56,7 @@
                #:use-module (gnu packages python) ; python（site-packages 版本推导）
                #:use-module (gnu home services) ; home-environment-variables-service-type、home-files-service-type
                #:use-module (gnu services)     ; simple-service
-               #:use-module (guix gexp)        ; local-file
+               #:use-module (guix gexp)        ; local-file、file-append
                #:use-module (guix packages)    ; package-version
                #:use-module (virelith packages nautilus) ; python-nautilus、nautilus-open-any-terminal
                #:use-module (guix records)
@@ -116,7 +116,18 @@
            'nautilus-suppress-ghostty-extension
            home-files-service-type
            `((".local/share/nautilus-python/extensions/ghostty.py"
-              ,%ghostty-nautilus-extension-stub)))))
+              ,%ghostty-nautilus-extension-stub)))
+          ;; 菜单标签中文化（2026-09）：open-any 的 gettext 搜索列表
+          ;; 硬编码 ~/.local/share/locale 与 /usr/share/locale
+          ;; （源码 nautilus_open_any_terminal.py），profile 的
+          ;; share/locale 不在其中——符号链把包内 zh_CN .mo 暴露到
+          ;; ~/.local/share/locale（label "在此处打开Ghostty"）。
+          (simple-service
+           'nautilus-open-any-terminal-locale
+           home-files-service-type
+           `((".local/share/locale/zh_CN/LC_MESSAGES/nautilus-open-any-terminal.mo"
+              ,(file-append nautilus-open-any-terminal
+                            "/share/locale/zh_CN/LC_MESSAGES/nautilus-open-any-terminal.mo"))))))
    ;; 扩展的终端选择：ghostty（本仓库唯一 terminal）。
    (gsettings
     (list (gsettings-setting

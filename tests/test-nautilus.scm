@@ -123,4 +123,26 @@ of the pinned python major.minor"
                     (string-contains stub "Shadows")
                     (string-contains s "basename"))))
 
+;; ── NA5：菜单标签中文化（2026-09）─────────────────────────
+;; open-any 的 gettext 只搜 ~/.local/share/locale 与 /usr/share/
+;; locale（源码硬编码）——profile 的 share/locale 不可见；符号链
+;; 把包内 zh_CN .mo 暴露到 ~/.local/share/locale。
+(test-assert "NA5: zh_CN locale symlink exposes the translated menu label"
+             (let* ((files
+                     (append-map service-value
+                                 (filter
+                                  (lambda (s)
+                                    (any (lambda (ext)
+                                           (eq? home-files-service-type
+                                                (service-extension-target ext)))
+                                         (service-type-extensions
+                                          (service-kind s))))
+                                  (application-home-services %nautilus-app))))
+                    (entry (assoc
+                            ".local/share/locale/zh_CN/LC_MESSAGES/nautilus-open-any-terminal.mo"
+                            files)))
+               (and entry
+                    (string-contains (object->string (cdr entry))
+                                     "nautilus-open-any-terminal"))))
+
 (test-end "nautilus")
