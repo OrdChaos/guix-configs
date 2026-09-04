@@ -1,6 +1,6 @@
 ;;; /etc/profile ownership 测试（2026-09 登录链审计）：
 ;;;   - 唯一 owner：Guix Home 激活 = ~/.profile → setup-environment；
-;;;   - 唯一 owner：system /etc/profile = (guixcfg system profile)
+;;;   - 唯一 owner：system /etc/profile = (guixcfg system profile policy)
 ;;;     ——pinned guix 模板逐字一致，唯删除 user-profile loop 里的
 ;;;     guix-home 条目（消除同一 login shell 内 guix-home
 ;;;     etc/profile 被 source 两次的拓扑重复；不做运行时去重）。
@@ -12,7 +12,7 @@
 ;;;   PR2  VM 与 Laptop 的 etc-service value 恰好一个 'profile
 ;;;        条目且为仓库模板（上游条目被替换，不并存）。
 
-(use-modules (guixcfg system profile)
+(use-modules (guixcfg system profile policy)
              (guixcfg hosts vm)
              (guixcfg hosts laptop)
              (gnu services)          ; etc-service-type、service-kind、service-value
@@ -26,7 +26,7 @@
 (test-begin "profile")
 
 (define %profile-text
-  (call-with-input-file "modules/guixcfg/system/profile"
+  (call-with-input-file "modules/guixcfg/system/profile/profile"
                         (lambda (p) (read-string p))))
 
 ;; ── PR1：模板内容契约 ──────────────────────────────────────

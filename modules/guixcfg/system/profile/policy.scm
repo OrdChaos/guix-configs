@@ -27,7 +27,7 @@
 ;;;   非交互上下文（不读 ~/.profile 的 SSH 命令等）对 home 环境的
 ;;;   影响以 VM 验收实测为准（2026-09）。
 
-(define-module (guixcfg system profile)
+(define-module (guixcfg system profile policy)
                #:use-module (gnu services) ; etc-service-type
                #:use-module (guix gexp)    ; local-file
                #:use-module (srfi srfi-1)  ; remove
