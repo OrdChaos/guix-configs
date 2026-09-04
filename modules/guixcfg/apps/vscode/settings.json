@@ -1,5 +1,16 @@
 {
     "telemetry.telemetryLevel": "off",
     "update.mode": "none",
+    "terminal.integrated.profiles.linux": {
+        "bash": {
+            "path": "bash",
+            "icon": "terminal-bash"
+        },
+        "nushell": {
+            "path": "nu"
+        }
+    },
+    "terminal.integrated.defaultProfile.linux": "nushell",
+    "git.confirmSync": false,
     "workbench.colorTheme": "Nord Light Brighter"
 }
