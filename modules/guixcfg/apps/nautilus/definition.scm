@@ -52,6 +52,7 @@
 
 (define-module (guixcfg apps nautilus definition)
                #:use-module (gnu packages gnome) ; nautilus、gvfs
+               #:use-module (gnu packages glib)  ; gobject-introspection（cairo-1.0.typelib）
                #:use-module (gnu packages python) ; python（site-packages 版本推导）
                #:use-module (gnu home services) ; home-environment-variables-service-type、home-files-service-type
                #:use-module (gnu services)     ; simple-service
@@ -94,8 +95,15 @@
    ;; gvfs：trash 的 D-Bus activation 服务文件所在包（见上）。
    ;; python-nautilus + nautilus-open-any-terminal：右键"打开终端"扩展
    ;; （gtk/pygobject 经扩展的 propagated-inputs 随闭包进入 profile）。
+   ;; gobject-introspection：cairo-1.0.typelib 的携带者——guix 的
+   ;; cairo 不构建 introspection（无 typelib），而扩展经 gi 导入
+   ;; Gtk 3.0 时其 typelib 依赖 namespace cairo；缺失时扩展 import
+   ;; 静默失败、菜单不出现（2026-09 VM 实测 ImportError）。GI 的
+   ;; typelib 搜索（XDG_DATA_DIRS/../lib/girepository-1.0）经
+   ;; profile 合并即可命中。
    (home-packages (list nautilus gvfs
-                        python-nautilus nautilus-open-any-terminal))
+                        python-nautilus nautilus-open-any-terminal
+                        gobject-introspection))
    ;; PYTHONPATH：loader 内嵌 python 发现 profile 里 gi 的唯一通道
    ;; （见文件头 2026-09 断点记录）；stub 遮蔽 ghostty bundled 扩展
    ;; 防重复菜单项（同记录）。
