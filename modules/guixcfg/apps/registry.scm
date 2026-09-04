@@ -30,6 +30,7 @@
                #:use-module (guixcfg apps zip definition)
                #:use-module (guixcfg apps less definition)
                #:use-module (guixcfg apps file definition)
+               #:use-module (guixcfg apps mesa-utils definition)
                #:use-module (guixcfg apps gnome-keyring definition)
                #:use-module (guixcfg apps mpv definition)
                #:use-module (guixcfg apps google-chrome-stable definition)
@@ -73,6 +74,7 @@
         %zip
         %less
         %file
+        %mesa-utils
         %fastfetch
         %mpv
         %google-chrome-stable
