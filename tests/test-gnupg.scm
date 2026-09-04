@@ -153,15 +153,28 @@ with 0700 directory permissions (no ssh/browser/extra sockets)"
 ;; 本 key 带 passphrase：agent conf 必须携带 pinentry-program（缺失
 ;; 时 agent 报 "No pinentry"，所有签名失败）；conf 必须是生成物——
 ;; 静态文件无法携带版本相关的 store 路径（mixed-text-file 在
-;; build-time 解析 pinentry-gtk-2 的 /bin/pinentry-gtk-2）。
+;; build-time 解析 pinentry 级联 wrapper 的路径）。
 (test-assert "GN5: agent conf is generated (mixed-text-file) with a \
-pinentry-program resolved from pinentry-gtk2 at build time"
+pinentry-program resolved from the cascade wrapper at build time"
              (let ((s (call-with-input-file
                        "modules/guixcfg/apps/gnupg/definition.scm"
                        (lambda (p) (read-string p)))))
                (and (string-contains s "pinentry-program")
-                    (string-contains s "pinentry-gtk-2")
+                    (string-contains s "pinentry-cascade-wrapper")
                     (string-contains s "mixed-text-file")
                     (not (string-contains s "local-file \"gpg-agent.conf\"")))))
+
+;; ── GN6：pinentry 级联（2026-09，主机 Arch wrapper 同设计）────
+;; 图形环境（DISPLAY / WAYLAND_DISPLAY，agent 经 OPTION display /
+;; putenv 转发）→ pinentry-gnome3（GTK3 现代风）；无图形 → gtk-2
+;; （FALLBACK_CURSES 退终端）。纯 exec 语义、零探测。
+(test-assert "GN6: cascade wrapper execs gnome3 on display, gtk-2 otherwise"
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/apps/gnupg/definition.scm"
+                       (lambda (p) (read-string p)))))
+               (and (string-contains s "pinentry-gnome3")
+                    (string-contains s "pinentry-gtk-2")
+                    (string-contains s "WAYLAND_DISPLAY")
+                    (string-contains s "execl"))))
 
 (test-end "gnupg")
