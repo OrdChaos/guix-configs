@@ -1,9 +1,10 @@
 ;;; sudo 机器策略（host-agnostic）：/etc/sudoers 的 Defaults 声明。
+;;; 内容静态 → 独立文件 colocate（同目录 sudoers，local-file）。
 ;;;
 ;;; 规则部分 = guix 默认 %sudoers-specification（root ALL=(ALL) ALL
-;;; + %wheel ALL=(ALL) ALL，gnu/system.scm:1300）——内联声明并在
-;;; 测试里对照默认内容断言；不从 foreign record 取 content
-;;; （跨编译单元的 record 类型身份陷阱，2026-09 实测）。
+;;; + %wheel ALL=(ALL) ALL，gnu/system.scm:1300）——测试对照默认
+;;; 内容断言；不从 foreign record 取 content（跨编译单元的 record
+;;; 类型身份陷阱，2026-09 实测）。
 ;;;
 ;;; Defaults 声明（2026-09）：
 ;;;   - lecture = never：无状态根下 /var/db/sudo/lectured 每次 boot
@@ -20,16 +21,9 @@
 ;;;     `visudo --check` 强制校验，非法配置会在 reconfigure 时
 ;;;     fail-loud。
 
-(define-module (guixcfg system sudo)
-               #:use-module (guix gexp) ; plain-file
+(define-module (guixcfg system sudo policy)
+               #:use-module (guix gexp) ; local-file
                #:export (%sudoers-file))
 
 (define %sudoers-file
-  (plain-file
-   "sudoers"
-   "root ALL=(ALL) ALL
-%wheel ALL=(ALL) ALL
-
-Defaults lecture = never
-Defaults passprompt = \"[sudo] %p 的密码：\"
-"))
+  (local-file "sudoers" "sudoers"))

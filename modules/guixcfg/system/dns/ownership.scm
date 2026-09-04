@@ -28,7 +28,7 @@
 (define-module (guixcfg system dns ownership)
                #:use-module (gnu services)      ; simple-service
                #:use-module (gnu services base) ; etc-service-type
-               #:use-module (guix gexp)         ; plain-file、local-file
+               #:use-module (guix gexp)         ; local-file
                #:export (%system-resolv-conf
                          %resolvconf-config
                          %dhcp-dns-metadata-path
@@ -39,7 +39,8 @@
 (define %system-resolv-conf
   ;; SmartDNS 是唯一 system resolver。IPv6 AAAA 查询同样经此
   ;; nameserver（SmartDNS 向上游问 AAAA）——不需要 ::1 条目。
-  (plain-file "resolv.conf" "nameserver 127.0.0.1\n"))
+  ;; 内容静态 → colocate 独立文件（dns/resolv.conf）。
+  (local-file "resolv.conf" "resolv.conf"))
 
 (define %resolvconf-config
   ;; colocate 独立文件（dns/resolvconf.conf；注释见该文件头）。

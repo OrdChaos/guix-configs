@@ -57,7 +57,7 @@
                #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
                #:use-module (guixcfg system machine-identity) ; /etc/machine-id 持久化（先于 D-Bus activation）
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind + 系统集成
-               #:use-module (guixcfg system sudo) ; %sudoers-file（Defaults 声明：lecture/passprompt）
+               #:use-module (guixcfg system sudo policy) ; %sudoers-file（Defaults 声明：lecture/passprompt）
                #:use-module (guixcfg flatpak service) ; flatpak-persistence-rules（installation + 每 selected app，所有 host 共享）
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:use-module (srfi srfi-1)              ; remove
@@ -217,7 +217,7 @@ make-host-operating-system 的产物。"
    (timezone %common-timezone)
    (locale %common-locale)
 
-   ;; sudo 机器策略：lecture/passprompt Defaults（guixcfg system sudo）。
+   ;; sudo 机器策略：lecture/passprompt Defaults（guixcfg system sudo policy）。
    (sudoers-file %sudoers-file)
 
    ;; Limine + UKI + UEFI 直启（docs/architecture/boot.md）。

@@ -1,0 +1,5 @@
+root ALL=(ALL) ALL
+%wheel ALL=(ALL) ALL
+
+Defaults lecture = never
+Defaults passprompt = "[sudo] %p 的密码："
