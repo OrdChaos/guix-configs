@@ -87,6 +87,7 @@
                "tests/test-home-path.scm"
                "tests/test-bash.scm"
                "tests/test-nautilus.scm"
+               "tests/test-sudo.scm"
                "tests/test-appearance.scm"
                "tests/test-boot-state.scm"
                "tests/test-process.scm"
