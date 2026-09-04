@@ -1,0 +1,90 @@
+# System-owned /etc/profile — guixcfg (modules/guixcfg/system/profile.scm).
+# Identical to the pinned guix template except that the user-profile
+# loop no longer sources the Guix Home profile: home activation is
+# owned solely by ~/.profile -> setup-environment (see the module
+# header for the 2026-09 ownership decision).
+# Crucial variables that could be missing in the profiles' 'etc/profile'
+# because they would require combining both profiles.
+# FIXME: See <http://bugs.gnu.org/20255>.
+export MANPATH=$HOME/.guix-profile/share/man:/run/current-system/profile/share/man
+export INFOPATH=$HOME/.guix-profile/share/info:/run/current-system/profile/share/info
+export XDG_DATA_DIRS=$HOME/.guix-profile/share:/run/current-system/profile/share
+export XDG_CONFIG_DIRS=$HOME/.guix-profile/etc/xdg:/run/current-system/profile/etc/xdg
+export GUIX_EXTENSIONS_PATH=$HOME/.guix-profile/share/guix/extensions:/run/current-system/profile/share/guix/extensions
+
+# Make sure libXcursor finds cursors installed into user or system profiles.  See <http://bugs.gnu.org/24445>
+export XCURSOR_PATH=$HOME/.icons:$HOME/.guix-profile/share/icons:/run/current-system/profile/share/icons
+
+# Ignore the default value of 'PATH'.
+unset PATH
+
+# Load the system profile's settings.
+GUIX_PROFILE=/run/current-system/profile ; \
+. /run/current-system/profile/etc/profile
+
+# Since 'lshd' does not use pam_env, /etc/environment must be explicitly
+# loaded when someone logs in via SSH.  See <http://bugs.gnu.org/22175>.
+# We need 'PATH' to be defined here, for 'cat' and 'cut'.  Do this before
+# reading the user's 'etc/profile' to allow variables to be overridden.
+if [ -f /etc/environment -a -n "$SSH_CLIENT" \
+     -a -z "$LINUX_MODULE_DIRECTORY" ]
+then
+  . /etc/environment
+  export `cat /etc/environment | cut -d= -f1`
+fi
+
+# Arrange so that ~/.config/guix/current comes first,
+# and the current profile comes first.
+for profile in "$HOME/.guix-profile"        \
+               "$HOME/.config/guix/current"
+do
+  if [ -f "$profile/etc/profile" ]
+  then
+    # Load the user profile's settings.
+    GUIX_PROFILE="$profile" ; \
+    . "$profile/etc/profile"
+  else
+    # At least define this one so that basic things just work
+    # when the user installs their first package.
+    export PATH="$profile/bin:$PATH"
+  fi
+done
+
+# Clean up after ourselves.
+unset GUIX_PROFILE
+
+# Prepend privileged programs.
+export PATH=/run/privileged/bin:$PATH
+
+# Arrange so that ~/.config/guix/current/share/info comes first.
+export INFOPATH="$HOME/.config/guix/current/share/info:$INFOPATH"
+
+# Set the umask, notably for users logging in via 'lsh'.
+# See <http://bugs.gnu.org/22650>.
+umask 022
+
+# Allow Hunspell-based applications (IceCat, LibreOffice, etc.) to
+# find dictionaries.
+export DICPATH="$HOME/.guix-profile/share/hunspell:/run/current-system/profile/share/hunspell"
+
+# Allow GStreamer-based applications to find plugins.
+export GST_PLUGIN_PATH="$HOME/.guix-profile/lib/gstreamer-1.0"
+
+for i in /etc/profile.d/*.sh; do
+    if [ -r "$i" ]; then
+        if [ "${-#*i}" != "$-" ]; then
+            . "$i"
+        else
+            . "$i" >/dev/null
+        fi
+    fi
+done
+unset i
+
+if [ -n "$BASH_VERSION" -a -f /etc/bashrc ]; then
+  # Load Bash-specific initialization code, taking care to not source
+  # /etc/bashrc when invoked from a non-interactive SSH shell,
+  # to avoid recursion (/etc/bashrc also sources /etc/profile
+  # in the non-login, non-interactive SSH case).
+  [[ $- != *i* && -n $SSH_CLIENT ]] || source /etc/bashrc
+fi

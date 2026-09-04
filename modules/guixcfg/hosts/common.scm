@@ -58,6 +58,7 @@
                #:use-module (guixcfg system machine-identity) ; /etc/machine-id 持久化（先于 D-Bus activation）
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind + 系统集成
                #:use-module (guixcfg system sudo policy) ; %sudoers-file（Defaults 声明：lecture/passprompt）
+               #:use-module (guixcfg system profile) ; %system-profile（/etc/profile ownership）
                #:use-module (guixcfg flatpak service) ; flatpak-persistence-rules（installation + 每 selected app，所有 host 共享）
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:use-module (srfi srfi-1)              ; remove
@@ -272,4 +273,15 @@ activation 的 dbus-uuidgen）——docs/architecture/persistence.md
       (services (append (operating-system-user-services base-os)
                         (list (machine-identity-service)
                               (account-databases-service
-                               accounts+groups))))))))
+                               accounts+groups))))
+      ;; /etc/profile ownership：system 只激活 system profile /
+      ;; 用户 guix-profile / guix current；Guix Home 激活唯一归
+      ;; home（~/.profile → setup-environment）——删除 pinned 模板
+      ;; user-profile loop 里的 guix-home 条目（guixcfg system
+      ;; profile，2026-09 登录链审计）。etc-service 在 essential
+      ;; services 里（operating-system-essential-services），
+      ;; 不在 user services——在此替换其 value。
+      (essential-services
+       (modify-services (operating-system-essential-services base-os)
+         (etc-service-type entries =>
+           (system-profile-etc-entries entries))))))))
