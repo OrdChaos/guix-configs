@@ -91,12 +91,9 @@
 
 ;; git 签名配置（跨 app 契约）：git app 的 .gitconfig include 本
 ;; 文件（user.signingkey + commit.gpgsign；keyid 是公开信息）。
+;; 内容静态 → 独立文件 colocate（同目录 git-signing）。
 (define %gnupg-git-signing-file
-  (plain-file
-   "git-signing"
-   (string-append "[user]\n\tsigningkey = "
-                  "FF0F1FE0A176071F0E39A94DFF93E1DAE0897EDE\n"
-                  "[commit]\n\tgpgsign = true\n")))
+  (local-file "git-signing" "gnupg-git-signing"))
 
 ;; pinentry 级联 wrapper（2026-09，与主机 Arch 的 /usr/bin/pinentry
 ;; wrapper 同一设计）：agent 只认一个 pinentry-program，wrapper 按

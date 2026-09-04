@@ -1,0 +1,7 @@
+[user]
+	name = OrdChaos
+	email = orderchaos@ordchaos.com
+[init]
+	defaultBranch = master
+[include]
+	path = ~/.config/git/signing

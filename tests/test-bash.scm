@@ -16,8 +16,8 @@
              (guixcfg apps registry)
              (gnu home services shells) ; home-bash-service-type
              (gnu services)             ; service-kind、service-value
-             (guix gexp)                ; plain-file?、plain-file-content
              (guix records)             ; record-type-descriptor、record-accessor
+             (ice-9 rdelim)             ; read-string
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -47,15 +47,19 @@
                   %bash-config))
 
 ;; ── BS2：GPG_TTY 转发（bashrc，非静态环境变量表）───────────
-(test-assert "BS2: bashrc exports GPG_TTY for pinentry tty forwarding"
+(test-assert "BS2: bashrc ships the colocated gpg-tty.bashrc (local-file)"
              (let ((rcs ((bash-field 'bashrc) %bash-config)))
                (and (pair? rcs)
-                    (every plain-file? rcs)
                     (any (lambda (f)
-                           (string-contains
-                            (plain-file-content f)
-                            "GPG_TTY"))
+                           (string-contains (object->string f)
+                                            "gpg-tty"))
                          rcs))))
+
+(test-assert "BS2: gpg-tty.bashrc exports GPG_TTY for pinentry tty forwarding"
+             (let ((s (call-with-input-file
+                       "modules/guixcfg/apps/bash/gpg-tty.bashrc"
+                       (lambda (p) (read-string p)))))
+               (string-contains s "GPG_TTY")))
 
 (test-assert "BS2: GPG_TTY stays dynamic (bashrc), not a static env var"
              (let ((vars ((bash-field 'environment-variables) %bash-config)))

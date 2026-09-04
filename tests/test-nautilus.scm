@@ -108,14 +108,16 @@ of the pinned python major.minor"
                     (entry (assoc
                             ".local/share/nautilus-python/extensions/ghostty.py"
                             files))
+                    (stub (call-with-input-file
+                           "modules/guixcfg/apps/nautilus/ghostty.py"
+                           (lambda (p) (read-string p))))
                     (s (call-with-input-file
                         "modules/guixcfg/apps/nautilus/definition.scm"
                         (lambda (p) (read-string p)))))
                (and entry
-                    ;; object->string：跨编译单元的 record 类型实例可能
-                    ;; 不一致（plain-file? 陷阱），字符串断言与之无关。
-                    (string-contains (object->string (cdr entry))
-                                     "Shadows")
+                    ;; 内容独立为 colocate 文件（local-file）——
+                    ;; 断言直接读仓库源文件。
+                    (string-contains stub "Shadows")
                     (string-contains s "basename"))))
 
 (test-end "nautilus")

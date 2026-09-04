@@ -55,7 +55,7 @@
                #:use-module (gnu packages python) ; python（site-packages 版本推导）
                #:use-module (gnu home services) ; home-environment-variables-service-type、home-files-service-type
                #:use-module (gnu services)     ; simple-service
-               #:use-module (guix gexp)        ; plain-file
+               #:use-module (guix gexp)        ; local-file
                #:use-module (guix packages)    ; package-version
                #:use-module (virelith packages nautilus) ; python-nautilus、nautilus-open-any-terminal
                #:use-module (guix records)
@@ -83,17 +83,10 @@
 ;; stub（遮蔽 saayix ghostty 的 bundled 扩展）：必须是一个可干净
 ;; 导入的 Python 模块——nautilus-python 先扫 ~/.local/share，按
 ;; basename 导入（模块名缓存），本 stub 先于 profile 里的
-;; ghostty.py 成为模块 "ghostty"，saayix 那份不再加载。
+;; ghostty.py 成为模块 "ghostty"，saayix 那份不再加载。内容静态
+;; → 独立文件 colocate（同目录 ghostty.py）。
 (define %ghostty-nautilus-extension-stub
-  (plain-file
-   "ghostty.py"
-   "# Repository-owned stub (guixcfg nautilus app, 2026-09).\n\
-# Shadows the nautilus-python extension bundled with the saayix ghostty\n\
-# package: nautilus-python scans ~/.local/share first and imports modules\n\
-# by basename, so this empty module is cached as 'ghostty' and the bundled\n\
-# one never loads.  \"Open terminal here\" is owned exclusively by\n\
-# nautilus-open-any-terminal (gsettings terminal fact + new-tab).\n\
-# Alternative rejected: patching the ghostty package would rebuild zig.\n"))
+  (local-file "ghostty.py"))
 
 (define %nautilus
   (application

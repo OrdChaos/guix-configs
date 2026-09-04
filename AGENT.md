@@ -272,12 +272,12 @@ docs/architecture/storage.md；本节省略版：
 - **repository 是 evaluation/deployment input，绝不是 runtime
   dependency**：modules/ 禁止 getcwd/current-filename 依赖加载；
   app definition 必须可移植（无 checkout 路径、无 /home/ 绝对
-  路径、无用户名）——唯一例外：git app definition
-  （apps/git/definition.scm）是默认提交身份的 authority
-  （%git-identity-name/%git-identity-email，与主机全局 git 身份
-  一致的 host policy；test-source-hygiene 对其豁免 "ordchaos"
-  负向扫描并正向断言精确形态）。tools/ 的 `(getcwd)`
-  add-to-load-path 是仓库内 CLI 的标准模式，允许。
+  路径、无用户名）——唯一例外：apps/git/gitconfig（.gitconfig
+  静态文件，与 definition 同目录 colocate）是默认提交身份的
+  authority（与主机全局 git 身份一致的 host policy；
+  test-source-hygiene 正向断言其精确形态，身份字面量不进入任何
+  .scm）。tools/ 的 `(getcwd)` add-to-load-path 是仓库内 CLI 的
+  标准模式，允许。
 
 ## 14. Secret ownership 与 machine state（2026-08）
 

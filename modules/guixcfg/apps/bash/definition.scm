@@ -4,7 +4,7 @@
 (define-module (guixcfg apps bash definition)
                #:use-module (gnu services)                 ; service
                #:use-module (gnu home services shells)     ; home-bash-service-type
-               #:use-module (guix gexp)                    ; plain-file
+               #:use-module (guix gexp)                    ; local-file
                #:use-module (guix records)
                #:use-module (guixcfg apps model)
                #:export (%bash))
@@ -15,11 +15,10 @@
 ;; 未激活时）pinentry-gtk-2 退回 curses 在终端里画密码框——没有
 ;; GPG_TTY 就无处可画，签名失败 "Inappropriate ioctl for device"。
 ;; tty 是 per-shell 动态事实，只能放 bashrc（每个交互 shell 求值），
-;; 不能进 home-environment-variables 静态表。
+;; 不能进 home-environment-variables 静态表。内容静态 → 独立文件
+;; colocate（同目录 gpg-tty.bashrc）。
 (define %bash-gpg-tty-bashrc
-  (plain-file
-   "bashrc-gpg-tty"
-   "export GPG_TTY=\"$(tty 2>/dev/null || true)\"\n"))
+  (local-file "gpg-tty.bashrc" "bashrc-gpg-tty"))
 
 (define %bash
   (application

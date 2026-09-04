@@ -79,21 +79,17 @@
 ;; ── 3. generic modules 无开发机身份 ─────────────────────────
 ;; 仓库代码不得出现开发者用户名 / 具体机器 checkout 绝对路径。
 ;; （"user"/"vm"/"laptop" 等是项目 inventory 值，不在此列。）
-;; 例外 1：modules/guixcfg/users/ 是用户名结构事实的权威来源
+;; 例外：modules/guixcfg/users/ 是用户名结构事实的权威来源
 ;; （%primary-user，AGENT.md §13）——真实用户名必然出现在那里，
 ;; 检查范围排除该目录；generic 模块仍必须无泄漏。
-;; 例外 2：modules/guixcfg/apps/git/definition.scm 是 git 默认
-;; 提交身份的权威来源（%git-identity-name/%git-identity-email，
-;; host policy 显式声明，与主机全局 git 身份一致）——开发身份
-;; 字符串只允许出现在那里；下方正向断言其精确形态，豁免是有界
-;; 的（该文件仍受 app-definition 可移植性检查：无 /home/、
-;; 无 checkout、无 /persist/）。
-(define %git-identity-authority "modules/guixcfg/apps/git/definition.scm")
+;; git 默认提交身份（OrdChaos <orderchaos@ordchaos.com>）是
+;; host policy，声明在 apps/git/gitconfig（.gitconfig 静态文件，
+;; 非 .scm，不在本负向扫描范围内）——下方正向断言其精确形态。
+(define %git-identity-authority "modules/guixcfg/apps/git/gitconfig")
 
 (define %generic-modules
   (filter (lambda (p)
-            (and (not (string-prefix? "modules/guixcfg/users/" p))
-                 (not (string=? p %git-identity-authority))))
+            (not (string-prefix? "modules/guixcfg/users/" p)))
           (scheme-files-under "modules")))
 
 (test-assert "modules/ contain no developer username"
@@ -101,14 +97,12 @@
                (not (string-contains s "ordchaos"))))
 
 (test-assert "git identity authority holds the only sanctioned identity data"
-             ;; 豁免的有界性：git definition 的身份字面量必须是精确
-             ;; 形态（默认身份 = 主机全局 git 身份；默认分支 master）。
-             ;; 其余 modules/ 由上面的负向扫描保证零身份泄漏。
+             ;; 默认身份 = 主机全局 git 身份；默认分支 master。身份
+             ;; 字面量只允许出现在该 gitconfig 静态文件，不得进入
+             ;; 任何 .scm（上面的负向扫描保证）。
              (let ((s (read-file %git-identity-authority)))
-               (and (string-contains
-                     s "(define %git-identity-name \"OrdChaos\")")
-                    (string-contains
-                     s "(define %git-identity-email \"orderchaos@ordchaos.com\")")
+               (and (string-contains s "name = OrdChaos")
+                    (string-contains s "email = orderchaos@ordchaos.com")
                     (string-contains s "defaultBranch = master"))))
 
 (test-assert "generic modules contain no getcwd-dependent loading"

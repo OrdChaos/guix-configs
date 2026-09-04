@@ -74,7 +74,7 @@
                #:use-module (gnu packages gnome)     ; gsettings-desktop-schemas、dconf
                #:use-module (gnu packages gnome-xyz) ; adw-gtk3-theme
                #:use-module (gnu services)           ; simple-service
-               #:use-module (guix gexp)              ; plain-file、program-file
+               #:use-module (guix gexp)              ; local-file、plain-file、program-file
                #:use-module (guix records)
                #:use-module (virelith packages icons)   ; fluent-icon-theme
                #:use-module (virelith packages cursors) ; fluent-cursor-theme
@@ -85,8 +85,9 @@
 
 ;; gtk-{3,4}/gtk.css 唯一职责：导入 Noctalia 生成的动态配色
 ;; （同目录 noctalia.css）。与 stock hook 写入文本逐字节一致。
+;; 内容静态 → 独立文件 colocate（同目录 gtk.css）。
 (define %gtk-css-import
-  (plain-file "gtk.css" "@import url(\"noctalia.css\");\n"))
+  (local-file "gtk.css" "gtk-css-import"))
 
 (define (settings-ini name entries)
   "由共享事实生成 settings.ini（单一来源，不散落——任务十五）。"
