@@ -108,7 +108,7 @@ enabled = [ "mdj2812/mihomo-control" ]
 
 [shell]
 app_icon_color = "primary"
-avatar_path = "/home/ordchaos/.local/share/avatars/avatar.png"
+avatar_path = "~/.local/share/avatars/avatar.png"
 settings_show_advanced = false
 setup_wizard_enabled = false
 telemetry_enabled = false
@@ -152,18 +152,18 @@ wallpaper_scheme = "m3-fruit-salad"
         post_hook = "appearance-sync {{ mode }}"
 
 [wallpaper]
-directory = "/home/ordchaos/.local/share/backgrounds"
+directory = "~/.local/share/backgrounds"
 enabled = true
 fill_mode = "crop"
 
     [wallpaper.default]
-    path = "/home/ordchaos/.local/share/backgrounds/wallpaper.jpg"
+    path = "~/.local/share/backgrounds/wallpaper.jpg"
 
     [wallpaper.last]
-    path = "/home/ordchaos/.local/share/backgrounds/wallpaper.jpg"
+    path = "~/.local/share/backgrounds/wallpaper.jpg"
 
     [wallpaper.monitors.Virtual-1]
-    path = "/home/ordchaos/.local/share/backgrounds/wallpaper.jpg"
+    path = "~/.local/share/backgrounds/wallpaper.jpg"
 
 [widget.battery]
 capsule = true
