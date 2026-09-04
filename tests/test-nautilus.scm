@@ -89,4 +89,33 @@ of the pinned python major.minor"
                     (string=? "'ghostty'"
                               (gsettings-setting-value (car gs))))))
 
+;; ── NA4：ghostty bundled 扩展遮蔽（防重复菜单项）────────────
+;; saayix ghostty 包随包分发自己的 nautilus-python 扩展
+;; （"Open in Ghostty"，不可配置、总是新进程）——与 open-any-terminal
+;; 重复。nautilus-python 先扫 ~/.local/share 且按 basename 走模块
+;; 缓存，仓库 stub 遮蔽之；不采用 patch ghostty 包（zig 重建代价）。
+(test-assert "NA4: repo stub shadows the saayix ghostty nautilus extension"
+             (let* ((files
+                     (append-map service-value
+                                 (filter
+                                  (lambda (s)
+                                    (any (lambda (ext)
+                                           (eq? home-files-service-type
+                                                (service-extension-target ext)))
+                                         (service-type-extensions
+                                          (service-kind s))))
+                                  (application-home-services %nautilus-app))))
+                    (entry (assoc
+                            ".local/share/nautilus-python/extensions/ghostty.py"
+                            files))
+                    (s (call-with-input-file
+                        "modules/guixcfg/apps/nautilus/definition.scm"
+                        (lambda (p) (read-string p)))))
+               (and entry
+                    ;; object->string：跨编译单元的 record 类型实例可能
+                    ;; 不一致（plain-file? 陷阱），字符串断言与之无关。
+                    (string-contains (object->string (cdr entry))
+                                     "Shadows")
+                    (string-contains s "basename"))))
+
 (test-end "nautilus")
