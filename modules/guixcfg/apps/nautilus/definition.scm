@@ -22,15 +22,50 @@
 ;;;     (guixcfg apps ghostty)），schema 随 home profile 投影，
 ;;;     gsettings reconcile 的 runtime dconf 投影统一应用。
 ;;;
+;;;     Guix 特有断点（2026-09 VM 实测根因）：扩展发现没问题
+;;;     （XDG_DATA_DIRS 含 profile share ✓），但 nautilus-python 的
+;;;     C loader 内嵌 store 里的裸 python（python-nautilus 的编译期
+;;;     input，3.12.x），其 sys.path 不含 profile 的 site-packages
+;;;     ——loader/扩展的 `import gi` 静默失败，右键菜单不出现。
+;;;     主机 Arch 上同一扩展开箱即用：系统 python 的 gi 在
+;;;     dist-packages 默认路径（/usr/lib/python3.x/site-packages）。
+;;;     修复：会话级 PYTHONPATH 指向 profile site-packages
+;;;     （嵌入式解释器 Py_Initialize 尊重 PYTHONPATH；版本号从
+;;;     pinned python 推导，不写死）。代价：会话内所有 python
+;;;     都看到该 site-packages——非 3.12 解释器（如编辑器自带）
+;;;     只在导入其中 C 模块时才报版本不匹配，正常不用 gi 的
+;;;     工具不受影响（2026-09 取舍记录）。
+;;;
 ;;; 无 persistence 规则（nautilus 状态属用户数据层）。
 
 (define-module (guixcfg apps nautilus definition)
                #:use-module (gnu packages gnome) ; nautilus、gvfs
+               #:use-module (gnu packages python) ; python（site-packages 版本推导）
+               #:use-module (gnu home services) ; home-environment-variables-service-type
+               #:use-module (gnu services)     ; simple-service
+               #:use-module (guix packages)    ; package-version
                #:use-module (virelith packages nautilus) ; python-nautilus、nautilus-open-any-terminal
                #:use-module (guix records)
                #:use-module (guixcfg apps model)
                #:use-module (guixcfg gsettings model) ; gsettings-setting
+               #:use-module (guixcfg users user) ; %primary-user、user-profile-home-directory
+               #:use-module (srfi srfi-1)       ; take
                #:export (%nautilus))
+
+;; loader 内嵌解释器的 site-packages 搜索路径：profile 下
+;; lib/python<major.minor>/site-packages。版本号从 pinned python
+;; 推导（与 python-nautilus 的编译期 input 同源——virelith
+;; nautilus.scm 的 (gnu packages python) python），与 profile 里
+;; pygobject/gi 的安装目录一致，不写死 "3.12"。
+(define %nautilus-python-major-minor
+  (string-join (take (string-split (package-version python) #\.) 2)
+               "."))
+
+(define %nautilus-python-path
+  (string-append (user-profile-home-directory %primary-user)
+                 "/.guix-home/profile/lib/python"
+                 %nautilus-python-major-minor
+                 "/site-packages"))
 
 (define %nautilus
   (application
@@ -40,6 +75,13 @@
    ;; （gtk/pygobject 经扩展的 propagated-inputs 随闭包进入 profile）。
    (home-packages (list nautilus gvfs
                         python-nautilus nautilus-open-any-terminal))
+   ;; PYTHONPATH：loader 内嵌 python 发现 profile 里 gi 的唯一通道
+   ;; （见文件头 2026-09 断点记录）。
+   (home-services
+    (list (simple-service
+           'nautilus-python-env
+           home-environment-variables-service-type
+           (list (cons "PYTHONPATH" %nautilus-python-path)))))
    ;; 扩展的终端选择：ghostty（本仓库唯一 terminal）。
    (gsettings
     (list (gsettings-setting
