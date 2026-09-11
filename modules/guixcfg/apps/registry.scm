@@ -32,6 +32,7 @@
                #:use-module (guixcfg apps file definition)
                #:use-module (guixcfg apps mesa-utils definition)
                #:use-module (guixcfg apps nodejs definition)
+               #:use-module (guixcfg apps java definition)
                #:use-module (guixcfg apps rust definition)
                #:use-module (guixcfg apps gnome-keyring definition)
                #:use-module (guixcfg apps mpv definition)
@@ -78,6 +79,7 @@
         %file
         %mesa-utils
         %nodejs
+        %java
         %rust
         %fastfetch
         %mpv

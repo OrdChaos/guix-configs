@@ -143,6 +143,7 @@
                "tests/test-gsettings-reconcile.scm"
                "tests/test-doc-hygiene.scm"
                "tests/test-nushell.scm"
+               "tests/test-java.scm"
                "tests/test-seed-once.scm"
                "tests/test-noctalia-seed.scm"
                "tests/test-source-hygiene.scm"
