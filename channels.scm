@@ -46,6 +46,15 @@
         (make-channel-introduction
          "cae11b77a64f281cc9ab45e20567e59efc37e96b"
          (openpgp-fingerprint
+           "FF0F 1FE0 A176 071F 0E39  A94D FF93 E1DA E089 7EDE"))))
+      (channel
+       (name 'guix-rust-toolchain)
+       (url "https://github.com/OrdChaos/guix-rust-toolchain.git")
+       (branch "master")
+       (introduction
+        (make-channel-introduction
+         "7eb3c7727b341ac671f1b7a06054a8aacc28cb52"
+         (openpgp-fingerprint
           "FF0F 1FE0 A176 071F 0E39  A94D FF93 E1DA E089 7EDE"))))
       (channel
        (name 'saayix)

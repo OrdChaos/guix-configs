@@ -2,7 +2,7 @@
        (name 'guix)
        (url "https://codeberg.org/guix/guix.git")
        (branch "master")
-       (commit "45a0e435d35df99e925c45df6841c1bbca00d60a")
+       (commit "de069958fcf9050be92a4085c31b9738ca4ff912")
        (introduction
         (make-channel-introduction
          "9edb3f66fd807b096b48283debdcddccfea34bad"
@@ -22,27 +22,37 @@
        (name 'rosenthal)
        (url "https://codeberg.org/hako/rosenthal.git")
        (branch "trunk")
-       (commit "c6361f6e7b087a48eda47f32981cfda70c9fa424")
+       (commit "83af642df352a88e2c3c5a288540080917bab3a4")
        (introduction
         (make-channel-introduction
          "7677db76330121a901604dfbad19077893865f35"
          (openpgp-fingerprint
           "13E7 6CD6 E649 C28C 3385  4DF5 5E5A A665 6149 17F7"))))
       (channel
-      (name 'virelith)
-      (url "https://github.com/ordchaos/virelith.git")
-      (branch "master")
-      (commit "4cf2a5aae878ee413e536bed94752eab94b817af")
+       (name 'virelith)
+       (url "https://github.com/ordchaos/virelith.git")
+       (branch "master")
+       (commit "4cf2a5aae878ee413e536bed94752eab94b817af")
        (introduction
         (make-channel-introduction
          "cae11b77a64f281cc9ab45e20567e59efc37e96b"
          (openpgp-fingerprint
           "FF0F 1FE0 A176 071F 0E39  A94D FF93 E1DA E089 7EDE"))))
       (channel
+       (name 'guix-rust-toolchain)
+       (url "https://github.com/OrdChaos/guix-rust-toolchain.git")
+       (branch "master")
+       (commit "3b2b747acb101702765a4bd3471666a05acd7edf")
+       (introduction
+        (make-channel-introduction
+         "7eb3c7727b341ac671f1b7a06054a8aacc28cb52"
+         (openpgp-fingerprint
+          "FF0F 1FE0 A176 071F 0E39  A94D FF93 E1DA E089 7EDE"))))
+      (channel
        (name 'saayix)
        (url "https://codeberg.org/look/saayix")
        (branch "main")
-       (commit "663966eb6d9c491174dfd67d2eadf1fca3f1577b")
+       (commit "9d22922ef477f82b442d533c376baac4fe666268")
        (introduction
         (make-channel-introduction
          "12540f593092e9a177eb8a974a57bb4892327752"
@@ -52,4 +62,4 @@
        (name 'bluebox)
        (url "https://codeberg.org/lapislazuli/bluebox")
        (branch "main")
-       (commit "71628770c8612c041e06672f34c0c8e6fc67c13c")))
+       (commit "f5c32b67e5abfa2ea8e9630c36dc0cfe3b29ebd4")))

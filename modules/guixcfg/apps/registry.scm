@@ -32,6 +32,7 @@
                #:use-module (guixcfg apps file definition)
                #:use-module (guixcfg apps mesa-utils definition)
                #:use-module (guixcfg apps nodejs definition)
+               #:use-module (guixcfg apps rust definition)
                #:use-module (guixcfg apps gnome-keyring definition)
                #:use-module (guixcfg apps mpv definition)
                #:use-module (guixcfg apps google-chrome-stable definition)
@@ -77,6 +78,7 @@
         %file
         %mesa-utils
         %nodejs
+        %rust
         %fastfetch
         %mpv
         %google-chrome-stable
