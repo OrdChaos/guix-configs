@@ -48,6 +48,7 @@
                #:use-module (guixcfg apps loupe definition)
                #:use-module (guixcfg apps gnome-text-editor definition)
                #:use-module (guixcfg apps gnome-characters definition)
+               #:use-module (guixcfg apps mission-center definition)
                #:use-module (guixcfg apps vscode definition)
                #:use-module (guixcfg apps onlyoffice definition)
                #:use-module (guixcfg apps nushell definition)
@@ -96,6 +97,7 @@
         %loupe
         %gnome-text-editor
         %gnome-characters
+        %mission-center
         %vscode
         %onlyoffice
         %nushell
