@@ -341,7 +341,7 @@ preflight（git status / describe 等）——blue -n 下也真实执行，以�
             (host-source-absolute-path root host))
     (primitive-exit 1))
   (%run-checks
-   (format #f "build preflight (host: ~a; dirty worktree allowed)~%" host)
+   (format #f "build preflight (host: ~a; dirty worktree allowed)" host)
    (%root-level-checks root)))
 
 ;; doctor：deployment readiness——比 build preflight 多 git clean 与
@@ -349,7 +349,7 @@ preflight（git status / describe 等）——blue -n 下也真实执行，以�
 (define (%doctor root host)
   (format #t "doctor: deployment readiness for host ~a~%" host)
   (%run-checks
-   (format #f "doctor checks (repo: ~a)~%" root)
+   (format #f "doctor checks (repo: ~a)" root)
    (append
     (%root-level-checks root)
     (list
