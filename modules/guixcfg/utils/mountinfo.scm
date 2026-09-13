@@ -150,8 +150,8 @@ OPTIONS + ',' + %guixcfg-utab-ownership-marker）。ROOT/SOURCE 必须
 额外 options 不影响归属；无 marker 的外来条目（即使带相同桌面
 选项）不属本服务。"
   (let ((opts-field (find (lambda (field)
-                           (string-prefix? "OPTS=" field))
-                         (string-split line #\space))))
+                            (string-prefix? "OPTS=" field))
+                          (string-split line #\space))))
     (and opts-field
          (member %guixcfg-utab-ownership-marker
                  (string-split (substring opts-field

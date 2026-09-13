@@ -59,41 +59,41 @@
 ;;; ── 操作契约（runtime 过程；测试经 #:directory 注入）───────
 
 (define* (session-gate-path #:key (directory %session-gate-directory))
-  "DIRECTORY 下的 gate 文件路径。"
-  (string-append directory "/" %session-gate-file-name))
+         "DIRECTORY 下的 gate 文件路径。"
+         (string-append directory "/" %session-gate-file-name))
 
 (define* (session-gate-close! #:key
                               (directory %session-gate-directory)
                               (message %session-gate-close-message))
-  "关闭 gate（创建 gate 文件）。幂等：目录 mkdir-p + chmod 0755
+         "关闭 gate（创建 gate 文件）。幂等：目录 mkdir-p + chmod 0755
   （/run/guixcfg 是本项目的 privileged 运行时命名空间），写入
   MESSAGE。"
-  (mkdir-p directory)
-  (chmod directory #o755)
-  (call-with-output-file (session-gate-path #:directory directory)
-    (lambda (port)
-      (display message port))))
+         (mkdir-p directory)
+         (chmod directory #o755)
+         (call-with-output-file (session-gate-path #:directory directory)
+                                (lambda (port)
+                                  (display message port))))
 
 (define* (session-gate-open! #:key (directory %session-gate-directory))
-  "打开 gate（删除 gate 文件）。幂等：文件不存在时无操作。"
-  (false-if-exception
-   (delete-file (session-gate-path #:directory directory))))
+         "打开 gate（删除 gate 文件）。幂等：文件不存在时无操作。"
+         (false-if-exception
+          (delete-file (session-gate-path #:directory directory))))
 
 ;;; ── boot 关闭端（activation gexp builder）──────────────────
 ;;; 只闭包 (guix build utils)；路径/目录/文案全部 ungexp 字符串。
 
 (define* (session-gate-close-activation
           #:key (directory %session-gate-directory)
-                (message %session-gate-close-message))
-  "activation gexp：boot 早期关闭 gate（mkdir-p + chmod + 写文案）。
+          (message %session-gate-close-message))
+         "activation gexp：boot 早期关闭 gate（mkdir-p + chmod + 写文案）。
 DIRECTORY/MESSAGE 经 ungexp 注入（测试可用临时目录）。"
-  (with-imported-modules (source-module-closure '((guix build utils)))
-                         #~(begin
-                            (use-modules (guix build utils))
-                            (mkdir-p #$directory)
-                            (chmod #$directory #o755)
-                            (call-with-output-file #$(session-gate-path
-                                                      #:directory directory)
-                                                   (lambda (port)
-                                                     (display #$message
-                                                              port))))))
+         (with-imported-modules (source-module-closure '((guix build utils)))
+                                #~(begin
+                                   (use-modules (guix build utils))
+                                   (mkdir-p #$directory)
+                                   (chmod #$directory #o755)
+                                   (call-with-output-file #$(session-gate-path
+                                                             #:directory directory)
+                                                          (lambda (port)
+                                                            (display #$message
+                                                                     port))))))

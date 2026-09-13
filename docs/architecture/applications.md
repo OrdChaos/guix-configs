@@ -157,7 +157,7 @@ apps/<app>/
 | `system-services` | 仅少数真正需要 system-level service 的 app | **不要**用它包装 greetd/accounts/readiness/TPM/UKI/Secure Boot 等核心基础设施 |
 | `persistence` | 声明 app-owned mutable canonical state | 只声明 rule，挂载由 `(guixcfg system application-persistence)` 执行 |
 | `secrets` | 声明 app 需要的 ciphertext/runtime secret | 只声明，解密/发布由 `(guixcfg security secrets)` 执行 |
-| `gsettings` | 声明 app 负责的静态 GSettings（schema/key/value，GVariant 文本） | 只声明，投影由 `(guixcfg gsettings …)` 执行到 runtime dconf；`(schema,key)` 全局单一 owner；appearance 6 键保留域不可声明（docs/architecture/gsettings.md） |
+| `gsettings` | 声明 app 负责的静态 GSettings（schema/key/value，GVariant 文本） | 只声明，投影由 `modules/guixcfg/gsettings/` 的 model/serialize/runtime/reconcile/home-service 执行到 runtime dconf；`(schema,key)` 全局单一 owner；appearance 6 键保留域不可声明（docs/architecture/gsettings.md） |
 
 聚合（registry → Home/System）：
 

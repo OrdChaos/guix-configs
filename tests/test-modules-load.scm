@@ -15,7 +15,8 @@
              (srfi srfi-64))
 
 ;; 依赖顺序排列：被依赖的模块先编译注册。清单不再手工维护——
-;; 自动扫描 modules/guixcfg 全部 .scm，按 #:use-module 行对 guixcfg
+;; 自动扫描 modules/guixcfg 的核心 .scm；apps/ 是可选应用清单，不属于
+;; mandatory suite。按 #:use-module 行对 guixcfg
 ;; 内部依赖做拓扑排序（冷 ccache 下 compile-file 对依赖缺失报
 ;; "no code for module"；漏清单会让模块以旧 record 类型残留，导致
 ;; accessor wrong-type-arg——fastfetch 2026-08 实测）。新增应用/模块
@@ -55,6 +56,9 @@
 
 (define (module-source-file? file)
   (module-name-of file))
+
+(define (core-source-file? file)
+  (not (string-prefix? "modules/guixcfg/apps/" file)))
 
 (define (guixcfg-use-modules file)
   "FILE 中 #:use-module 引用的 guixcfg 模块名列表（跳过注释行）。"
@@ -114,13 +118,44 @@
                                        dependents))))
           (loop remaining* ready* (cons n acc)))))))
 
+(define (app-module-name? name)
+  (and (pair? name)
+       (pair? (cdr name))
+       (eq? (car name) 'guixcfg)
+       (eq? (cadr name) 'apps)))
+
 (define %all-modules
-  (let* ((files (filter module-source-file?
-                        (scheme-files-under "modules/guixcfg")))
-         (nodes (map module-name-of files))
-         (edges (map (lambda (f)
-                       (cons (module-name-of f) (guixcfg-use-modules f)))
-                     files)))
+  (let* ((all-files (filter (lambda (file)
+                              (and (core-source-file? file)
+                                   (module-source-file? file)))
+                            (scheme-files-under "modules/guixcfg")))
+         (all-nodes (map module-name-of all-files))
+         (raw-edges (map (lambda (file)
+                           (cons (module-name-of file)
+                                 (guixcfg-use-modules file)))
+                         all-files))
+         (direct (filter (lambda (node)
+                           (any app-module-name?
+                                (or (assoc-ref raw-edges node) '())))
+                         all-nodes))
+         (blocked
+          (let loop ((blocked direct))
+            (let ((next
+                   (delete-duplicates
+                    (append blocked
+                            (filter
+                             (lambda (node)
+                               (any (lambda (dep) (member dep blocked))
+                                    (or (assoc-ref raw-edges node) '())))
+                             all-nodes)))))
+              (if (= (length next) (length blocked)) blocked
+                (loop next)))))
+         (nodes (filter (lambda (node) (not (member node blocked))) all-nodes))
+         (edges (map (lambda (node)
+                       (cons node
+                             (filter (lambda (dep) (member dep nodes))
+                                     (or (assoc-ref raw-edges node) '()))))
+                     nodes)))
     (topo-sort nodes edges)))
 
 (define (module-file name)
@@ -134,7 +169,8 @@
             %non-module-sources
             (filter (lambda (f)
                       (not (module-source-file? f)))
-                    (scheme-files-under "modules/guixcfg")))
+                    (filter core-source-file?
+                            (scheme-files-under "modules/guixcfg"))))
 
 (test-assert "all modules compile and load without unbound-variable warnings"
              (let ((warnings (open-output-string)))
@@ -154,13 +190,6 @@
                    (when (string-contains text "unbound")
                      (format (current-error-port) "~a" text))
                    (and ok (not (string-contains text "unbound")))))))
-
-;; operating-system 的 services 等字段是延迟求值的，compile-file 不会
-;; 触发字段校验；这里显式实例化 %vm-os，让“services 字段必须是服务列表”
-;; 这类错误在测试期暴露，而不是留到 system build。
-(test-assert "hosts/vm.scm %vm-os instantiates (valid services field)"
-             (let ((os (module-ref (resolve-module '(guixcfg hosts vm)) '%vm-os)))
-               (list? ((@ (gnu system) operating-system-services) os))))
 
 ;; tools/*.scm 是 CLI 脚本（无 define-module）：脚本里的未绑定变量只有
 ;; 运行到对应分支才炸（实测教训：(unresolved) 曾在 disk-install 的

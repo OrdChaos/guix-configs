@@ -36,7 +36,7 @@
 (define %docs-content
   (string-join (map (lambda (f)
                       (call-with-input-file f
-                        (lambda (p) (read-string p))))
+                                            (lambda (p) (read-string p))))
                     %doc-files)
                "\n"))
 
@@ -47,9 +47,9 @@
 ;; 路径、占位符、散文术语，以及文档中作为删除决策记录的路径。
 (define %doc-path-exemptions
   '("definition.scm" "state.scm" "limine-menu.scm"
-    "EFI/Guix/candidate.scm" "gnu/build/file-systems.scm"
-    "guix/gexp.scm" "nonguix/transformations.scm"
-    "modules/guixcfg/system/resolvconf.scm")) ; dns.md 的删除决策记录
+                     "EFI/Guix/candidate.scm" "gnu/build/file-systems.scm"
+                     "guix/gexp.scm" "nonguix/transformations.scm"
+                     "modules/guixcfg/system/resolvconf.scm")) ; dns.md 的删除决策记录
 
 ;; modules/guixcfg 下的全部文件 basename（bare-name 引用的兜底解析：
 ;; docs 常用 `readiness.scm` 等不带 area 前缀的短名）。

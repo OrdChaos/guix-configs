@@ -92,7 +92,7 @@
 (test-group "argv"
             (test-equal "delete uses guix package -p (no bootloader reinstall)"
                         '("guix" "package" "-p" "/var/guix/profiles/system"
-                          "--delete-generations=0,3")
+                                 "--delete-generations=0,3")
                         (delete-generations-argv "/var/guix/profiles/system"
                                                  '(0 3)))
             (test-error "empty delete list throws" #t
@@ -106,12 +106,12 @@
    (for-each make-generation! '(0 1 2 3 4))
    (symlink "system-4-link" %tmp-profile)
    (call-with-output-file %tmp-boot-states
-     (lambda (port)
-       (write '((format-version . 2)
-                (last-good . ((generation . 2)
-                              (system . "/gnu/store/fake-system-2")
-                              (command-line . ""))))
-              port))))
+                          (lambda (port)
+                            (write '((format-version . 2)
+                                     (last-good . ((generation . 2)
+                                                   (system . "/gnu/store/fake-system-2")
+                                                   (command-line . ""))))
+                                   port))))
  (lambda ()
    (let ((plan (system-generation-plan #:profile %tmp-profile
                                        #:boot-states-path %tmp-boot-states

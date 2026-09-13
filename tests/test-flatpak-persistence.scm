@@ -122,35 +122,25 @@
             (append-map flatpak-application-persistence-rules
                         (flatpak-select-applications '() %fp-apps)))
 
-;; ── 生产 catalog 回归（registry 的真实内容）────────────────
-;; Catalog/Selection 是 lifecycle authority：真实 catalog 必须持续
-;; 通过校验，QQ（selected）派生正确的默认 rule；未选中 app 不产生
-;; mount（selection 驱动的投影语义）。
+;; ── 生产 catalog 通用不变量 ────────────────────────────────
+;; 不枚举具体应用：新增或选择应用无需修改测试。
 (define %prod-rules (flatpak-persistence-rules))
+(define %prod-selected (flatpak-selected-applications))
 
-(test-assert "production catalog validates at load (registry side effect)"
-             (any (lambda (a)
-                    (and (eq? 'qq (flatpak-application-name a))
-                         (string=? "com.qq.QQ" (flatpak-application-id a))))
-                  %flatpak-applications))
-(test-assert "production selection resolves against catalog"
-             (= 2 (length (flatpak-selected-applications))))
-(test-assert "production selected QQ gets its default .var/app rule"
-             (any (lambda (r)
-                    (and (string=? ".var/app/com.qq.QQ"
-                                   (application-persistence-rule-consumer r))
-                         (string=? "flatpak/apps/com.qq.QQ"
-                                   (application-persistence-rule-backing r))))
-                  %prod-rules))
 (test-assert "production rules = installation + selected apps only"
-             (= (+ 1 (length (flatpak-selected-applications)))
+             (= (+ 1 (length %prod-selected))
                 (length %prod-rules)))
-(test-assert "production selected WeChat gets its default .var/app rule"
-             (any (lambda (r)
-                    (and (string=? ".var/app/com.tencent.WeChat"
-                                   (application-persistence-rule-consumer r))
-                         (string=? "flatpak/apps/com.tencent.WeChat"
-                                   (application-persistence-rule-backing r))))
-                  %prod-rules))
+
+(test-assert "every production selected app gets its default persistence rule"
+             (every
+              (lambda (app)
+                (let ((id (flatpak-application-id app)))
+                  (any (lambda (rule)
+                         (and (string=? (string-append ".var/app/" id)
+                                        (application-persistence-rule-consumer rule))
+                              (string=? (string-append "flatpak/apps/" id)
+                                        (application-persistence-rule-backing rule))))
+                       %prod-rules)))
+              %prod-selected))
 
 (test-end "flatpak-persistence")

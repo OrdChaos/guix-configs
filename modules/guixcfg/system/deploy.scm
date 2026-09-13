@@ -131,7 +131,7 @@ closed，不静默返回空表）。"
 GUILE_LOAD_PATH/GUILE_LOAD_COMPILED_PATH。"
   `("env"
     ,(string-append "GUILE_LOAD_PATH=" root "/" %modules-dir)
-    ,(string-append "GUILE_LOAD_COMPILED_PATH=" root "/" %modules-dir)))
+     ,(string-append "GUILE_LOAD_COMPILED_PATH=" root "/" %modules-dir)))
 
 (define (guix-time-machine-argv root channels-file subcommand)
   "构造锁定频道的 guix 命令 argv（前缀注入 modules load path env）。
@@ -189,8 +189,8 @@ ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMM
   ;; 调用方负责已挂好 /mnt 并设置 GUIX_CONFIG_FACTS。
   (guix-time-machine-argv root %channels-lock-file
                           `("system" "init"
-                            ,(host-source-relative-path host)
-                            "/mnt")))
+                                     ,(host-source-relative-path host)
+                                     "/mnt")))
 
 (define (reconfigure-privileged-argv blue-executable blueprint-path host home-user)
   ;; blue reconfigure 的 privilege handoff argv：sudo 重新执行【同一
@@ -245,13 +245,13 @@ ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMM
   ;; 仓库 modules/（从仓库根运行）。
   (guix-time-machine-argv root %channels-lock-file
                           `("repl" "tools/install-cli.scm" "--"
-                            ,mode ,host ,device)))
+                                   ,mode ,host ,device)))
 
 (define (enroll-cli-argv root mode host)
   ;; blue enroll 的 pinned 执行入口 argv（tools/enroll-cli.scm）。
   (guix-time-machine-argv root %channels-lock-file
                           `("repl" "tools/enroll-cli.scm" "--"
-                            ,mode ,host)))
+                                   ,mode ,host)))
 
 (define (gc-cli-argv root mode host extra)
   ;; blue gc 的 pinned 执行入口 argv（tools/gc-cli.scm）：域执行在
@@ -260,7 +260,7 @@ ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMM
   ;; ("--keep" "N") / ("--delete" "LIST")。
   (guix-time-machine-argv root %channels-lock-file
                           `("repl" "tools/gc-cli.scm" "--"
-                            ,mode ,host ,@extra)))
+                                   ,mode ,host ,@extra)))
 
 (define (sb-keygen-tool-argv root keydir)
   ;; tools/secure-boot-keygen.scm 的官方调用形态（工具头部注释）：
@@ -269,8 +269,8 @@ ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMM
   ;; 见 modules-load-path-env）。
   (guix-time-machine-argv root %channels-lock-file
                           `("shell" "-m" "manifests/secure-boot-keygen.scm"
-                            "--" "guix" "repl"
-                            "tools/secure-boot-keygen.scm" ,keydir)))
+                                    "--" "guix" "repl"
+                                    "tools/secure-boot-keygen.scm" ,keydir)))
 
 (define (sb-keystore-tool-argv root keydir)
   ;; tools/secure-boot-enroll.scm 的官方调用形态（工具头部注释）：
@@ -281,10 +281,10 @@ ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMM
   ;; no code for module，VM 实测）。模块经 GUILE_LOAD_PATH 注入。
   (guix-time-machine-argv root %channels-lock-file
                           `("shell" "-m" "manifests/secure-boot-enroll.scm"
-                            "--" "guix" "time-machine" "-C"
-                            ,(string-append root "/" %channels-lock-file)
-                            "--" "repl"
-                            "tools/secure-boot-enroll.scm" ,keydir)))
+                                    "--" "guix" "time-machine" "-C"
+                                    ,(string-append root "/" %channels-lock-file)
+                                    "--" "repl"
+                                    "tools/secure-boot-enroll.scm" ,keydir)))
 
 (define (commit-root-tool-argv root target)
   ;; tools/disk-install.scm 的 commit-root 子命令（安装阶段的 root
@@ -292,7 +292,7 @@ ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMM
   ;; 子进程隔离才能做退出码分类——(guixcfg system install)）。
   (guix-time-machine-argv root %channels-lock-file
                           `("repl" "tools/disk-install.scm" "--"
-                            "commit-root" ,target)))
+                                   "commit-root" ,target)))
 
 (define (channel-lock-refresh-argv root)
   ;; blue update 的 argv：channels.scm:6-9 的文档化流程——用可变频道

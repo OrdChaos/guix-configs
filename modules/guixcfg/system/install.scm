@@ -25,7 +25,7 @@
 ;;;   db.key/db.crt）；secrets 在 system-init 前（AGENT.md §5：阶段 5
 ;;;   必须先于 system init）；identity 解锁在 disk 前（让 LUKS
 ;;;   passphrase 走 luks-recovery.age 而非交互）；repo 在 commit-root
-;;;   后（/mnt/persist/data-home 挂载且系统已可启动，runbook 阶段 10
+;;;   后（/mnt/persist/data-home 挂载且系统已可启动，runbook 阶段 8
 ;;;   的相对顺序）。
 ;;;
 ;;; 退出码契约（docs/operations/installation.md）：
@@ -50,6 +50,7 @@
                #:use-module (guixcfg storage commit)     ; commit-state
                #:use-module (guixcfg security age)       ; runtime-identity-present?、age-unlock!、ensure-installed-identity!、%installed-identity-path、%account-credentials-dir、provision-password-hash!
                #:use-module (guixcfg security credential-source) ; resolve-luks-passphrase-source
+               #:use-module (guixcfg security secure-boot-material)
                #:use-module (guixcfg system machine-facts) ; load-machine-facts（facts 内容校验）
                #:use-module (guixcfg system deploy)      ; system-init-argv / sb-keygen-tool-argv / sb-keystore-tool-argv / commit-root-tool-argv / channels-structure-ok?
                #:use-module (guixcfg boot layout)        ; %esp-mount-point
@@ -99,7 +100,7 @@
 ;;; ────────────────────────────────────────────────────────────
 ;;; 固定事实
 
-;; 仓库内相对路径（installation.md 阶段 7 的 install secret）。
+;; 仓库内相对路径（installation.md 阶段 5 的 install secret）。
 (define %user-password-hash-rel "modules/guixcfg/users/secrets/user-password.hash.age")
 
 ;; 安装目标的 SB keydir（target-prefix 语义与 boot/uki.scm 的部署期
@@ -122,12 +123,11 @@
                  (persist-mount-point "@persist-system")
                  "/accounts/" user "/password.hash"))
 
-(define %sb-key-file-names '("PK.key" "PK.crt" "KEK.key" "KEK.crt"
-                             "db.key" "db.crt"))
+(define %sb-key-file-names %secure-boot-key-file-names)
 
-(define %keystore-auth-paths '("keystore/PK/PK.auth"
-                               "keystore/KEK/KEK.auth"
-                               "keystore/db/db.auth"))
+(define %keystore-auth-paths
+  (map (lambda (path) (string-append "keystore/" path))
+       %secure-boot-keystore-auth-paths))
 
 ;; commit-root 会把 /var/guix 收养进 @persist-var-guix（mount-at-install?
 ;; #f 的刻意设计）——system-1-link 在 commit 后不再位于 /mnt/var/guix；
@@ -137,9 +137,9 @@
 (define %init-markers '("/etc" "/boot/deploy-uki"))
 
 (define %esp-markers '("/limine.conf" "/EFI/Guix/A/CURRENT.EFI"
-                       "/EFI/Guix/A/RECOVERY.EFI"))
+                                      "/EFI/Guix/A/RECOVERY.EFI"))
 
-;; 仓库 checkout 复制（installation.md 手动 runbook 阶段 10 的机制化）：
+;; 仓库 checkout 复制（installation.md 手动 runbook 阶段 8 的机制化）：
 ;; 目标 = @persist-data-home/<user>/guix-configs（与
 ;; (guixcfg system user-persistence) 的 guix-configs bind backing
 ;; 一致——首次 boot 即 bind 到 ~/guix-configs）。检测与验证共用同一
@@ -204,7 +204,7 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
 ;; 阶段 id 顺序 = 展示/执行顺序（真实依赖顺序，见模块头）。
 (define %install-stage-ids
   '(disk mounts facts sb-keys secrets sb-keystore system-init
-          commit-root repo validate))
+         commit-root repo validate))
 
 (define (stage-status state id)
   "STATE 中 id 阶段的 <install-stage>（缺省 #f）。"
@@ -382,76 +382,76 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
          (keydir (install-keydir target))
          (user (user-profile-name %primary-user)))
     `((partition-table .
-       ,(or (file-exists? esp-partlabel)
-            (file-exists? sys-partlabel)))
+                       ,(or (file-exists? esp-partlabel)
+                            (file-exists? sys-partlabel)))
       (luks-volume .
-       ;; cryptsetup isLuks 用退出码表态（0 = 是 LUKS），stdout 无输出
-       ;; ——绝不能用输出文本判断（resume 时误判 incompatible，实测）。
-       ,(and (file-exists? sys-partlabel)
-             (let ((p (false-if-exception
-                       (open-pipe* OPEN_READ "cryptsetup" "isLuks"
-                                   sys-partlabel))))
-               (and p (zero? (status:exit-val (close-pipe p)))))))
+                   ;; cryptsetup isLuks 用退出码表态（0 = 是 LUKS），stdout 无输出
+                   ;; ——绝不能用输出文本判断（resume 时误判 incompatible，实测）。
+                   ,(and (file-exists? sys-partlabel)
+                         (let ((p (false-if-exception
+                                   (open-pipe* OPEN_READ "cryptsetup" "isLuks"
+                                               sys-partlabel))))
+                           (and p (zero? (status:exit-val (close-pipe p)))))))
       (luks-open . ,(file-exists? mapper))
       (btrfs-rootfs .
-       ,(and (file-exists? mapper)
-             (let ((v (false-if-exception
-                       (first-command-line "btrfs" "filesystem" "show"
-                                           mapper))))
-               (and v (string-contains v %btrfs-filesystem-label)))))
+                    ,(and (file-exists? mapper)
+                          (let ((v (false-if-exception
+                                    (first-command-line "btrfs" "filesystem" "show"
+                                                        mapper))))
+                            (and v (string-contains v %btrfs-filesystem-label)))))
       (targets-mounted .
-       ,(and (let ((src (false-if-exception
-                         (first-command-line "findmnt" "-no" "SOURCE"
-                                             target))))
-               (and src (not (string-null? src))))
-             (let ((src (false-if-exception
-                         (first-command-line "findmnt" "-no" "SOURCE"
-                                             (string-append target
-                                                            %esp-mount-point)))))
-               (and src (not (string-null? src))))))
+                       ,(and (let ((src (false-if-exception
+                                         (first-command-line "findmnt" "-no" "SOURCE"
+                                                             target))))
+                               (and src (not (string-null? src))))
+                             (let ((src (false-if-exception
+                                         (first-command-line "findmnt" "-no" "SOURCE"
+                                                             (string-append target
+                                                                            %esp-mount-point)))))
+                               (and src (not (string-null? src))))))
       (top-mounted .
-       ,(let ((r (false-if-exception
-                  (first-command-line "findmnt" "-no" "TARGET"
-                                      %btrfs-top-mount))))
-          (and r (not (string-null? r)))))
+                   ,(let ((r (false-if-exception
+                              (first-command-line "findmnt" "-no" "TARGET"
+                                                  %btrfs-top-mount))))
+                      (and r (not (string-null? r)))))
       (facts-file .
-       ,(and (file-exists? (install-facts-path target))
-             (install-facts-path target)))
+                  ,(and (file-exists? (install-facts-path target))
+                        (install-facts-path target)))
       (luks-uuid .
-       ,(and (file-exists? sys-partlabel)
-             (false-if-exception
-              (first-command-line "cryptsetup" "luksUUID"
-                                  sys-partlabel))))
+                 ,(and (file-exists? sys-partlabel)
+                       (false-if-exception
+                        (first-command-line "cryptsetup" "luksUUID"
+                                            sys-partlabel))))
       (sb-keys .
-       ,(let ((n (count
-                  (lambda (f)
-                    (file-exists? (string-append keydir "/" f)))
-                  %sb-key-file-names)))
-          (cond ((= n 6) 'complete)
-                ((zero? n) 'none)
-                (else 'partial))))
+               ,(let ((n (count
+                          (lambda (f)
+                            (file-exists? (string-append keydir "/" f)))
+                          %sb-key-file-names)))
+                  (cond ((= n 6) 'complete)
+                    ((zero? n) 'none)
+                    (else 'partial))))
       (keystore .
-       ,(every (lambda (f)
-                 (file-exists? (string-append keydir "/" f)))
-               %keystore-auth-paths))
+                ,(every (lambda (f)
+                          (file-exists? (string-append keydir "/" f)))
+                        %keystore-auth-paths))
       (identity . ,(file-exists? (install-identity-path target)))
       (password-hash . ,(file-exists?
                          (install-password-hash-path target user)))
       (init-markers .
-       ,(every (lambda (f)
-                 (file-exists? (string-append target f)))
-               %init-markers))
+                    ,(every (lambda (f)
+                              (file-exists? (string-append target f)))
+                            %init-markers))
       (esp-markers .
-       ,(every (lambda (f)
-                 (file-exists?
-                  (string-append target %esp-mount-point f)))
-               %esp-markers))
+                   ,(every (lambda (f)
+                             (file-exists?
+                              (string-append target %esp-mount-point f)))
+                           %esp-markers))
       (commit .
-       ,(let ((c (false-if-exception (commit-state))))
-          (case c
-            ((committed) 'committed)
-            ((interrupted-after-rename not-committed) 'fresh)
-            (else 'unknown))))
+              ,(let ((c (false-if-exception (commit-state))))
+                 (case c
+                   ((committed) 'committed)
+                   ((interrupted-after-rename not-committed) 'fresh)
+                   (else 'unknown))))
       (repo-copied . ,(repo-copy-present? target)))))
 
 (define* (detect-install-state root host device)
@@ -712,7 +712,7 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
 
 (define (install-repository! exec root target)
   "把仓库 checkout 复制到 /mnt/persist/data-home/USER/guix-configs
-（installation.md 手动 runbook 阶段 10 的同一语义：tar 排除 vms/ 与
+（installation.md 手动 runbook 阶段 8 的同一语义：tar 排除 vms/ 与
 *.log，保留 .git）。两段 tar 经 staging 文件（/tmp）——EXEC 是单
 argv 子进程，不经 shell 管道（无引号风险）。chown -R 归还 USER
 ownership：boot 期 user-persistence activation 只 chown 顶层目录、
@@ -728,8 +728,8 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
     (run-checked-exec! exec 'repo `("mkdir" "-p" ,dest))
     (run-checked-exec! exec 'repo
                        `("tar" "cf" ,staging
-                              "--exclude=./vms" "--exclude=*.log"
-                              "-C" ,root "."))
+                               "--exclude=./vms" "--exclude=*.log"
+                               "-C" ,root "."))
     (run-checked-exec! exec 'repo `("tar" "xf" ,staging "-C" ,dest))
     (false-if-exception (delete-file staging))
     (run-checked-exec! exec 'repo `("chown" "-R" ,owner ,dest))
@@ -737,7 +737,7 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
 
 (define* (install-transaction! root host device
                                #:key exec on-confirm
-                                     (target "/mnt"))
+                               (target "/mnt"))
          "执行安装事务（含 resume/skip/fail-closed 判定）。返回退出码
 0/1/2/3（blueprint 的 root 命令原样 primitive-exit）。EXEC 契约见
 模块头；ON-CONFIRM 是破坏性确认 UI（返回 #f = 用户中止）。"
@@ -805,165 +805,165 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
                      (if (not unlock-ok?)
                        1
                        (cond
-                     ((eq? disk-status 'incompatible)
-                      (format (current-error-port)
-                              "~%INSTALL BLOCKED: disk state is incompatible.~%  ~a~%"
-                              (install-stage-detail disk))
-                      (format (current-error-port)
-                              "Expected: a blank device, or the complete target layout (esp+system partitions, LUKS2, Btrfs rootfs).~%Actual: see the stage report above.~%Recovery: inspect with 'guix repl tools/disk-install.scm -- inspect ~a'; wiping is never automatic.~%"
-                              device)
-                      2)
-                     ((eq? disk-status 'ambiguous)
-                      (format (current-error-port)
-                              "~%INSTALL BLOCKED: disk state is ambiguous.~%  ~a~%"
-                              (install-stage-detail disk))
-                      (format (current-error-port)
-                              "Recovery: open the volume manually ('cryptsetup open ~a cryptroot') and re-run; wiping is never automatic.~%"
-                              (by-partlabel-path "system"))
-                      2)
-                     ((and (eq? disk-status 'fresh)
-                           (not (on-confirm state)))
-                      (format (current-error-port)
-                              "~%Installation aborted; nothing was modified.~%")
-                      3)
-                     (else
-                      (when (eq? disk-status 'fresh)
-                        (format #t "~%Confirmation accepted.~%"))
-                      ;; ── 分阶段执行 ──
-                      (catch #t
-                        (lambda ()
-                          (let ((run-stage
-                                 (lambda (id thunk)
-                                   (let ((s (stage-status
-                                             (detect-install-state root host
-                                                                   device)
-                                             id)))
-                                     (format #t "~%== stage ~a: ~a~%" id
-                                             (install-stage-status s))
-                                     (case (install-stage-status s)
-                                       ((complete) #t)
-                                       ((incompatible)
-                                        (error "stage is incompatible"
-                                               (install-stage-detail s)))
-                                       ((ambiguous)
-                                        (error "stage is ambiguous"
-                                               (install-stage-detail s)))
-                                       (else (thunk)))))))
-                            ;; 1. disk（fresh：完整磁盘阶段）
-                            (run-stage 'disk
-                                       (lambda ()
-(set! mutated? #t)
-                                         (let ((passphrase
-                                                (resolve-passphrase-reader!
-                                                 root)))
-                                           ;; fail-early：luks-secret
-                                           ;; 解密预演（首次 mutation 前）
-                                           (passphrase)
-                                           (ensure-disk-phase!
-                                            policy device passphrase))))
-                            ;; 2. mounts（resume：打开 LUKS + 重放
-                            ;;    mount 步骤）
-                            (run-stage 'mounts
-                                       (lambda ()
-                                         (let ((passphrase
-                                                (resolve-passphrase-reader!
-                                                 root)))
-                                           (unless (file-exists?
-                                                    %luks-mapper-path)
-                                             (format #t "  opening LUKS volume...~%")
-                                             (execute-luks-open
-                                              (passphrase)))
-                                           (execute-mounts!
-                                            (storage-plan policy device)))))
-                            ;; 3. facts（幂等重写；不匹配时分类层已
-                            ;;    blocked）
-                            (run-stage 'facts
-                                       (lambda ()
-                                         (write-machine-facts target)))
-                            ;; 4. sb-keys（keygen 子进程；partial 已
-                            ;;    blocked）
-                            (run-stage 'sb-keys
-                                       (lambda ()
-                                         (run-checked-exec!
-                                          exec 'sb-keys
-                                          (sb-keygen-tool-argv
-                                           root keydir))))
-                            ;; 5. secrets（幂等）
-                            (run-stage 'secrets
-                                       (lambda ()
-                                         (ensure-installed-identity! target)
-                                         (parameterize
-                                          ((%account-credentials-dir
-                                            (string-append
-                                             target
-                                             (persist-mount-point
-                                              "@persist-system")
-                                             "/accounts")))
-                                           (provision-password-hash!
-                                            (user-profile-name %primary-user)
-                                            (string-append
-                                             root "/"
-                                             %user-password-hash-rel)))
-                                         (format #t "  secrets installed.~%")))
-                            ;; 6. sb-keystore（幂等重建）
-                            (run-stage 'sb-keystore
-                                       (lambda ()
-                                         (run-checked-exec!
-                                          exec 'sb-keystore
-                                          (sb-keystore-tool-argv
-                                           root keydir))))
-                            ;; 7. system-init（重跑安全；facts 经 env）
-                            (run-stage 'system-init
-                                       (lambda ()
-                                         (ensure-cow-store! exec target)
-                                         (setenv "GUIX_CONFIG_FACTS"
-                                                 (install-facts-path target))
-                                         (set! mutated? #t)
-                                         (run-checked-exec!
-                                          exec 'system-init
-                                          (system-init-argv root host))))
-                            ;; 8. commit-root（CLI 子进程隔离硬 exit；
-                            ;;    幂等 + 中断恢复）
-                            (run-stage 'commit-root
-                                       (lambda ()
-                                         (run-checked-exec!
-                                          exec 'commit-root
-                                          (commit-root-tool-argv
-                                           root target))))
-                            ;; 9. repo（runbook 阶段 10 机制化：
-                            ;;    checkout → @persist-data-home；幂等）
-                            (run-stage 'repo
-                                       (lambda ()
-                                         (install-repository!
-                                          exec root target))))
-                            ;; 10. validate（总是执行）
-                            (format #t "~%== stage validate~%")
-                            (let ((problems
-                                   (validate-installation target device)))
-                              (if (null? problems)
-                                (begin
-                                 (for-each
-                                  (lambda (l) (format #t "~a~%" l))
-                                  (install-next-step-lines host))
-                                 0)
-                                (begin
-                                 (for-each
-                                  (lambda (p)
-                                    (format (current-error-port)
-                                            "validate FAIL: ~a~%" p))
-                                  problems)
-                                 (format (current-error-port)
-                                         "~%Installation is incomplete; fix the issues above or re-run 'blue install ~a ~a' (resume is automatic where safe).~%"
-                                          host device)
-                                  2))))
-                        (lambda (key . args)
+                         ((eq? disk-status 'incompatible)
                           (format (current-error-port)
-                                  "~%Installation stopped.~%error: ~s ~s~%"
-                                  key args)
+                                  "~%INSTALL BLOCKED: disk state is incompatible.~%  ~a~%"
+                                  (install-stage-detail disk))
                           (format (current-error-port)
-                                  "~%Recovery: re-run 'blue install ~a ~a' — completed stages are detected and skipped; the disk is never re-formatted automatically.~%"
-                                   host device)
-                           (if mutated? 2 1)))))))))))))
+                                  "Expected: a blank device, or the complete target layout (esp+system partitions, LUKS2, Btrfs rootfs).~%Actual: see the stage report above.~%Recovery: inspect with 'guix repl tools/disk-install.scm -- inspect ~a'; wiping is never automatic.~%"
+                                  device)
+                          2)
+                         ((eq? disk-status 'ambiguous)
+                          (format (current-error-port)
+                                  "~%INSTALL BLOCKED: disk state is ambiguous.~%  ~a~%"
+                                  (install-stage-detail disk))
+                          (format (current-error-port)
+                                  "Recovery: open the volume manually ('cryptsetup open ~a cryptroot') and re-run; wiping is never automatic.~%"
+                                  (by-partlabel-path "system"))
+                          2)
+                         ((and (eq? disk-status 'fresh)
+                               (not (on-confirm state)))
+                          (format (current-error-port)
+                                  "~%Installation aborted; nothing was modified.~%")
+                          3)
+                         (else
+                          (when (eq? disk-status 'fresh)
+                            (format #t "~%Confirmation accepted.~%"))
+                          ;; ── 分阶段执行 ──
+                          (catch #t
+                            (lambda ()
+                              (let ((run-stage
+                                     (lambda (id thunk)
+                                       (let ((s (stage-status
+                                                 (detect-install-state root host
+                                                                       device)
+                                                 id)))
+                                         (format #t "~%== stage ~a: ~a~%" id
+                                                 (install-stage-status s))
+                                         (case (install-stage-status s)
+                                           ((complete) #t)
+                                           ((incompatible)
+                                            (error "stage is incompatible"
+                                                   (install-stage-detail s)))
+                                           ((ambiguous)
+                                            (error "stage is ambiguous"
+                                                   (install-stage-detail s)))
+                                           (else (thunk)))))))
+                                ;; 1. disk（fresh：完整磁盘阶段）
+                                (run-stage 'disk
+                                           (lambda ()
+                                             (set! mutated? #t)
+                                             (let ((passphrase
+                                                    (resolve-passphrase-reader!
+                                                     root)))
+                                               ;; fail-early：luks-secret
+                                               ;; 解密预演（首次 mutation 前）
+                                               (passphrase)
+                                               (ensure-disk-phase!
+                                                policy device passphrase))))
+                                ;; 2. mounts（resume：打开 LUKS + 重放
+                                ;;    mount 步骤）
+                                (run-stage 'mounts
+                                           (lambda ()
+                                             (let ((passphrase
+                                                    (resolve-passphrase-reader!
+                                                     root)))
+                                               (unless (file-exists?
+                                                        %luks-mapper-path)
+                                                 (format #t "  opening LUKS volume...~%")
+                                                 (execute-luks-open
+                                                  (passphrase)))
+                                               (execute-mounts!
+                                                (storage-plan policy device)))))
+                                ;; 3. facts（幂等重写；不匹配时分类层已
+                                ;;    blocked）
+                                (run-stage 'facts
+                                           (lambda ()
+                                             (write-machine-facts target)))
+                                ;; 4. sb-keys（keygen 子进程；partial 已
+                                ;;    blocked）
+                                (run-stage 'sb-keys
+                                           (lambda ()
+                                             (run-checked-exec!
+                                              exec 'sb-keys
+                                              (sb-keygen-tool-argv
+                                               root keydir))))
+                                ;; 5. secrets（幂等）
+                                (run-stage 'secrets
+                                           (lambda ()
+                                             (ensure-installed-identity! target)
+                                             (parameterize
+                                              ((%account-credentials-dir
+                                                (string-append
+                                                 target
+                                                 (persist-mount-point
+                                                  "@persist-system")
+                                                 "/accounts")))
+                                              (provision-password-hash!
+                                               (user-profile-name %primary-user)
+                                               (string-append
+                                                root "/"
+                                                %user-password-hash-rel)))
+                                             (format #t "  secrets installed.~%")))
+                                ;; 6. sb-keystore（幂等重建）
+                                (run-stage 'sb-keystore
+                                           (lambda ()
+                                             (run-checked-exec!
+                                              exec 'sb-keystore
+                                              (sb-keystore-tool-argv
+                                               root keydir))))
+                                ;; 7. system-init（重跑安全；facts 经 env）
+                                (run-stage 'system-init
+                                           (lambda ()
+                                             (ensure-cow-store! exec target)
+                                             (setenv "GUIX_CONFIG_FACTS"
+                                                     (install-facts-path target))
+                                             (set! mutated? #t)
+                                             (run-checked-exec!
+                                              exec 'system-init
+                                              (system-init-argv root host))))
+                                ;; 8. commit-root（CLI 子进程隔离硬 exit；
+                                ;;    幂等 + 中断恢复）
+                                (run-stage 'commit-root
+                                           (lambda ()
+                                             (run-checked-exec!
+                                              exec 'commit-root
+                                              (commit-root-tool-argv
+                                               root target))))
+                                ;; 9. repo（runbook 阶段 8 机制化：
+                                ;;    checkout → @persist-data-home；幂等）
+                                (run-stage 'repo
+                                           (lambda ()
+                                             (install-repository!
+                                              exec root target))))
+                              ;; 10. validate（总是执行）
+                              (format #t "~%== stage validate~%")
+                              (let ((problems
+                                     (validate-installation target device)))
+                                (if (null? problems)
+                                  (begin
+                                   (for-each
+                                    (lambda (l) (format #t "~a~%" l))
+                                    (install-next-step-lines host))
+                                   0)
+                                  (begin
+                                   (for-each
+                                    (lambda (p)
+                                      (format (current-error-port)
+                                              "validate FAIL: ~a~%" p))
+                                    problems)
+                                   (format (current-error-port)
+                                           "~%Installation is incomplete; fix the issues above or re-run 'blue install ~a ~a' (resume is automatic where safe).~%"
+                                           host device)
+                                   2))))
+                            (lambda (key . args)
+                              (format (current-error-port)
+                                      "~%Installation stopped.~%error: ~s ~s~%"
+                                      key args)
+                              (format (current-error-port)
+                                      "~%Recovery: re-run 'blue install ~a ~a' — completed stages are detected and skipped; the disk is never re-formatted automatically.~%"
+                                      host device)
+                              (if mutated? 2 1)))))))))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 安装后验证（§37；只读）

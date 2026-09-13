@@ -17,7 +17,7 @@
 ;;;   §5 入口 —— (blueprint ...) 注册
 ;;;
 ;;; Host 语义：EXPLICIT HOST ONLY。host ID 事实来自
-;;; modules/guixcfg/hosts/*.scm 的文件名（(guixcfg hosts selection)
+;;; modules/guixcfg/hosts/*.scm 的文件名（(guixcfg system deploy)
 ;;; 目录枚举），无自动检测、无 fallback。
 ;;;
 ;;; dry-run 契约（逐命令，见 docs/operations/reconfigure.md）：
@@ -50,8 +50,10 @@
              (blue file-system directory)   ; mkdir-p
              (ice-9 match)
              (ice-9 format)
+             (ice-9 ftw)
              (ice-9 textual-ports)
              (srfi srfi-1)
+             (srfi srfi-13)
              (srfi srfi-26))
 
 ;;; ============================================================
@@ -153,6 +155,8 @@
              (guixcfg flatpak registry)     ; %flatpak-remotes/applications/selection
              (guixcfg users facts))         ; %primary-user（HOME_USER 默认权威源；channel-free）
 
+(primitive-load (string-append (%repo-root) "/tests/manifest.scm"))
+
 (define (%subprocess-fail! status command)
   "子进程非零退出的统一出口：以【解码后的】子进程退出码终止。
 blue 的 popen 返回 raw wait status（子进程 exit 1 → 256）——直接
@@ -188,20 +192,20 @@ primitive-exit 不做 Guile backtrace——非零退出是预期内失败。"
              #t)))
 
 (define* (%exec command #:key input)
-  "总是真实执行（无 dry-run 短路）。只允许用于 Blue dry-run 映射到
+         "总是真实执行（无 dry-run 短路）。只允许用于 Blue dry-run 映射到
 下游 Guix dry-run 的两个特殊路径：build-os -n / reconfigure -n——
 执行的命令自带 guix --dry-run，无副作用（pinned Guix 的 build-handler
 只累积请求不执行）。install/enroll 的 pinned CLI 子进程（含交互确认）
 也走这里；INPUT 语义同 %run。其余一切子进程必须走 %run。"
-  (let ((status (if input
-                  (popen (car command) (cdr command)
-                         #:input input
-                         #:working-directory (%repo-root))
-                  (popen (car command) (cdr command)
-                         #:working-directory (%repo-root)))))
-    (unless (zero? status)
-      (%subprocess-fail! status command))
-    #t))
+         (let ((status (if input
+                         (popen (car command) (cdr command)
+                                #:input input
+                                #:working-directory (%repo-root))
+                         (popen (car command) (cdr command)
+                                #:working-directory (%repo-root)))))
+           (unless (zero? status)
+             (%subprocess-fail! status command))
+           #t))
 
 (define (%run-soft command)
   "运行命令但不因非零退出终止，返回解码后的 exit code。用于
@@ -655,9 +659,7 @@ rewrite, no knowledge of future channel revisions."))
                        (lambda () (%capture argv))
                        (lambda (content status)
                          (unless (zero? status)
-                           (format (current-error-port)
-                                   "channel refresh failed (exit ~a)~%" status)
-                           (primitive-exit (or status 1)))
+                           (%subprocess-fail! status argv))
                          (atomic-write-file! lock
                                              (lambda (port) (display content port)))
                          (format #t "channels.lock.scm updated~%")
@@ -980,7 +982,7 @@ its exact status (0 success / 1 preflight / 2 partial mutation /
                 (match arguments
                        ((host device)
                         (%exec (install-cli-argv (%repo-root)
-                                                "run" host device)
+                                                 "run" host device)
                                #:input (current-input-port)))
                        (_ (%usage-error
                            "usage (internal): HOST DEVICE"))))
@@ -1092,6 +1094,20 @@ plan only; zero mutation, no sudo, no confirmation."))
   (guix-time-machine-argv (%repo-root) "channels.lock.scm"
                           '("repl" "tests/run-tests.scm")))
 
+(define (repository-core-files-under dir)
+  (let walk ((relative-dir dir))
+    (append-map
+     (lambda (name)
+       (let* ((relative-path (string-append relative-dir "/" name))
+              (absolute-path (string-append (%repo-root) "/" relative-path)))
+         (cond ((member name '("." "..")) '())
+           ((eq? 'directory (stat:type (stat absolute-path)))
+            (if (string=? relative-path "modules/guixcfg/apps")
+              '()
+              (walk relative-path)))
+           (else (list relative-path)))))
+     (scandir (string-append (%repo-root) "/" relative-dir)))))
+
 (define-blue-method (ask-build-manifest (this <repository-tests>)
                                         (inputs <list>)
                                         (output <string>))
@@ -1106,7 +1122,12 @@ plan only; zero mutation, no sudo, no confirmation."))
 
 (define %repository-tests
   (repository-tests
-   (inputs '())
+   (inputs (append '("blueprint.scm" "channels.lock.scm"
+                                     "tests/run-tests.scm" "tests/manifest.scm")
+                   %core-test-files
+                   (repository-core-files-under "modules")
+                   (repository-core-files-under "tools")
+                   (repository-core-files-under "docs")))
    (outputs '(".blue-store/check/repository-tests.marker"))))
 
 ;;; ============================================================
@@ -1124,6 +1145,8 @@ plan only; zero mutation, no sudo, no confirmation."))
                  enroll-command
                  enroll-root-command
                  firstboot-command
+                 gc-command
+                 gc-root-command
                  update-command
                  flatpak-command
                  gsettings-command)))

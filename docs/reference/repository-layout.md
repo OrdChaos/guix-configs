@@ -9,7 +9,8 @@ assets/               仓库派生的用户资源（avatar/wallpaper——经
                        (guixcfg home assets) 声明式安装到
                        ~/.local/share/avatars|backgrounds/）
 manifests/            开发 / 安装 / secrets / Secure Boot 工具链 manifest
-modules/guixcfg/      全部配置模块（-L modules 加入 load path）
+modules/guixcfg/      全部配置模块（guile/repl 用绝对 -L；guix system
+                       用 GUILE_LOAD_PATH，禁止把它加入 package path）
   apps/                Application layer：model.scm + registry.scm +
                        selection.scm（configuration variant
                        selection：application 声明变体，host 只做
@@ -78,8 +79,8 @@ modules/guixcfg/      全部配置模块（-L modules 加入 load path）
                        System profile 的 Flatpak sandbox 字体投影、
                        ONLYOFFICE 兼容层（apps/onlyoffice）共同消费
 tools/                 独立领域 CLI（刻意留在 Blue 之外：disk-install、
-                       secrets、secure-boot、tpm2-enroll、历史 E2E
-                       harness；reconfigure 事务与 Flatpak 已迁入
+                       secrets、secure-boot、tpm2-enroll，以及仍被集成测试
+                       使用的 E2E driver；reconfigure 事务与 Flatpak 已迁入
                        Blue/domain module，不再属于这里）
 templates/            新组件模板（application/definition.scm 原生应用、
                        flatpak-application/definition.scm Flatpak 应用）
@@ -91,7 +92,8 @@ secrets 密文          密文与引用者同置：apps/<app>/secrets/、
                       /persist/system/state；readiness domain
                       （login-critical/ordinary）是 secret-decl 属性，
                       不改变 repository 布局
-tests/                测试（run-tests.scm 入口 + 各主题 test-*.scm）
+tests/                测试（run-tests.scm 默认 core；--apps 可选 app checks；
+                       integration/ 放非默认 E2E）
 docs/                 文档（本目录；application layer 见
                       architecture/applications.md +
                       development/applications.md）

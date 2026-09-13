@@ -361,13 +361,18 @@ gsettings range <schema-id> <key>
 
 ## E10. Validation
 
-应用层没有 per-app 测试（配置内容/应用列表不做断言——加应用不应
-要求改测试）。框架级测试（application model、module compile、
-assembly）自动覆盖新增 app：
+新增应用不要求新增或修改测试。默认 mandatory suite 不运行 app
+专属断言；它验证 application model 等通用机制及真实 Host composition
+的基本可加载性。模块编译清单不单独枚举 `modules/guixcfg/apps/**`，但
+真实 Host composition 会自然加载已选择的应用。仓库保留的既有 app
+专属检查为可选组：
 
 ```bash
-# 全量（模块清单自动发现 + 拓扑排序，无需登记）
+# mandatory core
 guix time-machine -C channels.lock.scm -- repl tests/run-tests.scm
+
+# optional app-specific checks
+guix time-machine -C channels.lock.scm -- repl -- tests/run-tests.scm --apps
 ```
 
 需要时 `blue reconfigure <host>`（Guile transaction，见

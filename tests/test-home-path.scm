@@ -3,6 +3,7 @@
 ;;; 当前用户 uid/gid——chown 到自身合法）。
 
 (use-modules (guixcfg utils home-path)
+             (guixcfg utils paths)
              (guix build utils)    ; mkdir-p、delete-file-recursively
              (ice-9 ftw)           ; mkdtemp
              (srfi srfi-64))
@@ -65,6 +66,11 @@
                  (ensure-home-parent-directories! %home "" %uid %gid)
                  #f)
                (lambda (key . args) #t)))
+
+(test-assert "relative path permits dots inside a path segment"
+             (valid-relative-path? "profiles/foo..bar/config"))
+(test-assert "relative path rejects parent traversal segments"
+             (not (valid-relative-path? "profiles/../config")))
 
 ;; ── 清理 ─────────────────────────────────────────────────────
 (delete-file-recursively %tmp-root)

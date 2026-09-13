@@ -28,6 +28,7 @@
 (define-module (guixcfg security enroll)
                #:use-module (guixcfg security tpm2 state)   ; read-tpm2-state / tpm2-enrolled? / enrollment-artifacts-present? / %tpm2-state-dir
                #:use-module (guixcfg system machine-facts)  ; resolve-facts-path / %default-machine-facts-path / load-machine-facts
+               #:use-module (guixcfg security secure-boot-material)
                #:use-module (guixcfg storage model)         ; persist-mount-point
                #:use-module (guixcfg boot layout)           ; %esp-mount-point / %esp-tpm2-directory
                #:use-module (guix records)
@@ -78,11 +79,9 @@
 
 (define %sb-keystore (string-append %sb-keydir "/keystore"))
 
-(define %sb-key-file-names '("PK.key" "PK.crt" "KEK.key" "KEK.crt"
-                             "db.key" "db.crt"))
+(define %sb-key-file-names %secure-boot-key-file-names)
 
-(define %keystore-auth-paths '("PK/PK.auth" "KEK/KEK.auth"
-                               "db/db.auth"))
+(define %keystore-auth-paths %secure-boot-keystore-auth-paths)
 
 (define %firmware-confirm-token "ENROLL-FIRMWARE")
 
@@ -103,20 +102,21 @@
            (and (>= (bytevector-length bv) 5)
                 (bytevector-u8-ref bv 4))))))
 
-(define (secure-boot-firmware-state)
-  "固件状态：'enrolled（SecureBoot=1 且 SetupMode=0，注册完成）/
+(define* (secure-boot-firmware-state #:optional (read-byte efi-variable-byte))
+         "固件状态：'enrolled（SecureBoot=1 且 SetupMode=0，注册完成）/
 'setup-mode（SB=0 且 SetupMode=1，待注册）/ 'pending-reboot（SB=0、
 SetupMode=0 但 PK 已写入——固件已注册、Secure Boot 待下次 boot 激活
 的正常中间态）/ 'unclear（其余组合或 efivarfs 不可读——fail closed，
 绝不猜）。"
-  (let ((sb (efi-variable-byte "SecureBoot"))
-        (sm (efi-variable-byte "SetupMode"))
-        (pk (efi-variable-byte "PK")))
-    (cond
-      ((and (= sb 1) (= sm 0)) 'enrolled)
-      ((and (= sb 0) (= sm 1)) 'setup-mode)
-      ((and (= sb 0) (= sm 0) pk) 'pending-reboot)
-      (else 'unclear))))
+         (let ((sb (read-byte "SecureBoot"))
+               (sm (read-byte "SetupMode"))
+               (pk (read-byte "PK")))
+           (cond
+             ((and (number? sb) (number? sm) (= sb 1) (= sm 0)) 'enrolled)
+             ((and (number? sb) (number? sm) (= sb 0) (= sm 1)) 'setup-mode)
+             ((and (number? sb) (number? sm) (= sb 0) (= sm 0) pk)
+              'pending-reboot)
+             (else 'unclear))))
 
 (define (esp-tpm2-artifacts-present?)
   "ESP 侧 sealed blobs 完整（解锁前读取副本；与 tools/tpm2-enroll.scm
@@ -220,101 +220,101 @@ ENOENT 都被 scandir 折叠为 #f，存在性由 file-exists? 单独判定
    (scandir (persist-mount-point "@persist-system"))))
 
 (define* (enroll-readonly-checks root host #:key (soft? #t))
-  "((label . thunk) ...)：thunk 返回 (ok . detail) / (fail . detail) /
+         "((label . thunk) ...)：thunk 返回 (ok . detail) / (fail . detail) /
 (info . detail)。SOFT? #t（user 态/dry-run）时 root-only 状态降级为
 info；#f（root 事务）全部硬性。"
-  (let* ((status (classify-enrollment-probes (collect-enrollment-probes)))
-         (persist-ok? (or (persist-readable?) (not soft?))))
-    (list
-     (cons "installed system"
-           (lambda ()
-             (if (and (enrollment-status-current-system status)
-                      (enrollment-status-persist status))
-               '(ok . #f)
-               (cons 'fail
-                     "this does not look like the installed target system (/run/current-system and /persist/system are required)"))))
-     (cons "machine facts"
-           (lambda ()
-             (cond
-               ((enrollment-status-facts status) '(ok . #f))
-               (persist-ok?
-                (cons 'fail "machine facts unreadable or missing luks-uuid"))
-               (else '(info . "requires root to read")))))
-     (cons "ESP boot artifacts"
-           (lambda ()
-             (if (enrollment-status-esp status)
-               '(ok . #f)
-                (cons 'fail "/efi/EFI/Guix missing (ESP not mounted or not installed)"))))
-     (cons "Secure Boot keys"
-           (lambda ()
-             (cond
-               ((enrollment-status-keys status) '(ok . #f))
-               ;; 目录确实不存在 = 真缺失（ENOENT 非权限伪影），soft 态
-               ;; 也 fail——不把真缺失伪装成「需 root」。
-               ((not (file-exists? %sb-keydir))
-                (cons 'fail
-                      (format #f "SB key material missing under ~a (run blue install or tools/secure-boot-keygen.scm)"
-                              %sb-keydir)))
-               ;; 目录在但内容不可读（普通用户 vs 0700 root）→ info。
-               ((and soft? (not (sb-keydir-readable?)))
-                '(info . "requires root to read"))
-               (else
-                (cons 'fail
-                      (format #f "SB key material missing under ~a (run blue install or tools/secure-boot-keygen.scm)"
-                              %sb-keydir))))))
-     (cons "Secure Boot keystore"
-           (lambda ()
-             (cond
-               ((enrollment-status-keystore status) '(ok . #f))
-               ;; 关键：普通用户无法遍历 0700 root keydir 时，对
-               ;; keystore 的 stat 是 EACCES 不是 ENOENT——file-exists?
-               ;; 同样返回 #f。绝不能把权限伪影判成"真缺失"：
-               ;; keydir 在但不可遍历 → soft 态降级 info。
-               ((and soft?
-                     (file-exists? %sb-keydir)
-                     (not (sb-keydir-readable?)))
-                '(info . "requires root to read"))
-               ;; 可遍历（root，或 keydir 权限宽松）时的真缺失。
-               ((not (file-exists? %sb-keystore))
-                (cons 'fail
-                      (format #f "SB keystore missing under ~a (run blue install or tools/secure-boot-enroll.scm)"
-                              %sb-keystore)))
-               ;; keystore 在但 0700 不可读（权限伪影，非缺失）。
-               ((and soft? (not (sb-keystore-readable?)))
-                '(info . "requires root to read"))
-               (else
-                (cons 'fail
-                      (format #f "SB keystore missing under ~a (run blue install or tools/secure-boot-enroll.scm)"
-                              %sb-keystore))))))
-     (cons "sbkeysync available"
-           (lambda ()
-             (if (enrollment-status-sbkeysync status)
-               '(ok . #f)
-                (cons 'fail "sbkeysync not found (system profile sbsigntools)"))))
-     (cons "TPM device"
-           (lambda ()
-             (if (enrollment-status-tpm-device status)
-               '(ok . #f)
-               (cons 'fail "/dev/tpmrm0 missing"))))
-     (cons "TPM enrollment"
-           (lambda ()
-             (case (enrollment-status-tpm status)
-               ((compatible) '(ok . "already enrolled"))
-               ((absent) '(ok . "not enrolled yet"))
-               ((incomplete)
-                (cons 'fail
-                      "enrollment state exists but artifacts are incomplete (incompatible; resolve manually)"))
-               (else '(info . "state unreadable (needs root)")))))
-     (cons "firmware state"
-           (lambda ()
-             (case (enrollment-status-firmware status)
-               ((enrolled) '(ok . "Secure Boot active, Setup Mode off"))
-               ((setup-mode) '(ok . "Setup Mode (SecureBoot=0, SetupMode=1)"))
-               ((pending-reboot)
-                '(ok . "firmware enrolled; Secure Boot activates at the next boot (reboot, then re-run)"))
-               (else
-                (cons 'fail
-                      "firmware state unclear (efivarfs unreadable or SecureBoot/SetupMode combination unexpected)"))))))))
+         (let* ((status (classify-enrollment-probes (collect-enrollment-probes)))
+                (persist-ok? (or (persist-readable?) (not soft?))))
+           (list
+            (cons "installed system"
+                  (lambda ()
+                    (if (and (enrollment-status-current-system status)
+                             (enrollment-status-persist status))
+                      '(ok . #f)
+                      (cons 'fail
+                            "this does not look like the installed target system (/run/current-system and /persist/system are required)"))))
+            (cons "machine facts"
+                  (lambda ()
+                    (cond
+                      ((enrollment-status-facts status) '(ok . #f))
+                      (persist-ok?
+                       (cons 'fail "machine facts unreadable or missing luks-uuid"))
+                      (else '(info . "requires root to read")))))
+            (cons "ESP boot artifacts"
+                  (lambda ()
+                    (if (enrollment-status-esp status)
+                      '(ok . #f)
+                      (cons 'fail "/efi/EFI/Guix missing (ESP not mounted or not installed)"))))
+            (cons "Secure Boot keys"
+                  (lambda ()
+                    (cond
+                      ((enrollment-status-keys status) '(ok . #f))
+                      ;; 目录确实不存在 = 真缺失（ENOENT 非权限伪影），soft 态
+                      ;; 也 fail——不把真缺失伪装成「需 root」。
+                      ((not (file-exists? %sb-keydir))
+                       (cons 'fail
+                             (format #f "SB key material missing under ~a (run blue install or tools/secure-boot-keygen.scm)"
+                                     %sb-keydir)))
+                      ;; 目录在但内容不可读（普通用户 vs 0700 root）→ info。
+                      ((and soft? (not (sb-keydir-readable?)))
+                       '(info . "requires root to read"))
+                      (else
+                       (cons 'fail
+                             (format #f "SB key material missing under ~a (run blue install or tools/secure-boot-keygen.scm)"
+                                     %sb-keydir))))))
+            (cons "Secure Boot keystore"
+                  (lambda ()
+                    (cond
+                      ((enrollment-status-keystore status) '(ok . #f))
+                      ;; 关键：普通用户无法遍历 0700 root keydir 时，对
+                      ;; keystore 的 stat 是 EACCES 不是 ENOENT——file-exists?
+                      ;; 同样返回 #f。绝不能把权限伪影判成"真缺失"：
+                      ;; keydir 在但不可遍历 → soft 态降级 info。
+                      ((and soft?
+                            (file-exists? %sb-keydir)
+                            (not (sb-keydir-readable?)))
+                       '(info . "requires root to read"))
+                      ;; 可遍历（root，或 keydir 权限宽松）时的真缺失。
+                      ((not (file-exists? %sb-keystore))
+                       (cons 'fail
+                             (format #f "SB keystore missing under ~a (run blue install or tools/secure-boot-enroll.scm)"
+                                     %sb-keystore)))
+                      ;; keystore 在但 0700 不可读（权限伪影，非缺失）。
+                      ((and soft? (not (sb-keystore-readable?)))
+                       '(info . "requires root to read"))
+                      (else
+                       (cons 'fail
+                             (format #f "SB keystore missing under ~a (run blue install or tools/secure-boot-enroll.scm)"
+                                     %sb-keystore))))))
+            (cons "sbkeysync available"
+                  (lambda ()
+                    (if (enrollment-status-sbkeysync status)
+                      '(ok . #f)
+                      (cons 'fail "sbkeysync not found (system profile sbsigntools)"))))
+            (cons "TPM device"
+                  (lambda ()
+                    (if (enrollment-status-tpm-device status)
+                      '(ok . #f)
+                      (cons 'fail "/dev/tpmrm0 missing"))))
+            (cons "TPM enrollment"
+                  (lambda ()
+                    (case (enrollment-status-tpm status)
+                      ((compatible) '(ok . "already enrolled"))
+                      ((absent) '(ok . "not enrolled yet"))
+                      ((incomplete)
+                       (cons 'fail
+                             "enrollment state exists but artifacts are incomplete (incompatible; resolve manually)"))
+                      (else '(info . "state unreadable (needs root)")))))
+            (cons "firmware state"
+                  (lambda ()
+                    (case (enrollment-status-firmware status)
+                      ((enrolled) '(ok . "Secure Boot active, Setup Mode off"))
+                      ((setup-mode) '(ok . "Setup Mode (SecureBoot=0, SetupMode=1)"))
+                      ((pending-reboot)
+                       '(ok . "firmware enrolled; Secure Boot activates at the next boot (reboot, then re-run)"))
+                      (else
+                       (cons 'fail
+                             "firmware state unclear (efivarfs unreadable or SecureBoot/SetupMode combination unexpected)"))))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 计划输出与固件确认（纯）
@@ -451,8 +451,8 @@ guix 模块——VM 实测 'no code for module (guix records)/(json)'。"
 (define (tpm2-enroll-argv root action flags)
   "ACTION + FLAGS 的完整 tpm2-enroll argv（含 guile 解析）。"
   (call-with-values resolve-guix-guile!
-    (lambda (guile site)
-      (tpm2-tool-argv root guile site action flags))))
+                    (lambda (guile site)
+                      (tpm2-tool-argv root guile site action flags))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 事务（root 阶段；dry-run 绝不调用）

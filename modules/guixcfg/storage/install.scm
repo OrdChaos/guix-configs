@@ -144,11 +144,11 @@ password（docs/architecture/boot.md（TPM2））。"
 (define %mount-step-ids '(mount-top mount-root mount-subvolume mount-esp))
 
 (define* (execute-mounts! plan)
-  "重放 PLAN 中的 mount 步骤（其余步骤跳过）。用于 resume 场景。"
-  (for-each (lambda (step)
-              (when (memq (plan-step-id step) %mount-step-ids)
-                (execute-step step (lambda () #t))))
-            plan))
+         "重放 PLAN 中的 mount 步骤（其余步骤跳过）。用于 resume 场景。"
+         (for-each (lambda (step)
+                     (when (memq (plan-step-id step) %mount-step-ids)
+                       (execute-step step (lambda () #t))))
+                   plan))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 人工确认：必须输入完整设备路径（docs/architecture/storage.md）。
@@ -167,7 +167,7 @@ password（docs/architecture/boot.md（TPM2））。"
 ;;; 任何一步抛异常，立即报告并退出非零，不做任何自动清理或续跑。
 
 (define* (execute-plan plan #:key (passphrase-reader read-luks-passphrase!)
-                               (on-failure #f))
+                       (on-failure #f))
          "逐步执行计划（失败即停）。
 LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值；
 它只存在于本次 apply session（不进 plan、不落盘、不进 argv/env）。
@@ -202,7 +202,7 @@ ON-FAILURE 非 #f 时是 (lambda (key args) ...) 失败处理器：安装编排�
 (define %required-commands
   '("sgdisk" "udevadm" "mkfs.vfat" "cryptsetup" "mkfs.btrfs"
              "btrfs" "mount" "umount" "mkdir" "lsblk" "findmnt" "readlink"
-             ;; repo 复制阶段（installation.md 阶段 10：tar 两段复制 +
+             ;; repo 复制阶段（installation.md 阶段 8：tar 两段复制 +
              ;; chown -R 归还 USER ownership）
              "tar" "chown"))
 

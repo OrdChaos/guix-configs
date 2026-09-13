@@ -4,7 +4,7 @@ LiveCD 救援流程。系统坏了从这里开始。
 
 > 底层工具是恢复/诊断的权威入口，保留手工能力（Blue install/enroll
 > 的失败恢复也落到这里）：`disk-install inspect/plan`、
-> `secrets unlock/verify/decrypt`、`secure-boot-keygen/enroll`、
+> `secrets unlock/verify/decrypt`、Secure Boot keygen/keystore 工具、
 > `tpm2-enroll preflight/status/enroll/replace`。安装中途失败的
 > resume 语义见 `installation.md`（`blue install` 重跑自动跳过已完成
 > 阶段，绝不自动重新格式化）。
@@ -19,7 +19,8 @@ LiveCD 救援流程。系统坏了从这里开始。
   docs/architecture/boot.md）。
 - **secrets 恢复**：master password → `tools/secrets.scm unlock` →
   原 ciphertext 无 rekey 即可解密（stable S 模型）。
-- **密码/账户恢复**：provision 新 hash（见安装 阶段 7）或直接编辑
+- **密码/账户恢复**：按 installation.md 的安装前 secrets provisioning
+  小节生成新 hash，或直接编辑
   `/persist/system/accounts/<user>/password.hash`（root）。
 
 ## LiveCD 救援

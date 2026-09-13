@@ -234,7 +234,8 @@ guix time-machine -C channels.lock.scm -- \
 
 **网络边界（硬不变量）**：reconfigure / boot / home activation /
 login gate 不做任何联网 flatpak 操作（remote-add/install/update/
-remote-info/repair）。`(guixcfg flatpak service|model|registry)` 不
+remote-info/repair）。`(guixcfg flatpak service)`、`(guixcfg flatpak model)`
+与 `(guixcfg flatpak registry)` 不
 import `(guixcfg flatpak reconcile)`、不含 CLI 调用面
 （`tests/test-flatpak-service.scm` 静态回归固定）。所有操作显式
 `--user`（无 system installation、无 `/var/lib/flatpak`）。

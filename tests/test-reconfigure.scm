@@ -53,15 +53,15 @@
 (define (ready-home! home-dir)
   (symlink %fake-store-home (home-link home-dir)))
 
-;; 空 readiness 输出 = 全部 capability 正常。
-(define (no-herd-outputs) (lambda (argv) ""))
+;; readiness 必须由 herd 明确报告 started。
+(define (started-herd-outputs) (lambda (argv) "It is started."))
 
 (define (expected-guix-argv)
   '("env" "GUILE_LOAD_PATH=/repo/modules"
-           "GUILE_LOAD_COMPILED_PATH=/repo/modules"
-           "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
-           "system" "reconfigure"
-           "modules/guixcfg/hosts/vm.scm"))
+          "GUILE_LOAD_COMPILED_PATH=/repo/modules"
+          "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
+          "system" "reconfigure" "--no-kexec"
+          "modules/guixcfg/hosts/vm.scm"))
 
 ;; ── 1. system reconfigure 失败 → gate 重开、Home 不动、exit 1 ──
 
@@ -79,7 +79,7 @@
      (lambda (argv)
        (set! log (cons argv log))
        (if (equal? argv (expected-guix-argv)) 1 0))
-     #:command-output (no-herd-outputs)
+     #:command-output (started-herd-outputs)
      #:sleep-proc (lambda (s) #t)))
   (test-equal "system failure: exit code 1" 1 result)
   (test-assert "system failure: gate reopened" (not (gate-closed? gate-dir)))
@@ -101,7 +101,7 @@
      #:gate-dir gate-dir
      #:home-dir home-dir
      #:run-command (lambda (argv) (set! log (cons argv log)) 0)
-     #:command-output (no-herd-outputs)
+     #:command-output (started-herd-outputs)
      #:sleep-proc (lambda (s) #t)))
   (test-equal "unsafe pivot: exit code 2" 2 result)
   (test-assert "unsafe pivot: gate stays closed" (gate-closed? gate-dir))
@@ -125,7 +125,7 @@
        (if (and (equal? (car argv) "herd")
                 (equal? (cadr argv) "restart"))
          1 0))
-     #:command-output (no-herd-outputs)
+     #:command-output (started-herd-outputs)
      #:sleep-proc (lambda (s) #t)))
   (test-equal "herd restart failure: exit code 2" 2 result)
   (test-assert "herd restart failure: gate stays closed" (gate-closed? gate-dir)))
@@ -143,7 +143,7 @@
      #:gate-dir gate-dir
      #:home-dir home-dir
      #:run-command (lambda (argv) 0)
-     #:command-output (no-herd-outputs)
+     #:command-output (started-herd-outputs)
      #:sleep-proc (lambda (s) (set! polls (1+ polls)) #t)))
   (test-equal "activation timeout: exit code 2" 2 result)
   (test-equal "activation timeout: 30 polls" 30 polls)
@@ -161,7 +161,7 @@
      #:gate-dir gate-dir
      #:home-dir home-dir
      #:run-command (lambda (argv) 0)
-     #:command-output (no-herd-outputs)
+     #:command-output (started-herd-outputs)
      ;; 模拟 activation 失败残留 safe pivot（第一次 poll 时产生；
      ;; lstat 判定存在——悬空 symlink 对 file-exists? 是 #f）
      #:sleep-proc
@@ -191,10 +191,27 @@
      (lambda (argv)
        (if (equal? (last argv) "account-state-ready")
          "Failed to start account-state-ready"
-         ""))
+         "It is started."))
      #:sleep-proc (lambda (s) #t)))
   (test-equal "readiness failure: exit code 2" 2 result)
   (test-assert "readiness failure: gate stays closed" (gate-closed? gate-dir)))
+
+(let ((sandbox (make-sandbox)))
+  (define gate-dir (second sandbox))
+  (define home-dir (third sandbox))
+  (ready-home! home-dir)
+  (define result
+    (reconfigure-transaction!
+     "vm" "alice"
+     #:root "/repo"
+     #:gate-dir gate-dir
+     #:home-dir home-dir
+     #:run-command (lambda (argv) 0)
+     #:command-output (lambda (argv) #f)
+     #:sleep-proc (lambda (s) #t)))
+  (test-equal "readiness query failure: exit code 2" 2 result)
+  (test-assert "readiness query failure: gate stays closed"
+               (gate-closed? gate-dir)))
 
 ;; ── 7. 成功、Home 未变 → gate 重开、exit 0 ──
 
@@ -209,7 +226,7 @@
      #:gate-dir gate-dir
      #:home-dir home-dir
      #:run-command (lambda (argv) 0)
-     #:command-output (no-herd-outputs)
+     #:command-output (started-herd-outputs)
      #:sleep-proc (lambda (s) #t)))
   (test-equal "success unchanged: exit code 0" 0 result)
   (test-assert "success unchanged: gate reopened" (not (gate-closed? gate-dir))))
@@ -228,7 +245,7 @@
      #:gate-dir gate-dir
      #:home-dir home-dir
      #:run-command (lambda (argv) 0)
-     #:command-output (no-herd-outputs)
+     #:command-output (started-herd-outputs)
      ;; 模拟激活期间 Home 链接被切换到新 generation
      #:sleep-proc
      (lambda (s)
@@ -260,7 +277,7 @@
         (ready-home! home-dir)   ; 让激活立即就绪
         0)
        0))
-   #:command-output (no-herd-outputs)
+   #:command-output (started-herd-outputs)
    #:sleep-proc (lambda (s) #t))
   (test-equal "gate file content expresses in-progress state"
               "A reconfigure is in progress.\n" captured-gate))

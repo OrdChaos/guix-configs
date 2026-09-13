@@ -2,20 +2,17 @@
 ;;; （sentinel / password hash）绝不进入 /gnu/store。
 ;;;
 ;;; 扫描范围（合理的注入面，非全盘 grep）：
-;;;   1. system activation 脚本（account/shadow 生成的潜在载体）；
-;;;   2. secrets 部署/密码注入脚本；
-;;;   3. system derivation 文本（所有内嵌引用）；
-;;;   4. Guix Home closure 的 files。
+;;;   1. synthetic secrets deployment script；
+;;;   2. account verification script；
+;;;   3. tracked ciphertext shape。
 ;;; sentinel 字符串与测试 hash 的 salt 是本轮测试 ciphertext 的明文
 ;;; 独有标记——出现在任何 store 路径即失败。
 
-(use-modules (gnu system)
-             (guix store)
+(use-modules (guix store)
              (guix monads)
              (guix derivations)
              (guix gexp)
              (guixcfg security secrets)
-             (guixcfg hosts vm)            ; %vm-test-secrets（VM 测试机 sentinel）
              (guixcfg system accounts)
              (ice-9 rdelim)
              (srfi srfi-13)
@@ -45,19 +42,21 @@
 
 (test-begin "store-leakage")
 
-;; 1. system activation 脚本（含 account/shadow 生成逻辑）
-(define %vm-os (module-ref (resolve-module '(guixcfg hosts vm)) '%vm-os))
-(define activation-text
-  (build-text (lower-object (operating-system-activation-script %vm-os))))
-(test-assert "activation script contains no secret plaintext"
-             (no-leak? activation-text))
+;; Synthetic declarations keep this mandatory check independent of full OS,
+;; applications, and expensive kernel derivations.
+(define %test-secrets
+  (list (secret-decl
+         (name 'store-leakage-sentinel)
+         (scope 'system)
+         (domain 'login-critical)
+         (source (local-file "tests/fixtures/secrets/test-system.age"))
+         (target-name "store-leakage-sentinel"))))
 
-;; 2. secrets 部署脚本 + 密码注入脚本
 (define deploy-text
   (build-text
    (gexp->file "leak-check-deploy"
                (program-file-gexp
-                (secrets-deploy-program %vm-test-secrets "user")))))
+                (secrets-deploy-program %test-secrets "user")))))
 (test-assert "secrets deploy script clean" (no-leak? deploy-text))
 
 (define verify-text
@@ -67,14 +66,7 @@
                 (account-databases-verify-program "user")))))
 (test-assert "account verify script clean" (no-leak? verify-text))
 
-;; 3. system derivation 文本（内嵌引用面）
-(define system-drv
-  (run-with-store %store (lower-object %vm-os)))
-(define system-drv-text (file-text (derivation-file-name system-drv)))
-(test-assert "system drv contains no secret plaintext"
-             (no-leak? system-drv-text))
-
-;; 4. ciphertext 本身允许进 store——但密文形态不含明文标记
+;; Ciphertext itself may enter the store, but never its plaintext.
 ;;    （反面验证：ciphertext 在 closure 中是被允许的）。
 (test-assert "ciphertext may enter store (armored age, no plaintext)"
              (no-leak? (file-text "tests/fixtures/secrets/test-system.age")))

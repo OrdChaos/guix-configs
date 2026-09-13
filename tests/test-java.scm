@@ -101,18 +101,18 @@ Java 的 -version 走 stderr，故两个流都收）。"
        (lambda ()
          (if (file-exists? file)
            (call-with-input-file file
-             (lambda (port)
-               (let loop ((lines '()))
-                 (let ((line (read-line port)))
-                   (if (eof-object? line)
-                     (apply string-append (reverse lines))
-                     (loop (cons (string-append line "\n") lines)))))))
+                                 (lambda (port)
+                                   (let loop ((lines '()))
+                                     (let ((line (read-line port)))
+                                       (if (eof-object? line)
+                                         (apply string-append (reverse lines))
+                                         (loop (cons (string-append line "\n") lines)))))))
            ""))
        (lambda () (false-if-exception (delete-file file)))))
     (with-output-to-file out-file
-      (lambda ()
-        (with-error-to-file err-file
-          (lambda () (apply system* program args)))))
+                         (lambda ()
+                           (with-error-to-file err-file
+                                               (lambda () (apply system* program args)))))
     (cons (slurp out-file) (slurp err-file))))
 
 (define (java-major text)
@@ -151,7 +151,7 @@ Java 的 -version 走 stderr，故两个流都收）。"
 ;; 期望值是字面量（string<? 是字典序：java17 < java21 < java24 < java8）。
 (test-equal "J3: one ~/.local/bin/javaN wrapper per declared version"
             '(".local/bin/java17" ".local/bin/java21"
-              ".local/bin/java24" ".local/bin/java8")
+                                  ".local/bin/java24" ".local/bin/java8")
             (sort (map car %java-files) string<?))
 
 ;; Home 契约：home-files 条目必须是 **(target source) 两元素 list**
@@ -180,68 +180,68 @@ Java 的 -version 走 stderr，故两个流都收）。"
 
 (if %jdks-available?
   (begin
-    ;; J4：每个 wrapper 真实执行 → major 与声明一致。
-    (for-each
-     (lambda (entry)
-       (let* ((major (car entry))
-              (target (string-append ".local/bin/java"
-                                     (number->string major)))
-              (program (build (home-file-source target)))
-              (version-text (cdr (capture-run program '("-version")))))
-         (test-equal (string-append "J4: " target
-                                    " reports its declared major version")
-                     major
-                     (java-major version-text))))
-     %java-version-table)
-
-    ;; J5：JAVA_HOME == 默认 JDK 的 "jdk" output，且其 bin/java 的
-    ;; major = 默认版本（profile 的 java 与 JAVA_HOME 同一目录）。
-    (let* ((value (assoc-ref %java-env "JAVA_HOME"))
-           (home (string-trim-right
-                  (car (capture-run
-                        (build (program-file
-                                "java-home-value-probe"
-                                #~(begin (display #$value) (newline))))
-                        '()))
-                  #\newline)))
-      (test-equal "J5: JAVA_HOME equals the default JDK's jdk output path"
-                  (jdk-store-path %default-java)
-                  home)
-      (test-equal "J5: $JAVA_HOME/bin/java reports the default major version"
-                  (car (find (lambda (entry)
-                               (eq? %default-java (cdr entry)))
-                             %java-version-table))
-                  (java-major
-                   (cdr (capture-run (string-append home "/bin/java")
-                                     '("-version"))))))
-
-    ;; J6：GC 存活前提（见 definition 文件头 store reference 一节）。
-    (for-each
-     (lambda (entry)
-       (let* ((major (car entry))
-              (jdk (cdr entry))
-              (target (string-append ".local/bin/java"
-                                     (number->string major)))
-              (wrapper (build (home-file-source target))))
-         (test-assert (string-append "J6: " target
-                                     " wrapper references its launcher output")
-                      (let ((refs (store-references wrapper)))
-                        (and refs
-                             (member (jdk-launcher-store-path jdk) refs))))))
-     %java-version-table)
-
-    ;; #:hooks '()：这里只断言 manifest→profile 的 store reference
-    ;; 语义，profile hooks（font/desktop cache 等）与断言无关，且会
-    ;; 引入额外依赖（保持测试离线可用）。
-    (let* ((profile (run-with-store
-                     %store
-                     (profile-derivation
-                      (packages->manifest (application-home-packages %java))
-                      #:hooks '()))))
-      (build-derivations %store (list profile))
-      (test-assert "J6: profile references the JDK output JAVA_HOME points at"
-                   (let ((refs (store-references
-                                (derivation->output-path profile))))
-                     (and refs
-                          (member (jdk-store-path %default-java) refs))))))
+   ;; J4：每个 wrapper 真实执行 → major 与声明一致。
+   (for-each
+    (lambda (entry)
+      (let* ((major (car entry))
+             (target (string-append ".local/bin/java"
+                                    (number->string major)))
+             (program (build (home-file-source target)))
+             (version-text (cdr (capture-run program '("-version")))))
+        (test-equal (string-append "J4: " target
+                                   " reports its declared major version")
+                    major
+                    (java-major version-text))))
+    %java-version-table)
+   
+   ;; J5：JAVA_HOME == 默认 JDK 的 "jdk" output，且其 bin/java 的
+   ;; major = 默认版本（profile 的 java 与 JAVA_HOME 同一目录）。
+   (let* ((value (assoc-ref %java-env "JAVA_HOME"))
+          (home (string-trim-right
+                 (car (capture-run
+                       (build (program-file
+                               "java-home-value-probe"
+                               #~(begin (display #$value) (newline))))
+                       '()))
+                 #\newline)))
+     (test-equal "J5: JAVA_HOME equals the default JDK's jdk output path"
+                 (jdk-store-path %default-java)
+                 home)
+     (test-equal "J5: $JAVA_HOME/bin/java reports the default major version"
+                 (car (find (lambda (entry)
+                              (eq? %default-java (cdr entry)))
+                            %java-version-table))
+                 (java-major
+                  (cdr (capture-run (string-append home "/bin/java")
+                                    '("-version"))))))
+   
+   ;; J6：GC 存活前提（见 definition 文件头 store reference 一节）。
+   (for-each
+    (lambda (entry)
+      (let* ((major (car entry))
+             (jdk (cdr entry))
+             (target (string-append ".local/bin/java"
+                                    (number->string major)))
+             (wrapper (build (home-file-source target))))
+        (test-assert (string-append "J6: " target
+                                    " wrapper references its launcher output")
+                     (let ((refs (store-references wrapper)))
+                       (and refs
+                            (member (jdk-launcher-store-path jdk) refs))))))
+    %java-version-table)
+   
+   ;; #:hooks '()：这里只断言 manifest→profile 的 store reference
+   ;; 语义，profile hooks（font/desktop cache 等）与断言无关，且会
+   ;; 引入额外依赖（保持测试离线可用）。
+   (let* ((profile (run-with-store
+                    %store
+                    (profile-derivation
+                     (packages->manifest (application-home-packages %java))
+                     #:hooks '()))))
+     (build-derivations %store (list profile))
+     (test-assert "J6: profile references the JDK output JAVA_HOME points at"
+                  (let ((refs (store-references
+                               (derivation->output-path profile))))
+                    (and refs
+                         (member (jdk-store-path %default-java) refs))))))
   (display "NOTE: JDK store outputs unavailable locally; J4/J5/J6 execution assertions skipped\n"))

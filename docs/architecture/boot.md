@@ -27,7 +27,7 @@ kernel/firmware/microcode 的唯一权威定义在
 definition；VM/laptop 都消费它，host 不得各自定义 kernel）：
 
 - **kernel**：Nonguix standard Linux（`(nongnu packages linux)` 的
-  `linux`，当前 pinned revision 为 7.1 系列），经 channels.lock.scm
+  `linux-7.2`），经 channels.lock.scm
   锁定的 Nonguix revision 提供。Linux-libre 不再被任何 host 选中。
 - **firmware**：`linux-firmware`（完整 generic firmware 集）由
   `operating-system` 的 `firmware` 字段 declaratively 提供——不经
@@ -46,9 +46,6 @@ definition；VM/laptop 都消费它，host 不得各自定义 kernel）：
   （menu-entry-linux），不识别 package 名称、不绑定 Linux-libre。
   仓库无 graft-kernel（早期修剪）；kernel artifact 直接经
   menu-entry → boot-plan → ukify。
-
-NVIDIA proprietary driver / Wayland Desktop 属于后续 milestone
-（M2），不进入当前 baseline。
 
 ## 菜单语义（两轴模型）
 
@@ -115,8 +112,9 @@ db    我们的 db + Microsoft db CAs（含 Option ROM UEFI CA 2023）+ 固件 d
   keystore（`{PK,KEK,db}/*.auth`）；PK 最后写入。
 - 签名在部署期：探测到 `db.key`/`db.crt` 即让 ukify 签 UKI、
   sbsign 签 Limine；密钥不存在则全部不签（开发期）。
-- keygen / UKI 部署 / 固件 enrollment 是三个独立阶段；enrollment
-  失败不得阻塞普通安装。
+- `blue install` 生成 key/keystore 并部署签名 UKI，但不写固件 NVRAM；
+  目标系统启动后由 `blue firstboot` 注册 db/KEK/PK，重启使 Secure Boot
+  生效，再由 `blue enroll` 完成 PCR7 TPM enrollment。
 
 ## TPM2（PCR7-only）
 
@@ -183,12 +181,10 @@ load sealed → policy session → unseal → 管道直连 cryptsetup
 
 ## 内核模块签名
 
-Secure Boot 开启后 lockdown 拒绝未签名外部模块。目标：外部模块在
-安装/变更时用本项目 Secure Boot 密钥自签名，签名成为 system
-generation 构建/部署的一部分，随 generation 部署与回滚。
-
-**当前未实现**。Laptop 组装最终 NVIDIA 配置前必须实现并验证；不是
-VM Secure Boot 的 blocker。
+当前 pinned kernel 为 `CONFIG_MODULE_SIG=n` 且未启用 lockdown；Laptop
+已启用 NVIDIA open kernel module，因此当前没有外部模块签名门槛。
+未来若启用 module signature enforcement，签名必须成为 system
+generation 的构建、部署与回滚边界，不能增加独立运行时 writer。
 
 ## 实测知识（tpm2-tools 5.7 / swtpm）
 

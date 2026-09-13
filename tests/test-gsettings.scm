@@ -19,7 +19,6 @@
              (guixcfg gsettings home-service) ; gsettings-reconcile-service（wrapper/契约断言）
              (guixcfg apps model)       ; make-application、applications-gsettings
              (guixcfg apps registry)    ; %applications（唯一启用事实源）
-             (guixcfg apps gnome-text-editor definition) ; %gnome-text-editor（first consumer）
              (guixcfg home user)        ; %guix-home（service 结构断言）
              (gnu home)                 ; home-environment-services（standalone 自足，不依赖套件模块上下文）
              (gnu home services shepherd) ; home-shepherd-service-type
@@ -117,35 +116,6 @@
 (test-assert "ownership: current repository registry passes validation"
              (validate-gsettings-ownership!
               (applications-gsettings %applications)))
-
-;; ── first consumer（gnome-text-editor）──────────────────────
-;; schema/key 以 VM 实测的 pinned 48.3 org.gnome.TextEditor 为准
-;; （gsettings list-keys / range；indent-style 枚举 'tab'|'space'）。
-
-(test-equal "consumer: gnome-text-editor declares exactly the 7 pinned keys"
-            '("custom-font" "highlight-current-line" "indent-style"
-                            "show-line-numbers" "show-right-margin" "style-scheme"
-                            "use-system-font")
-            (map gsettings-setting-key
-                 (application-gsettings %gnome-text-editor)))
-
-(test-equal "consumer: single owner contribution captured by aggregation"
-            'gnome-text-editor
-            (caar (filter (lambda (entry)
-                            (eq? (car entry) 'gnome-text-editor))
-                          (applications-gsettings %applications))))
-
-(test-equal "consumer: serialized keyfile is byte-identical to the declared projection"
-            "[org/gnome/TextEditor]\ncustom-font='Monospace 11'\nhighlight-current-line=true\nindent-style='space'\nshow-line-numbers=true\nshow-right-margin=false\nstyle-scheme='Adwaita'\nuse-system-font=false\n"
-            (serialize-gsettings-keyfile
-             (application-gsettings %gnome-text-editor)))
-
-(test-assert "consumer: no appearance-reserved key declared"
-             (not (any (lambda (setting)
-                         (assoc (cons (gsettings-setting-schema setting)
-                                      (gsettings-setting-key setting))
-                                %appearance-owned-gsettings-keys))
-                       (application-gsettings %gnome-text-editor))))
 
 ;; ── aggregation ────────────────────────────────────────────
 

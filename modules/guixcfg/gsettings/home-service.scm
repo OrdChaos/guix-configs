@@ -69,85 +69,85 @@
   (local-file "runtime.scm" "gsettings-runtime"))
 
 (define* (gsettings-reconcile-wrapper desired-settings home-directory)
-  "DESIRED-SETTINGS（<gsettings-setting> 列表，须已通过
+         "DESIRED-SETTINGS（<gsettings-setting> 列表，须已通过
 gsettings-desired-state 的 ownership 校验与排序）→ generated
 program-file（core-guile + runtime contract）。HOME-DIRECTORY 是
 HOME 的权威路径（GSETTINGS_SCHEMA_DIR 回退与 HOME 环境回退）。"
-  (let* ((entries
-          (map (lambda (setting)
-                 (list (gsettings-setting-schema setting)
-                       (gsettings-setting-key setting)
-                       (gsettings-setting-value setting)))
-               desired-settings))
-         (keyfile (serialize-gsettings-keyfile desired-settings)))
-    (program-file
-     "gsettings-reconcile"
-     #~(begin
-        (use-modules (ice-9 match))
-        ;; 唯一 runtime contract（校验/五态/dconf load 与 manual
-        ;; 路径同一份实现）。
-        (load #$%gsettings-runtime-source)
-        (define gsettings-bin #$(file-append (gexp-input glib "bin") "/bin/gsettings"))
-        (define dconf-bin #$(file-append dconf "/bin/dconf"))
-        (define entries '#$entries)
-        (define keyfile #$keyfile)
-        (define home (or (getenv "HOME") #$home-directory))
-
-        ;; 会话 schema 集：优先会话环境，缺失时回退 Home profile
-        ;; 的标准 compiled schemas 位置。
-        (define schemas-dir
-          (or (getenv "GSETTINGS_SCHEMA_DIR")
-              (string-append home
-                             "/.guix-home/profile/share/glib-2.0/schemas")))
-        (setenv "GSETTINGS_SCHEMA_DIR" schemas-dir)
-
-        (format #t "gsettings reconcile: ~a managed key(s)~%" (length entries))
-        (for-each (lambda (line)
-                    (format #t "~a~%" line))
-                  (gsettings-runtime-format-status
-                   (gsettings-runtime-status gsettings-bin entries)))
-        ;; validate：三类声明错误 fail-loud（one-shot 失败由 shepherd
-        ;; 记录，绝不 silent ignore）。
-        (for-each (lambda (problem)
-                    (match problem
-                      ((schema key text)
-                       (format (current-error-port)
-                               "gsettings reconcile: ~a: ~a (~a)~%"
-                               text key schema))))
-                  (gsettings-runtime-problems gsettings-bin entries))
-        (unless (null? (gsettings-runtime-problems gsettings-bin entries))
-          (exit 1))
-        (let ((status (gsettings-runtime-apply! dconf-bin keyfile)))
-          (unless (zero? status)
-            (format (current-error-port)
-                    "gsettings reconcile: dconf load failed (exit ~a)~%"
-                    status)
-            (exit 1)))
-        (format #t "gsettings reconcile: done~%")))))
+         (let* ((entries
+                 (map (lambda (setting)
+                        (list (gsettings-setting-schema setting)
+                              (gsettings-setting-key setting)
+                              (gsettings-setting-value setting)))
+                      desired-settings))
+                (keyfile (serialize-gsettings-keyfile desired-settings)))
+           (program-file
+            "gsettings-reconcile"
+            #~(begin
+               (use-modules (ice-9 match))
+               ;; 唯一 runtime contract（校验/五态/dconf load 与 manual
+               ;; 路径同一份实现）。
+               (load #$%gsettings-runtime-source)
+               (define gsettings-bin #$(file-append (gexp-input glib "bin") "/bin/gsettings"))
+               (define dconf-bin #$(file-append dconf "/bin/dconf"))
+               (define entries '#$entries)
+               (define keyfile #$keyfile)
+               (define home (or (getenv "HOME") #$home-directory))
+               
+               ;; 会话 schema 集：优先会话环境，缺失时回退 Home profile
+               ;; 的标准 compiled schemas 位置。
+               (define schemas-dir
+                 (or (getenv "GSETTINGS_SCHEMA_DIR")
+                     (string-append home
+                                    "/.guix-home/profile/share/glib-2.0/schemas")))
+               (setenv "GSETTINGS_SCHEMA_DIR" schemas-dir)
+               
+               (format #t "gsettings reconcile: ~a managed key(s)~%" (length entries))
+               (for-each (lambda (line)
+                           (format #t "~a~%" line))
+                         (gsettings-runtime-format-status
+                          (gsettings-runtime-status gsettings-bin entries)))
+               ;; validate：三类声明错误 fail-loud（one-shot 失败由 shepherd
+               ;; 记录，绝不 silent ignore）。
+               (for-each (lambda (problem)
+                           (match problem
+                                  ((schema key text)
+                                   (format (current-error-port)
+                                           "gsettings reconcile: ~a: ~a (~a)~%"
+                                           text key schema))))
+                         (gsettings-runtime-problems gsettings-bin entries))
+               (unless (null? (gsettings-runtime-problems gsettings-bin entries))
+                 (exit 1))
+               (let ((status (gsettings-runtime-apply! dconf-bin keyfile)))
+                 (unless (zero? status)
+                   (format (current-error-port)
+                           "gsettings reconcile: dconf load failed (exit ~a)~%"
+                           status)
+                   (exit 1)))
+               (format #t "gsettings reconcile: done~%")))))
 
 ;; one-shot Home Shepherd 服务：session D-Bus 就绪后把仓库声明的
 ;; GSettings 投影进 runtime dconf（desired 声明 build-time 嵌入；
 ;; Home generation 更新 → Shepherd 重跑本服务 → reconfigure 后立即
 ;; 生效，无需手工 `blue gsettings apply`）。
 (define* (gsettings-reconcile-service desired-settings home-directory)
-  (simple-service
-   'gsettings-reconcile
-   home-shepherd-service-type
-   (list (shepherd-service
-          (documentation
-           "Repository-derived GSettings projection: validate declared \
+         (simple-service
+          'gsettings-reconcile
+          home-shepherd-service-type
+          (list (shepherd-service
+                 (documentation
+                  "Repository-derived GSettings projection: validate declared \
 (schema,key,value) against the session schema set, then apply them \
 via `dconf load /` (runtime dconf only; ~/.config/dconf is never \
 persisted).")
-          (provision '(gsettings-reconcile))
-          (requirement '(dbus))          ; dconf 写入依赖 session D-Bus（ca.desktop.dconf）
-          (one-shot? #t)
-          (respawn? #f)
-          (modules '((shepherd support))) ; %user-log-dir
-          (start #~(make-forkexec-constructor
-                    (list #$(gsettings-reconcile-wrapper
-                             desired-settings home-directory))
-                    #:log-file
-                    (string-append %user-log-dir
-                                   "/gsettings-reconcile.log")))
-          (stop #~(make-kill-destructor))))))
+                 (provision '(gsettings-reconcile))
+                 (requirement '(dbus))          ; dconf 写入依赖 session D-Bus（ca.desktop.dconf）
+                 (one-shot? #t)
+                 (respawn? #f)
+                 (modules '((shepherd support))) ; %user-log-dir
+                 (start #~(make-forkexec-constructor
+                           (list #$(gsettings-reconcile-wrapper
+                                    desired-settings home-directory))
+                           #:log-file
+                           (string-append %user-log-dir
+                                          "/gsettings-reconcile.log")))
+                 (stop #~(make-kill-destructor))))))

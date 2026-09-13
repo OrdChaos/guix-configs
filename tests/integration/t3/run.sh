@@ -81,8 +81,10 @@ fresh() {
 
 build-system() {
     GUIX_CONFIG_FACTS="$T7_DIR/facts.scm" \
+    GUILE_LOAD_PATH="$PWD/modules:$PWD/tests" \
+    GUILE_LOAD_COMPILED_PATH="$PWD/modules:$PWD/tests" \
         guix time-machine -C channels.lock.scm -- \
-        system build -L modules -L tests \
+        system build \
         tests/integration/t3/host.scm | tee "$T7_DIR/system-path"
 }
 

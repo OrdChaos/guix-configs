@@ -304,6 +304,6 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
   "EXISTING 是磁盘上实际存在的 generation 编号列表。
 返回应删除的编号列表（升序）。"
   (generations-to-delete* existing
-                         (root-state-current-generation state)
-                         (root-state-last-good-generation state)
-                         keep))
+                          (root-state-current-generation state)
+                          (root-state-last-good-generation state)
+                          keep))

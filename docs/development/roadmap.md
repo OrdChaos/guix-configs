@@ -31,21 +31,11 @@ PATH 前，无包机器（VM）上这些启动/按键会运行期失败（仅通
 - ~~`clash-verge`（proxy GUI）~~ → 已由 Mihomo 系统服务取代
   （`(guixcfg system mihomo service)`，docs/architecture/mihomo.md；GUI 控制
   经 Noctalia Mihomo Control 走 Clash API）
-- binds 引用的 `missioncenter` / `playerctl` / `orca`
+- binds 引用的 `playerctl` / `orca`
   （Guix 官方包名核对后入 registry）
 
 （已入仓库：noctalia、polkit-gnome、nautilus、fcitx5、
 xsettingsd。）
-
-### 历史 E2E harness（保留、不维护）
-
-`tools/test-tpm2-poc.sh`、`tools/test-tpm2-luks.sh`、
-`tools/t7-scenario.sh`：历史 PoC/场景驱动，当前无调用者
-（t7-scenario 已被 tests/integration/t3/run.sh 自带的 scenario
-取代；test-tpm2-luks 的真实 cryptsetup 回退场景在 tests/ 无等价物）。
-注意 `tools/t7-e2e.sh` 与 `tools/t7-interact.py` **不是** dead code：
-tests/integration/t3 仍在用。若未来把 test-tpm2-luks 的场景移植为
-Level 1-4 测试，这三个文件可删。
 
 ## Future features
 
@@ -57,14 +47,5 @@ Level 1-4 测试，这三个文件可删。
   NVIDIA open module adapter + niri iGPU/offload 机器事实）；剩余：
   实机 firmware 选择、microcode revision 验收、实机运行验证清单
   （prime-run/vulkaninfo/nvidia-smi/powerd，见 graphics.md）。
-- Mihomo 系统服务与 Flatpak 应用管理已落地（mihomo.md /
-  flatpak.md）；剩余是运维面打磨，不再作为未实现条目追踪。
-
-
-### SmartDNS（Phase 2 v1 已落地 ownership；剩余见 dns.md）
-
-- 已做：静态 /etc/resolv.conf → SmartDNS → 固定 upstream；DHCP DNS
-  metadata（/run/resolvconf/resolv.conf）由 openresolv 产出、v1 不消费；
-  resolvconf-bootstrap 退役。
-- 未来：DHCP DNS 作为 SmartDNS 附加 upstream 组（hook 产出 + config
+- **SmartDNS**：未来支持 DHCP DNS 作为附加 upstream 组（hook 产出 + config
   再生成 + SIGHUP）；cache 持久化（如需要）。

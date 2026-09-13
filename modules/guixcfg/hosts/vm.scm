@@ -1,7 +1,8 @@
 ;;; VM 最终 <operating-system> 组装点（docs/README.md）。
 ;;;
-;;; 构建：guix time-machine -C channels.lock.scm -- system build \
-;;;         -L modules -e '(@ (guixcfg hosts vm) %vm-os)'
+;;; 构建：GUILE_LOAD_PATH="$PWD/modules" GUILE_LOAD_COMPILED_PATH="$PWD/modules" \
+;;;         guix time-machine -C channels.lock.scm -- system build \
+;;;         -e '(@ (guixcfg hosts vm) %vm-os)'
 ;;;
 ;;; 与 Laptop 的共享组装算法在 (guixcfg hosts common)（services /
 ;;; user-services / 基础 OS / account fold + 最终 OS）。本模块只
@@ -121,5 +122,5 @@
 ;; 末尾裸表达式：让本文件同时是 guix system 的入口文件——
 ;; guix system init/reconfigure 加载文件时取最后一个顶层表达式的值
 ;; （daviwil 模式）。因此本文件既是模块 (guixcfg hosts vm)，又是入口：
-;;   guix system init -L modules modules/guixcfg/hosts/vm.scm /mnt
+;;   GUILE_LOAD_PATH="$PWD/modules" guix system init modules/guixcfg/hosts/vm.scm /mnt
 %vm-os

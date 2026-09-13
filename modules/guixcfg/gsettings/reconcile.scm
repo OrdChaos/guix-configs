@@ -103,21 +103,21 @@
 返回 managed 键数。空声明集 → 无操作（#t，不 invoke dconf）。"
   (for-each (lambda (problem)
               (match problem
-                ((schema key text)
-                 (error (string-append "gsettings apply: " key
-                                       " (" schema ") " text)
-                        #f))))
+                     ((schema key text)
+                      (error (string-append "gsettings apply: " key
+                                            " (" schema ") " text)
+                             #f))))
             (gsettings-runtime-problems (gsettings-tool)
                                         (settings->entries settings)))
   (if (null? settings)
     #t
     (begin
-      (let ((status (gsettings-runtime-apply!
-                     (dconf-tool)
-                     (serialize-gsettings-keyfile settings))))
-        (unless (zero? status)
-          (error "gsettings apply: dconf load failed" status)))
-      (length settings))))
+     (let ((status (gsettings-runtime-apply!
+                    (dconf-tool)
+                    (serialize-gsettings-keyfile settings))))
+       (unless (zero? status)
+         (error "gsettings apply: dconf load failed" status)))
+     (length settings))))
 
 (define (gsettings-status-format entries)
   "ENTRIES → 逐键文本报告行（runtime contract 的输出格式）。"

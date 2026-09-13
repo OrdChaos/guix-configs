@@ -247,11 +247,11 @@
 
 (test-equal "cross-path: status agrees between module API and runtime contract"
             (begin
-              (setenv "GS_FAKE_KEYS" "restore-session\n")
-              (setenv "GS_FAKE_GET_VALUE" "true")
-              (map (lambda (e)
-                     (list (caddr e) (cadddr e) (car (cddddr e))))
-                   (gsettings-status (list %k-restore))))
+             (setenv "GS_FAKE_KEYS" "restore-session\n")
+             (setenv "GS_FAKE_GET_VALUE" "true")
+             (map (lambda (e)
+                    (list (caddr e) (cadddr e) (car (cddddr e))))
+                  (gsettings-status (list %k-restore))))
             (map (lambda (e)
                    (list (caddr e) (cadddr e) (car (cddddr e))))
                  (gsettings-runtime-status
@@ -260,24 +260,24 @@
 
 (test-equal "cross-path: missing-schema problem classification agrees"
             (begin
-              (setenv "GS_FAKE_MISSING_SCHEMA" "org.gnome.TextEditor")
-              (map (lambda (e) (list (car e) (cadr e) (caddr e)))
-                   (gsettings-runtime-problems
-                    (string-append %gs-bin "/gsettings")
-                    '(("org.gnome.TextEditor" "restore-session" "false")))))
+             (setenv "GS_FAKE_MISSING_SCHEMA" "org.gnome.TextEditor")
+             (map (lambda (e) (list (car e) (cadr e) (caddr e)))
+                  (gsettings-runtime-problems
+                   (string-append %gs-bin "/gsettings")
+                   '(("org.gnome.TextEditor" "restore-session" "false")))))
             '(("org.gnome.TextEditor" "restore-session" "schema not found")))
 
 (test-equal "cross-path: invalid-desired-value classification agrees"
             (begin
-              (unsetenv "GS_FAKE_MISSING_SCHEMA")
-              (setenv "GS_FAKE_KEYS" "restore-session\n")
-              (setenv "GS_FAKE_RANGE_TYPE" "b")
-              (map (lambda (e) (list (car e) (cadr e) (caddr e)))
-                   (gsettings-runtime-problems
-                    (string-append %gs-bin "/gsettings")
-                    '(("org.gnome.TextEditor" "restore-session" "notabool")))))
+             (unsetenv "GS_FAKE_MISSING_SCHEMA")
+             (setenv "GS_FAKE_KEYS" "restore-session\n")
+             (setenv "GS_FAKE_RANGE_TYPE" "b")
+             (map (lambda (e) (list (car e) (cadr e) (caddr e)))
+                  (gsettings-runtime-problems
+                   (string-append %gs-bin "/gsettings")
+                   '(("org.gnome.TextEditor" "restore-session" "notabool")))))
             '(("org.gnome.TextEditor" "restore-session"
-               "invalid desired value (GVariant text)")))
+                                      "invalid desired value (GVariant text)")))
 
 (test-end)
 

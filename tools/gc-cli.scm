@@ -54,9 +54,9 @@ tools/gc-cli.scm -- ACTION HOST [--keep N | --delete LIST]~%actions: plan | run~
 内部布局不敏感），供单行错误输出。"
   (let walk ((x exn-args))
     (cond ((string? x) (list x))
-          ((symbol? x) (list (symbol->string x)))
-          ((pair? x) (append (walk (car x)) (walk (cdr x))))
-          (else '()))))
+      ((symbol? x) (list (symbol->string x)))
+      ((pair? x) (append (walk (car x)) (walk (cdr x))))
+      (else '()))))
 
 (define (error-text key args)
   "把 catch 的 (key . args) 收敛为单行错误文本。misc-error 的 args 是
@@ -108,12 +108,12 @@ tools/gc-cli.scm -- ACTION HOST [--keep N | --delete LIST]~%actions: plan | run~
               (unless (member mode '("plan" "run"))
                 (usage))
               (call-with-values (lambda () (parse-options rest))
-                (lambda (keep delete)
-                  (let ((plan (system-generation-plan
-                               #:host host #:keep keep #:delete delete)))
-                    (print-plan plan)
-                    (when (string=? mode "run")
-                      (run! plan))))))
+                                (lambda (keep delete)
+                                  (let ((plan (system-generation-plan
+                                               #:host host #:keep keep #:delete delete)))
+                                    (print-plan plan)
+                                    (when (string=? mode "run")
+                                      (run! plan))))))
              (_ (usage))))
     (lambda (key . args)
       (format (current-error-port) "gc: ~a~%" (error-text key args))

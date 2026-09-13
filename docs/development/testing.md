@@ -13,7 +13,7 @@ generation 状态机、policies、plan、validate、users 等）。
 
 ## Level 2 — Module load
 
-`tests/test-modules-load.scm` 等：确认模块可加载、`%vm-os` 可实例化
+`tests/test-modules-load.scm` 等：确认核心模块可加载、`%vm-os` 可实例化
 （machine facts 由 run-tests.scm 注入测试值）。
 
 证明：模块结构/依赖图健康，无 compile/load 错误。
@@ -37,8 +37,9 @@ thunk、secrets deploy、只读 verify。
 
 ```bash
 GUIX_CONFIG_FACTS=<facts> \
+GUILE_LOAD_PATH="$PWD/modules" GUILE_LOAD_COMPILED_PATH="$PWD/modules" \
   guix time-machine -C channels.lock.scm -- system build \
-  -L "$PWD/modules" -e '(@ (guixcfg hosts vm) %vm-os)'
+  -e '(@ (guixcfg hosts vm) %vm-os)'
 ```
 
 证明：完整 OS 可构建，所有 activation/shepherd 配置生成正确。
@@ -63,8 +64,14 @@ acceptance checklist）。
 ## 标准命令
 
 ```bash
-# full tests（pinned Guix）
+# mandatory core tests（pinned Guix；不要求 per-app tests）
 guix time-machine -C channels.lock.scm -- repl tests/run-tests.scm
+
+# optional existing application-specific checks
+guix time-machine -C channels.lock.scm -- repl -- tests/run-tests.scm --apps
+
+# core + optional application checks
+guix time-machine -C channels.lock.scm -- repl -- tests/run-tests.scm --all
 
 # Blue 入口（等价，builtin check 经 repository-tests testable 薄包装
 # 上面的 runner；测试清单的事实源仍是 run-tests.scm）
@@ -76,8 +83,9 @@ guix time-machine -C channels.lock.scm -- \
 
 # system build dry-run / build
 GUIX_CONFIG_FACTS=/tmp/facts.scm \
+  GUILE_LOAD_PATH="$PWD/modules" GUILE_LOAD_COMPILED_PATH="$PWD/modules" \
   guix time-machine -C channels.lock.scm -- system build \
-  -L "$PWD/modules" -e '(@ (guixcfg hosts vm) %vm-os)'
+  -e '(@ (guixcfg hosts vm) %vm-os)'
 ```
 
 不要把 "gexp successfully builds" 当作 "runtime program definitely

@@ -18,46 +18,46 @@
 (test-begin "vendor-certificates")
 
 (test-group "record contract"
-  (test-equal "db carries 5 certificates"
-    5
-    (length (vendor-certificates-for 'db)))
-  (test-equal "KEK carries 2 certificates"
-    2
-    (length (vendor-certificates-for 'KEK)))
-  (test-equal "7 certificates in total"
-    7
-    (length %vendor-certificates))
-  (test-assert "all sources are file-append inside the certificate package"
-    (every (lambda (cert)
-             (let ((src (vendor-certificate-source cert)))
-               (and (file-append? src)
-                    (eq? (file-append-base src)
-                         microsoft-secure-boot-certificates)
-                    (string-prefix?
-                     "/share/secure-boot/microsoft/"
-                     (string-join (file-append-suffix src) "")))))
-           %vendor-certificates))
-  (test-assert "install paths match the package catalog install-names"
-    (every (lambda (cert)
-             (let ((path (string-join (file-append-suffix
-                                       (vendor-certificate-source cert))
-                                      "")))
-               (member (string-drop path (string-length
-                                          "/share/secure-boot/microsoft/"))
-                       (map car %microsoft-secure-boot-certs))))
-           %vendor-certificates)))
+            (test-equal "db carries 5 certificates"
+                        5
+                        (length (vendor-certificates-for 'db)))
+            (test-equal "KEK carries 2 certificates"
+                        2
+                        (length (vendor-certificates-for 'KEK)))
+            (test-equal "7 certificates in total"
+                        7
+                        (length %vendor-certificates))
+            (test-assert "all sources are file-append inside the certificate package"
+                         (every (lambda (cert)
+                                  (let ((src (vendor-certificate-source cert)))
+                                    (and (file-append? src)
+                                         (eq? (file-append-base src)
+                                              microsoft-secure-boot-certificates)
+                                         (string-prefix?
+                                          "/share/secure-boot/microsoft/"
+                                          (string-join (file-append-suffix src) "")))))
+                                %vendor-certificates))
+            (test-assert "install paths match the package catalog install-names"
+                         (every (lambda (cert)
+                                  (let ((path (string-join (file-append-suffix
+                                                            (vendor-certificate-source cert))
+                                                           "")))
+                                    (member (string-drop path (string-length
+                                                               "/share/secure-boot/microsoft/"))
+                                            (map car %microsoft-secure-boot-certs))))
+                                %vendor-certificates)))
 
 (test-group "lowering"
-  (test-assert "all sources lower to one certificate package derivation (no build, no network)"
-    (run-with-store (open-connection)
-      (mlet %store-monad ((drvs (mapm %store-monad
-                                      (lambda (cert)
-                                        (lower-object
-                                         (vendor-certificate-source cert)))
-                                      %vendor-certificates)))
-        (return (and (= 7 (length drvs))
-                     (every derivation? drvs)
-                     (= 1 (length (delete-duplicates drvs)))))))))
+            (test-assert "all sources lower to one certificate package derivation (no build, no network)"
+                         (run-with-store (open-connection)
+                                         (mlet %store-monad ((drvs (mapm %store-monad
+                                                                         (lambda (cert)
+                                                                           (lower-object
+                                                                            (vendor-certificate-source cert)))
+                                                                         %vendor-certificates)))
+                                               (return (and (= 7 (length drvs))
+                                                            (every derivation? drvs)
+                                                            (= 1 (length (delete-duplicates drvs)))))))))
 
 ;; Evaluation of this module performs no network I/O; the only external
 ;; interaction is the local store socket used above.

@@ -56,7 +56,7 @@ secure-boot-keygen / secure-boot-enroll / tpm2-enroll）。
 - 仓库位于 installer 环境可读位置（如 LiveCD 的 `/root/guix-configs`，
   VM 9p 共享或 clone）。Blue 经 development manifest 提供：
   `guix time-machine -C channels.lock.scm -- shell -m manifests/development.scm -- blue …`。
-- 阶段 5（安装 stable identity 到 persist）必须先于 system init（
+- 阶段 5（安装 stable identity 与 persistent password hash）必须先于 system init（
   `blue install` 的 secrets 阶段自动保证此顺序；AGENT.md §5）。
 - `@persist-var-guix` 在 init 期间刻意不挂载（`mount-at-install? #f`）
   ——init 会删除目标的 /var/guix 重新注册，挂载点删不掉（EBUSY）；
@@ -103,7 +103,7 @@ blue enroll laptop             # enroll 相位 2：固件 skip → TPM enrollmen
   system-init      GUIX_CONFIG_FACTS + guix system init → /mnt
   commit-root      @root-template 只读发布 + @root-0（幂等 + 中断恢复）
   repo             仓库 checkout 复制到 /mnt/persist/data-home/<user>/
-                   guix-configs（runbook 阶段 10 机制化；tar 排除
+                   guix-configs（runbook 阶段 8 机制化；tar 排除
                    vms/*.log + chown -R 归还 USER ownership）
   validate         /mnt 布局 / facts / system generation / ESP artifacts /
                    secrets / commit state / SB key material / repo copy
@@ -270,7 +270,7 @@ guix time-machine -C channels.lock.scm -- build --dry-run \
 
 输出为 store 路径 = 已缓存；输出 `would be built` = 需要本地编译。
 
-## 阶段 5：安装 stable S 到 persist
+## 阶段 5：安装 stable identity、password hash 与 keystore
 
 **必须先于 system init**：漏装/后装会导致首次启动的 secrets-deploy
 无法解密（boot 后无 runtime identity，只用 installed identity），
@@ -282,6 +282,16 @@ prompt（已两次实测；secrets-deploy 与 commit-root 都会在缺失时
 install -d -m 700 /mnt/persist/system/keys/age
 install -m 600 /run/guixcfg-age/stable-identity \
   /mnt/persist/system/keys/age/identity
+
+GUIXCFG_ACCOUNTS_DIR=/mnt/persist/system/accounts \
+  guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/secrets.scm -- \
+  guile -L "$PWD/modules" -s tools/secrets.scm provision-password ordchaos \
+  modules/guixcfg/users/secrets/user-password.hash.age
+
+guix time-machine -C channels.lock.scm -- \
+  shell -m manifests/secure-boot-enroll.scm -- \
+  guix repl tools/secure-boot-enroll.scm /mnt/persist/system/keys/secure-boot
 ```
 
 验证：目录 0700、identity 0600、root。
@@ -290,26 +300,15 @@ install -m 600 /run/guixcfg-age/stable-identity \
 
 ```bash
 GUIX_CONFIG_FACTS=/mnt/persist/system/facts/host.scm \
+GUILE_LOAD_PATH="$PWD/modules" GUILE_LOAD_COMPILED_PATH="$PWD/modules" \
   guix time-machine -C channels.lock.scm -- system init \
-  -L "$PWD/modules" modules/guixcfg/hosts/vm.scm /mnt
+  modules/guixcfg/hosts/vm.scm /mnt
 ```
 
 成功标志：system-1-link、EFI/Guix/A/{CURRENT,RECOVERY}.EFI、
 bootloader installed。有 db.key 则 UKI 已签名。
 
-## 阶段 7：provision 用户密码 hash
-
-```bash
-GUIXCFG_ACCOUNTS_DIR=/mnt/persist/system/accounts \
-  guix time-machine -C channels.lock.scm -- \
-  shell -m manifests/secrets.scm -- \
-  guile -L "$PWD/modules" -s tools/secrets.scm provision-password ordchaos \
-  modules/guixcfg/users/secrets/user-password.hash.age
-```
-
-验证：`/mnt/persist/system/accounts/ordchaos/password.hash`，root 0600。
-
-## 阶段 8：commit-root
+## 阶段 7：commit-root
 
 ```bash
 guix repl tools/disk-install.scm -- commit-root /mnt
@@ -323,25 +322,10 @@ guix repl tools/disk-install.scm -- commit-root /mnt
 committed、state = `(boot-status . first-boot)`、UKI 部署 B committed。
 重复执行是安全 no-op。
 
-## 阶段 9：Secure Boot 固件注册（可选）
+固件 NVRAM 不在 installer 环境写入。进入目标系统后使用本文开头的
+`blue firstboot` → reboot → `blue enroll` 流程。
 
-```bash
-# keystore 构建
-guix time-machine -C channels.lock.scm -- \
-  shell -m manifests/secure-boot-enroll.scm -- \
-  guix repl tools/secure-boot-enroll.scm /mnt/persist/system/keys/secure-boot
-
-# 固件写入：db/KEK 先，PK 最后（写 PK 启用 Secure Boot）
-guix time-machine -C channels.lock.scm -- \
-  shell -m manifests/secure-boot-enroll.scm -- \
-  sh -c 'sbkeysync --keystore /mnt/persist/system/keys/secure-boot/keystore --verbose &&
-         sbkeysync --keystore /mnt/persist/system/keys/secure-boot/keystore --verbose --pk'
-```
-
-要求固件处于 Setup Mode（SecureBoot=0、SetupMode=1）。enrollment
-失败不阻塞普通安装（可稍后在目标系统补做）。
-
-## 阶段 10：仓库复制到 persistent user data
+## 阶段 8：仓库复制到 persistent user data
 
 > `blue install` 的 repo 阶段已把本段自动化（检测/复制/chown/验证，
 > 见 Blue 主路径）；以下为机制细节与恢复/专家参考。

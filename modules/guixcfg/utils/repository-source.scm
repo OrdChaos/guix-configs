@@ -21,6 +21,7 @@
 ;;; 不读取 Git checkout。
 
 (define-module (guixcfg utils repository-source)
+               #:use-module (guixcfg utils paths)
                #:use-module (guix gexp)   ; local-file、assume-source-relative-file-name
                #:export (repository-file
                          repository-root))
@@ -55,10 +56,7 @@ canonicalize-path 报裸路径。"
   (let ((rel (if (string-prefix? "./" relative-path)
                (substring relative-path 2)
                relative-path)))
-    (unless (and (string? rel)
-                 (> (string-length rel) 0)
-                 (not (string-prefix? "/" rel))
-                 (not (string-contains rel "..")))
+    (unless (valid-relative-path? rel)
       (error "repository-file: unsafe relative path" relative-path))
     (let ((path (string-append (repository-root) "/" rel)))
       (unless (file-exists? path)

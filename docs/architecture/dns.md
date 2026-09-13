@@ -33,7 +33,7 @@ Mihomo 只负责 TUN / traffic routing / proxy policy——不做 DNS
 | `/etc/resolvconf.conf` | `(guixcfg system dns ownership)` | 把 openresolv libc subscriber 的输出重定向到 `/run/resolvconf/resolv.conf`；其余 subscriber（named/dnsmasq/unbound/systemd-resolved/…）显式关闭 |
 | DHCP DNS | NetworkManager（经 resolvconf -a） | **不丢弃**：以 `/run/resolvconf/resolv.conf` 的形式保留为 upstream metadata——v1 只产出、SmartDNS 暂不消费；未来"DHCP DNS 作为上游"的 seam |
 | SmartDNS 进程 | `(guixcfg system dns smartdns)`（thin service，Guix smartdns 47 包） | Shepherd 管理；loopback-only 监听；固定 upstream；cache 仅内存 |
-| upstream 出口 | `(guixcfg system mihomo)` 模板 rules | `IP-CIDR,<upstream>/32,DIRECT,no-resolve`——上游直连（自举必需：节点服务器是域名，上游走节点 = 解析死锁；附带 DNS 不随节点存亡，2026-08-28 重启实测） |
+| upstream 出口 | `(guixcfg system mihomo config)` 模板 rules | `IP-CIDR,<upstream>/32,DIRECT,no-resolve`——上游直连（自举必需：节点服务器是域名，上游走节点 = 解析死锁；附带 DNS 不随节点存亡） |
 
 ## 数据流（当前真实）
 

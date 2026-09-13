@@ -38,19 +38,23 @@ guix time-machine -C channels.lock.scm -- \
   shell -m manifests/development.scm -- blue install laptop /dev/nvme0n1
 # → reboot into the installed system
 blue -n firstboot laptop   # 只读：reconfigure 推导 plan + enrollment 计划
-blue firstboot laptop      # 首次启动收敛：reconfigure + enroll（TPM/固件）
+blue firstboot laptop      # 首次启动收敛：reconfigure + 固件 enrollment
+# reboot once so Secure Boot becomes active, then enroll TPM:
+blue enroll laptop
 # 单独重跑机器绑定（policy 变化 replace / TPM 重建）：
 blue -n enroll laptop
 blue enroll laptop
 
 # 构建 VM 系统配置（已装系统外需要 facts 文件，见 development/testing.md）
 GUIX_CONFIG_FACTS=/tmp/facts.scm \
-  guix time-machine -C channels.lock.scm -- system build -L "$PWD/modules" modules/guixcfg/hosts/vm.scm
+GUILE_LOAD_PATH="$PWD/modules" GUILE_LOAD_COMPILED_PATH="$PWD/modules" \
+  guix time-machine -C channels.lock.scm -- system build modules/guixcfg/hosts/vm.scm
 
 # 日常入口（安装后，Blue 来自已部署 Guix Home profile）
 blue doctor laptop
 blue build-os laptop
 blue reconfigure laptop
+blue gc laptop
 blue update            # 重写 channels.lock.scm（见 docs/operations/reconfigure.md）
 blue check
 

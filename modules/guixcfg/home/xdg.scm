@@ -26,17 +26,6 @@
                          %xdg-default-apps-service
                          %xdg-user-dirs-service))
 
-;; 默认浏览器：Google Chrome（stable）。desktop entry 来自 Chrome
-;; 模块的纯数据常量；选择策略在这里——默认 HTML 与 http/https
-;; scheme 都指向 Chrome。
-(define %xdg-default-applications
-  (map (lambda (mime)
-         (cons mime (list %chrome-desktop-entry)))
-       '("text/html"
-         "application/xhtml+xml"
-         "x-scheme-handler/http"
-         "x-scheme-handler/https")))
-
 ;; ── GNOME 轻量应用默认关联（单一默认：每种 MIME 恰好一个
 ;;    default entry；其余候选经各自 desktop entry 的 MimeType
 ;;    出现在"Open With"）────────────────────────────────────

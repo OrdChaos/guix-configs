@@ -70,18 +70,17 @@
 
 ## 5. 安装/身份规则
 
-- **阶段 5（安装 stable identity 到 persist）必须先于 system init**：
-  漏装/后装导致首次 boot secrets-deploy 无法解密 →
+- **阶段 5（安装 stable identity 与 persistent password hash）必须先于
+  system init**：漏装/后装导致首次 boot secrets/account projection 失败 →
   interactive-secrets-ready 失败 → login barrier 卡死（多次实测）。
 - commit-root 会兜底自动安装（缺失且 /run identity 可用时），无
   runtime identity 则 fail-fast。
 - 安装时 LUKS passphrase 经 `--luks-secret`（age 解密 luks-recovery.age，
   注意 decrypt 命令保留尾换行，cryptsetup 需要去换行）。
-- **无人值守安装必须包含 Secure Boot 固件注册（阶段 9）**：keygen
-  之后、关机之前，构建 keystore + sbkeysync 写固件（db/KEK 先，PK
-  最后——写 PK 才退出 Setup Mode）。漏做则重启后固件仍在 Setup
-  Mode，PCR7 enrollment preflight 失败（已实测一次；enroll 是
-  单向的，VM 重置需重建 OVMF VARS 文件）。
+- **安装不写 Secure Boot 固件 NVRAM**：install 只生成 keys/keystore
+  并部署签名 UKI。目标系统首次启动后运行 `blue firstboot` 写入
+  db/KEK/PK，重启使 Secure Boot 生效，再运行 `blue enroll` 完成 TPM
+  PCR7 enrollment。VM 重置固件状态时需重建 OVMF VARS 文件。
 - **仓库放进 persistent user data 后必须以正确 owner 收尾**：无人
   值守安装/后续以 root clone 或 pull 到 bind backing 后，必须
   `chown -R <user>:users <backing>/guix-configs`（user-persistence
@@ -138,7 +137,7 @@ channels；禁止照最新 master/博客写代码。
   问题）。
 - **THIN ADAPTER**：readiness → greetd gate（官方 greetd 服务必须
   requirement 含 interactive-session-ready）；SSH persistent host-key；
-  NVIDIA future adapter（disabled/identity）。
+  NVIDIA adapter（VM disabled/identity，Laptop active）。
 - **禁止双 owner**：custom dbus-run-session + home-dbus 不能同时 active；
   niri spawn pipewire + home-pipewire 禁止；xwayland-satellite 手工
   spawn + 官方自动管理禁止。source 可并存，active composition 只能
@@ -152,9 +151,9 @@ channels；禁止照最新 master/博客写代码。
 - **PROJECT-SPECIFIC**：persistence、root-generation、accounts、
   secrets、readiness、TPM、UKI、Secure Boot
 - **OFFICIAL GUIX**：authenticated user desktop lifecycle、Home
-  D-Bus、Home Niri、Home PipeWire、Xwayland/portal（官方提供处）
+  D-Bus、Home PipeWire、Xwayland/portal（官方提供处）
 - **THIN ADAPTER**：readiness→greetd、Home activation 验证、
-  SSH persistent host-key、NVIDIA future adapter
+  SSH persistent host-key、Home Niri session lifecycle、NVIDIA adapter
 
 ## 9. 环境/机器规则
 
@@ -202,9 +201,10 @@ docs/reference/repository-layout.md；本节省略版开发约束：
   跨层 `../../../files/...`。模块内密文走 source-relative
   `local-file`；tests/fixtures 密文（测试域）由 VM 测试机装配经
   `(guixcfg utils repository-source)` 的唯一 resolver 引用。
-  **前提：构建/部署入口的 `-L` 必须绝对路径**（`-L "$PWD/modules"`）——
-  local-file 的目录解析延迟到 lowering，相对 load-path 条目会让
-  解析退化为裸文件名并报 canonicalize-path 错（2026-08 实测）。
+  独立 `guile`/`guix repl` 使用绝对 `-L "$PWD/modules"`；`guix system`
+  禁止使用 `-L`（它会污染 package search path），改用绝对
+  `GUILE_LOAD_PATH`/`GUILE_LOAD_COMPILED_PATH`。相对 load path 会让
+  local-file lowering 退化为裸文件名并报 canonicalize-path 错。
 - mutable application state 的 canonical backing 位于
   `/persist/data-app`（bind projection）；禁止持久化整个
   `.config/.local/.local/share/.cache`。

@@ -151,15 +151,17 @@ HOST 与 HOME-USER 由调用方显式传入（Blue 的 privilege handoff）。"
                                   "reconfigure: system generation switched OK, but Home hot-activation~%  FAILED (old Home: ~a; system is NOT rolled back).~%  Gate remains CLOSED (new interactive sessions refused).~%  Investigate: pivot residue ~a, or ~a occupied by a non-symlink.~%  Fix, then re-run blue reconfigure ~a to recover without reboot.~%"
                                   (or old-home "none") pivot home-link host)
                           2)
-                         ;; 5. readiness 复查：各 capability 无 failed
+                         ;; 5. readiness 复查：每个 capability 必须明确 started。
+                         ;; 查询失败、服务缺失与未知输出均 fail closed。
                          (let ((failed
                                 (find
                                  (lambda (svc)
                                    (let ((out (command-output
                                                `("herd" "status"
                                                         ,(symbol->string svc)))))
-                                     (and (string? out)
-                                          (string-contains out "Failed to start"))))
+                                     (not (and (string? out)
+                                               (string-contains out
+                                                                "It is started.")))))
                                  %readiness-capabilities)))
                            (if failed
                              (begin

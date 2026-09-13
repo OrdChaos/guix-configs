@@ -190,9 +190,9 @@
 
 (test-equal "gc-cli-argv runs the pinned gc tool with env-injected modules"
             '("env" "GUILE_LOAD_PATH=/repo/modules"
-                     "GUILE_LOAD_COMPILED_PATH=/repo/modules"
-                     "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
-                     "repl" "tools/gc-cli.scm" "--" "plan" "vm" "--delete" "0,3")
+                    "GUILE_LOAD_COMPILED_PATH=/repo/modules"
+                    "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
+                    "repl" "tools/gc-cli.scm" "--" "plan" "vm" "--delete" "0,3")
             (gc-cli-argv %root "plan" "vm" '("--delete" "0,3")))
 
 (test-assert "gc argv has no shell metacharacters"
@@ -203,10 +203,10 @@
 
 (test-equal "system-reconfigure-argv (transaction core) is pinned, env-injected modules"
             '("env" "GUILE_LOAD_PATH=/repo/modules"
-                     "GUILE_LOAD_COMPILED_PATH=/repo/modules"
-                     "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
-                     "system" "reconfigure" "--no-kexec"
-                     "modules/guixcfg/hosts/vm.scm")
+                    "GUILE_LOAD_COMPILED_PATH=/repo/modules"
+                    "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
+                    "system" "reconfigure" "--no-kexec"
+                    "modules/guixcfg/hosts/vm.scm")
             (system-reconfigure-argv %root "vm"))
 
 (test-assert "system-reconfigure-argv (normal) has no --dry-run"

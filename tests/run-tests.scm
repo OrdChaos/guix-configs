@@ -1,6 +1,7 @@
 ;;; 测试运行器。模块代码使用 (guix records)，所以需要 Guix 的模块路径，
 ;;; 通过锁定频道运行（从仓库根目录）：
 ;;;   guix time-machine -C channels.lock.scm -- repl tests/run-tests.scm
+;;;   guix time-machine -C channels.lock.scm -- repl -- tests/run-tests.scm --apps
 ;;; 全部通过时退出码为 0，有失败时退出码为 1。
 
 ;; guix repl 不提供 -L，这里显式把 modules/ 加入 load path；
@@ -12,6 +13,7 @@
 
 (use-modules (guix channels)     ; channel-name、channel-commit（解析 lock）
              (srfi srfi-1)
+             (srfi srfi-13)
              (ice-9 ftw)         ; scandir
              (srfi srfi-64))
 
@@ -41,12 +43,52 @@
 (define %saayix-store-dir (channel-store-dir 'saayix))
 (define %rosenthal-store-dir (channel-store-dir 'rosenthal))
 (define %bluebox-store-dir (channel-store-dir 'bluebox))
+(define %rust-toolchain-store-dir (channel-store-dir 'guix-rust-toolchain))
 
 (add-to-load-path %nonguix-store-dir)
 (add-to-load-path %virelith-store-dir)
 (add-to-load-path %saayix-store-dir)
 (add-to-load-path %rosenthal-store-dir)
 (add-to-load-path %bluebox-store-dir)
+(add-to-load-path %rust-toolchain-store-dir)
+
+;; Repository-local .go files are developer cache, not test inputs. Loading
+;; stale or interrupted ccache objects can split Guix record identities.
+(set! %load-compiled-path
+  (filter (lambda (path)
+            (not (string-contains path "/.cache/guile/ccache/")))
+          %load-compiled-path))
+
+(primitive-load "tests/manifest.scm")
+
+(define %test-arguments (cdr (program-arguments)))
+
+(unless (and (every (lambda (arg) (member arg '("--apps" "--all")))
+                    %test-arguments)
+             (<= (length %test-arguments) 1))
+  (error "usage: tests/run-tests.scm [--apps|--all]" %test-arguments))
+
+(define %test-mode
+  (cond ((member "--all" %test-arguments) 'all)
+    ((member "--apps" %test-arguments) 'apps)
+    (else 'core)))
+
+(define %discovered-test-files
+  (sort (map (lambda (name) (string-append "tests/" name))
+             (scandir "tests"
+                      (lambda (name)
+                        (and (string-prefix? "test-" name)
+                             (string-suffix? ".scm" name)))))
+        string<?))
+
+(define %classified-test-files
+  (sort (append %core-test-files %app-test-files) string<?))
+
+(unless (and (equal? %discovered-test-files %classified-test-files)
+             (= (length %classified-test-files)
+                (length (delete-duplicates %classified-test-files))))
+  (error "test manifest is incomplete or contains duplicates"
+         %discovered-test-files %classified-test-files))
 
 ;; 必须先设置 runner，再加载测试文件：
 ;; SRFI-64 的计数器都记录在“当前 runner”上。
@@ -83,91 +125,10 @@
  (lambda () (setenv "GUIX_CONFIG_FACTS" %test-facts-file))
  (lambda ()
    (for-each run-file
-             '("tests/test-atomic-file.scm"
-               "tests/test-home-path.scm"
-               "tests/test-bash.scm"
-               "tests/test-nautilus.scm"
-               "tests/test-sudo.scm"
-               "tests/test-profile.scm"
-               "tests/test-appearance.scm"
-               "tests/test-boot-state.scm"
-               "tests/test-process.scm"
-               "tests/test-spawn.scm"
-               "tests/test-model.scm"
-               "tests/test-policies.scm"
-               "tests/test-plan.scm"
-               "tests/test-validate.scm"
-               "tests/test-device.scm"
-               "tests/test-root-generation.scm"
-               "tests/test-system-generations.scm"
-               "tests/test-modules-load.scm"
-               "tests/test-machine-facts.scm"
-               "tests/test-luks-passphrase.scm"
-               "tests/test-tpm2-state.scm"
-               "tests/test-tpm-unlock.scm"
-               "tests/test-recovery.scm"
-               "tests/test-uki-menu.scm"
-               "tests/test-device-resolver.scm"
-               "tests/test-commit-root.scm"
-               "tests/test-install-identity.scm"
-               "tests/test-tpm2-enroll.scm"
-               "tests/test-credential-source.scm"
-               "tests/test-kernel-platform.scm"
-               "tests/test-nvidia.scm"
-               "tests/test-prime-run.scm"
-               "tests/test-channels.scm"
-               "tests/test-certificates.scm"
-               "tests/test-deploy.scm"
-               "tests/test-reconfigure.scm"
-               "tests/test-install-orchestration.scm"
-               "tests/test-enroll-orchestration.scm"
-               "tests/test-blue-app.scm"
-               "tests/test-flatpak-actions.scm"
-               "tests/test-substitutes.scm"
-               "tests/test-desktop.scm"
-               "tests/test-mihomo.scm"
-               "tests/test-smartdns.scm"
-               "tests/test-session-env.scm"
-               "tests/test-apps.scm"
-               "tests/test-selection.scm"
-               "tests/test-niri-config.scm"
-               "tests/test-home.scm"
-               "tests/test-fonts-policy.scm"
-               "tests/test-xdg-policy.scm"
-               "tests/test-assets.scm"
-               "tests/test-application-persistence.scm"
-               "tests/test-flatpak-model.scm"
-               "tests/test-flatpak-persistence.scm"
-               "tests/test-flatpak-service.scm"
-               "tests/test-flatpak-reconcile-exec.scm"
-               "tests/test-gsettings.scm"
-               "tests/test-gsettings-reconcile.scm"
-               "tests/test-doc-hygiene.scm"
-               "tests/test-nushell.scm"
-               "tests/test-mission-center.scm"
-               "tests/test-java.scm"
-               "tests/test-seed-once.scm"
-               "tests/test-noctalia-seed.scm"
-               "tests/test-source-hygiene.scm"
-               "tests/test-machine-state-persistence.scm"
-               "tests/test-machine-identity.scm"
-               "tests/test-mixed-authority.scm"
-               "tests/test-gnome-keyring.scm"
-               "tests/test-gnupg.scm"
-               "tests/test-ui-language.scm"
-               "tests/test-vscode.scm"
-               "tests/test-ssh.scm"
-               "tests/test-user-persistence.scm"
-               "tests/test-mount-metadata.scm"
-               "tests/test-session.scm"
-               "tests/test-home-pivot.scm"
-               "tests/test-users.scm"
-               "tests/test-age.scm"
-               "tests/test-secrets.scm"
-               "tests/test-accounts.scm"
-               "tests/test-runtime-exec.scm"
-               "tests/test-store-leakage.scm"
-               "tests/test-readiness.scm")))
+             (case %test-mode
+               ((apps) %app-test-files)
+               ((all) (append %core-test-files %app-test-files))
+               (else %core-test-files))))
  (lambda ()
    (unsetenv "GUIX_CONFIG_FACTS")
    (when (file-exists? %test-facts-file)

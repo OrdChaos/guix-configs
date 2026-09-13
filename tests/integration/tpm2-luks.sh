@@ -18,12 +18,12 @@
 #     是读到 EOF 语义，无法与 --new-keyfile=- 共享 stdin，实测）；
 #   - 解锁验证用 --test-passphrase（无需 root、不建 mapping）。
 #
-# 用法：tools/test-tpm2-luks.sh
+# 用法：tests/integration/tpm2-luks.sh
 # 依赖：swtpm、tpm2-tools（含 libtss2-tcti-swtpm，宿主包）、
 #       cryptsetup。
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 command -v swtpm >/dev/null || { echo "swtpm missing" >&2; exit 1; }
 command -v cryptsetup >/dev/null || { echo "cryptsetup missing" >&2; exit 1; }

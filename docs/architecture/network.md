@@ -118,20 +118,7 @@
 
 ---
 
-## 6. 宿主侧环境约束（已知事实，非仓库责任）
-
-2026-08-27/28 实测两条（宿主侧当时的瞬时状态；当前宿主已恢复干净）：
-
-1. **明文 53 全局劫持**：宿主机/路由器侧残留的 clash fake-ip DNS 对一切端口 53 查询代答（`198.18.x` A + `fdfe:dcba:9876::x` AAAA），连宿主机自身的 `getent` 都被污染。
-2. **直连出站不稳**：订阅 API 直连 TCP 建立后响应被 EOF 掐断。
-
-设计立场：上游 DNS 直连是**自举必需**（D4），因此宿主侧 53 必须可信
-（宿主代理全关/干净的常态）；上述两条约束若复发，直连 DNS 会被污染
-（§7 矩阵第四行）。
-
----
-
-## 7. 降级矩阵
+## 6. 降级矩阵
 
 | 模式 | DNS | 应用流量 | 订阅刷新 | 结论 |
 |---|---|---|---|---|
@@ -156,7 +143,6 @@ smartdns/订阅/流量**天然直连**——所以 TUN off 不是"断网"，而�
 | 手动刷订阅 | `PUT http://127.0.0.1:9090/providers/proxies/airport` |
 | 热改运行配置 | 改 `/run/mihomo/config.yaml` 后 **copy 到 `/var/lib/clash/config.yaml` 再 `PUT /configs {"path":"/var/lib/clash/config.yaml"}`**（SAFE_PATHS 只允许 `-d` 目录）。**不要 `herd restart mihomo`**——它会重跑物化器，从系统世代烘焙的模板重新生成配置，覆盖手工改动 |
 | 清 DNS 假 IP 缓存 | smartdns：`herd stop smartdns` → `rm /tmp/smartdns.cache`（stop 时会回写！）→ `herd start smartdns`；nscd：`herd stop nscd` → `rm /var/db/nscd/hosts` → `herd start nscd` |
-| reconfigure 前置 | 先 push virelith librime 修复并更新 `channels.lock.scm` 的 virelith commit（否则 fcitx5 闭包撞 librime 构建失败）；reconfigure 后 mihomo 为"待替换"态，reboot 换上新世代 |
 
 ---
 

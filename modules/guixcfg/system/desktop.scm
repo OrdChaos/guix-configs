@@ -126,11 +126,7 @@
                ;; helper wrapper，非裸 upstream script；greeter 以
                ;; greetd 的 greeter 用户无认证运行——start_greeter
                ;; authenticate=false，HOME=/var/empty）。
-               ;; 光标异常（倒置 + 登录后幽灵光标）最终确认为宿主
-               ;; virglrenderer 的 bug（virtio GPU 的宿主 GL 后端），
-               ;; 与 greeter 无关——virelith channel 的 cursor patch
-               ;; 已回滚，package 保持 unpatched 上游状态。排查记录
-               ;; 见 docs/operations/vm-testing.md「光标异常排查记录」。
+               ;; 使用 channel 提供的 unpatched upstream greeter。
                (default-session-command
                 (greetd-noctalia-session))))))))
 

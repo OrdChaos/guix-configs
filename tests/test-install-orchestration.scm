@@ -36,12 +36,12 @@
 
 (define %empty-disk-probes
   '((partition-table . #f) (luks-volume . #f) (luks-open . #f)
-    (btrfs-rootfs . #f) (targets-mounted . #f)
-    (facts-file . #f) (luks-uuid . #f)
-    (sb-keys . none) (keystore . #f)
-    (identity . #f) (password-hash . #f)
-    (init-markers . #f) (esp-markers . #f)
-    (commit . unknown) (repo-copied . #f)))
+                           (btrfs-rootfs . #f) (targets-mounted . #f)
+                           (facts-file . #f) (luks-uuid . #f)
+                           (sb-keys . none) (keystore . #f)
+                           (identity . #f) (password-hash . #f)
+                           (init-markers . #f) (esp-markers . #f)
+                           (commit . unknown) (repo-copied . #f)))
 
 ;; 真实 facts 文件（classify-facts 会 load-machine-facts 实际读取——
 ;; 必须指向存在的文件；内容 UUID 与 %complete-probes 的 luks-uuid 一致）。
@@ -57,13 +57,13 @@
 
 (define %complete-probes
   `((partition-table . #t) (luks-volume . #t) (luks-open . #t)
-    (btrfs-rootfs . #t) (targets-mounted . #t) (top-mounted . #t)
-    (facts-file . ,%facts-file)
-    (luks-uuid . "11111111-1111-1111-1111-111111111111")
-    (sb-keys . complete) (keystore . #t)
-    (identity . #t) (password-hash . #t)
-    (init-markers . #t) (esp-markers . #t)
-    (commit . committed) (repo-copied . #t)))
+                           (btrfs-rootfs . #t) (targets-mounted . #t) (top-mounted . #t)
+                           (facts-file . ,%facts-file)
+                           (luks-uuid . "11111111-1111-1111-1111-111111111111")
+                           (sb-keys . complete) (keystore . #t)
+                           (identity . #t) (password-hash . #t)
+                           (init-markers . #t) (esp-markers . #t)
+                           (commit . committed) (repo-copied . #t)))
 
 (test-begin "install-orchestration")
 
@@ -168,7 +168,7 @@
 (test-equal "commit unknown with targets mounted is incompatible (fail closed)"
             'incompatible
             (stage-of (probes-with %complete-probes
-                                  '(commit . unknown))
+                                   '(commit . unknown))
                       'commit-root))
 
 (test-equal "repo complete when the checkout markers are present"
@@ -210,7 +210,7 @@
 (test-assert "plan excludes TPM and firmware PK enrollment"
              (and (string-contains plan-text "TPM enrollment")
                   (string-contains plan-text
-                                  "firmware Secure Boot PK enrollment")))
+                                   "firmware Secure Boot PK enrollment")))
 
 (test-assert "plan shows all stage ids"
              (every (lambda (id)
@@ -266,7 +266,7 @@
 
 (test-equal "system init puts FILE after options and /mnt last"
             '("system" "init"
-              "modules/guixcfg/hosts/laptop.scm" "/mnt")
+                       "modules/guixcfg/hosts/laptop.scm" "/mnt")
             (cdr (member "--" init-argv)))
 
 (define privileged (install-privileged-argv "/bin/blue"
@@ -347,7 +347,7 @@
             (cddr (member "tools/enroll-cli.scm" enroll-cli)))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; repo 复制机制（installation.md 阶段 10 的机制化）
+;;; repo 复制机制（installation.md 阶段 8 的机制化）
 
 (test-equal "repo path is the user-persistence guix-configs backing"
             (string-append "/mnt"
@@ -389,7 +389,7 @@
                                           "/docs"))
               (not (repo-copy-present? %repo-fixture-target))))
 
-(test-assert "repo copy replays the runbook stage 10 sequence via exec (no shell)"
+(test-assert "repo copy replays the runbook stage 8 sequence via exec (no shell)"
              (let ((log '()))
                (install-repository!
                 (lambda (argv) (set! log (cons argv log)) 0)

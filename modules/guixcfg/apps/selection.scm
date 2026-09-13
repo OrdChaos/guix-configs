@@ -24,6 +24,7 @@
 ;;; 兜底报错——本模块不重复实现另一套冲突系统。
 
 (define-module (guixcfg apps selection)
+               #:use-module (guixcfg utils paths)
                #:use-module (gnu home services) ; home-files-service-type
                #:use-module (gnu services)      ; simple-service
                #:use-module (guix gexp)         ; local-file?、local-file-name
@@ -46,10 +47,7 @@
 ;; target 必须是合法的 ~/.config 相对路径：非空、非绝对、无 ".."
 ;; 逃逸（与 repository-file 相同的校验规则）。
 (define (validate-relative-path! target)
-  (unless (and (string? target)
-               (> (string-length target) 0)
-               (not (string-prefix? "/" target))
-               (not (string-contains target "..")))
+  (unless (valid-relative-path? target)
     (error "application-configuration-selection: invalid target path"
            target)))
 

@@ -86,15 +86,15 @@
     (and m (string->number (match:substring m 1)))))
 
 (define* (last-good-system-generation #:optional (path %boot-states-path))
-  "boot-state 注册表记录的 last-good Guix generation 编号；缺失/无效
+         "boot-state 注册表记录的 last-good Guix generation 编号；缺失/无效
 返回 #f。兼容 v2（last-good 是 alist）与 v1（last-good 是整数）。"
-  (let ((alist (false-if-exception (read-boot-state-alist path))))
-    (and alist
-         (let ((lg (assq-ref alist 'last-good)))
-           (cond ((and (list? lg) (assq 'generation lg))
-                  (assq-ref lg 'generation))
-                 ((integer? lg) lg)
-                 (else #f))))))
+         (let ((alist (false-if-exception (read-boot-state-alist path))))
+           (and alist
+                (let ((lg (assq-ref alist 'last-good)))
+                  (cond ((and (list? lg) (assq 'generation lg))
+                         (assq-ref lg 'generation))
+                    ((integer? lg) lg)
+                    (else #f))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 决策
@@ -145,8 +145,8 @@ delete-generations（后者会 reinstall-bootloader，见模块头注释）。"
   (unless (pair? generations)
     (error "no generations to delete"))
   `("guix" "package" "-p" ,profile
-    ,(string-append "--delete-generations="
-                    (string-join (map number->string generations) ","))))
+           ,(string-append "--delete-generations="
+                           (string-join (map number->string generations) ","))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; plan（只读决策；供 plan 显示与 run 执行共用）
@@ -157,41 +157,41 @@ delete-generations（后者会 reinstall-bootloader，见模块头注释）。"
                                  (host #f)
                                  (keep #f)
                                  (delete #f))
-  "计算回收计划（不修改任何状态），返回 alist：
+         "计算回收计划（不修改任何状态），返回 alist：
   existing / current / last-good / mode / keep / to-delete
 MODE 是 'keep（按策略或 --keep N）或 'delete（--delete 显式集合）。
 显式 --delete 必须存在且不得包含 current / last-good（fail closed）；
 显式集合与 --keep 互斥。"
-  (when (and delete keep)
-    (error "--delete and --keep are mutually exclusive"))
-  (let* ((existing (system-generation-numbers profile))
-         (current (system-current-generation profile))
-         (last-good (last-good-system-generation boot-states-path)))
-    (if delete
-      (let ((delete (sort (delete-duplicates delete) <)))
-        (when (null? delete)
-          (error "--delete requires at least one generation"))
-        (for-each
-         (lambda (g)
-           (unless (memv g existing)
-             (error "generation does not exist" g))
-           (when (or (and current (eqv? g current))
-                     (and last-good (eqv? g last-good)))
-             (error "refusing to delete current/last-good generation" g)))
-         delete)
-        `((existing . ,existing)
-          (current . ,current)
-          (last-good . ,last-good)
-          (mode . delete)
-          (keep . #f)
-          (to-delete . ,delete)))
-      (let ((keep (if keep keep (keep-for-host host))))
-        (unless (and (integer? keep) (>= keep 0))
-          (error "keep must be a non-negative integer" keep))
-        `((existing . ,existing)
-          (current . ,current)
-          (last-good . ,last-good)
-          (mode . keep)
-          (keep . ,keep)
-          (to-delete . ,(system-generations-to-delete
-                         existing current last-good keep)))))))
+         (when (and delete keep)
+           (error "--delete and --keep are mutually exclusive"))
+         (let* ((existing (system-generation-numbers profile))
+                (current (system-current-generation profile))
+                (last-good (last-good-system-generation boot-states-path)))
+           (if delete
+             (let ((delete (sort (delete-duplicates delete) <)))
+               (when (null? delete)
+                 (error "--delete requires at least one generation"))
+               (for-each
+                (lambda (g)
+                  (unless (memv g existing)
+                    (error "generation does not exist" g))
+                  (when (or (and current (eqv? g current))
+                            (and last-good (eqv? g last-good)))
+                    (error "refusing to delete current/last-good generation" g)))
+                delete)
+               `((existing . ,existing)
+                 (current . ,current)
+                 (last-good . ,last-good)
+                 (mode . delete)
+                 (keep . #f)
+                 (to-delete . ,delete)))
+             (let ((keep (if keep keep (keep-for-host host))))
+               (unless (and (integer? keep) (>= keep 0))
+                 (error "keep must be a non-negative integer" keep))
+               `((existing . ,existing)
+                 (current . ,current)
+                 (last-good . ,last-good)
+                 (mode . keep)
+                 (keep . ,keep)
+                 (to-delete . ,(system-generations-to-delete
+                                existing current last-good keep)))))))

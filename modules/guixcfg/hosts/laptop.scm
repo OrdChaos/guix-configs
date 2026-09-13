@@ -25,8 +25,10 @@
 ;;; 共享——不再是 host 差异。）
 ;;;
 ;;; 构建（需要 machine facts，见 (guixcfg system file-systems) 头注释）：
-;;;   GUIX_CONFIG_FACTS=<facts> guix time-machine -C channels.lock.scm \
-;;;     -- system build -L "$PWD/modules" -e '(@ (guixcfg hosts laptop) %laptop-os)'
+;;;   GUIX_CONFIG_FACTS=<facts> GUILE_LOAD_PATH="$PWD/modules" \
+;;;     GUILE_LOAD_COMPILED_PATH="$PWD/modules" \
+;;;     guix time-machine -C channels.lock.scm -- system build \
+;;;     -e '(@ (guixcfg hosts laptop) %laptop-os)'
 
 (define-module (guixcfg hosts laptop)
                #:use-module (gnu)                          ; operating-system、user-account、service 等
@@ -129,7 +131,7 @@
 ;; 投影与 NVIDIA transformation。仅用于折叠 account 列表。
 (define %os-without-account-databases
   (make-base-host-operating-system
-   #:host-name "guix-laptop"
+   #:host-name "ordchaos-laptop"
    #:persistent-mount-file-systems %persistent-mount-file-systems
    #:mihomo-machine-state-file-systems %mihomo-machine-state-file-systems
    #:noctalia-greeter-machine-state-file-systems
@@ -147,5 +149,5 @@
 ;; 末尾裸表达式：让本文件同时是 guix system 的入口文件——
 ;; guix system init/reconfigure 加载文件时取最后一个顶层表达式的值
 ;; （daviwil 模式）。因此本文件既是模块 (guixcfg hosts laptop)，又是入口：
-;;   guix system init -L modules modules/guixcfg/hosts/laptop.scm /mnt
+;;   GUILE_LOAD_PATH="$PWD/modules" guix system init modules/guixcfg/hosts/laptop.scm /mnt
 %laptop-os

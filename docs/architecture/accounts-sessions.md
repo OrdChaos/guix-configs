@@ -46,16 +46,15 @@ FFI——上游 `activate-users+groups` 的 flock 在 boot 环境失败会导致
   verify`）在**验证最终 /etc/shadow** 后才 provision；该服务绝不写
   文件。
 
-历史教训：早期独立 password-project writer 用 `(cons hash (cdr
-fields))` 把 hash 写进 name 字段（产生 `$6$…:!:` 坏行、user 名
-丢失），结构测试因用 passwd 格式断言 shadow 而假阳性通过。该
-writer 已删除，credential 注入并入唯一投影 writer。
+Credential 只能由唯一 account projection writer 写入，最终 shadow
+格式与 persistent verifier 必须由结构和运行时测试共同验证。
 
 ## 用户结构事实
 
-`(guixcfg users user)` 的 `%primary-user` 是用户结构事实的唯一来源
-（name/uid/groups/shell/home + password-secret 逻辑引用）；host 只
-select。password hash 不进 evaluator/store。
+`(guixcfg users facts)` 的 `%primary-user` 是用户结构事实的唯一来源
+（name/uid/groups/shell/home + password-secret 逻辑引用）；`users/user`
+负责账户构造并兼容 re-export。host 只 select，password hash 不进
+evaluator/store。
 
 ## Readiness DAG
 

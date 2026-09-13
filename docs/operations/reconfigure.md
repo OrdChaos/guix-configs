@@ -6,7 +6,7 @@
 
 Blue（repository orchestrator）是日常编排入口。已部署系统上 `blue`
 直接来自 **Home profile**（`~/.guix-home/profile/bin/blue`，Blue 是
-一个 application：`(guixcfg apps blue)`，package 来自 pinned bluebox
+一个 application：`(guixcfg apps blue definition)`，package 来自 pinned bluebox
 channel）：
 
 ```bash
@@ -21,7 +21,7 @@ blue firstboot HOST          # 首次启动收敛：reconfigure + enroll（见 i
 blue enroll HOST             # 机器绑定 enrollment（目标系统上；见 installation.md）
 blue gc HOST                 # 删除旧 system generation（不跑 guix gc）
 blue update                  # 重写 channels.lock.scm
-blue check                   # 测试套件
+blue check                   # 核心测试套件（应用专属测试不默认运行）
 ```
 
 **两个 Blue 来源的语义边界**：
@@ -89,7 +89,7 @@ lifecycle,不属于 system provisioning。
   参数必须显式给出 host ID；`build-os all` 构建全部 host（CI 用）。
 - 无参数**绝不 fallback**（尤其不回退 vm）——报错并列出已知 host。
 - host ID 的事实源是 `modules/guixcfg/hosts/*.scm` 的文件名
-  （`(guixcfg hosts selection)` 目录枚举）；不做 hostname 自动检测、
+  （`(guixcfg system deploy)` 目录枚举）；不做 hostname 自动检测、
   不加载完整 operating-system 取 host-name。
 - 文档示例只写当前两个 host，**权威 host list 不在此手工维护**。
 
@@ -227,7 +227,7 @@ GUIX_CONFIG_FACTS=/persist/system/facts/host.scm \
 ```text
 repository root（marker-based，channels.lock.scm 所在目录）
 channels.lock.scm 存在
-modules/ 存在（guix -L 目标）
+modules/ 存在（GUILE_LOAD_PATH 注入目标）
 machine facts：复用 (guixcfg system machine-facts) 的 resolution
   policy（GUIX_CONFIG_FACTS → /persist/system/facts/host.scm）；
   路径存在、可解析、含 boot-critical fact（luks-uuid）

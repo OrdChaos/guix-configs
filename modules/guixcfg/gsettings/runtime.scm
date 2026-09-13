@@ -49,13 +49,13 @@
   "`gsettings list-keys SCHEMA` 的键名列表；schema 不存在（非零
 退出）→ #f。"
   (call-with-values
-      (lambda () (gsettings-runtime-capture
-                  (list gsettings-bin "list-keys" schema)))
-    (lambda (out status)
-      (and (zero? status)
-           (filter (negate string-null?)
-                   (map string-trim-both
-                        (string-split out #\newline)))))))
+   (lambda () (gsettings-runtime-capture
+               (list gsettings-bin "list-keys" schema)))
+   (lambda (out status)
+     (and (zero? status)
+          (filter (negate string-null?)
+                  (map string-trim-both
+                       (string-split out #\newline)))))))
 
 (define (gsettings-runtime-range-type gsettings-bin schema key)
   "`gsettings range SCHEMA KEY` 的浅层类型令牌；失败 → #f。形如
@@ -64,15 +64,15 @@
 '不检查'（Phase 1 不做 GVariant 类型系统，深校验由 dconf load
 接受性兜底）。"
   (call-with-values
-      (lambda () (gsettings-runtime-capture
-                  (list gsettings-bin "range" schema key)))
-    (lambda (out status)
-      (and (zero? status)
-           (let ((tokens (string-tokenize out)))
-             (and (pair? tokens)
-                  (string=? "type" (car tokens))
-                  (pair? (cdr tokens))
-                  (cadr tokens)))))))
+   (lambda () (gsettings-runtime-capture
+               (list gsettings-bin "range" schema key)))
+   (lambda (out status)
+     (and (zero? status)
+          (let ((tokens (string-tokenize out)))
+            (and (pair? tokens)
+                 (string=? "type" (car tokens))
+                 (pair? (cdr tokens))
+                 (cadr tokens)))))))
 
 (define (gsettings-runtime-shallow-value-valid? value type)
   "Phase 1 最小 GVariant 文本校验：TYPE 为 #f（range 不可读或非
@@ -80,17 +80,17 @@
 整数文本；'d' → 数值文本；'s' → 单引号包裹的字符串文本；其余
 类型不检查。"
   (cond ((not type) #t)
-        ((string=? type "b") (member value '("true" "false")))
-        ((member type '("i" "u" "x"))
-         (let ((n (false-if-exception (string->number value))))
-           (and n (integer? n))))
-        ((string=? type "d")
-         (false-if-exception (and (string->number value) #t)))
-        ((string=? type "s")
-         (and (>= (string-length value) 2)
-              (char=? #\' (string-ref value 0))
-              (char=? #\' (string-ref value (1- (string-length value))))))
-        (else #t)))
+    ((string=? type "b") (member value '("true" "false")))
+    ((member type '("i" "u" "x"))
+     (let ((n (false-if-exception (string->number value))))
+       (and n (integer? n))))
+    ((string=? type "d")
+     (false-if-exception (and (string->number value) #t)))
+    ((string=? type "s")
+     (and (>= (string-length value) 2)
+          (char=? #\' (string-ref value 0))
+          (char=? #\' (string-ref value (1- (string-length value))))))
+    (else #t)))
 
 ;;; ── 五态 status ────────────────────────────────────────────
 
@@ -99,32 +99,32 @@
   (let ((keys (gsettings-runtime-schema-keys gsettings-bin schema)))
     (cond ((not keys)
            (list schema key 'missing-schema desired #f))
-          ((not (member key keys))
-           (list schema key 'missing-key desired #f))
-          ((not (gsettings-runtime-shallow-value-valid?
-                 desired (gsettings-runtime-range-type
-                          gsettings-bin schema key)))
-           (list schema key 'invalid-desired-value desired #f))
-          (else
-           (call-with-values
-               (lambda () (gsettings-runtime-capture
-                           (list gsettings-bin "get" schema key)))
-             (lambda (out status)
-               (if (not (zero? status))
-                 (list schema key 'missing-key desired #f)
-                 (let ((current (string-trim-both out)))
-                   (list schema key
-                         (if (string=? desired current)
-                           'synced
-                           'drifted)
-                         desired current)))))))))
+      ((not (member key keys))
+       (list schema key 'missing-key desired #f))
+      ((not (gsettings-runtime-shallow-value-valid?
+             desired (gsettings-runtime-range-type
+                      gsettings-bin schema key)))
+       (list schema key 'invalid-desired-value desired #f))
+      (else
+       (call-with-values
+        (lambda () (gsettings-runtime-capture
+                    (list gsettings-bin "get" schema key)))
+        (lambda (out status)
+          (if (not (zero? status))
+            (list schema key 'missing-key desired #f)
+            (let ((current (string-trim-both out)))
+              (list schema key
+                    (if (string=? desired current)
+                      'synced
+                      'drifted)
+                    desired current)))))))))
 
 (define (gsettings-runtime-status gsettings-bin entries)
   "ENTRIES（((schema key desired) ...)）→ 五态条目列表（按输入
 顺序）。"
   (map (lambda (entry)
          (apply gsettings-runtime-status-entry
-                (cons gsettings-bin entry)))
+           (cons gsettings-bin entry)))
        entries))
 
 ;;; ── 校验问题（apply 的 fail-loud 判据）────────────────────

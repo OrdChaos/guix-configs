@@ -33,6 +33,18 @@
 (test-assert "efi variable probe returns #f for a nonexistent variable"
              (not (efi-variable-byte "Guixcfg-Does-Not-Exist")))
 
+(test-eq "unreadable EFI variables produce unclear firmware state"
+         'unclear
+         (secure-boot-firmware-state (lambda (name) #f)))
+
+(test-eq "readable EFI variables classify enrolled firmware"
+         'enrolled
+         (secure-boot-firmware-state
+          (lambda (name)
+            (cond ((string=? name "SecureBoot") 1)
+              ((string=? name "SetupMode") 0)
+              (else 1)))))
+
 ;;; ────────────────────────────────────────────────────────────
 ;;; 纯分类：固件 / TPM / idempotency
 
@@ -87,7 +99,7 @@
              (and (string-contains plan-text "/dev/tpmrm0")
                   (string-contains plan-text "not enrolled")
                   (string-contains plan-text
-                                  "enroll using current policy")))
+                                   "enroll using current policy")))
 
 (test-assert "enroll plan shows Secure Boot section"
              (and (string-contains plan-text "Secure Boot:")
@@ -204,10 +216,10 @@
 ;; 必须 fail，soft 态也不得伪装成「需 root」）。本机 /persist 不存在
 ;; = 真缺失 → fail。
 (define* (enroll-check-status label #:key (soft? #t))
-  (let ((check (find (lambda (c) (string=? (car c) label))
-                     (enroll-readonly-checks "/repo" "laptop"
-                                             #:soft? soft?))))
-    (car ((cdr check)))))
+         (let ((check (find (lambda (c) (string=? (car c) label))
+                            (enroll-readonly-checks "/repo" "laptop"
+                                                    #:soft? soft?))))
+           (car ((cdr check)))))
 
 (test-equal "SB keys check fails closed when the keydir is truly absent (soft mode)"
             'fail

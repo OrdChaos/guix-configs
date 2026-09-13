@@ -1056,7 +1056,7 @@ secrets ordinary deploy 的产物形态）。"
                 %session-gate-close-message
                 (call-with-input-file (string-append root
                                                      "/run/guixcfg/session-not-ready")
-                  (lambda (p) (read-string p))))
+                                      (lambda (p) (read-string p))))
     (test-equal "SG1: gate directory is 0755"
                 #o755 (stat:perms (stat (string-append root "/run/guixcfg"))))
     ;; open!/close!（runtime 契约，reconfigure 生产路径同款）：

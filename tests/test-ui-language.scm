@@ -25,6 +25,8 @@
 
 (test-runner-current (test-runner-simple))
 
+(primitive-load "tests/manifest.scm")
+
 (define (non-ascii? ch)
   (> (char->integer ch) 127))
 
@@ -116,7 +118,9 @@ usage 帮助文本。"
                         stripped)))
                 (and m #t)))))
        (map (lambda (v) (cons f v)) (scan-lines (numbered-lines f) pred))))
-   (append (scm-files (string-append (getcwd) "/modules"))
+   (append (filter (lambda (file)
+                     (not (string-contains file "/modules/guixcfg/apps/")))
+                   (scm-files (string-append (getcwd) "/modules")))
            (scm-files (string-append (getcwd) "/tools")))))
 
 (define (scan-test-descriptions dir)
@@ -131,7 +135,10 @@ usage 帮助文本。"
                         stripped)))
                 (and m #t)))))
        (map (lambda (v) (cons f v)) (scan-lines (numbered-lines f) pred))))
-   (filter (lambda (f) (not (string-suffix? "test-ui-language.scm" f)))
+   (filter (lambda (f)
+             (and (not (string-suffix? "test-ui-language.scm" f))
+                  (not (member (string-append "tests/" (basename f))
+                               %app-test-files))))
            (scm-files (string-append (getcwd) "/tests")))))
 
 (define (scan-shell-output dirs)
