@@ -42,7 +42,7 @@
        (name 'guix-rust-toolchain)
        (url "https://github.com/OrdChaos/guix-rust-toolchain.git")
        (branch "master")
-       (commit "3b2b747acb101702765a4bd3471666a05acd7edf")
+       (commit "89b384e2a57ddf6eb61fd400753b6e33e4886daa")
        (introduction
         (make-channel-introduction
          "7eb3c7727b341ac671f1b7a06054a8aacc28cb52"
