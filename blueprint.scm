@@ -11,8 +11,8 @@
 ;;;   §1 命令构造复用层 —— 直接使用 (guixcfg system deploy) 的纯 argv
 ;;;   §2 preflight —— doctor（含 git clean gate）与 build preflight（不含）
 ;;;   §3 命令定义 —— doctor / build-os / reconfigure / install /
-;;;                    enroll / firstboot（+ 内部 privileged mode）/
-;;;                    update / flatpak / gsettings
+;;;                    enroll / firstboot / gc（+ 内部 privileged
+;;;                    mode）/ update / flatpak / gsettings
 ;;;   §4 repository-tests testable —— 薄包装 tests/run-tests.scm
 ;;;   §5 入口 —— (blueprint ...) 注册
 ;;;
@@ -203,6 +203,18 @@ primitive-exit 不做 Guile backtrace——非零退出是预期内失败。"
       (%subprocess-fail! status command))
     #t))
 
+(define (%run-soft command)
+  "运行命令但不因非零退出终止，返回解码后的 exit code。用于
+reconfigure 后的 best-effort 维护步骤（失败只 WARNING，不改变已完成
+部署的退出码）。dry-run 下只打印（不执行）。"
+  (if (dry-build?)
+    (begin
+     (format #t "  [dry-run] ~{ ~a~}~%" command)
+     0)
+    (let ((status (popen (car command) (cdr command)
+                         #:working-directory (%repo-root))))
+      (if (number? status) (or (status:exit-val status) 1) (or status 1)))))
+
 (define (%capture command)
   "运行命令并捕获 stdout，返回 (values output status)。用于纯只读
 preflight（git status / describe 等）——blue -n 下也真实执行，以提供
@@ -265,6 +277,22 @@ preflight（git status / describe 等）——blue -n 下也真实执行，以�
          (_ (%usage-error
              (format #f "expected HOST or all; known hosts: ~a"
                      (string-join (known-host-ids root) ", "))))))
+
+(define (%require-gc-arguments arguments)
+  "解析 gc 的位置参数 HOST 与可选选项，返回 (values host extra)：
+EXTRA 是 --keep N / --delete LIST 的原始 argv 片段，原样透传给
+tools/gc-cli.scm（域校验在子进程；blueprint 只校验 host）。"
+  (match arguments
+         ((host . rest)
+          (values
+           (if (host-id? (known-host-ids (%repo-root)) host)
+             host
+             (%usage-error
+              (format #f "unknown host: ~a~%known hosts: ~a~%usage: blue gc HOST [--keep N | --delete LIST]"
+                      host (string-join (known-host-ids (%repo-root)) ", "))))
+           rest))
+         (_ (%usage-error
+             "usage: blue gc HOST [--keep N | --delete LIST]"))))
 
 ;;; ============================================================
 ;;; §2 preflight
@@ -513,14 +541,74 @@ failure)."))
                    "privileged reconfigure mode requires root (effective UID 0)"))
                 (match arguments
                        ((host home-user)
-                        (primitive-exit
-                         (reconfigure-transaction!
-                          host
-                          (if (string-null? home-user)
-                            (user-profile-name %primary-user)
-                            home-user))))
+                        (let ((code (reconfigure-transaction!
+                                     host
+                                     (if (string-null? home-user)
+                                       (user-profile-name %primary-user)
+                                       home-user))))
+                          ;; reconfigure 成功后自动删除旧 system
+                          ;; generation（按 host policy；见 blue gc）。
+                          ;; 只删 generation，不跑 guix gc（见命令帮助）。
+                          ;; best-effort：失败只 WARNING，不改变已完成
+                          ;; 部署的退出码（0）。
+                          (when (zero? code)
+                            (unless (zero? (%run-soft
+                                            (gc-cli-argv (%repo-root)
+                                                         "run" host '())))
+                              (format (current-error-port)
+                                      "WARNING: post-reconfigure generation deletion failed; run 'blue gc ~a' manually~%"
+                                      host)))
+                          (primitive-exit code)))
                        (_ (%usage-error
                            "usage (internal): HOST HOME_USER"))))
+
+;;; ---------- gc（system generation 回收） ----------
+
+(define-command (gc-command arguments)
+                ((invoke "gc")
+                 (category 'maintenance)
+                 (synopsis "Delete old Guix system generations (does not run guix gc)")
+                 (help "HOST [--keep N | --delete LIST]
+Delete old Guix system generations (removes their GC roots). Retention
+defaults to the host storage policy (keep-root-generations); --keep N
+overrides it; --delete LIST removes an explicit generation set
+(comma-separated, ranges like 3..5 allowed). current and last-good
+generations are never deleted, and generation 0 is protected by Guix.
+This does NOT run 'guix gc': deleting generations alone reclaims no
+store space (a global guix gc would also collect on-demand store
+content such as rust-toolchain proxies' realized toolchains). Run
+'guix gc' yourself if you want to reclaim store space. Needs root:
+hands off to a privileged re-execution of this same Blue.
+With blue -n: read-only plan only (existing/current/last-good/
+to-delete); no mutation, no sudo."))
+                (call-with-values
+                 (lambda () (%require-gc-arguments arguments))
+                 (lambda (host extra)
+                   (let ((root (%repo-root)))
+                     (if (dry-build?)
+                       (%exec (gc-cli-argv root "plan" host extra))
+                       (%run (gc-privileged-argv
+                              (car (program-arguments))
+                              (string-append root "/blueprint.scm")
+                              host extra)))))))
+
+;; 内部 privileged mode（Blue self-reexec 的 root phase；与
+;; .reconfigure-root 同一模型）。回收需要写 /var/guix/profiles。
+(define-command (gc-root-command arguments)
+                ((invoke ".gc-root")
+                 (category 'internal)
+                 (synopsis "Internal privileged generation deletion (root only)")
+                 (help "HOST [--keep N | --delete LIST]
+Internal mode for blue gc's sudo handoff. Requires effective UID 0.
+Runs tools/gc-cli.scm run (delete old system generations; no guix gc)."))
+                (unless (zero? (getuid))
+                  (%usage-error
+                   "privileged gc mode requires root (effective UID 0)"))
+                (match arguments
+                       ((host . extra)
+                        (%exec (gc-cli-argv (%repo-root) "run" host extra)))
+                       (_ (%usage-error
+                           "usage (internal): HOST [--keep N | --delete LIST]"))))
 
 ;;; ---------- update ----------
 

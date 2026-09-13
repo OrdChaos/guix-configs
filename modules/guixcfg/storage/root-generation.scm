@@ -44,7 +44,8 @@
                          ;; 用户态确认与清理
                          confirm-boot
                          prune-created-at
-                         generations-to-delete))
+                         generations-to-delete
+                         generations-to-delete*))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 状态文件位置（docs/architecture/storage.md（Root generation））。
@@ -282,12 +283,27 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
 ;;; （recovery 引用的就是 last-good；事务中的 @root-N.new 不是合法
 ;;; generation 名，不会出现在 EXISTING 里，由执行层另行处理。）
 
-(define (generations-to-delete existing state keep)
-  "EXISTING 是磁盘上实际存在的 generation 编号列表。
-返回应删除的编号列表（升序）。"
-  (let* ((protected (delete #f (list (root-state-current-generation state)
-                                     (root-state-last-good-generation state))))
+;; 纯保留算法（两轴共用）：EXISTING 升序编号；CURRENT / LAST-GOOD 永远
+;; 受保护（#f 表示无）；其余保留最新 KEEP 个，返回应删除的编号（升序）。
+;; Btrfs 轴（@root-N）与 Guix 轴（/var/guix/profiles/system-N-link）都用
+;; 它，保证同一 host policy 在两轴语义一致（(guixcfg system
+;; system-generations)）。
+(define (generations-to-delete* existing current last-good keep)
+  "EXISTING 是实际存在的 generation 编号列表（升序或任意序）。
+保留 CURRENT、LAST-GOOD，以及其余中最新 KEEP 个；返回应删除的编号
+列表（升序）。KEEP 必须是非负整数。"
+  (unless (and (integer? keep) (>= keep 0))
+    (error "keep must be a non-negative integer" keep))
+  (let* ((protected (delete #f (list current last-good)))
          (candidates (lset-difference = existing protected))
          ;; 新的在前，保留前 KEEP 个，其余删除
          (sorted (sort candidates >)))
     (sort (drop sorted (min keep (length sorted))) <)))
+
+(define (generations-to-delete existing state keep)
+  "EXISTING 是磁盘上实际存在的 generation 编号列表。
+返回应删除的编号列表（升序）。"
+  (generations-to-delete* existing
+                         (root-state-current-generation state)
+                         (root-state-last-good-generation state)
+                         keep))

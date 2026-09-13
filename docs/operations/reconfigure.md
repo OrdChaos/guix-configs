@@ -19,6 +19,7 @@ blue reconfigure HOST        # 部署（干净提交的工作树）
 blue install HOST DEVICE     # 安装生命周期（LiveCD；见 installation.md）
 blue firstboot HOST          # 首次启动收敛：reconfigure + enroll（见 installation.md）
 blue enroll HOST             # 机器绑定 enrollment（目标系统上；见 installation.md）
+blue gc HOST                 # 删除旧 system generation（不跑 guix gc）
 blue update                  # 重写 channels.lock.scm
 blue check                   # 测试套件
 ```
@@ -61,6 +62,12 @@ blue -n firstboot laptop  # 只读：reconfigure 推导 plan + enrollment 计划
 blue check                # 测试套件（薄包装 tests/run-tests.scm）
 blue update               # 重写 channels.lock.scm（见下）
 blue -n update
+
+# system generation 删除（Guix 轴；见 architecture/storage.md）
+blue gc laptop            # 按 policy 保留
+blue gc laptop --keep 2   # 覆盖保留数
+blue gc laptop --delete 0,3
+blue -n gc laptop         # 只读 plan
 
 # Flatpak 用户应用生命周期（user scope；见 architecture/flatpak.md）
 blue flatpak status [--refresh]
@@ -155,6 +162,40 @@ gate transaction → drift check）成功后，接着执行 `blue enroll HOST`
 - gate 卡住（某 capability failed）：修复后重跑
   `blue reconfigure HOST`，无需 reboot。
 
+## system generation 删除（blue gc）
+
+旧 system generation 的删除是显式入口，不是全自动服务：
+
+```text
+blue gc HOST                    按 host policy（keep-root-generations）
+                                保留最新 generation
+blue gc HOST --keep N           覆盖 policy
+blue gc HOST --delete LIST      LIST 逗号分隔、支持 3..5 区间
+```
+
+- current 与 last-good generation 永不删除；generation 0 由 Guix
+  （delete-generation）保护。
+- 域逻辑在 `(guixcfg system system-generations)`，执行在
+  `tools/gc-cli.scm`（pinned 子进程）；`blue gc` 经 sudo handoff 到
+  内部 `.gc-root`（写 `/var/guix/profiles` 需要 root）。
+- 用 `guix package -p <system-profile> --delete-generations=...` 而非
+  `guix system delete-generations`：后者会 `reinstall-bootloader`，经
+  `lookup-bootloader-by-name` 在 profile 的 `gnu/bootloader` 命名空间查
+  自定义 `uki` bootloader——必然失败（见 storage.md）。
+- `blue reconfigure HOST` 成功后**自动**执行同一步（按 policy，
+  best-effort：失败只 WARNING，不改变已成功部署的退出码）。
+
+**`blue gc` 不运行 `guix gc`**：删除 generation 只是移除 GC root，
+不释放 store 空间。有意不自动 `guix gc`——它是全 store 级的，会连带
+回收所有失去 root 的 on-demand store 内容（例如 guix-rust-toolchain
+代理 realize 的 toolchain：其 GC root 在 ephemeral 的
+`~/.cache/guix-rust-toolchain/roots/`，跨 boot 即失效）。需要释放空间
+时自行显式运行 `guix gc`。
+
+Btrfs 轴（`@root-N` 子卷）由系统 activation 的 `ephemeral-root-cleanup`
+按同一 policy 自动清理（见 architecture/storage.md）；两轴共用保留算法
+与 policy。
+
 ## 手动等价命令
 
 ```bash
@@ -197,6 +238,7 @@ channels.scm 与 channels.lock.scm 结构兼容
 | `blue -n firstboot HOST` | reconfigure 相位 dry-run（同 `-n reconfigure`）+ enroll 相位只读计划（同 `-n enroll`）；零 mutation、无 sudo、无确认 |
 | `blue -n update` | **command preview only**：不联网、不解析新 revision、不写锁；只打印将执行的命令与目标文件。无法预告"将更新到什么 commit" |
 | `blue -n check` | 不真正运行测试套件（Blue testable builtin dry-run 语义，有意为之） |
+| `blue -n gc HOST` | `tools/gc-cli.scm plan`：只读列出 existing/current/last-good/to-delete；不删除、无 sudo |
 | `blue doctor` | 本身只读，检查照常执行 |
 
 ## update

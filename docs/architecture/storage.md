@@ -51,6 +51,28 @@ GPT
 - 状态文件：`/persist/system/root-generations/state.scm`
   （原子写，含 `.prev` 回退）。
 
+**两条正交的 generation 轴**：
+
+```text
+Btrfs 轴   @root-N 子卷（磁盘根快照）
+           → ephemeral-root-cleanup activation（自动，按 keep-root-generations）
+Guix 轴    /var/guix/profiles/system-N-link（声明式 system generation）
+           → blue gc（显式入口 + reconfigure 后自动，按同一 policy）
+```
+
+两轴共用保留算法 `(guixcfg storage root-generation)` 的
+`generations-to-delete*` 与同一 host policy（`keep-root-generations`）：
+保留 current、last-good，再保留最新 N 个。Guix 轴经
+`(guixcfg system system-generations)` 决策、`tools/gc-cli.scm` 执行
+（`guix package -p <system-profile> --delete-generations=...`），细节
+与原因见 `operations/reconfigure.md`。last-good 的 Guix GC root 由
+boot-state/recovery 维护。
+
+Guix 轴只删 generation（移除 GC root），**不运行 `guix gc`**：删除
+generation 不释放 store 空间；有意不自动 `guix gc`（它是全 store 级，
+会连带回收 on-demand store 内容，如 rust-toolchain 代理 realize 的
+toolchain）。store 空间由操作者显式回收。
+
 ## 持久子卷
 
 固定的 8 个持久子卷；除 `/gnu/store` 和 `/var/guix` 外挂载点都在

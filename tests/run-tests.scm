@@ -99,6 +99,7 @@
                "tests/test-validate.scm"
                "tests/test-device.scm"
                "tests/test-root-generation.scm"
+               "tests/test-system-generations.scm"
                "tests/test-modules-load.scm"
                "tests/test-machine-facts.scm"
                "tests/test-luks-passphrase.scm"

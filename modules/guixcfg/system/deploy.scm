@@ -39,8 +39,10 @@
                          reconfigure-privileged-argv
                          install-privileged-argv
                          enroll-privileged-argv
+                         gc-privileged-argv
                          install-cli-argv
                          enroll-cli-argv
+                         gc-cli-argv
                          sb-keygen-tool-argv
                          sb-keystore-tool-argv
                          commit-root-tool-argv
@@ -214,6 +216,15 @@ ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMM
             "-f" ,blueprint-path
             ".enroll-root" ,host))
 
+(define (gc-privileged-argv blue-executable blueprint-path host extra)
+  ;; blue gc 的 privilege handoff（同一模型）：删除 system generation /
+  ;; guix gc 需要写 /var/guix/profiles，root 才能做。EXTRA 是
+  ;; ("--keep" "N") / ("--delete" "LIST") / '() 透传。
+  `("sudo" ,blue-executable
+            ,(string-append "--store-directory=" %privileged-blue-store)
+            "-f" ,blueprint-path
+            ".gc-root" ,host ,@extra))
+
 (define (install-cli-argv root mode host device)
   ;; blue install 的 pinned 执行入口 argv（tools/install-cli.scm）：
   ;; 域执行在子进程（blueprint 进程内加载大模块图会 link 阶段
@@ -229,6 +240,15 @@ ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMM
   (guix-time-machine-argv root %channels-lock-file
                           `("repl" "tools/enroll-cli.scm" "--"
                             ,mode ,host)))
+
+(define (gc-cli-argv root mode host extra)
+  ;; blue gc 的 pinned 执行入口 argv（tools/gc-cli.scm）：域执行在
+  ;; 子进程（blueprint 编译期不导入 system-generations，gsettings/
+  ;; install/enroll 同款决策）。MODE ∈ plan | run；EXTRA 透传
+  ;; ("--keep" "N") / ("--delete" "LIST")。
+  (guix-time-machine-argv root %channels-lock-file
+                          `("repl" "tools/gc-cli.scm" "--"
+                            ,mode ,host ,@extra)))
 
 (define (sb-keygen-tool-argv root keydir)
   ;; tools/secure-boot-keygen.scm 的官方调用形态（工具头部注释）：
