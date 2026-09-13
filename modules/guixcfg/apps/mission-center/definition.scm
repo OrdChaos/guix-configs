@@ -10,10 +10,11 @@
 ;;;
 ;;; 状态边界：全部用户设置经 GSettings schema
 ;;; io.missioncenter.MissionCenter（窗口尺寸、选中页、列排序、刷新
-;;; 间隔、单位制等）——由本仓库 generic GSettings/dconf 投影管理，
-;;; 本定义不额外声明（保持 schema 默认；如需固定偏好在此追加
-;;; gsettings-setting）。源码审计无文件型应用数据（GUI 不写
-;;; user_config_dir/user_data_dir），因此无 persistence rule。
+;;; 间隔、单位制等）——由本仓库 generic GSettings/dconf 投影管理。
+;;; 本定义只固定 first-time-running=false（见下）；其余键保持 schema
+;;; 默认，如需固定偏好在此追加 gsettings-setting。源码审计无文件型
+;;; 应用数据（GUI 不写 user_config_dir/user_data_dir），因此无
+;;; persistence rule。
 ;;; Magpie 的硬件数据库 hw.db 是包内只读数据，wrapper 经
 ;;; MC_MAGPIE_HW_DB 指向 store 路径。
 ;;;
@@ -29,6 +30,7 @@
 (define-module (guixcfg apps mission-center definition)
                #:use-module (guix records)
                #:use-module (guixcfg apps model)          ; application
+               #:use-module (guixcfg gsettings model)     ; gsettings-setting
                #:use-module (virelith packages mission-center) ; mission-center
                #:export (%mission-center
                          %mission-center-desktop-entry))
@@ -38,10 +40,25 @@
 ;; 不在此决定默认应用。
 (define %mission-center-desktop-entry "io.missioncenter.MissionCenter.desktop")
 
+;; 静态偏好（io.missioncenter.MissionCenter，pinned 1.2.0 schema 实测）：
+;;   first-time-running  bool  false
+;; first-time-running 控制首次运行对话框（"Enabling Additional Values"，
+;; src/window.rs 检测到 true 即 show_first_run_dialog()）。本仓库 dconf
+;; 每次 boot 重建（dconf 有意不持久化），schema 默认 true 会让对话框在
+;; 每次重启后首次打开都弹出；固定为 false 使其永不出现（setup 脚本本身
+;; 已在 virelith 包内禁用）。其余键保持 schema 默认（窗口尺寸/选中页等
+;; 由运行时写入 disposable dconf）。
+(define %mission-center-gsettings
+  (list (gsettings-setting
+         (schema "io.missioncenter.MissionCenter")
+         (key "first-time-running")
+         (value "false"))))
+
 (define %mission-center
   (application
    (name 'mission-center)
    ;; 单一包：GUI 与 Magpie 后端、desktop entry、GSettings schema 与
    ;; hw.db 均在其中；依赖经包闭包随 profile 进入（GTK4/libadwaita/
    ;; Mesa/Vulkan loader/nvtop 等）。
-   (home-packages (list mission-center))))
+   (home-packages (list mission-center))
+   (gsettings %mission-center-gsettings)))
