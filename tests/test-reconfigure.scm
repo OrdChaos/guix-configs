@@ -57,8 +57,10 @@
 (define (no-herd-outputs) (lambda (argv) ""))
 
 (define (expected-guix-argv)
-  '("guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
-           "system" "reconfigure" "-L" "/repo/modules"
+  '("env" "GUILE_LOAD_PATH=/repo/modules"
+           "GUILE_LOAD_COMPILED_PATH=/repo/modules"
+           "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
+           "system" "reconfigure"
            "modules/guixcfg/hosts/vm.scm"))
 
 ;; ── 1. system reconfigure 失败 → gate 重开、Home 不动、exit 1 ──

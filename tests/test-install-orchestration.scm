@@ -258,12 +258,14 @@
              (and (member "-C" init-argv)
                   (member "/repo/channels.lock.scm" init-argv)))
 
-(test-assert "system init -L is absolute"
-             (equal? "/repo/modules"
-                    (and=> (member "-L" init-argv) cadr)))
+(test-assert "system init injects modules via GUILE_LOAD_PATH"
+             (member "GUILE_LOAD_PATH=/repo/modules" init-argv))
+
+(test-assert "system init never puts modules on the package search path (-L)"
+             (not (member "-L" init-argv)))
 
 (test-equal "system init puts FILE after options and /mnt last"
-            '("system" "init" "-L" "/repo/modules"
+            '("system" "init"
               "modules/guixcfg/hosts/laptop.scm" "/mnt")
             (cdr (member "--" init-argv)))
 

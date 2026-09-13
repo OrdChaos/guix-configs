@@ -30,6 +30,7 @@
                          host-source-absolute-path
                          host-id?
                          require-host-id
+                         modules-load-path-env
                          guix-time-machine-argv
                          system-build-argv
                          system-reconfigure-argv
@@ -116,18 +117,33 @@ closed，不静默返回空表）。"
 
 ;;; ---------- argv 构造（纯函数） ----------
 
+;; 库模块经 GUILE_LOAD_PATH/GUILE_LOAD_COMPILED_PATH 注入子进程，绝不
+;; 用 -L：-L/--load-path 会把 modules/ 加进「包搜索路径」
+;; （%package-module-path），guix system 的 fold-packages 会遍历并加载
+;; 其中每个 .scm（含非模块的 gsettings/runtime.scm 与 OS 入口文件），
+;; 污染模块缓存——实测导致 %applications/%guix-home 未绑定。GUILE_LOAD_PATH
+;; 只影响 Guile 的 %load-path，包发现不遍历（对齐 alezost/guix-config 的
+;; 做法：GUIX_PACKAGE_PATH 只放包，其余模块走 GUILE_LOAD_PATH）。
+(define (modules-load-path-env root)
+  "env(1) argv 前缀：把 ROOT/modules 注入子进程的
+GUILE_LOAD_PATH/GUILE_LOAD_COMPILED_PATH。"
+  `("env"
+    ,(string-append "GUILE_LOAD_PATH=" root "/" %modules-dir)
+    ,(string-append "GUILE_LOAD_COMPILED_PATH=" root "/" %modules-dir)))
+
 (define (guix-time-machine-argv root channels-file subcommand)
-  "构造锁定频道的 guix 命令 argv。ROOT 必须为绝对路径；CHANNELS-FILE
-是仓库根相对文件名；SUBCOMMAND 是 time-machine -- 之后的参数列表。"
-  `("guix" "time-machine" "-C" ,(string-append root "/" channels-file)
-           "--" ,@subcommand))
+  "构造锁定频道的 guix 命令 argv（前缀注入 modules load path env）。
+ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMMAND
+是 time-machine -- 之后的参数列表。"
+  (append (modules-load-path-env root)
+          `("guix" "time-machine" "-C" ,(string-append root "/" channels-file)
+                   "--" ,@subcommand)))
 
 (define (system-subcommand-argv root host action extra)
-  "guix system 子命令 argv：-L 必须是绝对路径（AGENT.md：source-relative
-local-file 在相对 load-path 下 lowering 阶段解析失败），host 文件按
-host-source-relative-path 的权威相对路径。"
+  "guix system 子命令 argv：host 文件按 host-source-relative-path 的
+权威相对路径；库模块经 guix-time-machine-argv 的 GUILE_LOAD_PATH 注入
+（不用 -L，见 modules-load-path-env）。"
   `("system" ,action ,@extra
-              "-L" ,(string-append root "/" %modules-dir)
               ,(host-source-relative-path host)))
 
 (define* (system-build-argv root host #:key dry-run?)
@@ -152,13 +168,13 @@ host-source-relative-path 的权威相对路径。"
 
 (define (system-init-argv root host)
   ;; blue install 的 guix system init argv：pinned channels.lock.scm、
-  ;; 绝对 -L、显式 host 文件、目标 /mnt。guix system init 的语法是
+  ;; 显式 host 文件、目标 /mnt（库模块经 GUILE_LOAD_PATH 注入，不用
+  ;; -L，见 modules-load-path-env）。guix system init 的语法是
   ;; FILE 在选项之后、TARGET 最后——/mnt 必须放末尾（放前面会被当
   ;; 成 FILE：failed to load '/mnt': Is a directory，VM 实测）。
   ;; 调用方负责已挂好 /mnt 并设置 GUIX_CONFIG_FACTS。
   (guix-time-machine-argv root %channels-lock-file
                           `("system" "init"
-                            "-L" ,(string-append root "/" %modules-dir)
                             ,(host-source-relative-path host)
                             "/mnt")))
 
@@ -217,12 +233,11 @@ host-source-relative-path 的权威相对路径。"
 (define (sb-keygen-tool-argv root keydir)
   ;; tools/secure-boot-keygen.scm 的官方调用形态（工具头部注释）：
   ;; pinned shell + keygen manifest 提供 ukify，guix repl 执行工具。
-  ;; -L 必需：工具自身不带 load path（2026-08 实测 no code for
-  ;; module (guixcfg storage model)；installation.md 阶段 4）。
+  ;; 工具自身不带 load path；模块经 GUILE_LOAD_PATH 注入（不用 -L，
+  ;; 见 modules-load-path-env）。
   (guix-time-machine-argv root %channels-lock-file
                           `("shell" "-m" "manifests/secure-boot-keygen.scm"
                             "--" "guix" "repl"
-                            "-L" ,(string-append root "/" %modules-dir)
                             "tools/secure-boot-keygen.scm" ,keydir)))
 
 (define (sb-keystore-tool-argv root keydir)
@@ -231,13 +246,12 @@ host-source-relative-path 的权威相对路径。"
   ;; 外层 shell 提供 efitools/sbsigntools/openssl 二进制；内层用
   ;; pinned repl（非 guix repl——工具 import (virelith packages
   ;; secure-boot)，宿主 guix current 无频道模块时会
-  ;; no code for module，VM 实测）。
+  ;; no code for module，VM 实测）。模块经 GUILE_LOAD_PATH 注入。
   (guix-time-machine-argv root %channels-lock-file
                           `("shell" "-m" "manifests/secure-boot-enroll.scm"
                             "--" "guix" "time-machine" "-C"
                             ,(string-append root "/" %channels-lock-file)
                             "--" "repl"
-                            "-L" ,(string-append root "/" %modules-dir)
                             "tools/secure-boot-enroll.scm" ,keydir)))
 
 (define (commit-root-tool-argv root target)

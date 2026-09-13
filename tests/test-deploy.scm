@@ -1,10 +1,11 @@
 ;;; (guixcfg system deploy) argv 构造、git gate 解析与 host 枚举测试。
 ;;; 由 tests/run-tests.scm 加载运行（从仓库根目录）。
 ;;;
-;;; 断言对象是纯 argv 列表：pinned channels.lock.scm、绝对 -L、
-;;; 正确 host module、无 shell-string 拼接、sudo 边界、
-;;; reconfigure -n 不经过 tools/reconfigure.sh、update 用可变
-;;; channels.scm。
+;;; 断言对象是纯 argv 列表：pinned channels.lock.scm、库模块经
+;;; GUILE_LOAD_PATH 注入（绝不用 -L——-L 会进包搜索路径，触发
+;;; guix system 的 fold-packages 遍历并污染模块缓存）、正确 host
+;;; module、无 shell-string 拼接、sudo 边界、reconfigure -n 不经过
+;;; tools/reconfigure.sh、update 用可变 channels.scm。
 ;;;
 ;;; host 枚举用 fixture 目录 tests/fixtures/hosts-scan/：vm.scm、
 ;;; laptop.scm、.hidden.scm（dot）、old.scm~（backup）、notes.txt
@@ -24,6 +25,12 @@
 
 (define (option-value argv opt)
   (and=> (member opt argv) cadr))
+
+(define (env-value argv var)
+  "从 env(1) 前缀 argv 提取 VAR=... 的值。"
+  (let ((prefix (string-append var "=")))
+    (and=> (find (lambda (x) (string-prefix? prefix x)) argv)
+           (cut substring <> (string-length prefix)))))
 
 (define (no-shell-metacharacters? argv)
   "argv 不得是 shell-string 拼接：任何元素都不能包含 && / ; / |。"
@@ -109,9 +116,12 @@
                   (member "-C" build-argv)
                   (member "/repo/channels.lock.scm" build-argv)))
 
-(test-equal "build-os -L is absolute"
+(test-equal "build-os injects modules via GUILE_LOAD_PATH"
             "/repo/modules"
-            (option-value build-argv "-L"))
+            (env-value build-argv "GUILE_LOAD_PATH"))
+
+(test-assert "build-os never puts modules on the package search path (-L)"
+             (not (member "-L" build-argv)))
 
 (test-equal "build-os targets the host module (authoritative relative path)"
             "modules/guixcfg/hosts/vm.scm"
@@ -135,8 +145,10 @@
 
 (test-assert "reconfigure -n runs guix system reconfigure --dry-run"
              (let ((tail (cdr (member "--" reconfigure-dry-argv))))
-               (and (equal? (take tail 4) '("system" "reconfigure" "--dry-run" "-L"))
-                    (equal? "/repo/modules" (option-value reconfigure-dry-argv "-L")))))
+               (and (equal? (take tail 3) '("system" "reconfigure" "--dry-run"))
+                    (equal? "/repo/modules"
+                            (env-value reconfigure-dry-argv "GUILE_LOAD_PATH"))
+                    (not (member "-L" reconfigure-dry-argv)))))
 
 (test-assert "reconfigure -n never enters the privileged transaction (no sudo, no script)"
              (and (not (member "sudo" reconfigure-dry-argv))
@@ -162,9 +174,11 @@
              (no-shell-metacharacters?
               (reconfigure-privileged-argv "/store/blue" "/repo/blueprint.scm" "vm" "alice")))
 
-(test-equal "system-reconfigure-argv (transaction core) is pinned and absolute -L"
-            '("guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
-                     "system" "reconfigure" "-L" "/repo/modules" "modules/guixcfg/hosts/vm.scm")
+(test-equal "system-reconfigure-argv (transaction core) is pinned, env-injected modules"
+            '("env" "GUILE_LOAD_PATH=/repo/modules"
+                     "GUILE_LOAD_COMPILED_PATH=/repo/modules"
+                     "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
+                     "system" "reconfigure" "modules/guixcfg/hosts/vm.scm")
             (system-reconfigure-argv %root "vm"))
 
 (test-assert "system-reconfigure-argv (normal) has no --dry-run"
