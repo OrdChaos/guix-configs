@@ -205,11 +205,16 @@
             '("env" "GUILE_LOAD_PATH=/repo/modules"
                      "GUILE_LOAD_COMPILED_PATH=/repo/modules"
                      "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
-                     "system" "reconfigure" "modules/guixcfg/hosts/vm.scm")
+                     "system" "reconfigure" "--no-kexec"
+                     "modules/guixcfg/hosts/vm.scm")
             (system-reconfigure-argv %root "vm"))
 
 (test-assert "system-reconfigure-argv (normal) has no --dry-run"
              (not (member "--dry-run" (system-reconfigure-argv %root "vm"))))
+
+(test-assert "reconfigure disables the default kexec preload (--no-kexec)"
+             (and (member "--no-kexec" (system-reconfigure-argv %root "vm"))
+                  (member "--no-kexec" reconfigure-dry-argv)))
 
 ;; ---- update ----
 

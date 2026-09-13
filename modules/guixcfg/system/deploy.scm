@@ -155,18 +155,30 @@ ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMM
                                  (system-subcommand-argv root host "build"
                                                          (if dry-run? '("--dry-run") '()))))
 
+;; reconfigure 的 guix 选项：--no-kexec 关闭 pinned guix 默认开启的
+;; kexec 预载（reconfigure 完成时用 kexec_file_load 把新 kernel/initrd
+;; 装进内存，供 `reboot --kexec` 免固件重启）。本系统不需要该步骤，
+;; 且它要打开新 kernel/initrd。gnu/system.scm 无声明式开关，只能传
+;; CLI flag（pinned guix 的 load-for-kexec? 默认 #t）。
+(define %reconfigure-options '("--no-kexec"))
+
 (define (system-reconfigure-argv root host)
   ;; blue reconfigure 的 root phase 实际执行的 guix argv（无
   ;; --dry-run）——(guixcfg system reconfigure) 事务的核心子进程。
   (guix-time-machine-argv root %channels-lock-file
-                          (system-subcommand-argv root host "reconfigure" '())))
+                          (system-subcommand-argv root host "reconfigure"
+                                                  %reconfigure-options)))
 
 (define (system-reconfigure-dry-run-argv root host)
   ;; blue -n reconfigure 的 argv：直接 guix system reconfigure --dry-run
   ;; （验证 system derivation/build plan），绝不进入 privileged
-  ;; transaction（gate/herd/Home 热激活不参与 dry-run）。
+  ;; transaction（gate/herd/Home 热激活不参与 dry-run）。选项与真实
+  ;; reconfigure 保持一致（--dry-run 下 --no-kexec 无副作用，仅让预览
+  ;; 与真实 argv 同形）。
   (guix-time-machine-argv root %channels-lock-file
-                          (system-subcommand-argv root host "reconfigure" '("--dry-run"))))
+                          (system-subcommand-argv root host "reconfigure"
+                                                  (cons "--dry-run"
+                                                        %reconfigure-options))))
 
 (define (system-init-argv root host)
   ;; blue install 的 guix system init argv：pinned channels.lock.scm、

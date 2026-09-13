@@ -127,7 +127,7 @@ root 进程的 Blue store 指向 /run 的项目命名空间，绝不向用户仓
 
 ```text
 关闭 login gate（新 session 拒绝；已有 session 不动）
-  → guix time-machine … system reconfigure
+  → guix time-machine … system reconfigure --no-kexec
   → shepherd 升级自动 restart 变化的 one-shot 服务
     （runtime secrets 代际发布、account verify、Home 热激活）
   → gvfs-mount-metadata one-shot 每轮落入 to-start 重跑（pinned guix
@@ -148,6 +148,12 @@ system 成功 + Home 失败   → gate 保持关闭，exit 2；
                             修复后重跑 blue reconfigure HOST
                             恢复（无需 reboot）
 ```
+
+reconfigure 的 guix argv 固定带 `--no-kexec`：pinned guix 默认在
+reconfigure 完成时用 `kexec_file_load` 把新 kernel/initrd 预载进内存
+（供 `reboot --kexec` 免固件重启）；本系统不需要，显式关闭。
+上游 Guix 的 operating-system 定义没有声明式开关，只能传 CLI flag
+（`deploy.scm` 的 `%reconfigure-options`；dry-run argv 同形）。
 
 `blue firstboot HOST` = 同一 reconfigure 机制（doctor → handoff →
 gate transaction → drift check）成功后，接着执行 `blue enroll HOST`
@@ -200,9 +206,14 @@ Btrfs 轴（`@root-N` 子卷）由系统 activation 的 `ephemeral-root-cleanup`
 
 ```bash
 GUIX_CONFIG_FACTS=/persist/system/facts/host.scm \
-  guix time-machine -C channels.lock.scm -- system reconfigure \
-  -L "$PWD/modules" modules/guixcfg/hosts/vm.scm
+  env GUILE_LOAD_PATH="$PWD/modules" GUILE_LOAD_COMPILED_PATH="$PWD/modules" \
+  guix time-machine -C channels.lock.scm -- system reconfigure --no-kexec \
+  modules/guixcfg/hosts/vm.scm
 ```
+
+（库模块经 `GUILE_LOAD_PATH` 注入，不用 `-L`——`-L` 会把
+`modules/` 加进包搜索路径，见 `deploy.scm` 的 `modules-load-path-env`。
+`--no-kexec` 见「正式入口的机制」。）
 
 日常验证：`guix system describe`、`herd status`、`guix home` 链接。
 
