@@ -34,7 +34,8 @@ atomic replace（write temp → rename）产生新 inode，破坏 hardlink；
    persistent；source 是 ciphertext + identity，运行时解密；
 3. Guix/UKI/build artifacts — generated/immutable deployment
    artifacts；
-4. 必须生成的 cache/index — 可重建且 ephemeral。
+4. 必须生成的 cache/index — 可重建且 ephemeral（唯一显式例外：
+   Guix channel cache，见 Persistence inventory）。
 
 ## Persistence inventory
 
@@ -44,6 +45,7 @@ atomic replace（write temp → rename）产生新 inode，破坏 hardlink；
 | `/var/guix` | `@persist-var-guix` | `/var/guix` | direct（安装期不挂） | yes | no |
 | user dirs | `/persist/data-home/<user>/<d>` | `/home/<user>/<d>` | directory bind | yes | no |
 | guix-configs | `/persist/data-home/<user>/guix-configs` | `/home/<user>/guix-configs` | directory bind | yes | no |
+| Guix channel cache | `/persist/data-home/<user>/cache-guix` | `/home/<user>/.cache/guix` | directory bind | yes | no |
 | SSH host keys | `/persist/system/ssh/ssh_host_ed25519_key` | sshd HostKey | direct reference | yes | no |
 | **machine-id** | **`/persist/system/machine-id`** | **`/etc/machine-id`** | **activation projection** | **yes** | **no** |
 | age identity | `/persist/system/keys/age/identity` | secrets 解密 | direct reference | yes | no |
@@ -58,6 +60,16 @@ atomic replace（write temp → rename）产生新 inode，破坏 hardlink；
 **Guix Home 是 derived state**：`~/.guix-home`、声明式 dotfiles 由
 官方 guix-home-service-type activate 经 symlink-manager 恢复，不搬进
 `/persist/data-home`。
+
+**Guix channel cache 是 cache ephemeral 的显式例外**：`guix
+time-machine -C channels.lock.scm` 把各频道 git 仓库抓到
+`$XDG_CACHE_HOME/guix`；无状态 `/home` 下每次 reconfigure 都重新
+clone 全部频道（guix 仓库最大）。经 selected user persistence
+（`(guixcfg system user-persistence)` 的 `%persistent-user-dirs`，
+backing `cache-guix` → consumer `.cache/guix`）持久化，只为消除
+重复抓取。consumer 精确到单个目录，绝不持久化整个 `~/.cache`；
+cache 内容可重建（guix 对缺失/过期 checkout 自愈），不构成
+canonical mutable state。
 
 ## Application persistence（/persist/data-app）
 

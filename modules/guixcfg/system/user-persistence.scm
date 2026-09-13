@@ -47,7 +47,17 @@
 
 ;; 持久化用户数据（XDG user directories 全集，与 (guixcfg home xdg)
 ;; 的 %xdg-user-dirs-service 对应——一致性由 tests/test-user-persistence.scm
-;; 回归）+ 仓库 checkout。
+;; 回归）+ 仓库 checkout + Guix channel cache。
+;;
+;; Guix channel cache（backing cache-guix → consumer $HOME/.cache/guix）：
+;; `guix time-machine -C channels.lock.scm` 把各频道 git 仓库抓到
+;; $XDG_CACHE_HOME/guix；无状态 /home 下每次 reconfigure 都要重新
+;; clone 全部频道（guix 仓库最大，数分钟）。这是本系统唯一被持久化的
+;; cache：consumer 精确到 ~/.cache/guix 一个目录，绝不持久化整个
+;; ~/.cache（AGENT.md §12）。cache 内容可重建（guix 对缺失/过期
+;; checkout 自愈），持久化只为消除 reconfigure 的重复抓取，不构成
+;; canonical mutable state——是 docs/architecture/persistence.md
+;; "Projection exceptions" 第 4 条（cache ephemeral）的显式例外。
 ;;
 ;; 明确不持久化 $HOME/.local/share/Trash（home trash）：GLib 的
 ;; g_local_file_trash 按 st_dev 把普通 HOME 文件判为 home trash
@@ -65,7 +75,9 @@
         (persistent-user-dir (backing "Pictures") (consumer "Pictures"))
         (persistent-user-dir (backing "Public") (consumer "Public"))
         (persistent-user-dir (backing "Templates") (consumer "Templates"))
-        (persistent-user-dir (backing "Videos") (consumer "Videos"))))
+        (persistent-user-dir (backing "Videos") (consumer "Videos"))
+        ;; Guix channel checkout / profile cache（见上）。
+        (persistent-user-dir (backing "cache-guix") (consumer ".cache/guix"))))
 
 (define (user-persistence-file-systems user)
   "持久化用户数据的 bind mount 声明（/persist/data-home/USER/<backing>

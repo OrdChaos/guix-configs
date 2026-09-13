@@ -64,6 +64,21 @@
                                 "Pictures" "Projects" "Public" "Templates"
                                 "Videos")))
 
+;; ── Guix channel cache 持久化（唯一持久化 cache；精确到
+;;    ~/.cache/guix，绝不持久化整个 ~/.cache）──────────────────
+(test-assert "guix channel cache is persisted at ~/.cache/guix"
+             (let ((d (find (lambda (d)
+                              (string=? ".cache/guix"
+                                        (persistent-user-dir-consumer d)))
+                            %persistent-user-dirs)))
+               (and d
+                    (string=? "cache-guix" (persistent-user-dir-backing d)))))
+
+(test-assert "whole ~/.cache is NOT persisted"
+             (not (any (lambda (d)
+                         (string=? ".cache" (persistent-user-dir-consumer d)))
+                       %persistent-user-dirs)))
+
 ;; ── home trash 不持久化（GLib 实证：独立 mount 破坏普通 HOME
 ;;    文件的 trash——st_dev 判定走 home trash，rename 跨 mount
 ;;    EXDEV；docs/architecture/home.md）────────────────────────
