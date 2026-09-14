@@ -10,7 +10,7 @@
 ;;;     → guix time-machine … system reconfigure
 ;;;     → shepherd 升级自动 restart 变化的 one-shot 服务（secrets
 ;;;       代际发布、password 投影、Home 热激活）
-;;;     → 验证：Home 链接状态 + 各 readiness capability 无 failed
+;;;     → 验证：Home 链接状态 + 各 readiness capability 已就绪
 ;;;     → open gate
 ;;;
 ;;; 为什么需要显式热激活验证：`guix system reconfigure` 的服务升级
@@ -32,17 +32,17 @@
 ;;;
 ;;; 可注入边界（单元测试用；不做真实 system reconfigure）：
 ;;;   run-command     argv → exit status
-;;;   command-output  argv → stdout 字符串（herd status 捕获）
+;;;   service-ready? capability → Boolean（Shepherd protocol 状态）
 ;;;   sleep-proc      secs → #t
 ;;;   gate-dir / home-dir / root   文件系统与路径边界
-;;; 生产默认值：system* / invoke-capture / sleep /
+;;; 生产默认值：system* / with-shepherd-action / sleep /
 ;;; /run/guixcfg / /home/<home-user> / repository-root。
 
 (define-module (guixcfg system reconfigure)
+               #:use-module (gnu services herd)       ; structured Shepherd status
                #:use-module (guixcfg system deploy)   ; system-reconfigure-argv
                #:use-module (guixcfg system session-gate) ; gate 唯一 authority（path/close/open/message）
                #:use-module (guixcfg utils repository-source) ; repository-root
-               #:use-module (guixcfg utils process)   ; invoke-capture
                #:use-module (guixcfg home pivot)      ; remove-stale-pivot!
                #:use-module (ice-9 format)
                #:use-module (srfi srfi-1)             ; find
@@ -78,24 +78,46 @@
   (and=> (symlink-target home-link)
          (cut string-prefix? "/gnu/store/" <>)))
 
-(define (readiness-capability-started? capability output)
-  "OUTPUT 是否明确表示 CAPABILITY 已启动。兼容 Shepherd 在不同服务
-状态形态下使用的两种成功文本；未知输出仍 fail closed。"
-  (and (string? output)
-       (or (string-contains output "It is started.")
-           (string-contains
-            output
-            (format #f "Service ~a has been started."
-                    (symbol->string capability))))))
+(define (shepherd-status-ready? properties)
+  "Shepherd status 的结构化 PROPERTIES 是否表示服务已就绪。
+普通服务必须 running；one-shot 服务必须有成功完成的启动记录。"
+  (define (property key)
+    (let ((entry (assq key properties)))
+      (and entry (pair? (cdr entry)) (cadr entry))))
+  (let ((status (property 'status))
+        (one-shot? (property 'one-shot?))
+        (changes (or (property 'status-changes) '()))
+        (failures (or (property 'startup-failures) '())))
+    (or (eq? status 'running)
+        (and one-shot?
+             (eq? status 'stopped)
+             (null? failures)
+             (any (lambda (change)
+                    (and (pair? change)
+                         (eq? (car change) 'starting)))
+                  changes)))))
+
+(define (shepherd-service-ready? capability)
+  "通过 Shepherd socket protocol 判断 CAPABILITY 是否已就绪。
+服务缺失、未知 protocol reply 或查询异常均返回 #f。"
+  (false-if-exception
+   (with-shepherd-action capability ('status) results
+     (let ((service (and (pair? results) (car results))))
+       (and (pair? service)
+            (eq? (car service) 'service)
+            (pair? (cdr service))
+            (let ((version (cadr service)))
+              (and (pair? version)
+                   (eq? (car version) 'version)
+                   (pair? (cdr version))
+                   (zero? (cadr version))))
+            (shepherd-status-ready? (cddr service)))))))
 
 (define* (reconfigure-transaction! host home-user
                                    #:key
                                    (root (repository-root))
                                    (run-command (lambda (argv) (apply system* argv)))
-                                   (command-output
-                                    (lambda (argv)
-                                      (false-if-exception
-                                       (apply invoke-capture argv))))
+                                    (service-ready? shepherd-service-ready?)
                                    (sleep-proc (lambda (secs) (sleep secs) #t))
                                    (gate-dir %gate-directory)
                                    (home-dir (string-append "/home/" home-user)))
@@ -161,21 +183,17 @@ HOST 与 HOME-USER 由调用方显式传入（Blue 的 privilege handoff）。"
                                   "reconfigure: system generation switched OK, but Home hot-activation~%  FAILED (old Home: ~a; system is NOT rolled back).~%  Gate remains CLOSED (new interactive sessions refused).~%  Investigate: pivot residue ~a, or ~a occupied by a non-symlink.~%  Fix, then re-run blue reconfigure ~a to recover without reboot.~%"
                                   (or old-home "none") pivot home-link host)
                           2)
-                         ;; 5. readiness 复查：每个 capability 必须明确 started。
-                         ;; 查询失败、服务缺失与未知输出均 fail closed。
-                         (let ((failed
-                                (find
-                                  (lambda (svc)
-                                    (let ((out (command-output
-                                                `("herd" "status"
-                                                         ,(symbol->string svc)))))
-                                      (not (readiness-capability-started?
-                                            svc out))))
-                                  %readiness-capabilities)))
+                          ;; 5. readiness 复查：直接读取 Shepherd protocol；
+                          ;; running 服务或成功完成的 one-shot 才算 ready。
+                          (let ((failed
+                                 (find
+                                   (lambda (svc)
+                                     (not (service-ready? svc)))
+                                   %readiness-capabilities)))
                             (if failed
                               (begin
                                (format (current-error-port)
-                                       "reconfigure: capability ~a was not confirmed started; gate remains CLOSED.~%  Fix the cause, then re-run blue reconfigure ~a to recover.~%"
+                                        "reconfigure: capability ~a was not confirmed ready; gate remains CLOSED.~%  Fix the cause, then re-run blue reconfigure ~a to recover.~%"
                                        failed host)
                               2)
                              (begin

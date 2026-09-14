@@ -2,7 +2,7 @@
 ;;; 由 tests/run-tests.scm 加载运行（从仓库根目录）。
 ;;;
 ;;; 不触碰真实 /run/guixcfg、真实 HOME、不做真实 system
-;;; reconfigure：全部经可注入边界（run-command / command-output /
+;;; reconfigure：全部经可注入边界（run-command / service-ready? /
 ;;; sleep-proc / gate-dir / home-dir / root）在 /tmp 沙箱内断言
 ;;; transaction 的 gate 状态机与 exit code 契约（0/1/2）。
 
@@ -54,12 +54,33 @@
 (define (ready-home! home-dir)
   (symlink %fake-store-home (home-link home-dir)))
 
-;; readiness 必须由 herd 明确报告 started。
-(define (started-herd-outputs)
-  (lambda (argv)
-    (string-append "Service " (last argv) " has been started.")))
+;; readiness 使用 Shepherd protocol 的结构化状态。
+(define (all-services-ready? service) #t)
 
-(define (legacy-started-herd-outputs) (lambda (argv) "It is started."))
+(define shepherd-status-ready?
+  (@@ (guixcfg system reconfigure) shepherd-status-ready?))
+
+(test-assert "structured running service is ready"
+  (shepherd-status-ready?
+   '((status running) (one-shot? #f)
+     (status-changes ((running . 20))) (startup-failures ()))))
+
+(test-assert "successfully completed one-shot is ready"
+  (shepherd-status-ready?
+   '((status stopped) (one-shot? #t)
+     (status-changes ((stopped . 20) (starting . 19)))
+     (startup-failures ()))))
+
+(test-assert "never-started one-shot is not ready"
+  (not (shepherd-status-ready?
+        '((status stopped) (one-shot? #t)
+          (status-changes ()) (startup-failures ())))))
+
+(test-assert "failed one-shot is not ready"
+  (not (shepherd-status-ready?
+        '((status stopped) (one-shot? #t)
+          (status-changes ((stopped . 20) (starting . 19)))
+          (startup-failures (20))))))
 
 (define (expected-guix-argv)
   '("env" "GUILE_LOAD_PATH=/repo/modules"
@@ -84,7 +105,7 @@
      (lambda (argv)
        (set! log (cons argv log))
        (if (equal? argv (expected-guix-argv)) 1 0))
-     #:command-output (started-herd-outputs)
+     #:service-ready? all-services-ready?
      #:sleep-proc (lambda (s) #t)))
   (test-equal "system failure: exit code 1" 1 result)
   (test-assert "system failure: gate reopened" (not (gate-closed? gate-dir)))
@@ -106,7 +127,7 @@
      #:gate-dir gate-dir
      #:home-dir home-dir
      #:run-command (lambda (argv) (set! log (cons argv log)) 0)
-     #:command-output (started-herd-outputs)
+     #:service-ready? all-services-ready?
      #:sleep-proc (lambda (s) #t)))
   (test-equal "unsafe pivot: exit code 2" 2 result)
   (test-assert "unsafe pivot: gate stays closed" (gate-closed? gate-dir))
@@ -130,7 +151,7 @@
        (if (and (equal? (car argv) "herd")
                 (equal? (cadr argv) "restart"))
          1 0))
-     #:command-output (started-herd-outputs)
+     #:service-ready? all-services-ready?
      #:sleep-proc (lambda (s) #t)))
   (test-equal "herd restart failure: exit code 2" 2 result)
   (test-assert "herd restart failure: gate stays closed" (gate-closed? gate-dir)))
@@ -148,7 +169,7 @@
      #:gate-dir gate-dir
      #:home-dir home-dir
      #:run-command (lambda (argv) 0)
-     #:command-output (started-herd-outputs)
+     #:service-ready? all-services-ready?
      #:sleep-proc (lambda (s) (set! polls (1+ polls)) #t)))
   (test-equal "activation timeout: exit code 2" 2 result)
   (test-equal "activation timeout: 30 polls" 30 polls)
@@ -166,7 +187,7 @@
      #:gate-dir gate-dir
      #:home-dir home-dir
      #:run-command (lambda (argv) 0)
-     #:command-output (started-herd-outputs)
+     #:service-ready? all-services-ready?
      ;; 模拟 activation 失败残留 safe pivot（第一次 poll 时产生；
      ;; lstat 判定存在——悬空 symlink 对 file-exists? 是 #f）
      #:sleep-proc
@@ -192,11 +213,9 @@
      #:gate-dir gate-dir
      #:home-dir home-dir
      #:run-command (lambda (argv) 0)
-     #:command-output
-     (lambda (argv)
-       (if (equal? (last argv) "account-state-ready")
-         "Failed to start account-state-ready"
-         "It is started."))
+     #:service-ready?
+     (lambda (service)
+       (not (eq? service 'account-state-ready)))
      #:sleep-proc (lambda (s) #t)))
   (test-equal "readiness failure: exit code 2" 2 result)
   (test-assert "readiness failure: gate stays closed" (gate-closed? gate-dir)))
@@ -212,7 +231,7 @@
      #:gate-dir gate-dir
      #:home-dir home-dir
      #:run-command (lambda (argv) 0)
-     #:command-output (lambda (argv) #f)
+     #:service-ready? (lambda (service) #f)
      #:sleep-proc (lambda (s) #t)))
   (test-equal "readiness query failure: exit code 2" 2 result)
   (test-assert "readiness query failure: gate stays closed"
@@ -231,7 +250,7 @@
      #:gate-dir gate-dir
      #:home-dir home-dir
      #:run-command (lambda (argv) 0)
-     #:command-output (started-herd-outputs)
+     #:service-ready? all-services-ready?
      #:sleep-proc (lambda (s) #t)))
   (test-equal "success unchanged: exit code 0" 0 result)
   (test-assert "success unchanged: gate reopened" (not (gate-closed? gate-dir))))
@@ -250,7 +269,7 @@
      #:gate-dir gate-dir
      #:home-dir home-dir
      #:run-command (lambda (argv) 0)
-     #:command-output (started-herd-outputs)
+     #:service-ready? all-services-ready?
      ;; 模拟激活期间 Home 链接被切换到新 generation
      #:sleep-proc
      (lambda (s)
@@ -274,11 +293,31 @@
      #:gate-dir gate-dir
      #:home-dir home-dir
      #:run-command (lambda (argv) 0)
-     #:command-output (legacy-started-herd-outputs)
+      #:service-ready? all-services-ready?
      #:sleep-proc (lambda (s) #t)))
-  (test-equal "legacy explicit started status remains accepted" 0 result)
-  (test-assert "legacy started status reopens gate"
-               (not (gate-closed? gate-dir))))
+  (test-equal "structured running status is accepted" 0 result)
+  (test-assert "structured running status reopens gate"
+                (not (gate-closed? gate-dir))))
+
+(let ((sandbox (make-sandbox))
+      (queries '()))
+  (define gate-dir (second sandbox))
+  (define home-dir (third sandbox))
+  (ready-home! home-dir)
+  (reconfigure-transaction!
+   "vm" "alice"
+   #:root "/repo"
+   #:gate-dir gate-dir
+   #:home-dir home-dir
+   #:run-command (lambda (argv) 0)
+    #:service-ready?
+    (lambda (service)
+      (set! queries (cons service queries))
+      #t)
+    #:sleep-proc (lambda (s) #t))
+  (test-equal "readiness probes query every capability structurally"
+              %readiness-capabilities
+              (reverse queries)))
 
 ;; ── gate 内容与 readiness 集合契约 ──
 
@@ -299,7 +338,7 @@
         (ready-home! home-dir)   ; 让激活立即就绪
         0)
        0))
-   #:command-output (started-herd-outputs)
+    #:service-ready? all-services-ready?
    #:sleep-proc (lambda (s) #t))
   (test-equal "gate file content expresses in-progress state"
               "A reconfigure is in progress.\n" captured-gate))
