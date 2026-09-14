@@ -78,6 +78,16 @@
   (and=> (symlink-target home-link)
          (cut string-prefix? "/gnu/store/" <>)))
 
+(define (readiness-capability-started? capability output)
+  "OUTPUT 是否明确表示 CAPABILITY 已启动。兼容 Shepherd 在不同服务
+状态形态下使用的两种成功文本；未知输出仍 fail closed。"
+  (and (string? output)
+       (or (string-contains output "It is started.")
+           (string-contains
+            output
+            (format #f "Service ~a has been started."
+                    (symbol->string capability))))))
+
 (define* (reconfigure-transaction! host home-user
                                    #:key
                                    (root (repository-root))
@@ -155,19 +165,18 @@ HOST 与 HOME-USER 由调用方显式传入（Blue 的 privilege handoff）。"
                          ;; 查询失败、服务缺失与未知输出均 fail closed。
                          (let ((failed
                                 (find
-                                 (lambda (svc)
-                                   (let ((out (command-output
-                                               `("herd" "status"
-                                                        ,(symbol->string svc)))))
-                                     (not (and (string? out)
-                                               (string-contains out
-                                                                "It is started.")))))
-                                 %readiness-capabilities)))
-                           (if failed
-                             (begin
-                              (format (current-error-port)
-                                      "reconfigure: capability ~a is FAILED; gate remains CLOSED.~%  Fix the cause, then re-run blue reconfigure ~a to recover.~%"
-                                      failed host)
+                                  (lambda (svc)
+                                    (let ((out (command-output
+                                                `("herd" "status"
+                                                         ,(symbol->string svc)))))
+                                      (not (readiness-capability-started?
+                                            svc out))))
+                                  %readiness-capabilities)))
+                            (if failed
+                              (begin
+                               (format (current-error-port)
+                                       "reconfigure: capability ~a was not confirmed started; gate remains CLOSED.~%  Fix the cause, then re-run blue reconfigure ~a to recover.~%"
+                                       failed host)
                               2)
                              (begin
                               (open-gate!)

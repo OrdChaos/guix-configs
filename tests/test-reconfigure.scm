@@ -8,9 +8,10 @@
 
 (use-modules (guixcfg system reconfigure)
              (guixcfg system session-gate) ; gate 唯一 authority（alias 完整性断言）
-             (guixcfg system deploy)      ; system-reconfigure-argv（断言 argv 形态）
-             (ice-9 rdelim)
-             (srfi srfi-64))
+              (guixcfg system deploy)      ; system-reconfigure-argv（断言 argv 形态）
+              (ice-9 rdelim)
+              (srfi srfi-1)
+              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
 
@@ -54,7 +55,11 @@
   (symlink %fake-store-home (home-link home-dir)))
 
 ;; readiness 必须由 herd 明确报告 started。
-(define (started-herd-outputs) (lambda (argv) "It is started."))
+(define (started-herd-outputs)
+  (lambda (argv)
+    (string-append "Service " (last argv) " has been started.")))
+
+(define (legacy-started-herd-outputs) (lambda (argv) "It is started."))
 
 (define (expected-guix-argv)
   '("env" "GUILE_LOAD_PATH=/repo/modules"
@@ -257,6 +262,23 @@
        #t)))
   (test-equal "success changed: exit code 0" 0 result)
   (test-assert "success changed: gate reopened" (not (gate-closed? gate-dir))))
+
+(let ((sandbox (make-sandbox)))
+  (define gate-dir (second sandbox))
+  (define home-dir (third sandbox))
+  (ready-home! home-dir)
+  (define result
+    (reconfigure-transaction!
+     "vm" "alice"
+     #:root "/repo"
+     #:gate-dir gate-dir
+     #:home-dir home-dir
+     #:run-command (lambda (argv) 0)
+     #:command-output (legacy-started-herd-outputs)
+     #:sleep-proc (lambda (s) #t)))
+  (test-equal "legacy explicit started status remains accepted" 0 result)
+  (test-assert "legacy started status reopens gate"
+               (not (gate-closed? gate-dir))))
 
 ;; ── gate 内容与 readiness 集合契约 ──
 
