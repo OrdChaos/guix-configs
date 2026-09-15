@@ -33,9 +33,9 @@
               "qemu"           ; VM 测试
               "gptfdisk"       ; sgdisk：GPT 分区
               "cryptsetup"     ; LUKS2
-               "btrfs-progs"    ; Btrfs 子卷与 swapfile
-               "dosfstools"     ; ESP 的 VFAT 格式化
-               "age"            ; install 期解锁 stable identity/secret
-               "coreutils"      ; stty：LUKS 密码输入时关闭终端回显
+              "btrfs-progs"    ; Btrfs 子卷与 swapfile
+              "dosfstools"     ; ESP 的 VFAT 格式化
+              "age"            ; install 期解锁 stable identity/secret
+              "coreutils"      ; stty：LUKS 密码输入时关闭终端回显
               "util-linux"))   ; lsblk、findmnt、wipefs（设备探测）
        (packages->manifest (list blue-compatible))))

@@ -92,10 +92,10 @@
 (test-assert "luksFormat uses --batch-mode and --key-file=-"
              (let ((args (fake-argv)))
                (and args
-                     (string-contains args "--batch-mode")
-                     (string-contains args "--key-file=-")
-                     (string-contains args "/dev/vda2")
-                     (not (string-contains args "/dev/disk/by-partlabel")))))
+                    (string-contains args "--batch-mode")
+                    (string-contains args "--key-file=-")
+                    (string-contains args "/dev/vda2")
+                    (not (string-contains args "/dev/disk/by-partlabel")))))
 (test-assert "luksFormat stdin receives passphrase"
              (string=? "pw4fmt" (fake-stdin)))
 ;; 关键：display + EOF 不附加换行——最终用户启动时交互输入的
@@ -124,11 +124,11 @@
 ;; ── 6. luksFormat 失败：抛错（不继续 open/Btrfs）────────────
 (install-fake-cryptsetup 1)
 (test-error "luksFormat failure throws" #t
-             (execute-luks-format "/dev/vda2" "pw"))
+            (execute-luks-format "/dev/vda2" "pw"))
 
 ;; ── 7. open 失败：抛错 ────────────────────────────────────
 (test-error "open failure throws" #t
-             (execute-luks-open "/dev/vda2" "pw"))
+            (execute-luks-open "/dev/vda2" "pw"))
 
 ;; 恢复 PATH，避免影响后续测试文件。
 (setenv "PATH" %original-path)

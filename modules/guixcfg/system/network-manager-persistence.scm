@@ -33,16 +33,16 @@
 The backing directory supplies the visible ownership and mode after the bind
 mount.  Do not recurse: NetworkManager owns profile file modes and contents."
   (with-imported-modules (source-module-closure '((guix build utils)))
-    #~(begin
-       (use-modules (guix build utils))
-       (let ((backing #$%network-manager-connections-backing-directory)
-             (consumer #$%network-manager-system-connections-directory))
-         (mkdir-p backing)
-         (chown backing 0 0)
-         (chmod backing #o700)
-         (mkdir-p consumer)
-         (chown consumer 0 0)
-         (chmod consumer #o700)))))
+                         #~(begin
+                            (use-modules (guix build utils))
+                            (let ((backing #$%network-manager-connections-backing-directory)
+                                  (consumer #$%network-manager-system-connections-directory))
+                              (mkdir-p backing)
+                              (chown backing 0 0)
+                              (chmod backing #o700)
+                              (mkdir-p consumer)
+                              (chown consumer 0 0)
+                              (chmod consumer #o700)))))
 
 (define (network-manager-connections-persistence-service)
   (simple-service 'network-manager-connections-persistence

@@ -14,16 +14,16 @@
                #:export (;; 纯解析（可测试）
                          <device-node>
                          device-node device-node?
-                          device-node-type device-node-size
-                          device-node-mountpoints device-node-children
-                          parse-lsblk-json
-                          device-node-mounted?
-                          device-node-tree-mounted?
-                          ;; IO 探测
-                          probe-device
-                          canonical-device
-                          target-partition-path
-                          device-on-disk?
+                         device-node-type device-node-size
+                         device-node-mountpoints device-node-children
+                         parse-lsblk-json
+                         device-node-mounted?
+                         device-node-tree-mounted?
+                         ;; IO 探测
+                         probe-device
+                         canonical-device
+                         target-partition-path
+                         device-on-disk?
                          ;; 命令执行辅助（install.scm 的环境检查等使用）
                          first-command-line))
 
@@ -231,7 +231,7 @@ QEMU/virtio 盘在 eudev 下没有 by-id 链接，只有 by-path。"
                  (command-lines "lsblk" "--json" "-b"
                                 "-o" "NAME,PATH,TYPE,SIZE,MOUNTPOINTS"
                                 path))))
-          (mounted (and node (device-node-tree-mounted? node)))
+         (mounted (and node (device-node-tree-mounted? node)))
          (system-disk (system-disk-device))
          (on-system-disk (and system-disk
                               (string=? (canonical-device path) system-disk))))

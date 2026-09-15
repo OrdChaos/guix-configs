@@ -133,14 +133,14 @@
                          (member pw-file rollback-args)
                          (string=? "3" (last rollback-args))
                          (not (file-exists? pw-file)))))
-
+     
      (test-equal "F1: a reused lower-numbered slot is identified exactly"
                  1 (added-keyslot '(0 2) '(0 1 2)))
      (test-assert "F2: ambiguous slot changes refuse a rollback target"
                   (not (added-keyslot '(0) '(0 1 2))))
      (test-assert "F3: no slot change refuses a rollback target"
                   (not (added-keyslot '(0 1) '(0 1))))
-
+     
      (let* ((source-dir (string-append tmp "/source"))
             (target-dir (string-append tmp "/target"))
             (source-pub (string-append source-dir "/seal.pub"))

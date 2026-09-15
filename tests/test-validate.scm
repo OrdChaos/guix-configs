@@ -9,9 +9,9 @@
 ;; 布尔字段默认 #f，只需写出 by-id、path 和容量。
 (define %good-facts
   (device-facts (path "/dev/vda")
-                 (by-id "/dev/disk/by-id/virtio-test")
-                 (type "disk")
-                 (size (gib 64))))
+                (by-id "/dev/disk/by-id/virtio-test")
+                (type "disk")
+                (size (gib 64))))
 
 ;; 坏情况用 (inherit ...) 派生：只写出要破坏的字段，其余继承好设备。
 ;; 这正是 define-record-type* 相对 SRFI-9 的核心便利之一。
@@ -35,16 +35,16 @@
             (test-equal "partition device rejected"
                         '(whole-disk)
                         (failure-names (validate-target (device-facts (inherit %good-facts)
-                                                                       (path "/dev/vda1")
-                                                                       (type "part")
-                                                                       (partition? #t))
-                                                         %vm-storage-policy)))
-
+                                                                      (path "/dev/vda1")
+                                                                      (type "part")
+                                                                      (partition? #t))
+                                                        %vm-storage-policy)))
+            
             (test-equal "non-partition block device rejected unless TYPE=disk"
                         '(whole-disk)
                         (failure-names (validate-target (device-facts (inherit %good-facts)
-                                                                       (path "/dev/sr0")
-                                                                       (type "rom"))
+                                                                      (path "/dev/sr0")
+                                                                      (type "rom"))
                                                         %vm-storage-policy)))
             
             (test-equal "mounted device rejected"
@@ -73,9 +73,9 @@
             
             (test-assert "multiple violations reported together"
                          (let ((failures (validate-target (device-facts (inherit %good-facts)
-                                                                       (by-id #f)
-                                                                       (type "part")
-                                                                       (partition? #t)
+                                                                        (by-id #f)
+                                                                        (type "part")
+                                                                        (partition? #t)
                                                                         (mounted? #t)
                                                                         (size (gib 4)))
                                                           %vm-storage-policy)))

@@ -538,7 +538,7 @@
                (eq? 'fail
                     (car ((cdr (find (lambda (c)
                                        (string=? (car c) "host known"))
-                                       checks)))))))
+                                     checks)))))))
 
 (let ((dir (mkdtemp "/tmp/guixcfg-installed-lifecycle-XXXXXX")))
   (dynamic-wind

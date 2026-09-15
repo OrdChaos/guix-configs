@@ -23,19 +23,19 @@
                      "cryptsetup" "luksFormat"
                      "--type" "luks2"
                      "--batch-mode"
-                      "--key-file=-"
-                      "--label" %luks-label
-                      partition))
+                     "--key-file=-"
+                     "--label" %luks-label
+                     partition))
 
 (define (execute-luks-open partition passphrase)
   "解锁 LUKS 卷到固定 mapper 名。PASSPHRASE 复用 luksFormat 时的同一
 输入（install.scm 的 apply session 提供），经 stdin 传入，
 不再要求第三次密码输入。"
   (invoke-with-stdin passphrase
-                      "cryptsetup" "open"
-                      "--key-file=-"
-                      partition
-                      %luks-mapper-name))
+                     "cryptsetup" "open"
+                     "--key-file=-"
+                     partition
+                     %luks-mapper-name))
 
 (define (execute-format-btrfs mapper-path)
   "在加密卷上格式化 Btrfs，使用固定文件系统标签。"

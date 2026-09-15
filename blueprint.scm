@@ -1015,9 +1015,9 @@ enrollment; no mutation); 2 partial mutation, cannot continue safely;
 3 user abort.
 With blue -n: read-only preflight + enrollment plan only; zero
 mutation, no sudo, no confirmation."))
-                 (let* ((root (%repo-root))
-                        (host (%require-host-argument arguments)))
-                   (if (dry-build?)
+                (let* ((root (%repo-root))
+                       (host (%require-host-argument arguments)))
+                  (if (dry-build?)
                     (begin
                      (%exec (enroll-cli-argv root "plan" host))
                      (format #t "  [dry-run] no mutation; no sudo; no confirmation.~%"))
@@ -1076,10 +1076,10 @@ Stops at the first failing phase; that phase's exit code is
 propagated (reconfigure: 0/1/2; enroll: 0/1/2/3).
 With blue -n: system reconfigure derivation dry-run + enrollment
 plan only; zero mutation, no sudo, no confirmation."))
-                 (let* ((root (%repo-root))
-                        (host (%require-host-argument arguments)))
-                   (%firstboot-guard root host)
-                   (if (dry-build?)
+                (let* ((root (%repo-root))
+                       (host (%require-host-argument arguments)))
+                  (%firstboot-guard root host)
+                  (if (dry-build?)
                     (begin
                      (%doctor root host)
                      (%exec (system-reconfigure-dry-run-argv root host))

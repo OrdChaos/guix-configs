@@ -20,10 +20,10 @@
   ;; 共享常量（测试间污染，已实测）。
   (fold (lambda (kv acc) (acons (car kv) (cdr kv) acc))
         (list (cons 'tpm 'absent) (cons 'firmware 'setup-mode)
-               (cons 'sb-keys #t) (cons 'keystore #t)
-               (cons 'facts #t) (cons 'sbkeysync #t)
-               (cons 'tpm-device #t) (cons 'tpm-artifacts #f)
-               (cons 'current-system #t)
+              (cons 'sb-keys #t) (cons 'keystore #t)
+              (cons 'facts #t) (cons 'sbkeysync #t)
+              (cons 'tpm-device #t) (cons 'tpm-artifacts #f)
+              (cons 'current-system #t)
               (cons 'persist #t) (cons 'esp #t))
         overrides))
 
@@ -70,9 +70,9 @@
   (string-append "/tmp/guixcfg-test-pk-" (number->string (getpid)) ".crt"))
 
 (call-with-output-file %pk-fixture
-  (lambda (port)
-    (display "-----BEGIN CERTIFICATE-----\nAQIDBA==\n-----END CERTIFICATE-----\n"
-             port)))
+                       (lambda (port)
+                         (display "-----BEGIN CERTIFICATE-----\nAQIDBA==\n-----END CERTIFICATE-----\n"
+                                  port)))
 
 (define (fake-efi-pk certificate-bytes)
   ;; 4-byte efivar attributes + one 28-byte EFI_SIGNATURE_LIST header +
@@ -96,14 +96,14 @@
     bv))
 
 (test-assert "EFI PK ownership check matches the exact certificate DER payload"
-  (efi-variable-contains-certificate?
-   "PK" %pk-fixture
-   (lambda (name) (fake-efi-pk '(1 2 3 4)))))
+             (efi-variable-contains-certificate?
+              "PK" %pk-fixture
+              (lambda (name) (fake-efi-pk '(1 2 3 4)))))
 
 (test-assert "EFI PK ownership check rejects a different certificate"
-  (not (efi-variable-contains-certificate?
-        "PK" %pk-fixture
-        (lambda (name) (fake-efi-pk '(1 2 3 5))))))
+             (not (efi-variable-contains-certificate?
+                   "PK" %pk-fixture
+                   (lambda (name) (fake-efi-pk '(1 2 3 5))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 纯分类：固件 / TPM / idempotency
@@ -142,7 +142,7 @@
 
 (test-equal "TPM unreadable"
             'unreadable
-             (enrollment-status-tpm (status-of '(tpm . unreadable))))
+            (enrollment-status-tpm (status-of '(tpm . unreadable))))
 
 (test-assert "firstboot is incomplete in Setup Mode"
              (not (firstboot-completed? (status-of))))

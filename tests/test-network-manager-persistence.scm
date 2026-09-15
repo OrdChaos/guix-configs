@@ -25,20 +25,20 @@
 (define %laptop-mount (mount-at %laptop-os %consumer))
 
 (test-assert "connection profile rule is valid"
-  (valid-machine-state-persistence-rule?
-   %network-manager-connections-persistence-rule))
+             (valid-machine-state-persistence-rule?
+              %network-manager-connections-persistence-rule))
 (test-equal "consumer is NetworkManager's system keyfile directory"
-  "/etc/NetworkManager/system-connections"
-  (machine-state-persistence-rule-consumer
-   %network-manager-connections-persistence-rule))
+            "/etc/NetworkManager/system-connections"
+            (machine-state-persistence-rule-consumer
+             %network-manager-connections-persistence-rule))
 (test-assert "laptop binds persistent connection profiles"
-  (and %laptop-mount
-       (string=? %backing (file-system-device %laptop-mount))
-       (memq 'bind-mount (file-system-flags %laptop-mount))))
+             (and %laptop-mount
+                  (string=? %backing (file-system-device %laptop-mount))
+                  (memq 'bind-mount (file-system-flags %laptop-mount))))
 (test-assert "VM does not persist NetworkManager profiles"
-  (not (mount-at %vm-os %consumer)))
+             (not (mount-at %vm-os %consumer)))
 (test-assert "volatile NetworkManager state is not persisted"
-  (not (mount-at %laptop-os "/var/lib/NetworkManager")))
+             (not (mount-at %laptop-os "/var/lib/NetworkManager")))
 
 (define %ownership-source
   (object->string
@@ -46,17 +46,17 @@
     (network-manager-connections-ownership-activation))))
 
 (test-assert "ownership activation covers backing and consumer"
-  (and (string-contains %ownership-source %backing)
-       (string-contains %ownership-source %consumer)))
+             (and (string-contains %ownership-source %backing)
+                  (string-contains %ownership-source %consumer)))
 (test-assert "ownership activation enforces root ownership and mode 0700"
-  (and (string-contains %ownership-source "chown backing 0 0")
-       (string-contains %ownership-source "chown consumer 0 0")
-       ;; #o700 is represented as decimal 448 in approximate gexp output.
-       (string-contains %ownership-source "chmod backing 448")
-       (string-contains %ownership-source "chmod consumer 448")))
+             (and (string-contains %ownership-source "chown backing 0 0")
+                  (string-contains %ownership-source "chown consumer 0 0")
+                  ;; #o700 is represented as decimal 448 in approximate gexp output.
+                  (string-contains %ownership-source "chmod backing 448")
+                  (string-contains %ownership-source "chmod consumer 448")))
 (test-assert "ownership activation does not recursively alter profiles"
-  (and (not (string-contains %ownership-source "chown-recursive"))
-       (not (string-contains %ownership-source "chmod-recursive"))))
+             (and (not (string-contains %ownership-source "chown-recursive"))
+                  (not (string-contains %ownership-source "chmod-recursive"))))
 
 (define %shepherd-services
   (shepherd-configuration-services
@@ -77,15 +77,15 @@
    'file-system-/etc/NetworkManager/system-connections))
 
 (test-assert "ordering services are present"
-  (and %network-manager %user-processes %file-systems %connection-mount))
+             (and %network-manager %user-processes %file-systems %connection-mount))
 (test-assert "NetworkManager starts after user-processes"
-  (memq 'user-processes
-        (shepherd-service-requirement %network-manager)))
+             (memq 'user-processes
+                   (shepherd-service-requirement %network-manager)))
 (test-assert "user-processes starts after file-systems"
-  (memq 'file-systems
-        (shepherd-service-requirement %user-processes)))
+             (memq 'file-systems
+                   (shepherd-service-requirement %user-processes)))
 (test-assert "file-systems target waits for the profile bind"
-  (memq 'file-system-/etc/NetworkManager/system-connections
-        (shepherd-service-requirement %file-systems)))
+             (memq 'file-system-/etc/NetworkManager/system-connections
+                   (shepherd-service-requirement %file-systems)))
 
 (test-end "network-manager-persistence")

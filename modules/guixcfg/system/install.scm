@@ -78,9 +78,9 @@
                          collect-install-probes
                          detect-install-state
                          ;; preflight checks（blueprint 的 %run-checks 形态）
-                          install-preflight-checks
-                          install-secure-boot-preflight
-                          installed-system-complete?
+                         install-preflight-checks
+                         install-secure-boot-preflight
+                         installed-system-complete?
                          ;; 计划输出与确认匹配（纯）
                          install-plan-lines
                          install-confirm-lines
@@ -124,11 +124,11 @@
           (root-generation-state
            (string-append (persist-mount-point "@persist-system")
                           "/root-generations/state.scm")))
-  "Return true when this boot is already running an installed target.
+         "Return true when this boot is already running an installed target.
 The committed root-generation state is the existing persistent authority;
 LiveCD resume paths do not expose it at the current-system paths."
-  (and (file-exists? current-system)
-       (file-exists? root-generation-state)))
+         (and (file-exists? current-system)
+              (file-exists? root-generation-state)))
 
 (define (install-identity-path target)
   (string-append target (%installed-identity-path)))
@@ -408,14 +408,14 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
          (keydir (install-keydir target))
          (user (user-profile-name %primary-user)))
     `((partition-table .
-                        ,(or esp-partition sys-partition))
+                       ,(or esp-partition sys-partition))
       (luks-volume .
                    ;; cryptsetup isLuks 用退出码表态（0 = 是 LUKS），stdout 无输出
                    ;; ——绝不能用输出文本判断（resume 时误判 incompatible，实测）。
-                    ,(and sys-partition
-                          (let ((p (false-if-exception
-                                    (open-pipe* OPEN_READ "cryptsetup" "isLuks"
-                                                sys-partition))))
+                   ,(and sys-partition
+                         (let ((p (false-if-exception
+                                   (open-pipe* OPEN_READ "cryptsetup" "isLuks"
+                                               sys-partition))))
                            (and p (zero? (status:exit-val (close-pipe p)))))))
       (luks-open . ,(file-exists? mapper))
       (btrfs-rootfs .
@@ -443,10 +443,10 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
                   ,(and (file-exists? (install-facts-path target))
                         (install-facts-path target)))
       (luks-uuid .
-                  ,(and sys-partition
-                        (false-if-exception
-                         (first-command-line "cryptsetup" "luksUUID"
-                                             sys-partition))))
+                 ,(and sys-partition
+                       (false-if-exception
+                        (first-command-line "cryptsetup" "luksUUID"
+                                            sys-partition))))
       (sb-keys .
                ,(let ((n (count
                           (lambda (f)
@@ -500,137 +500,137 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
 
 (define* (install-secure-boot-preflight host firmware-state
                                         #:optional (key-state 'absent))
-  "Classify the install-time firmware gate. VM firmware is test machinery;
+         "Classify the install-time firmware gate. VM firmware is test machinery;
 physical installs require Setup Mode, except ownership-proven resume states."
-  (cond ((string=? host "vm")
-         '(ok . "VM host: firmware state is managed by the test harness"))
-    ((eq? firmware-state 'setup-mode)
-     '(ok . "Setup Mode: fresh keys can be enrolled after first boot"))
-    ((memq firmware-state '(enrolled pending-reboot))
-     '(ok . "firmware PK matches the target key set (safe resume state)"))
-    ((eq? firmware-state 'enrolled-unverified)
-     (if (eq? key-state 'complete)
-       '(ok . "resume key set exists; firmware PK ownership requires verification in the root preflight")
-       '(fail . "fresh install cannot trust existing User Mode firmware; put it in Setup Mode before installing")))
-    ((eq? firmware-state 'foreign-enrolled)
-     '(fail . "firmware is already in User Mode with a different or unverifiable PK; put it in Setup Mode before installing with fresh keys"))
-    (else
-     '(fail . "cannot prove Secure Boot Setup Mode; put physical firmware in Setup Mode (SecureBoot=0, SetupMode=1) before installing"))))
+         (cond ((string=? host "vm")
+                '(ok . "VM host: firmware state is managed by the test harness"))
+           ((eq? firmware-state 'setup-mode)
+            '(ok . "Setup Mode: fresh keys can be enrolled after first boot"))
+           ((memq firmware-state '(enrolled pending-reboot))
+            '(ok . "firmware PK matches the target key set (safe resume state)"))
+           ((eq? firmware-state 'enrolled-unverified)
+            (if (eq? key-state 'complete)
+              '(ok . "resume key set exists; firmware PK ownership requires verification in the root preflight")
+              '(fail . "fresh install cannot trust existing User Mode firmware; put it in Setup Mode before installing")))
+           ((eq? firmware-state 'foreign-enrolled)
+            '(fail . "firmware is already in User Mode with a different or unverifiable PK; put it in Setup Mode before installing with fresh keys"))
+           (else
+            '(fail . "cannot prove Secure Boot Setup Mode; put physical firmware in Setup Mode (SecureBoot=0, SetupMode=1) before installing"))))
 
 (define* (install-preflight-checks root host device #:optional (target "/mnt"))
-  "((label . thunk) ...)：thunk 返回 (ok . detail) 或 (fail . detail)。
+         "((label . thunk) ...)：thunk 返回 (ok . detail) 或 (fail . detail)。
 只读；user 态与 dry-run 共用。"
-  (let ((policy (false-if-exception (storage-policy-by-name host))))
-    (list
-     (cons "installer lifecycle"
-           (lambda ()
-             (if (installed-system-complete?)
-               (cons 'fail
-                     "this machine already booted an installed system; blue install is only available from the LiveCD/installer environment")
-               '(ok . #f))))
-     (cons "repository root"
-           (lambda ()
-             (if (and (absolute-file-name? root)
-                      (file-exists? (string-append root "/channels.lock.scm"))
-                      (file-exists? (string-append root "/modules")))
-               '(ok . #f)
-               (cons 'fail (string-append "bad repository root: " root)))))
-     (cons "channels structure compatible"
-           (lambda ()
-             (if (false-if-exception (channels-structure-ok? root))
-               '(ok . #f)
-               '(fail . "channels.scm and channels.lock.scm disagree structurally"))))
-     (cons "host known"
-           (lambda ()
-             (if policy
-               (cons 'ok host)
-               (cons 'fail
-                     (string-append "unknown host or missing storage policy: "
-                                    host)))))
-     (cons "host policy valid"
-           (lambda ()
-             (if policy
-               (let ((failures (validate-policy policy)))
-                 (if (null? failures)
-                   '(ok . #f)
-                   (cons 'fail
-                         (string-join (map check-failure-message failures)
-                                      "; "))))
-                (cons 'fail "no policy to validate"))))
-      (cons "device exists"
-           (lambda ()
-             (let ((facts (false-if-exception (probe-device device))))
-               (cond
-                 ((not facts)
-                  (cons 'fail
-                        (string-append "cannot probe " device
-                                       " (lsblk missing or device absent)")))
-                  ((not (equal? "disk" (device-facts-type facts)))
-                   (cons 'fail
-                         (string-append device " is not lsblk TYPE=disk; the whole block device is required")))
-                 ((device-facts-mounted? facts)
-                  ;; resume：目标分区已存在且挂着（mounts 阶段已
-                  ;; 执行）是预期状态；空盘却挂载着才是异常。
-                   (if (false-if-exception
-                        (target-partition-path device 2))
-                    '(ok . "already mounted (resume state)")
-                    (cons 'fail
-                          (string-append device " is currently mounted; refusing to touch it"))))
-                 ((zero? (device-facts-size facts))
-                  (cons 'fail "device reports zero size"))
-                 (else
-                  (cons 'ok
-                        (format #f "~,2f GiB"
-                                (/ (device-facts-size facts)
-                                   1024.0 1024.0 1024.0))))))))
-     (cons "required tools"
-           (lambda ()
-             (let ((missing
-                    (filter (negate
-                             (lambda (cmd)
-                               (search-path
-                                (string-split (or (getenv "PATH") "") #\:)
-                                cmd)))
-                            (append %required-commands '("guix")))))
-               (if (null? missing)
-                 '(ok . #f)
-                 (cons 'fail
-                       (string-append "missing in PATH: "
-                                      (string-join missing ", ")
-                                      " (check the installer manifest)"))))))
-      (cons "UEFI environment"
-            (lambda ()
-              (if (file-exists? "/sys/firmware/efi")
-                '(ok . #f)
-                '(fail . "no /sys/firmware/efi; a UEFI booted installer environment is required"))))
-      (cons "Secure Boot install state"
-            (lambda ()
-              (install-secure-boot-preflight
-               host
-               (secure-boot-firmware-state
-                efi-variable-byte
-                (lambda ()
-                  (let ((matches?
-                         (efi-variable-contains-certificate?
-                          "PK" (string-append (install-keydir target)
-                                               "/PK.crt"))))
-                    (if (or matches? (zero? (getuid)))
-                      matches?
-                      'unverified))))
-               (sb-key-set-state (install-keydir target)))))
-     (cons "LUKS mapper free"
-           (lambda ()
-             (if (file-exists? %luks-mapper-path)
-               ;; mapper 已打开：resume 状态（目标分区已存在）是
-               ;; 预期且合法的；目标分区不存在却开着 mapper 才是
-               ;; 活动安装残留（fail closed）。
-                (if (and (false-if-exception
-                          (target-partition-path device 2))
-                         (device-on-disk? %luks-mapper-path device))
-                  '(ok . "already open (resume state)")
-                 (cons 'fail
-                       "cryptroot mapper already in use but no target partitions found (an unfinished or active installation may exist)"))
-               '(ok . #f)))))))
+         (let ((policy (false-if-exception (storage-policy-by-name host))))
+           (list
+            (cons "installer lifecycle"
+                  (lambda ()
+                    (if (installed-system-complete?)
+                      (cons 'fail
+                            "this machine already booted an installed system; blue install is only available from the LiveCD/installer environment")
+                      '(ok . #f))))
+            (cons "repository root"
+                  (lambda ()
+                    (if (and (absolute-file-name? root)
+                             (file-exists? (string-append root "/channels.lock.scm"))
+                             (file-exists? (string-append root "/modules")))
+                      '(ok . #f)
+                      (cons 'fail (string-append "bad repository root: " root)))))
+            (cons "channels structure compatible"
+                  (lambda ()
+                    (if (false-if-exception (channels-structure-ok? root))
+                      '(ok . #f)
+                      '(fail . "channels.scm and channels.lock.scm disagree structurally"))))
+            (cons "host known"
+                  (lambda ()
+                    (if policy
+                      (cons 'ok host)
+                      (cons 'fail
+                            (string-append "unknown host or missing storage policy: "
+                                           host)))))
+            (cons "host policy valid"
+                  (lambda ()
+                    (if policy
+                      (let ((failures (validate-policy policy)))
+                        (if (null? failures)
+                          '(ok . #f)
+                          (cons 'fail
+                                (string-join (map check-failure-message failures)
+                                             "; "))))
+                      (cons 'fail "no policy to validate"))))
+            (cons "device exists"
+                  (lambda ()
+                    (let ((facts (false-if-exception (probe-device device))))
+                      (cond
+                        ((not facts)
+                         (cons 'fail
+                               (string-append "cannot probe " device
+                                              " (lsblk missing or device absent)")))
+                        ((not (equal? "disk" (device-facts-type facts)))
+                         (cons 'fail
+                               (string-append device " is not lsblk TYPE=disk; the whole block device is required")))
+                        ((device-facts-mounted? facts)
+                         ;; resume：目标分区已存在且挂着（mounts 阶段已
+                         ;; 执行）是预期状态；空盘却挂载着才是异常。
+                         (if (false-if-exception
+                              (target-partition-path device 2))
+                           '(ok . "already mounted (resume state)")
+                           (cons 'fail
+                                 (string-append device " is currently mounted; refusing to touch it"))))
+                        ((zero? (device-facts-size facts))
+                         (cons 'fail "device reports zero size"))
+                        (else
+                         (cons 'ok
+                               (format #f "~,2f GiB"
+                                       (/ (device-facts-size facts)
+                                          1024.0 1024.0 1024.0))))))))
+            (cons "required tools"
+                  (lambda ()
+                    (let ((missing
+                           (filter (negate
+                                    (lambda (cmd)
+                                      (search-path
+                                       (string-split (or (getenv "PATH") "") #\:)
+                                       cmd)))
+                                   (append %required-commands '("guix")))))
+                      (if (null? missing)
+                        '(ok . #f)
+                        (cons 'fail
+                              (string-append "missing in PATH: "
+                                             (string-join missing ", ")
+                                             " (check the installer manifest)"))))))
+            (cons "UEFI environment"
+                  (lambda ()
+                    (if (file-exists? "/sys/firmware/efi")
+                      '(ok . #f)
+                      '(fail . "no /sys/firmware/efi; a UEFI booted installer environment is required"))))
+            (cons "Secure Boot install state"
+                  (lambda ()
+                    (install-secure-boot-preflight
+                     host
+                     (secure-boot-firmware-state
+                      efi-variable-byte
+                      (lambda ()
+                        (let ((matches?
+                               (efi-variable-contains-certificate?
+                                "PK" (string-append (install-keydir target)
+                                                    "/PK.crt"))))
+                          (if (or matches? (zero? (getuid)))
+                            matches?
+                            'unverified))))
+                     (sb-key-set-state (install-keydir target)))))
+            (cons "LUKS mapper free"
+                  (lambda ()
+                    (if (file-exists? %luks-mapper-path)
+                      ;; mapper 已打开：resume 状态（目标分区已存在）是
+                      ;; 预期且合法的；目标分区不存在却开着 mapper 才是
+                      ;; 活动安装残留（fail closed）。
+                      (if (and (false-if-exception
+                                (target-partition-path device 2))
+                               (device-on-disk? %luks-mapper-path device))
+                        '(ok . "already open (resume state)")
+                        (cons 'fail
+                              "cryptroot mapper already in use but no target partitions found (an unfinished or active installation may exist)"))
+                      '(ok . #f)))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 计划与确认输出（纯文本；打印归 blueprint）
@@ -826,8 +826,8 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
                                      (('fail . detail)
                                       (cons (car check) detail))
                                      (_ #f)))
-                             (install-preflight-checks root host device
-                                                       target))))
+                            (install-preflight-checks root host device
+                                                      target))))
                       (if (null? failures)
                         #t
                         (begin
@@ -951,7 +951,7 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
                                 ;;    blocked）
                                 (run-stage 'facts
                                            (lambda ()
-                                              (write-machine-facts target device)))
+                                             (write-machine-facts target device)))
                                 ;; 4. sb-keys（keygen 子进程；partial 已
                                 ;;    blocked）
                                 (run-stage 'sb-keys

@@ -53,15 +53,15 @@
                          ;; 状态记录
                          <enrollment-status>
                          enrollment-status make-enrollment-status enrollment-status?
-                          enrollment-status-tpm enrollment-status-firmware
-                          enrollment-status-keys enrollment-status-keystore
-                          enrollment-status-facts
-                          enrollment-status-tpm-artifacts
-                          ;; 只读检查（user 态与 dry-run 共用）
-                          enroll-readonly-checks
-                          firstboot-readonly-checks
-                          firstboot-completed?
-                          enrollment-completed?
+                         enrollment-status-tpm enrollment-status-firmware
+                         enrollment-status-keys enrollment-status-keystore
+                         enrollment-status-facts
+                         enrollment-status-tpm-artifacts
+                         ;; 只读检查（user 态与 dry-run 共用）
+                         enroll-readonly-checks
+                         firstboot-readonly-checks
+                         firstboot-completed?
+                         enrollment-completed?
                          ;; 计划输出与固件确认匹配（纯）
                          enroll-plan-lines
                          firmware-confirm-lines
@@ -221,23 +221,23 @@ X.509 signature payload (the 16-byte signature owner GUID is not identity)."
                                              (read-variable #f)
                                              (read-certificate
                                               pem-certificate-der))
-  "Return true only when EFI variable NAME contains the exact DER bytes of
+         "Return true only when EFI variable NAME contains the exact DER bytes of
 the PEM CERTIFICATE. EFI signature-list owner GUIDs may differ, so comparing
 the certificate payload is the stable ownership check."
-  (let* ((reader (or read-variable
-                     (lambda (variable)
-                       (let ((path
-                              (string-append
-                               "/sys/firmware/efi/efivars/" variable
-                               "-8be4df61-93ca-11d2-aa0d-00e098032b8c")))
-                         (and (file-exists? path)
-                              (false-if-exception
-                               (call-with-input-file
-                                path get-bytevector-all)))))))
-         (variable (reader name))
-        (der (read-certificate certificate)))
-    (and variable der
-         (efi-signature-lists-contain-certificate? variable der))))
+         (let* ((reader (or read-variable
+                            (lambda (variable)
+                              (let ((path
+                                     (string-append
+                                      "/sys/firmware/efi/efivars/" variable
+                                      "-8be4df61-93ca-11d2-aa0d-00e098032b8c")))
+                                (and (file-exists? path)
+                                     (false-if-exception
+                                      (call-with-input-file
+                                       path get-bytevector-all)))))))
+                (variable (reader name))
+                (der (read-certificate certificate)))
+           (and variable der
+                (efi-signature-lists-contain-certificate? variable der))))
 
 (define* (secure-boot-firmware-state
           #:optional (read-byte efi-variable-byte)
@@ -258,17 +258,17 @@ SetupMode=0 但 PK 已写入——固件已注册、Secure Boot 待下次 boot �
                (sm (read-byte "SetupMode"))
                (pk (read-byte "PK")))
            (cond
-              ((and (number? sb) (number? sm) (= sb 1) (= sm 0))
-               (case (own-pk?)
-                 ((unverified) 'enrolled-unverified)
-                 ((#f) 'foreign-enrolled)
-                 (else 'enrolled)))
+             ((and (number? sb) (number? sm) (= sb 1) (= sm 0))
+              (case (own-pk?)
+                ((unverified) 'enrolled-unverified)
+                ((#f) 'foreign-enrolled)
+                (else 'enrolled)))
              ((and (number? sb) (number? sm) (= sb 0) (= sm 1)) 'setup-mode)
              ((and (number? sb) (number? sm) (= sb 0) (= sm 0) pk)
-               (case (own-pk?)
-                 ((unverified) 'enrolled-unverified)
-                 ((#f) 'foreign-enrolled)
-                 (else 'pending-reboot)))
+              (case (own-pk?)
+                ((unverified) 'enrolled-unverified)
+                ((#f) 'foreign-enrolled)
+                (else 'pending-reboot)))
              (else 'unclear))))
 
 (define (esp-tpm2-artifacts-present?)
@@ -364,8 +364,8 @@ ENOENT 都被 scandir 折叠为 #f，存在性由 file-exists? 单独判定
    (tpm-device (assq-ref probes 'tpm-device))
    (tpm-artifacts (assq-ref probes 'tpm-artifacts))
    (current-system (assq-ref probes 'current-system))
-    (persist (assq-ref probes 'persist))
-    (esp (assq-ref probes 'esp))))
+   (persist (assq-ref probes 'persist))
+   (esp (assq-ref probes 'esp))))
 
 (define (firstboot-completed? status)
   "Return true once this installed target has written its firmware PK.
@@ -514,16 +514,16 @@ info；#f（root 事务）全部硬性。"
                     (case (enrollment-status-firmware status)
                       ((enrolled) '(ok . "Secure Boot active, Setup Mode off"))
                       ((setup-mode) '(ok . "Setup Mode (SecureBoot=0, SetupMode=1)"))
-                       ((pending-reboot)
-                        '(ok . "firmware enrolled; Secure Boot activates at the next boot (reboot, then re-run)"))
-                       ((foreign-enrolled)
-                        (cons 'fail
-                              "firmware is in User Mode but its PK does not match this system's PK.crt"))
-                       ((enrolled-unverified)
-                        (if soft?
-                          '(info . "requires root to verify firmware PK ownership")
-                          (cons 'fail
-                                "firmware PK ownership could not be verified as root")))
+                      ((pending-reboot)
+                       '(ok . "firmware enrolled; Secure Boot activates at the next boot (reboot, then re-run)"))
+                      ((foreign-enrolled)
+                       (cons 'fail
+                             "firmware is in User Mode but its PK does not match this system's PK.crt"))
+                      ((enrolled-unverified)
+                       (if soft?
+                         '(info . "requires root to verify firmware PK ownership")
+                         (cons 'fail
+                               "firmware PK ownership could not be verified as root")))
                       (else
                        (cons 'fail
                              "firmware state unclear (efivarfs unreadable or SecureBoot/SetupMode combination unexpected)"))))))))
@@ -573,10 +573,10 @@ info；#f（root 事务）全部硬性。"
          (format #f "  firmware: ~a"
                  (case (enrollment-status-firmware status)
                    ((enrolled) "Secure Boot active (Setup Mode off)")
-                    ((setup-mode) "Setup Mode")
-                    ((foreign-enrolled) "User Mode (firmware PK is not ours)")
-                    ((enrolled-unverified) "User Mode (PK ownership requires root)")
-                    (else "unclear")))
+                   ((setup-mode) "Setup Mode")
+                   ((foreign-enrolled) "User Mode (firmware PK is not ours)")
+                   ((enrolled-unverified) "User Mode (PK ownership requires root)")
+                   (else "unclear")))
          (format #f "  action: ~a" (firmware-action status))
          ""
          "Mutations:"
@@ -788,11 +788,11 @@ guix 模块——VM 实测 'no code for module (guix records)/(json)'。"
                               "post-enrollment FAIL: TPM status is ~a (expected compatible).~%"
                               (enrollment-status-tpm after))
                       2)
-                      ((memq (enrollment-status-firmware after)
-                             '(unclear enrolled-unverified foreign-enrolled))
-                       (format (current-error-port)
-                               "post-enrollment FAIL: firmware state/PK ownership is ~a after enrollment.~%"
-                               (enrollment-status-firmware after))
+                     ((memq (enrollment-status-firmware after)
+                            '(unclear enrolled-unverified foreign-enrolled))
+                      (format (current-error-port)
+                              "post-enrollment FAIL: firmware state/PK ownership is ~a after enrollment.~%"
+                              (enrollment-status-firmware after))
                       2)
                      (else
                       (format #t "~%post-enrollment validation passed: TPM compatible, firmware ~a.~%"

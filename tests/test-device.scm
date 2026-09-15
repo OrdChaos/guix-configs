@@ -71,8 +71,8 @@
               (test-equal "recognizes partition type" "part" (device-node-type part))
               (test-assert "partition mounted" (device-node-mounted? part)))
             
-             (let ((rom (parse-lsblk-json %livecd-rom-json)))
-               (test-assert "LiveCD media recognized as mounted" (device-node-mounted? rom))))
+            (let ((rom (parse-lsblk-json %livecd-rom-json)))
+              (test-assert "LiveCD media recognized as mounted" (device-node-mounted? rom))))
 
 (test-assert "mounted descendants are detected recursively"
              (device-node-tree-mounted?
@@ -87,15 +87,15 @@
 (unless (file-exists? %fake-bin)
   (mkdir %fake-bin))
 (call-with-output-file (string-append %fake-bin "/lsblk")
-  (lambda (p)
-    (display "#!/bin/sh\n" p)
-    (display "field=$2; dev=$3\n" p)
-    (display "case \"$field:$dev\" in\n" p)
-     (display "TYPE:/dev/nvme0n1|TYPE:/dev/nvme1n1) printf 'disk\\n' ;;\n" p)
-     (display "TYPE:/dev/nvme0n1p2|TYPE:/dev/nvme1n1p2) printf 'part\\n' ;;\n" p)
-     (display "PARTLABEL:/dev/nvme0n1p2|PARTLABEL:/dev/nvme1n1p2) printf 'system\\n' ;;\n" p)
-     (display "PKNAME:/dev/nvme0n1p2|PKNAME:/dev/nvme1n1p2) printf 'nvme0n1\\n' ;;\n" p)
-    (display "esac\n" p)))
+                       (lambda (p)
+                         (display "#!/bin/sh\n" p)
+                         (display "field=$2; dev=$3\n" p)
+                         (display "case \"$field:$dev\" in\n" p)
+                         (display "TYPE:/dev/nvme0n1|TYPE:/dev/nvme1n1) printf 'disk\\n' ;;\n" p)
+                         (display "TYPE:/dev/nvme0n1p2|TYPE:/dev/nvme1n1p2) printf 'part\\n' ;;\n" p)
+                         (display "PARTLABEL:/dev/nvme0n1p2|PARTLABEL:/dev/nvme1n1p2) printf 'system\\n' ;;\n" p)
+                         (display "PKNAME:/dev/nvme0n1p2|PKNAME:/dev/nvme1n1p2) printf 'nvme0n1\\n' ;;\n" p)
+                         (display "esac\n" p)))
 (chmod (string-append %fake-bin "/lsblk") #o755)
 (setenv "PATH" (string-append %fake-bin ":" %original-path))
 

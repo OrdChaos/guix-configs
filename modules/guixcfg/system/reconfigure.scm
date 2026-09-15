@@ -102,22 +102,22 @@
 服务缺失、未知 protocol reply 或查询异常均返回 #f。"
   (false-if-exception
    (with-shepherd-action capability ('status) results
-     (let ((service (and (pair? results) (car results))))
-       (and (pair? service)
-            (eq? (car service) 'service)
-            (pair? (cdr service))
-            (let ((version (cadr service)))
-              (and (pair? version)
-                   (eq? (car version) 'version)
-                   (pair? (cdr version))
-                   (zero? (cadr version))))
-            (shepherd-status-ready? (cddr service)))))))
+                         (let ((service (and (pair? results) (car results))))
+                           (and (pair? service)
+                                (eq? (car service) 'service)
+                                (pair? (cdr service))
+                                (let ((version (cadr service)))
+                                  (and (pair? version)
+                                       (eq? (car version) 'version)
+                                       (pair? (cdr version))
+                                       (zero? (cadr version))))
+                                (shepherd-status-ready? (cddr service)))))))
 
 (define* (reconfigure-transaction! host home-user
                                    #:key
                                    (root (repository-root))
                                    (run-command (lambda (argv) (apply system* argv)))
-                                    (service-ready? shepherd-service-ready?)
+                                   (service-ready? shepherd-service-ready?)
                                    (sleep-proc (lambda (secs) (sleep secs) #t))
                                    (gate-dir %gate-directory)
                                    (home-dir (string-append "/home/" home-user)))
@@ -183,18 +183,18 @@ HOST 与 HOME-USER 由调用方显式传入（Blue 的 privilege handoff）。"
                                   "reconfigure: system generation switched OK, but Home hot-activation~%  FAILED (old Home: ~a; system is NOT rolled back).~%  Gate remains CLOSED (new interactive sessions refused).~%  Investigate: pivot residue ~a, or ~a occupied by a non-symlink.~%  Fix, then re-run blue reconfigure ~a to recover without reboot.~%"
                                   (or old-home "none") pivot home-link host)
                           2)
-                          ;; 5. readiness 复查：直接读取 Shepherd protocol；
-                          ;; running 服务或成功完成的 one-shot 才算 ready。
-                          (let ((failed
-                                 (find
-                                   (lambda (svc)
-                                     (not (service-ready? svc)))
-                                   %readiness-capabilities)))
-                            (if failed
-                              (begin
-                               (format (current-error-port)
-                                        "reconfigure: capability ~a was not confirmed ready; gate remains CLOSED.~%  Fix the cause, then re-run blue reconfigure ~a to recover.~%"
-                                       failed host)
+                         ;; 5. readiness 复查：直接读取 Shepherd protocol；
+                         ;; running 服务或成功完成的 one-shot 才算 ready。
+                         (let ((failed
+                                (find
+                                 (lambda (svc)
+                                   (not (service-ready? svc)))
+                                 %readiness-capabilities)))
+                           (if failed
+                             (begin
+                              (format (current-error-port)
+                                      "reconfigure: capability ~a was not confirmed ready; gate remains CLOSED.~%  Fix the cause, then re-run blue reconfigure ~a to recover.~%"
+                                      failed host)
                               2)
                              (begin
                               (open-gate!)

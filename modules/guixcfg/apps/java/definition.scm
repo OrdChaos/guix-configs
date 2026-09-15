@@ -142,17 +142,17 @@ store 路径在 build 期展开。该 output 的 store reference 由 profile 的
    (home-services
     (list ;; 每个版本的稳定访问名（home-files；~/.local/bin 的 PATH
      ;; 贡献归 apps/polkit-gnome）。
-     (simple-service
-      'java-version-wrappers
-      home-files-service-type
-      (map (lambda (entry)
-             ;; 注意：home-files 条目是 **(target source) 两元素
-             ;; list**（不是 dotted pair——symlink-manager 的
-             ;; match 只接受 2 元素 list；env vars 才是 pair）。
-             (list (string-append ".local/bin/java"
-                                  (number->string (car entry)))
-                   (java-command-program (car entry) (cdr entry))))
-           %java-version-table))
+          (simple-service
+           'java-version-wrappers
+           home-files-service-type
+           (map (lambda (entry)
+                  ;; 注意：home-files 条目是 **(target source) 两元素
+                  ;; list**（不是 dotted pair——symlink-manager 的
+                  ;; match 只接受 2 元素 list；env vars 才是 pair）。
+                  (list (string-append ".local/bin/java"
+                                       (number->string (car entry)))
+                        (java-command-program (car entry) (cdr entry))))
+                %java-version-table))
           ;; JAVA_HOME = 默认 JDK 的 "jdk" output（声明值，非运行时
           ;; 探测；额外版本不覆盖它）。
           (simple-service

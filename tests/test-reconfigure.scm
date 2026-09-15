@@ -8,10 +8,10 @@
 
 (use-modules (guixcfg system reconfigure)
              (guixcfg system session-gate) ; gate 唯一 authority（alias 完整性断言）
-              (guixcfg system deploy)      ; system-reconfigure-argv（断言 argv 形态）
-              (ice-9 rdelim)
-              (srfi srfi-1)
-              (srfi srfi-64))
+             (guixcfg system deploy)      ; system-reconfigure-argv（断言 argv 形态）
+             (ice-9 rdelim)
+             (srfi srfi-1)
+             (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
 
@@ -61,26 +61,26 @@
   (@@ (guixcfg system reconfigure) shepherd-status-ready?))
 
 (test-assert "structured running service is ready"
-  (shepherd-status-ready?
-   '((status running) (one-shot? #f)
-     (status-changes ((running . 20))) (startup-failures ()))))
+             (shepherd-status-ready?
+              '((status running) (one-shot? #f)
+                                 (status-changes ((running . 20))) (startup-failures ()))))
 
 (test-assert "successfully completed one-shot is ready"
-  (shepherd-status-ready?
-   '((status stopped) (one-shot? #t)
-     (status-changes ((stopped . 20) (starting . 19)))
-     (startup-failures ()))))
+             (shepherd-status-ready?
+              '((status stopped) (one-shot? #t)
+                                 (status-changes ((stopped . 20) (starting . 19)))
+                                 (startup-failures ()))))
 
 (test-assert "never-started one-shot is not ready"
-  (not (shepherd-status-ready?
-        '((status stopped) (one-shot? #t)
-          (status-changes ()) (startup-failures ())))))
+             (not (shepherd-status-ready?
+                   '((status stopped) (one-shot? #t)
+                                      (status-changes ()) (startup-failures ())))))
 
 (test-assert "failed one-shot is not ready"
-  (not (shepherd-status-ready?
-        '((status stopped) (one-shot? #t)
-          (status-changes ((stopped . 20) (starting . 19)))
-          (startup-failures (20))))))
+             (not (shepherd-status-ready?
+                   '((status stopped) (one-shot? #t)
+                                      (status-changes ((stopped . 20) (starting . 19)))
+                                      (startup-failures (20))))))
 
 (define (expected-guix-argv)
   '("env" "GUILE_LOAD_PATH=/repo/modules"
@@ -293,11 +293,11 @@
      #:gate-dir gate-dir
      #:home-dir home-dir
      #:run-command (lambda (argv) 0)
-      #:service-ready? all-services-ready?
+     #:service-ready? all-services-ready?
      #:sleep-proc (lambda (s) #t)))
   (test-equal "structured running status is accepted" 0 result)
   (test-assert "structured running status reopens gate"
-                (not (gate-closed? gate-dir))))
+               (not (gate-closed? gate-dir))))
 
 (let ((sandbox (make-sandbox))
       (queries '()))
@@ -310,11 +310,11 @@
    #:gate-dir gate-dir
    #:home-dir home-dir
    #:run-command (lambda (argv) 0)
-    #:service-ready?
-    (lambda (service)
-      (set! queries (cons service queries))
-      #t)
-    #:sleep-proc (lambda (s) #t))
+   #:service-ready?
+   (lambda (service)
+     (set! queries (cons service queries))
+     #t)
+   #:sleep-proc (lambda (s) #t))
   (test-equal "readiness probes query every capability structurally"
               %readiness-capabilities
               (reverse queries)))
@@ -338,7 +338,7 @@
         (ready-home! home-dir)   ; 让激活立即就绪
         0)
        0))
-    #:service-ready? all-services-ready?
+   #:service-ready? all-services-ready?
    #:sleep-proc (lambda (s) #t))
   (test-equal "gate file content expresses in-progress state"
               "A reconfigure is in progress.\n" captured-gate))
