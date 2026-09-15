@@ -150,13 +150,16 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
                                   system-services
                                   (application-persistence-rules
                                    (host-application-persistence-rules))
+                                  (additional-machine-state-persistence-rules
+                                   '())
                                   secrets
                                   home-environment)
          "共享 user services 列表（不含 account-databases 投影本身）。
 SYSTEM-SERVICES 是 host 的 system services 列表（make-host-services
 的产物）；APPLICATION-PERSISTENCE-RULES 默认 = 全部 application +
 Flatpak 平台规则（host-application-persistence-rules，所有 host
-共享）；SECRETS 是全部声明式 secrets（host 的 inventory：测试
+共享）；ADDITIONAL-MACHINE-STATE-PERSISTENCE-RULES 是 host-only
+machine state；SECRETS 是全部声明式 secrets（host 的 inventory：测试
 sentinel + mihomo + applications）；HOME-ENVIRONMENT 是挂入 system
 的 Guix Home。"
          (append
@@ -170,8 +173,9 @@ sentinel + mihomo + applications）；HOME-ENVIRONMENT 是挂入 system
                  (user-profile-name %primary-user))
                 ;; machine-state persistence（root-owned system state）。
                 (machine-state-persistence-service
-                 (list %mihomo-data-persistence-rule
-                       %noctalia-greeter-persistence-rule))
+                 (append (list %mihomo-data-persistence-rule
+                               %noctalia-greeter-persistence-rule)
+                         additional-machine-state-persistence-rules))
                 ;; noctalia-greeter persistence backing 的 owner/mode
                 ;; （activation 先于 file-systems 挂载，与 channel
                 ;; activation 幂等无冲突）。
@@ -209,6 +213,8 @@ sentinel + mihomo + applications）；HOME-ENVIRONMENT 是挂入 system
                                           persistent-mount-file-systems
                                           mihomo-machine-state-file-systems
                                           noctalia-greeter-machine-state-file-systems
+                                          (additional-machine-state-file-systems
+                                           '())
                                           user-services)
          "基础 OS：与最终 OS 完全相同，只是不含 account-databases 投影与
 final transformation。仅用于折叠 account 列表；真正启动用
@@ -241,6 +247,7 @@ make-host-operating-system 的产物。"
                                 ;; machine-state binds（root-owned / greeter-owned）
                                 mihomo-machine-state-file-systems
                                 noctalia-greeter-machine-state-file-systems
+                                additional-machine-state-file-systems
                                 %base-file-systems))
           
           (swap-devices %swap-spaces)

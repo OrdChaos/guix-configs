@@ -96,34 +96,31 @@ path DSL。
 属于 machine-owned mutable state；只有明确要 declaratively provision
 某个网络时，才进入 encrypted declarative-secret 模型。
 
-## NetworkManager（canonical example，未启用）
+## NetworkManager connection profiles
 
-未来预期形态（**不是已确认的 production contract**）：
+Laptop 持久化 NetworkManager 自己保存的 keyfile connection profiles：
 
 ```text
 /persist/system/state/network-manager/system-connections
     → /etc/NetworkManager/system-connections
-
-/persist/system/state/network-manager/lib
-    → /var/lib/NetworkManager
 ```
 
-启用前必须再次审计（pinned Guix 94a84f9）：
+`modules/guixcfg/system/network-manager-persistence.scm` 拥有具体 rule
+与权限 activation。backing 和 consumer 都强制 `root:root`、`0700`；
+不递归改 profile 文件（keyfile 内容/mode 由 NetworkManager 管理）。
+pinned Guix 的 NetworkManager activation 也会 `mkdir-p` 同一 consumer，
+该操作不会放宽已有目录；所有 activation 完成后 Shepherd 才启动挂载，
+且 NetworkManager → `user-processes` → `file-systems` → connection bind，
+因此 daemon 启动前 projection 已就位。
 
-- `network-manager-service-type`（gnu/services/networking.scm:1491；
-  其 activate 已 `mkdir-p /etc/NetworkManager/system-connections`）；
-- NM 当前实际 keyfile location；
-- `/var/lib/NetworkManager` 中哪些 state 真正需要 persistence；
-- owner/group/mode；
-- `/etc` mountpoint topology（bind 挂到 /etc 子路径的行为）；
-- service/mount ordering；
-- Polkit/GUI connection-save semantics。
-
-当前状态：**architecture can support it；production rule NOT enabled**
-（generic mechanism + synthetic tests；无真实 NM service/rule）。
+不持久化 `/var/lib/NetworkManager`：timestamps、seen-BSSID、DHCP 等
+派生/易变状态不需要跨 ephemeral-root 保留。VM 也不接入该 rule。
 
 ## 现有 production rules
 
+- **NetworkManager（Laptop only）**：GUI/user-created keyfile profiles，
+  root-owned（0700）；只持久化 `system-connections`，不持久化
+  `/var/lib/NetworkManager`。
 - **machine-id**（system/machine-identity.scm + utils/machine-id.scm，
   2026-08-30）：`/persist/system/machine-id` → `/etc/machine-id`
   （activation 投影；不是 bind——单文件 atomic-replace 消费者）。

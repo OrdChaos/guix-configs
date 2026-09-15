@@ -1,12 +1,11 @@
 ;;; Machine-state persistence generic engine 测试：synthetic rules 验证
-;;; 机制（当前无 production rule——本文件不 invent 真实 daemon 规则；
-;;; NetworkManager 只作为 docs example，不依赖其 package/service）。
+;;; 机制；真实 daemon contract / host wiring 由各 consumer 测试覆盖
+;;; （例如 test-network-manager-persistence.scm）。
 ;;;
 ;;; 覆盖：root 派生自 persist-mount-point、backing/consumer 生成、
 ;;; bind projection、machine-owned lifecycle、validation（absolute
 ;;; backing / .. / empty / 非 absolute consumer / 禁止 roots 拒绝）、
-;;; 无 data-app backing、无 HOME-relative consumer、无 copy/sync、
-;;; 无 production rule。
+;;; 无 data-app backing、无 HOME-relative consumer、无 copy/sync。
 
 (use-modules (guixcfg system machine-state-persistence)
              (guixcfg storage model)   ; persist-mount-point

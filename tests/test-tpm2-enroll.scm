@@ -4,6 +4,9 @@
 ;;;   C. error binding：(rnrs base) 不再覆盖 Guile 原生 error——replace
 ;;;      在未 enrollment 时是正常业务错误（非 wrong-number-of-arguments）
 ;;;   D. 模块 compile/load：tools/tpm2-enroll.scm 无 unbound/wrong-import
+;;;   E. rollback password file 在异常处理期间仍存在，随后清理
+;;;   F. 新 keyslot 用集合差唯一识别，不会猜测/误删 recovery slot
+;;;   G. sealed pair 完整 stage 后才替换 live artifact
 ;;;   T7-T14. CLI credential 来源解析（--luks-secret / --noninteractive）：
 ;;;      互斥、status/preflight 拒绝、fail-closed、未知 flag
 ;;;
@@ -95,6 +98,87 @@
     (if (and (pair? irritants) (string? (car irritants)))
       (car irritants)
       (cadr a))))
+
+;; ── E-G：rollback/publication 的可注入边界 ─────────────────
+(let ((tmp (mkdtemp "/tmp/guixcfg-enroll-rollback-XXXXXX")))
+  (dynamic-wind
+   (lambda () #t)
+   (lambda ()
+     (let ((pw-file (string-append tmp "/pw"))
+           (visible-during-handler? #f)
+           (rollback-args #f))
+       (catch 'forced-failure
+         (lambda ()
+           (call-with-passphrase-file
+            "recovery-password" pw-file
+            (lambda (path)
+              (catch 'publish-failure
+                (lambda () (throw 'publish-failure))
+                (lambda args
+                  (set! visible-during-handler?
+                    (and (file-exists? path)
+                         (= #o600 (logand #o777 (stat:mode (stat path))))))
+                  (rollback-keyslot!
+                   3 "recovery-password" path
+                   #:invoke-proc
+                   (lambda args (set! rollback-args args)))
+                  (throw 'forced-failure)))))
+           #f)
+         (lambda args #t))
+       (test-assert "E: password file survives rollback handler and is then removed"
+                    (and visible-during-handler?
+                         rollback-args
+                         (string=? "recovery-password" (car rollback-args))
+                         (member "luksKillSlot" rollback-args)
+                         (member pw-file rollback-args)
+                         (string=? "3" (last rollback-args))
+                         (not (file-exists? pw-file)))))
+
+     (test-equal "F1: a reused lower-numbered slot is identified exactly"
+                 1 (added-keyslot '(0 2) '(0 1 2)))
+     (test-assert "F2: ambiguous slot changes refuse a rollback target"
+                  (not (added-keyslot '(0) '(0 1 2))))
+     (test-assert "F3: no slot change refuses a rollback target"
+                  (not (added-keyslot '(0 1) '(0 1))))
+
+     (let* ((source-dir (string-append tmp "/source"))
+            (target-dir (string-append tmp "/target"))
+            (source-pub (string-append source-dir "/seal.pub"))
+            (source-priv (string-append source-dir "/seal.priv"))
+            (target-pub (string-append target-dir "/seal.pub"))
+            (target-priv (string-append target-dir "/seal.priv")))
+       (mkdir-p source-dir)
+       (mkdir-p target-dir)
+       (call-with-output-file source-pub (lambda (p) (display "new-pub" p)))
+       (call-with-output-file source-priv (lambda (p) (display "new-priv" p)))
+       (call-with-output-file target-pub (lambda (p) (display "old-pub" p)))
+       (call-with-output-file target-priv (lambda (p) (display "old-priv" p)))
+       (catch 'copy-failed
+         (lambda ()
+           (publish-sealed-pair!
+            source-pub source-priv target-dir
+            #:copy-proc
+            (lambda (source target)
+              (if (string-suffix? "seal.priv" source)
+                (throw 'copy-failed)
+                (copy-file source target))))
+           #f)
+         (lambda args #t))
+       (test-assert "G1: staging failure leaves the live sealed pair unchanged"
+                    (and (string=? "old-pub"
+                                   (call-with-input-file target-pub get-string-all))
+                         (string=? "old-priv"
+                                   (call-with-input-file target-priv get-string-all))
+                         (not (file-exists? (string-append target-dir "/.seal.pub.new")))
+                         (not (file-exists? (string-append target-dir "/.seal.priv.new")))))
+       (publish-sealed-pair! source-pub source-priv target-dir)
+       (test-assert "G2: successful publication replaces both sealed blobs"
+                    (and (string=? "new-pub"
+                                   (call-with-input-file target-pub get-string-all))
+                         (string=? "new-priv"
+                                   (call-with-input-file target-priv get-string-all))))))
+   (lambda ()
+     (false-if-exception (delete-file-recursively tmp)))))
 
 ;; ── T7-T14：CLI credential 来源解析 ────────────────────────
 ;; parse-command/parse-credential-flag 是纯函数（不 exit、不改环境）；

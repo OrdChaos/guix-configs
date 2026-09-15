@@ -39,7 +39,7 @@
 ;;; 保证（绝不调用 install-transaction!）。
 
 (define-module (guixcfg system install)
-               #:use-module (guixcfg storage model)      ; persist-mount-point、%luks-mapper-path、%system-partlabel、by-partlabel-path、%btrfs-filesystem-label
+               #:use-module (guixcfg storage model)      ; persist-mount-point、%luks-mapper-path、%btrfs-filesystem-label
                #:use-module (guixcfg storage policies)   ; storage-policy-by-name
                #:use-module (guixcfg storage validate)   ; validate-policy / validate-target / check-failure-message
                #:use-module (guixcfg storage device)     ; probe-device / first-command-line
@@ -51,6 +51,7 @@
                #:use-module (guixcfg security age)       ; runtime-identity-present?、age-unlock!、ensure-installed-identity!、%installed-identity-path、%account-credentials-dir、provision-password-hash!
                #:use-module (guixcfg security credential-source) ; resolve-luks-passphrase-source
                #:use-module (guixcfg security secure-boot-material)
+               #:use-module (guixcfg security enroll)      ; firmware state + PK ownership probe
                #:use-module (guixcfg system machine-facts) ; load-machine-facts（facts 内容校验）
                #:use-module (guixcfg system deploy)      ; system-init-argv / sb-keygen-tool-argv / sb-keystore-tool-argv / commit-root-tool-argv / channels-structure-ok?
                #:use-module (guixcfg boot layout)        ; %esp-mount-point
@@ -77,7 +78,9 @@
                          collect-install-probes
                          detect-install-state
                          ;; preflight checks（blueprint 的 %run-checks 形态）
-                         install-preflight-checks
+                          install-preflight-checks
+                          install-secure-boot-preflight
+                          installed-system-complete?
                          ;; 计划输出与确认匹配（纯）
                          install-plan-lines
                          install-confirm-lines
@@ -115,6 +118,18 @@
                  (persist-mount-point "@persist-system")
                  "/facts/host.scm"))
 
+(define* (installed-system-complete?
+          #:key
+          (current-system "/run/current-system")
+          (root-generation-state
+           (string-append (persist-mount-point "@persist-system")
+                          "/root-generations/state.scm")))
+  "Return true when this boot is already running an installed target.
+The committed root-generation state is the existing persistent authority;
+LiveCD resume paths do not expose it at the current-system paths."
+  (and (file-exists? current-system)
+       (file-exists? root-generation-state)))
+
 (define (install-identity-path target)
   (string-append target (%installed-identity-path)))
 
@@ -124,6 +139,15 @@
                  "/accounts/" user "/password.hash"))
 
 (define %sb-key-file-names %secure-boot-key-file-names)
+
+(define (sb-key-set-state keydir)
+  "Return 'absent, 'complete, or 'partial for the Secure Boot key set."
+  (let ((present (count (lambda (name)
+                          (file-exists? (string-append keydir "/" name)))
+                        %sb-key-file-names)))
+    (cond ((zero? present) 'absent)
+      ((= present (length %sb-key-file-names)) 'complete)
+      (else 'partial))))
 
 (define %keystore-auth-paths
   (map (lambda (path) (string-append "keystore/" path))
@@ -214,8 +238,8 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
 ;;; ────────────────────────────────────────────────────────────
 ;;; 纯分类：探针 alist → 阶段状态列表。
 ;;; 探针 key（collect-install-probes 收集）：
-;;;   partition-table  #t/#f —— /dev/disk/by-partlabel/{esp,system} 存在
-;;;   luks-volume      #t/#f —— cryptsetup isLuks by-partlabel system
+;;;   partition-table  #t/#f —— 目标盘的 esp/system 分区存在
+;;;   luks-volume      #t/#f —— cryptsetup isLuks 目标盘 system 分区
 ;;;   luks-open        #t/#f —— /dev/mapper/cryptroot 存在
 ;;;   btrfs-rootfs     #t/#f —— btrfs filesystem show mapper 含 rootfs
 ;;;   targets-mounted  #t/#f —— /mnt 与 /mnt/efi 均已挂载
@@ -376,21 +400,22 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
 (define (collect-install-probes target device)
   "收集 TARGET（通常 /mnt）与 DEVICE 的可观察安装事实 → alist。
 不打开任何东西、不挂载、不写。"
-  (let* ((esp-partlabel (by-partlabel-path "esp"))
-         (sys-partlabel (by-partlabel-path "system"))
+  (let* ((esp-partition (false-if-exception
+                         (target-partition-path device 1)))
+         (sys-partition (false-if-exception
+                         (target-partition-path device 2)))
          (mapper %luks-mapper-path)
          (keydir (install-keydir target))
          (user (user-profile-name %primary-user)))
     `((partition-table .
-                       ,(or (file-exists? esp-partlabel)
-                            (file-exists? sys-partlabel)))
+                        ,(or esp-partition sys-partition))
       (luks-volume .
                    ;; cryptsetup isLuks 用退出码表态（0 = 是 LUKS），stdout 无输出
                    ;; ——绝不能用输出文本判断（resume 时误判 incompatible，实测）。
-                   ,(and (file-exists? sys-partlabel)
-                         (let ((p (false-if-exception
-                                   (open-pipe* OPEN_READ "cryptsetup" "isLuks"
-                                               sys-partlabel))))
+                    ,(and sys-partition
+                          (let ((p (false-if-exception
+                                    (open-pipe* OPEN_READ "cryptsetup" "isLuks"
+                                                sys-partition))))
                            (and p (zero? (status:exit-val (close-pipe p)))))))
       (luks-open . ,(file-exists? mapper))
       (btrfs-rootfs .
@@ -418,10 +443,10 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
                   ,(and (file-exists? (install-facts-path target))
                         (install-facts-path target)))
       (luks-uuid .
-                 ,(and (file-exists? sys-partlabel)
-                       (false-if-exception
-                        (first-command-line "cryptsetup" "luksUUID"
-                                            sys-partlabel))))
+                  ,(and sys-partition
+                        (false-if-exception
+                         (first-command-line "cryptsetup" "luksUUID"
+                                             sys-partition))))
       (sb-keys .
                ,(let ((n (count
                           (lambda (f)
@@ -473,11 +498,36 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
 ;;; preflight checks（installer environment readiness；与 deployment
 ;;; doctor 语义不同——这里不要求 facts / git clean）
 
-(define (install-preflight-checks root host device)
+(define* (install-secure-boot-preflight host firmware-state
+                                        #:optional (key-state 'absent))
+  "Classify the install-time firmware gate. VM firmware is test machinery;
+physical installs require Setup Mode, except ownership-proven resume states."
+  (cond ((string=? host "vm")
+         '(ok . "VM host: firmware state is managed by the test harness"))
+    ((eq? firmware-state 'setup-mode)
+     '(ok . "Setup Mode: fresh keys can be enrolled after first boot"))
+    ((memq firmware-state '(enrolled pending-reboot))
+     '(ok . "firmware PK matches the target key set (safe resume state)"))
+    ((eq? firmware-state 'enrolled-unverified)
+     (if (eq? key-state 'complete)
+       '(ok . "resume key set exists; firmware PK ownership requires verification in the root preflight")
+       '(fail . "fresh install cannot trust existing User Mode firmware; put it in Setup Mode before installing")))
+    ((eq? firmware-state 'foreign-enrolled)
+     '(fail . "firmware is already in User Mode with a different or unverifiable PK; put it in Setup Mode before installing with fresh keys"))
+    (else
+     '(fail . "cannot prove Secure Boot Setup Mode; put physical firmware in Setup Mode (SecureBoot=0, SetupMode=1) before installing"))))
+
+(define* (install-preflight-checks root host device #:optional (target "/mnt"))
   "((label . thunk) ...)：thunk 返回 (ok . detail) 或 (fail . detail)。
 只读；user 态与 dry-run 共用。"
   (let ((policy (false-if-exception (storage-policy-by-name host))))
     (list
+     (cons "installer lifecycle"
+           (lambda ()
+             (if (installed-system-complete?)
+               (cons 'fail
+                     "this machine already booted an installed system; blue install is only available from the LiveCD/installer environment")
+               '(ok . #f))))
      (cons "repository root"
            (lambda ()
              (if (and (absolute-file-name? root)
@@ -506,8 +556,8 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
                    (cons 'fail
                          (string-join (map check-failure-message failures)
                                       "; "))))
-               (cons 'fail "no policy to validate"))))
-     (cons "device exists"
+                (cons 'fail "no policy to validate"))))
+      (cons "device exists"
            (lambda ()
              (let ((facts (false-if-exception (probe-device device))))
                (cond
@@ -515,13 +565,14 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
                   (cons 'fail
                         (string-append "cannot probe " device
                                        " (lsblk missing or device absent)")))
-                 ((device-facts-partition? facts)
-                  (cons 'fail
-                        (string-append device " is a partition; the whole block device is required")))
+                  ((not (equal? "disk" (device-facts-type facts)))
+                   (cons 'fail
+                         (string-append device " is not lsblk TYPE=disk; the whole block device is required")))
                  ((device-facts-mounted? facts)
                   ;; resume：目标分区已存在且挂着（mounts 阶段已
                   ;; 执行）是预期状态；空盘却挂载着才是异常。
-                  (if (file-exists? (by-partlabel-path "system"))
+                   (if (false-if-exception
+                        (target-partition-path device 2))
                     '(ok . "already mounted (resume state)")
                     (cons 'fail
                           (string-append device " is currently mounted; refusing to touch it"))))
@@ -547,19 +598,36 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
                        (string-append "missing in PATH: "
                                       (string-join missing ", ")
                                       " (check the installer manifest)"))))))
-     (cons "UEFI environment"
-           (lambda ()
-             (if (file-exists? "/sys/firmware/efi")
-               '(ok . #f)
-               '(fail . "no /sys/firmware/efi; a UEFI booted installer environment is required"))))
+      (cons "UEFI environment"
+            (lambda ()
+              (if (file-exists? "/sys/firmware/efi")
+                '(ok . #f)
+                '(fail . "no /sys/firmware/efi; a UEFI booted installer environment is required"))))
+      (cons "Secure Boot install state"
+            (lambda ()
+              (install-secure-boot-preflight
+               host
+               (secure-boot-firmware-state
+                efi-variable-byte
+                (lambda ()
+                  (let ((matches?
+                         (efi-variable-contains-certificate?
+                          "PK" (string-append (install-keydir target)
+                                               "/PK.crt"))))
+                    (if (or matches? (zero? (getuid)))
+                      matches?
+                      'unverified))))
+               (sb-key-set-state (install-keydir target)))))
      (cons "LUKS mapper free"
            (lambda ()
              (if (file-exists? %luks-mapper-path)
                ;; mapper 已打开：resume 状态（目标分区已存在）是
                ;; 预期且合法的；目标分区不存在却开着 mapper 才是
                ;; 活动安装残留（fail closed）。
-               (if (file-exists? (by-partlabel-path "system"))
-                 '(ok . "already open (resume state)")
+                (if (and (false-if-exception
+                          (target-partition-path device 2))
+                         (device-on-disk? %luks-mapper-path device))
+                  '(ok . "already open (resume state)")
                  (cons 'fail
                        "cryptroot mapper already in use but no target partitions found (an unfinished or active installation may exist)"))
                '(ok . #f)))))))
@@ -758,7 +826,8 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
                                      (('fail . detail)
                                       (cons (car check) detail))
                                      (_ #f)))
-                            (install-preflight-checks root host device))))
+                             (install-preflight-checks root host device
+                                                       target))))
                       (if (null? failures)
                         #t
                         (begin
@@ -819,7 +888,9 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
                                   (install-stage-detail disk))
                           (format (current-error-port)
                                   "Recovery: open the volume manually ('cryptsetup open ~a cryptroot') and re-run; wiping is never automatic.~%"
-                                  (by-partlabel-path "system"))
+                                  (or (false-if-exception
+                                       (target-partition-path device 2))
+                                      "<target system partition>"))
                           2)
                          ((and (eq? disk-status 'fresh)
                                (not (on-confirm state)))
@@ -872,6 +943,7 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
                                                         %luks-mapper-path)
                                                  (format #t "  opening LUKS volume...~%")
                                                  (execute-luks-open
+                                                  (target-partition-path device 2)
                                                   (passphrase)))
                                                (execute-mounts!
                                                 (storage-plan policy device)))))
@@ -879,7 +951,7 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
                                 ;;    blocked）
                                 (run-stage 'facts
                                            (lambda ()
-                                             (write-machine-facts target)))
+                                              (write-machine-facts target device)))
                                 ;; 4. sb-keys（keygen 子进程；partial 已
                                 ;;    blocked）
                                 (run-stage 'sb-keys

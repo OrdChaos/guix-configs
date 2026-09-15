@@ -8,7 +8,8 @@
 (use-modules (guixcfg security enroll)
              (srfi srfi-64)
              (srfi srfi-1)
-             (srfi srfi-13))
+             (srfi srfi-13)
+             (rnrs bytevectors))
 
 (test-runner-current (test-runner-simple))
 
@@ -19,9 +20,10 @@
   ;; 共享常量（测试间污染，已实测）。
   (fold (lambda (kv acc) (acons (car kv) (cdr kv) acc))
         (list (cons 'tpm 'absent) (cons 'firmware 'setup-mode)
-              (cons 'sb-keys #t) (cons 'keystore #t)
-              (cons 'facts #t) (cons 'sbkeysync #t)
-              (cons 'tpm-device #t) (cons 'current-system #t)
+               (cons 'sb-keys #t) (cons 'keystore #t)
+               (cons 'facts #t) (cons 'sbkeysync #t)
+               (cons 'tpm-device #t) (cons 'tpm-artifacts #f)
+               (cons 'current-system #t)
               (cons 'persist #t) (cons 'esp #t))
         overrides))
 
@@ -43,7 +45,65 @@
           (lambda (name)
             (cond ((string=? name "SecureBoot") 1)
               ((string=? name "SetupMode") 0)
-              (else 1)))))
+              (else 1)))
+          (lambda () #t)))
+
+(test-eq "User Mode with a foreign PK is not classified as enrolled"
+         'foreign-enrolled
+         (secure-boot-firmware-state
+          (lambda (name)
+            (cond ((string=? name "SecureBoot") 1)
+              ((string=? name "SetupMode") 0)
+              (else 1)))
+          (lambda () #f)))
+
+(test-eq "unprivileged PK ownership uncertainty is distinct from a mismatch"
+         'enrolled-unverified
+         (secure-boot-firmware-state
+          (lambda (name)
+            (cond ((string=? name "SecureBoot") 1)
+              ((string=? name "SetupMode") 0)
+              (else 1)))
+          (lambda () 'unverified)))
+
+(define %pk-fixture
+  (string-append "/tmp/guixcfg-test-pk-" (number->string (getpid)) ".crt"))
+
+(call-with-output-file %pk-fixture
+  (lambda (port)
+    (display "-----BEGIN CERTIFICATE-----\nAQIDBA==\n-----END CERTIFICATE-----\n"
+             port)))
+
+(define (fake-efi-pk certificate-bytes)
+  ;; 4-byte efivar attributes + one 28-byte EFI_SIGNATURE_LIST header +
+  ;; one EFI_SIGNATURE_DATA (16-byte owner GUID + certificate payload).
+  (let* ((certificate-length (length certificate-bytes))
+         (signature-size (+ 16 certificate-length))
+         (list-size (+ 28 signature-size))
+         (bv (make-bytevector (+ 4 list-size) 0)))
+    (define (set-u32-le! offset value)
+      (do ((i 0 (+ i 1)))
+          ((= i 4))
+        (bytevector-u8-set! bv (+ offset i)
+                            (logand (ash value (* -8 i)) #xff))))
+    (set-u32-le! 20 list-size)
+    (set-u32-le! 24 0)
+    (set-u32-le! 28 signature-size)
+    (let loop ((bytes certificate-bytes) (offset 48))
+      (unless (null? bytes)
+        (bytevector-u8-set! bv offset (car bytes))
+        (loop (cdr bytes) (+ offset 1))))
+    bv))
+
+(test-assert "EFI PK ownership check matches the exact certificate DER payload"
+  (efi-variable-contains-certificate?
+   "PK" %pk-fixture
+   (lambda (name) (fake-efi-pk '(1 2 3 4)))))
+
+(test-assert "EFI PK ownership check rejects a different certificate"
+  (not (efi-variable-contains-certificate?
+        "PK" %pk-fixture
+        (lambda (name) (fake-efi-pk '(1 2 3 5))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 纯分类：固件 / TPM / idempotency
@@ -82,7 +142,50 @@
 
 (test-equal "TPM unreadable"
             'unreadable
-            (enrollment-status-tpm (status-of '(tpm . unreadable))))
+             (enrollment-status-tpm (status-of '(tpm . unreadable))))
+
+(test-assert "firstboot is incomplete in Setup Mode"
+             (not (firstboot-completed? (status-of))))
+
+(test-assert "firstboot is complete after firmware PK is written"
+             (firstboot-completed?
+              (status-of '(firmware . pending-reboot))))
+
+(test-assert "firstboot completion is visible to an unprivileged caller"
+             (firstboot-completed?
+              (status-of '(firmware . enrolled-unverified))))
+
+(test-assert "firstboot completion requires the installed target environment"
+             (not (firstboot-completed?
+                   (status-of '(firmware . enrolled)
+                              '(persist . #f)))))
+
+(test-assert "enrollment is complete only with active firmware and compatible TPM"
+             (enrollment-completed?
+              (status-of '(firmware . enrolled)
+                         '(tpm . compatible))))
+
+(test-assert "enrollment remains incomplete before the required reboot"
+             (not (enrollment-completed?
+                   (status-of '(firmware . pending-reboot)
+                              '(tpm . compatible)))))
+
+(test-assert "enrollment remains incomplete without TPM artifacts"
+             (not (enrollment-completed?
+                   (status-of '(firmware . enrolled)
+                              '(tpm . absent)))))
+
+(test-assert "unprivileged enrollment completion uses the ESP artifact copy"
+             (enrollment-completed?
+              (status-of '(firmware . enrolled-unverified)
+                         '(tpm . unreadable)
+                         '(tpm-artifacts . #t))))
+
+(test-assert "unreadable TPM state without ESP artifacts is not complete"
+             (not (enrollment-completed?
+                   (status-of '(firmware . enrolled-unverified)
+                              '(tpm . unreadable)
+                              '(tpm-artifacts . #f)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 计划输出（§24 格式）
@@ -253,3 +356,5 @@
                                  #:on-firmware-confirm exploding-confirm))
 
 (test-end "enroll-orchestration")
+
+(false-if-exception (delete-file %pk-fixture))

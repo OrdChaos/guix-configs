@@ -469,6 +469,11 @@ privilege handoff。子进程非零退出经 %run 原样传播（0/1/2/3）。"
          host)
         #:input (current-input-port)))
 
+(define (%firstboot-guard root host)
+  "Fail before reconfigure when firstboot already completed or this is not
+the installed target environment."
+  (%exec (enroll-cli-argv root "firstboot-guard" host)))
+
 ;;; ============================================================
 ;;; §3 命令定义
 ;;; ============================================================
@@ -904,7 +909,7 @@ Dry-run (blue -n):
 ;;; modules/，time-machine repl 自带全部频道模块 load path。
 ;;;
 ;;; 退出码契约（install/enroll 共用；文档 docs/operations/installation.md）：
-;;;   0 = 成功 / 已合规（skip/resume 收敛到完整状态）
+;;;   0 = 成功（partial lifecycle 可 resume；已完成 lifecycle 则阻断）
 ;;;   1 = 前置/配置失败，未发生任何 mutation
 ;;;   2 = 已发生部分 mutation，无法安全自动继续
 ;;;   3 = 用户显式中止（破坏性确认未通过）
@@ -940,8 +945,9 @@ Destructive confirmation: the full device path must be typed before
 the disk is touched. Not included: TPM enrollment and firmware
 PK enrollment (run 'blue firstboot HOST' after the first boot:
 reconfigure then machine enrollment).
-Exit codes: 0 success/already complete; 1 preflight failure (no
-mutation); 2 partial mutation, cannot continue safely; 3 user abort.
+Exit codes: 0 success; 1 preflight failure (including execution from an
+already-installed target boot; no mutation); 2 partial mutation,
+cannot continue safely; 3 user abort.
 With blue -n: read-only preflight + installation plan only; zero
 mutation, no sudo, no confirmation."))
                 (let* ((root (%repo-root))
@@ -1004,13 +1010,14 @@ phases, one reboot apart:
      already-enrolled parts are detected and skipped, never replaced
      automatically).
 Fails closed outside the target environment.
-Exit codes: 0 success/already compliant; 1 preflight failure (no
-mutation); 2 partial mutation, cannot continue safely; 3 user abort.
+Exit codes: 0 success; 1 preflight failure (including already-completed
+enrollment; no mutation); 2 partial mutation, cannot continue safely;
+3 user abort.
 With blue -n: read-only preflight + enrollment plan only; zero
 mutation, no sudo, no confirmation."))
-                (let* ((root (%repo-root))
-                       (host (%require-host-argument arguments)))
-                  (if (dry-build?)
+                 (let* ((root (%repo-root))
+                        (host (%require-host-argument arguments)))
+                   (if (dry-build?)
                     (begin
                      (%exec (enroll-cli-argv root "plan" host))
                      (format #t "  [dry-run] no mutation; no sudo; no confirmation.~%"))
@@ -1061,14 +1068,18 @@ One-click first-boot entry for a freshly installed system:
      the next boot; the run then asks for a reboot. After rebooting,
      run 'blue enroll HOST' once more to complete TPM enrollment
      (its policy must seal against a boot with the final Secure
-     Boot state).
+      Boot state).
+Runs only once: after this system has written its firmware PK,
+firstboot is blocked before reconfigure. Use ordinary 'blue
+reconfigure HOST' for later updates.
 Stops at the first failing phase; that phase's exit code is
 propagated (reconfigure: 0/1/2; enroll: 0/1/2/3).
 With blue -n: system reconfigure derivation dry-run + enrollment
 plan only; zero mutation, no sudo, no confirmation."))
-                (let* ((root (%repo-root))
-                       (host (%require-host-argument arguments)))
-                  (if (dry-build?)
+                 (let* ((root (%repo-root))
+                        (host (%require-host-argument arguments)))
+                   (%firstboot-guard root host)
+                   (if (dry-build?)
                     (begin
                      (%doctor root host)
                      (%exec (system-reconfigure-dry-run-argv root host))

@@ -37,14 +37,23 @@ normal operation
   必须对「以最终 Secure Boot 状态启动」的那次 boot 密封，SecureBoot
   恒在下次 boot 才置 1）；reboot 后（SecureBoot=1，LUKS 密码人工输入
   一次）再跑一次，固件 detected as enrolled → skip，TPM enrollment
-  执行（PolicyPCR sha256:7，幂等）→ validate。之后 policy 变化的
-  `replace`、TPM 重建等场景同样走 `blue enroll`。
+  执行（PolicyPCR sha256:7）→ validate。完成后 `blue enroll` 被 lifecycle
+  guard 阻断；policy 变化、`replace`、TPM 重建等恢复场景必须使用下方
+  显式 `tools/tpm2-enroll.scm` 入口，不能误走正常生命周期命令。
 - HOST 与 DEVICE 均显式：无 fallback、无 hostname/machine-id 自动检测。
 - dry-run（`blue -n`）零 mutation、不 sudo、不要求确认。
-- 退出码：`0` 成功/已合规；`1` 前置失败（未 mutation）；`2` 部分
+- 退出码：`0` 成功；`1` 前置失败（含生命周期已完成，未 mutation）；`2` 部分
   mutation 无法安全自动继续；`3` 用户显式中止。
 - resume：已完成的阶段按可观察事实检测并跳过；ambiguous /
   incompatible 部分状态 fail closed（绝不自动重新格式化）。
+- lifecycle guard 使用现有持久化事实，不另建可能漂移的 marker：已启动系统
+  的 `/persist/system/root-generations/state.scm` 阻断 `blue install`；本机
+  PK 已写入（pending-reboot/enrolled）阻断 `blue firstboot`；固件已激活且
+  `/persist/system/tpm2/state.scm` 与两侧 sealed artifacts compatible 时
+  阻断 `blue enroll`。普通用户无法遍历 root-only `/persist/system` 时，
+  guard 用固件已激活 + ESP sealed blob 副本完整作为只读完成佐证；root
+  事务仍复核持久化 state 与两侧 artifacts。普通运行和 `blue -n` 都执行
+  同一只读 guard。
 
 本文档主体是 Blue 主路径；下方「手动 runbook」是同一流程的底层阶段
 细节（专家 / 恢复参考，`blue install` 按此顺序编排），出问题时的手工
@@ -53,6 +62,14 @@ secure-boot-keygen / secure-boot-enroll / tpm2-enroll）。
 
 ## 前置
 
+- **实机首次安装前必须在固件 UI 清除 Secure Boot keys、进入 Setup
+  Mode**（`SecureBoot=0`, `SetupMode=1`），再启动 LiveCD。install 会生成
+  新 key 并用新 `db` 签首次 UKI；若固件仍在 User Mode 且不信任该 key，
+  安装结果将无法启动，也就无法执行 firstboot enrollment。preflight
+  因此在任何磁盘 mutation 前 fail closed。仅当 resume 目标已有完整 key
+  material，且固件 `PK` 被证明与目标的 `PK.crt` 完全一致时，已 enrolled
+  或 pending-reboot 状态才可继续。`vm` host 的固件状态由测试 harness
+  管理，刻意不套用这一实机 gate。
 - 仓库位于 installer 环境可读位置（如 LiveCD 的 `/root/guix-configs`，
   VM 9p 共享或 clone）。Blue 经 development manifest 提供：
   `guix time-machine -C channels.lock.scm -- shell -m manifests/development.scm -- blue …`。
@@ -64,7 +81,6 @@ secure-boot-keygen / secure-boot-enroll / tpm2-enroll）。
 - LiveCD 根是内存盘：`blue install` 的 system-init 阶段会自动检测
   `/gnu/store` 在 tmpfs 并先 `herd start cow-store /mnt`（herd 缺失
   即 fail closed）。
-
 ## Blue 主路径
 
 ```bash
@@ -92,7 +108,8 @@ blue enroll laptop             # enroll 相位 2：固件 skip → TPM enrollmen
 阶段自动 skip）：
 
 ```text
-  preflight        installer 环境检查（root/工具/设备/host policy/UEFI）
+  preflight        installer 环境检查（root/工具/设备/host policy/UEFI；
+                   实机要求 Setup Mode，或 own-PK 已证明的安全 resume）
   disk             GPT + LUKS2 + Btrfs 布局（fresh 才执行；
                    破坏性确认 = 逐字输入完整 DEVICE）
   mounts           resume：打开 LUKS + 重放 mount 步骤
@@ -123,8 +140,8 @@ identity unlock（runbook 阶段 1 的语义已并入 `blue install`）：runtim
 identity 已就位时走 `luks-recovery.age`（age 解密，不提示密码）；
 否则交互两次确认（credential-source 的同一 resolver，绝不静默回退）。
 
-`blue enroll` 的真实阶段（`blue -n enroll` 打印同一计划；已完成的
-阶段自动 skip）：
+`blue enroll` 的真实阶段（`blue -n enroll` 打印同一计划；部分完成的
+阶段可安全 skip/resume，整个 enrollment 完成后命令被阻断）：
 
 ```text
   preflight        目标系统环境（/run/current-system、/persist、ESP、
@@ -135,7 +152,9 @@ identity 已就位时走 `luks-recovery.age`（age 解密，不提示密码）�
                    PK 已写入但 SecureBoot 待 boot 激活时 skip）
   tpm              SecureBoot 已激活（本 boot）时：absent →
                    tpm2-enroll enroll --luks-secret（幂等自动）；
-                   compatible → skip；incomplete → fail closed。
+                   compatible 且固件未达到 final 状态时 skip；incomplete
+                   → fail closed。final compatible 状态由 lifecycle guard
+                   在事务前阻断。
                    SecureBoot 未激活（固件刚写完、尚未 reboot）时
                    跳过并 exit 0 提示 reboot——TPM 天然是第二阶段
   validate         TPM compatible + firmware 状态 + artifacts 复核
@@ -143,7 +162,8 @@ identity 已就位时走 `luks-recovery.age`（age 解密，不提示密码）�
 
 固件写入确认：打印当前固件状态、计划操作与回滚/恢复影响，逐字输入
 `ENROLL-FIRMWARE` 才继续（其他输入/EOF 一律中止）。TPM enrollment
-是幂等的，自动执行，不额外确认。
+的底层步骤可恢复且自动执行，不额外确认；正常 `blue enroll` 生命周期
+整体完成后不再以“幂等重跑”名义放行。
 
 ## 首次启动（blue firstboot）
 
@@ -170,6 +190,11 @@ blue -n firstboot laptop   # 只读：reconfigure 推导 plan + enrollment 计�
 blue firstboot laptop
 ```
 
+`firstboot` 是一次性入口：执行前先做只读 lifecycle guard。固件 PK 一旦
+写入（包括同一 boot 的 pending-reboot 状态），后续 `blue firstboot` 和
+`blue -n firstboot` 都会在 reconfigure 之前失败；日常更新必须使用
+`blue reconfigure HOST`。
+
 两个相位顺序固定：
 
 1. **reconfigure 相位** = `blue reconfigure HOST` 的完整机制（doctor
@@ -185,8 +210,8 @@ blue firstboot laptop
    且该次 boot 的 LUKS 密码需人工输入一次——TPM 自动解锁从下下个
    boot 起生效）。
 
-之后日常更新只用 `blue reconfigure HOST`；机器绑定重做只用
-`blue enroll HOST`。
+之后日常更新只用 `blue reconfigure HOST`；机器绑定修复/重做使用下方
+显式恢复工具，不能重跑已完成的 `blue enroll HOST`。
 
 ---
 
@@ -386,6 +411,8 @@ guix repl tools/tpm2-enroll.scm -- enroll --noninteractive      # stdin 直读
   安装流程见阶段 1）。runtime identity 缺失或解密失败立即中止，
   不会回退到交互输入；plaintext 不进 argv/env/log/store。
 - `--noninteractive`：从 stdin 直读一行（脚本/自动化注入）。
+- `enroll` / `replace` 在显示当前 PCR7 后仍会要求确认；输入 `yes`
+  （大小写不敏感）才会修改 LUKS keyslot 或发布 TPM artifact。
 - `status` / `preflight` 不接受任何 credential 来源 flag。
 - 来源解析统一走 `(guixcfg security credential-source)`（与
   disk-install 共享同一 resolver；测试见 tests/test-credential-source.scm、

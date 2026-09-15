@@ -48,6 +48,7 @@
              (guixcfg boot layout)       ; ESP 布局固定事实（与 initrd 解锁同一 authority）
              (guixcfg utils process)
              (guixcfg utils spawn)       ; wait-exit（unseal 管道回收）
+             (guixcfg utils atomic-file) ; atomic-replace-file!
              ((guix build utils) #:select (mkdir-p invoke delete-file-recursively)) ; #:select：不整体导入，避免 guile-user 下 delete 覆盖警告
              (ice-9 format)
              (ice-9 match)
@@ -149,18 +150,64 @@ SetupMode==0 才认为 Secure Boot 已启用；无法读取返回 #f
       #t)
     (lambda (key . args) #f)))
 
-(define (luks-max-keyslot)
-  "luksDump 中最大的 keyslot 编号（新加的 slot = 最大编号）。
-cryptsetup 2.8 的 luksDump 输出是 '  N: luks2'（无 'Keyslot' 前缀，
-T3 实测）；旧格式 'Keyslot N:' 也兼容。"
+(define (luks-keyslots)
+  "返回 luksDump 中的 keyslot 编号列表。
+cryptsetup 2.8 的输出是 '  N: luks2'（无 'Keyslot' 前缀，T3 实测）；
+旧格式 'Keyslot N:' 也兼容。"
   (let* ((dump (invoke-capture %cryptsetup "luksDump" (luks-device)))
          (slots (filter-map (lambda (line)
                               (let ((m (or (string-match "^Keyslot ([0-9]+):" line)
                                            (string-match
                                             "^[[:space:]]*([0-9]+): luks" line))))
-                                (and m (string->number (match:substring m 1)))))
-                            (string-split dump #\newline))))
-    (and (pair? slots) (apply max slots))))
+                                 (and m (string->number (match:substring m 1)))))
+                             (string-split dump #\newline))))
+    (delete-duplicates slots)))
+
+(define (added-keyslot before after)
+  "若 AFTER 相比 BEFORE 恰好新增一个 keyslot，返回它；否则返回 #f。
+rollback 只允许使用这个集合差，绝不从最大 slot 猜测删除目标。"
+  (let ((added (lset-difference = after before)))
+    (and (= (length added) 1) (car added))))
+
+(define (call-with-passphrase-file passphrase path proc)
+  "以 0600 文件 PATH 向 PROC 暂时提供 PASSPHRASE，退出时删除。
+PROC 的整个动态范围都可使用 PATH，包括异常处理中的 keyslot rollback。"
+  (call-with-output-file path (lambda (port) (display passphrase port)))
+  (chmod path #o600)
+  (dynamic-wind
+   (lambda () #t)
+   (lambda () (proc path))
+   (lambda () (false-if-exception (delete-file path)))))
+
+(define* (rollback-keyslot! keyslot passphrase pw-file
+                            #:key (invoke-proc invoke-with-stdin))
+  "用仍存在的 recovery password file 删除已确认新增的 KEYSLOT。
+INVOKE-PROC 可由测试替换；调用方只可传 added-keyslot 的唯一结果。"
+  (format (current-error-port) "Rollback: removing keyslot ~a~%" keyslot)
+  (invoke-proc passphrase %cryptsetup
+               "luksKillSlot" "--key-file" pw-file
+               (luks-device) (number->string keyslot)))
+
+(define* (publish-sealed-pair! source-pub source-priv target-dir
+                               #:key (copy-proc copy-file)
+                               (replace-proc atomic-replace-file!))
+  "先在 TARGET-DIR 完整 stage 两个 sealed blob，再逐文件原子替换 live pair。
+因此 copy/stage 失败不会破坏已有 enrollment；单文件也不会暴露 torn write。"
+  (mkdir-p target-dir)
+  (let ((staged-pub (string-append target-dir "/.seal.pub.new"))
+        (staged-priv (string-append target-dir "/.seal.priv.new"))
+        (target-pub (string-append target-dir "/seal.pub"))
+        (target-priv (string-append target-dir "/seal.priv")))
+    (dynamic-wind
+     (lambda () #t)
+     (lambda ()
+       (copy-proc source-pub staged-pub)
+       (copy-proc source-priv staged-priv)
+       (replace-proc staged-pub target-pub)
+       (replace-proc staged-priv target-priv))
+     (lambda ()
+       (false-if-exception (delete-file staged-pub))
+       (false-if-exception (delete-file staged-priv))))))
 
 (define (random-credential)
   "32 字节 /dev/urandom → 64 位 hex 字符串（LUKS keyslot passphrase）。
@@ -339,40 +386,26 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                     (tpm2-flush-session! %tcti %tpm2-bin sess)
                     (format #t "unseal self-check passed.~%"))
                   ;; 5. luksAddKey：credential 经 stdin（--new-keyfile=-）；
-                  (let ((pw-file (string-append workdir "/.pw")))
-                    (call-with-output-file
-                     pw-file
-                     (lambda (p) (display passphrase p)))
-                    (chmod pw-file #o600)
-                    
-                    (let ((old-slots (or (luks-max-keyslot) -1)))
-                      (invoke-with-stdin
-                       credential
+                   (call-with-passphrase-file
+                    passphrase
+                    (string-append workdir "/.pw")
+                    (lambda (pw-file)
+                     (let ((old-slots (luks-keyslots)))
+                       (invoke-with-stdin
+                        credential
                        %cryptsetup
                        "luksAddKey"
                        "--key-file"
                        pw-file
-                       "--new-keyfile=-"
-                       (luks-device))
-                      (let* ((keyslot (luks-max-keyslot))
-                             (rollback!
-                              (lambda ()
-                                (format
-                                 (current-error-port)
-                                 "Rollback: removing keyslot ~a~%"
-                                 keyslot)
-                                (invoke-with-stdin
-                                 passphrase
-                                 %cryptsetup
-                                 "luksKillSlot"
-                                 "--key-file"
-                                 pw-file
-                                 (luks-device)
-                                 (number->string keyslot)))))
-                        (delete-file pw-file)
-                        (unless
-                          (and keyslot (> keyslot old-slots))
-                          (error "cannot confirm new keyslot; aborting"))
+                        "--new-keyfile=-"
+                        (luks-device))
+                       (let* ((keyslot (added-keyslot old-slots (luks-keyslots)))
+                              (rollback!
+                               (lambda ()
+                                 (rollback-keyslot!
+                                  keyslot passphrase pw-file))))
+                         (unless keyslot
+                           (error "cannot uniquely identify new keyslot; refusing rollback"))
                         (format #t "TPM keyslot ~a added.~%" keyslot)
                         (unless
                           ;; 6. 验证新 keyslot 可解锁
@@ -389,21 +422,15 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                             (lambda (key . args) #f))
                           (rollback!)
                           (error "new keyslot unlock verification failed; rolled back"))
-                        ;; 7. 发布 ESP artifact（解锁前可读；失败回滚 keyslot）
-                        (let ((esp-dir %esp-tpm2-dir))
-                          (mkdir-p esp-dir)
-                          (catch #t
-                            (lambda ()
-                              (copy-file
-                               seal-pub
-                               (string-append esp-dir "/seal.pub"))
-                              (copy-file
-                               seal-priv
-                               (string-append esp-dir "/seal.priv"))
-                              (call-with-output-file
-                               (string-append esp-dir "/metadata.scm")
-                               (lambda (p)
-                                 (write `((enrollment-id unquote id)
+                         ;; 7. 发布 ESP artifact（解锁前可读；失败回滚 keyslot）
+                         (let ((esp-dir %esp-tpm2-dir))
+                           (catch #t
+                             (lambda ()
+                               (publish-sealed-pair! seal-pub seal-priv esp-dir)
+                               (atomic-write-file!
+                                (string-append esp-dir "/metadata.scm")
+                                (lambda (p)
+                                  (write `((enrollment-id unquote id)
                                           (keyslot unquote keyslot)
                                           (pcr7 unquote pcr7-hex)
                                           (created unquote (current-time)))
@@ -412,13 +439,11 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                             (lambda (key . args)
                               (rollback!)
                               (apply throw key args)))
-                          (format #t "ESP artifact published (~a)~%" esp-dir))
-                        ;; 8. /persist 管理副本 + 原子写 state
-                        (let ((obj-dir (enrollment-artifact-dir)))
-                          (mkdir-p obj-dir)
-                          (copy-file seal-pub (string-append obj-dir "/seal.pub"))
-                          (copy-file seal-priv (string-append obj-dir "/seal.priv"))
-                          (write-tpm2-state!
+                           (format #t "ESP artifact published (~a)~%" esp-dir))
+                         ;; 8. /persist 管理副本 + 原子写 state
+                         (let ((obj-dir (enrollment-artifact-dir)))
+                           (publish-sealed-pair! seal-pub seal-priv obj-dir)
+                           (write-tpm2-state!
                            (tpm2-enrollment
                             (id id)
                             (keyslot keyslot)
@@ -430,7 +455,7 @@ T3 实测）；旧格式 'Keyslot N:' 也兼容。"
                            "state written (enrollment ~a, keyslot ~a)~%"
                            id
                            keyslot))
-                        (format #t "~%enrollment complete. Next boot will attempt TPM auto-unlock;\npassphrase fallback is unaffected.~%"))))))))
+                         (format #t "~%enrollment complete. Next boot will attempt TPM auto-unlock;\npassphrase fallback is unaffected.~%")))))))))
           (lambda () (false-if-exception (delete-file-recursively workdir)))))
 
 (define (do-replace passphrase-source)

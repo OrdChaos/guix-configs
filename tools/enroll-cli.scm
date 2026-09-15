@@ -5,6 +5,8 @@
 ;;;
 ;;; 用法（仓库根）：
 ;;;   guix time-machine -C channels.lock.scm -- \
+;;;     repl tools/enroll-cli.scm -- firstboot-guard HOST
+;;;   guix time-machine -C channels.lock.scm -- \
 ;;;     repl tools/enroll-cli.scm -- plan HOST
 ;;;   guix time-machine -C channels.lock.scm -- \
 ;;;     repl tools/enroll-cli.scm -- run HOST
@@ -13,7 +15,7 @@
 ;;; ENROLLMENT PLAN；零 mutation、无确认；任何 FAIL → exit 1。
 ;;; run：root 事务（preflight → 固件写入确认 → firmware enrollment
 ;;; → TPM enrollment → post-enrollment 验证）；exit 契约 = 模块头：
-;;; 0 成功/已合规；1 前置失败（未 mutation）；2 部分 mutation 无法
+;;; 0 成功；1 前置失败（含 lifecycle 已完成，未 mutation）；2 部分 mutation 无法
 ;;; 安全继续；3 用户显式中止。
 
 ;; guix repl 不提供 -L，这里显式把 modules/ 加入 load path
@@ -30,47 +32,52 @@
 
 (define (usage)
   (format (current-error-port)
-          "usage: enroll-cli.scm -- plan HOST | run HOST~%")
+          "usage: enroll-cli.scm -- firstboot-guard HOST | plan HOST | run HOST~%")
   (exit 1))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; plan（只读；user 态与 blue -n 共用）
 
+(define (run-checks checks prefix)
+  (let loop ((rest checks) (failures 0))
+    (if (null? rest)
+      (begin
+       (unless (zero? failures)
+         (format (current-error-port) "~a: ~a check(s) failed~%"
+                 prefix failures)
+         (exit 1))
+       #t)
+      (let* ((check (car rest))
+             (result ((cdr check))))
+        (match result
+               (('ok . detail)
+                (format #t "  [OK] ~a~a~%" (car check)
+                        (if detail (string-append ": " detail) "")))
+               (('info . detail)
+                (format #t "  [--] ~a~a~%" (car check)
+                        (if detail (string-append ": " detail) "")))
+               (('fail . detail)
+                (format (current-error-port) "  [FAIL] ~a: ~a~%"
+                        (car check) detail))
+               (_ #t))
+        (loop (cdr rest)
+              (+ failures (if (and (pair? result)
+                                   (eq? (car result) 'fail))
+                            1 0)))))))
+
+(define (firstboot-guard-command host)
+  (run-checks (firstboot-readonly-checks (repo-root) host)
+              "firstboot preflight")
+  (exit 0))
+
 (define (plan-command host)
   (let ((root (repo-root)))
-    (let loop ((checks (enroll-readonly-checks root host))
-               (failures 0))
-      (if (null? checks)
-        (begin
-         (unless (zero? failures)
-           (format (current-error-port)
-                   "enroll preflight: ~a check(s) failed~%" failures)
-           (exit 1))
-         (for-each
-          (lambda (line) (format #t "~a~%" line))
-          (enroll-plan-lines
-           (classify-enrollment-probes (collect-enrollment-probes))
-           host))
-         (exit 0))
-        (let* ((check (car checks))
-               (result ((cdr check))))
-          (match result
-                 (('ok . detail)
-                  (format #t "  [OK] ~a~a~%"
-                          (car check)
-                          (if detail (string-append ": " detail) "")))
-                 (('info . detail)
-                  (format #t "  [--] ~a~a~%"
-                          (car check)
-                          (if detail (string-append ": " detail) "")))
-                 (('fail . detail)
-                  (format (current-error-port) "  [FAIL] ~a: ~a~%"
-                          (car check) detail))
-                 (_ #t))
-          (loop (cdr checks)
-                (+ failures (if (and (pair? result)
-                                     (eq? (car result) 'fail))
-                              1 0))))))))
+    (run-checks (enroll-readonly-checks root host) "enroll preflight")
+    (for-each
+     (lambda (line) (format #t "~a~%" line))
+     (enroll-plan-lines
+      (classify-enrollment-probes (collect-enrollment-probes)) host))
+    (exit 0)))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; run（root 事务；固件确认 UI 归本 CLI）
@@ -104,8 +111,10 @@
 ;;; ────────────────────────────────────────────────────────────
 
 (match (cdr (command-line))
+       (("--" "firstboot-guard" host) (firstboot-guard-command host))
        (("--" "plan" host) (plan-command host))
        (("--" "run" host) (run-command host))
+       (("firstboot-guard" host) (firstboot-guard-command host))
        (("plan" host) (plan-command host))
        (("run" host) (run-command host))
        (_ (usage)))

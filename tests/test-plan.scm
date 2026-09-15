@@ -56,7 +56,16 @@
                                 (and (eq? (plan-step-id step) 'partition)
                                      (= (assq-ref (plan-step-detail step) 'esp-size)
                                         (host-storage-policy-esp-size %vm-storage-policy))))
-                              %test-plan))
+                               %test-plan))
+            (test-assert "partition-dependent operations carry the confirmed disk"
+                         (every (lambda (step)
+                                  (or (not (memq (plan-step-id step)
+                                                 '(format-esp luks-format luks-open
+                                                   mount-esp write-facts)))
+                                      (string=? "/dev/vda"
+                                                (assq-ref (plan-step-detail step)
+                                                          'device))))
+                                %test-plan))
             (test-assert "swapfile step uses subvolume name (@persist- prefix), not mount point"
                          (any (lambda (step)
                                 (and (eq? (plan-step-id step) 'make-swapfile)

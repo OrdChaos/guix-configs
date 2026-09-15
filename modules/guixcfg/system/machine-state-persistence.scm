@@ -2,7 +2,7 @@
 ;;; /persist/system/state/<backing> → bind → <absolute system consumer>。
 ;;;
 ;;; 支持“daemon/GUI 在运行期写标准 /etc、/var/lib 等位置，但
-;;; canonical state 留在 /persist/system”的架构位置——例如未来
+;;; canonical state 留在 /persist/system”的架构位置——例如 laptop
 ;;; NetworkManager 的 GUI-created connection profiles：
 ;;;   /persist/system/state/network-manager/system-connections
 ;;;     → /etc/NetworkManager/system-connections

@@ -115,6 +115,12 @@ db    我们的 db + Microsoft db CAs（含 Option ROM UEFI CA 2023）+ 固件 d
 - `blue install` 生成 key/keystore 并部署签名 UKI，但不写固件 NVRAM；
   目标系统启动后由 `blue firstboot` 注册 db/KEK/PK，重启使 Secure Boot
   生效，再由 `blue enroll` 完成 PCR7 TPM enrollment。
+- 因首次 UKI 已由新生成、尚未受信任的 `db` 签名，实机 fresh install
+  必须从 Setup Mode 开始。User Mode 只作为 safe resume 接受：固件 PK
+  变量必须包含目标 `/persist` key set 的精确 `PK.crt` DER；只看
+  `SecureBoot=1`/`SetupMode=0` 不足以证明这是本机 key。enroll 的
+  already-enrolled 判定使用同一 ownership check，不能把外部 PK 当作
+  已完成而跳过。
 
 ## TPM2（PCR7-only）
 

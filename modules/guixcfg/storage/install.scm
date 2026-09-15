@@ -101,19 +101,32 @@ password（docs/architecture/boot.md（TPM2））。"
                                                               (partition             . ,(lambda (d passphrase!) (execute-partition (detail-ref d 'device)
                                                                                                                                    (detail-ref d 'esp-size))))
                                                               (wait-udev             . ,(lambda (d passphrase!) (execute-wait-udev (detail-ref d 'device))))
-                                                              (format-esp            . ,(lambda (d passphrase!) (execute-format-esp)))
+                                                               (format-esp            . ,(lambda (d passphrase!)
+                                                                                           (execute-format-esp
+                                                                                            (target-partition-path (detail-ref d 'device) 1))))
                                                               ;; LUKS passphrase 来自 apply session（luks-format 首次读取，
                                                               ;; luks-open 复用同一值），经 stdin 传给 cryptsetup。
                                                               (luks-format           . ,(lambda (d passphrase!)
-                                                                                          (execute-luks-format (passphrase!))))
+                                                                                           (execute-luks-format
+                                                                                            (target-partition-path (detail-ref d 'device) 2)
+                                                                                            (passphrase!))))
                                                               (luks-open             . ,(lambda (d passphrase!)
                                                                                           (catch #t
-                                                                                            (lambda () (execute-luks-open (passphrase!)))
+                                                                                             (lambda ()
+                                                                                               (execute-luks-open
+                                                                                                (target-partition-path (detail-ref d 'device) 2)
+                                                                                                (passphrase!)))
                                                                                             (lambda args
                                                                                               (format (current-error-port)
                                                                                                       "LUKS volume created but initial open failed; luksFormat will not be rerun.~%")
                                                                                               (apply throw args)))))
-                                                              (format-btrfs          . ,(lambda (d passphrase!) (execute-format-btrfs (detail-ref d 'device))))
+                                                               (format-btrfs          . ,(lambda (d passphrase!)
+                                                                                           (let ((mapper (detail-ref d 'device))
+                                                                                                 (disk (detail-ref d 'target-disk)))
+                                                                                             (unless (device-on-disk? mapper disk)
+                                                                                               (error "LUKS mapper does not belong to confirmed target disk"
+                                                                                                      mapper disk))
+                                                                                             (execute-format-btrfs mapper))))
                                                               (mount-top             . ,(lambda (d passphrase!) (execute-mount-top)))
                                                               (make-subvolume        . ,(lambda (d passphrase!) (execute-make-subvolume (detail-ref d 'name))))
                                                               ;; 与 make-subvolume 同一执行器；独立 step id 只是让计划更可读
@@ -127,8 +140,14 @@ password（docs/architecture/boot.md（TPM2））。"
                                                               (mount-subvolume       . ,(lambda (d passphrase!) (execute-mount-subvolume (detail-ref d 'name)
                                                                                                                                          (detail-ref d 'target)
                                                                                                                                          (detail-ref d 'options))))
-                                                              (mount-esp             . ,(lambda (d passphrase!) (execute-mount-esp (detail-ref d 'target))))
-                                                              (write-facts           . ,(lambda (d passphrase!) (write-machine-facts (detail-ref d 'target))))
+                                                               (mount-esp             . ,(lambda (d passphrase!)
+                                                                                           (execute-mount-esp
+                                                                                            (target-partition-path (detail-ref d 'device) 1)
+                                                                                            (detail-ref d 'target))))
+                                                               (write-facts           . ,(lambda (d passphrase!)
+                                                                                           (write-machine-facts
+                                                                                            (detail-ref d 'target)
+                                                                                            (detail-ref d 'device))))
                                                               (ready                 . ,(lambda (d passphrase!) #t))))
 
 (define (execute-step step passphrase!)
@@ -201,8 +220,9 @@ ON-FAILURE 非 #f 时是 (lambda (key args) ...) 失败处理器：安装编排�
 
 (define %required-commands
   '("sgdisk" "udevadm" "mkfs.vfat" "cryptsetup" "mkfs.btrfs"
-             "btrfs" "mount" "umount" "mkdir" "lsblk" "findmnt" "readlink"
-             ;; repo 复制阶段（installation.md 阶段 8：tar 两段复制 +
+              "btrfs" "mount" "umount" "mkdir" "lsblk" "findmnt" "readlink"
+              "age"
+              ;; repo 复制阶段（installation.md 阶段 8：tar 两段复制 +
              ;; chown -R 归还 USER ownership）
              "tar" "chown"))
 
@@ -232,11 +252,12 @@ ON-FAILURE 非 #f 时是 (lambda (key args) ...) 失败处理器：安装编排�
 ;;; initrd 里没有 udev，mapped-device 的 source 只能用 LUKS UUID
 ;;; （initrd 会扫描块设备匹配，无需 /dev/disk/by-* 符号链接）。
 
-(define (write-machine-facts target)
+(define (write-machine-facts target device)
   "把安装时发现的机器事实写入 TARGET 下的 facts 文件（boot 期
 fail-closed 读取——原子写，不留半个文件）。"
-  (let ((luks-uuid (first-command-line "cryptsetup" "luksUUID"
-                                       (by-partlabel-path %system-partlabel))))
+  (let ((luks-uuid (first-command-line
+                    "cryptsetup" "luksUUID"
+                    (target-partition-path device 2))))
     (unless luks-uuid
       (error "failed to read LUKS UUID" %system-partlabel))
     (let ((facts `((luks-uuid . ,luks-uuid)))

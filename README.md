@@ -31,6 +31,8 @@ guix time-machine -C channels.lock.scm -- repl tools/disk-install.scm -- inspect
 guix time-machine -C channels.lock.scm -- repl tools/disk-install.scm -- plan vm /dev/vda
 
 # 安装生命周期（LiveCD / installer 环境；HOST 与 DEVICE 均显式）
+#  实机首次安装先在固件 UI 清除 Secure Boot keys、进入 Setup Mode；
+#  否则 preflight 拒绝。
 #  dry-run：只读 preflight + 完整安装计划，零 mutation、无 sudo
 guix time-machine -C channels.lock.scm -- \
   shell -m manifests/development.scm -- blue -n install laptop /dev/nvme0n1
@@ -41,9 +43,8 @@ blue -n firstboot laptop   # 只读：reconfigure 推导 plan + enrollment 计�
 blue firstboot laptop      # 首次启动收敛：reconfigure + 固件 enrollment
 # reboot once so Secure Boot becomes active, then enroll TPM:
 blue enroll laptop
-# 单独重跑机器绑定（policy 变化 replace / TPM 重建）：
-blue -n enroll laptop
-blue enroll laptop
+# install / firstboot / enroll 完成后各自 fail closed，不作为日常重跑入口。
+# TPM repair/replace 使用文档中的显式底层恢复工具。
 
 # 构建 VM 系统配置（已装系统外需要 facts 文件，见 development/testing.md）
 GUIX_CONFIG_FACTS=/tmp/facts.scm \

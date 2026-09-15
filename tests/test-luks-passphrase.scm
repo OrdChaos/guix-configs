@@ -88,12 +88,14 @@
 
 ;; ── 4. luksFormat：--batch-mode + --key-file=-，stdin 是 passphrase ──
 (install-fake-cryptsetup 0)
-(execute-luks-format "pw4fmt")
+(execute-luks-format "/dev/vda2" "pw4fmt")
 (test-assert "luksFormat uses --batch-mode and --key-file=-"
              (let ((args (fake-argv)))
                (and args
-                    (string-contains args "--batch-mode")
-                    (string-contains args "--key-file=-"))))
+                     (string-contains args "--batch-mode")
+                     (string-contains args "--key-file=-")
+                     (string-contains args "/dev/vda2")
+                     (not (string-contains args "/dev/disk/by-partlabel")))))
 (test-assert "luksFormat stdin receives passphrase"
              (string=? "pw4fmt" (fake-stdin)))
 ;; 关键：display + EOF 不附加换行——最终用户启动时交互输入的
@@ -102,28 +104,31 @@
              (not (string-suffix? "\n" (fake-stdin))))
 
 ;; ── 5. open：--key-file=-，stdin 是 passphrase ─────────────
-(execute-luks-open "pw4open")
+(execute-luks-open "/dev/vda2" "pw4open")
 (test-assert "open uses --key-file=-"
              (let ((args (fake-argv)))
-               (and args (string-contains args "--key-file=-"))))
+               (and args
+                    (string-contains args "--key-file=-")
+                    (string-contains args "/dev/vda2")
+                    (not (string-contains args "/dev/disk/by-partlabel")))))
 (test-assert "open stdin receives passphrase"
              (string=? "pw4open" (fake-stdin)))
 (test-assert "open stdin has no trailing newline"
              (not (string-suffix? "\n" (fake-stdin))))
 
 ;; 非 ASCII passphrase：UTF-8 多字节字符经 stdin 原样传递
-(execute-luks-format "秘密pw-✓")
+(execute-luks-format "/dev/vda2" "秘密pw-✓")
 (test-assert "non-ASCII passphrase bytes match stdin exactly"
              (string=? "秘密pw-✓" (fake-stdin)))
 
 ;; ── 6. luksFormat 失败：抛错（不继续 open/Btrfs）────────────
 (install-fake-cryptsetup 1)
 (test-error "luksFormat failure throws" #t
-            (execute-luks-format "pw"))
+             (execute-luks-format "/dev/vda2" "pw"))
 
 ;; ── 7. open 失败：抛错 ────────────────────────────────────
 (test-error "open failure throws" #t
-            (execute-luks-open "pw"))
+             (execute-luks-open "/dev/vda2" "pw"))
 
 ;; 恢复 PATH，避免影响后续测试文件。
 (setenv "PATH" %original-path)

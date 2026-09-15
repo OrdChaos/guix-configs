@@ -74,6 +74,7 @@
     "tests/test-seed-once.scm"
     "tests/test-source-hygiene.scm"
     "tests/test-machine-state-persistence.scm"
+    "tests/test-network-manager-persistence.scm"
     "tests/test-machine-identity.scm"
     "tests/test-mixed-authority.scm"
     "tests/test-ui-language.scm"

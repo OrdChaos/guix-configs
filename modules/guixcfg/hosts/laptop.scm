@@ -15,8 +15,7 @@
 ;;;   1. 网络：NetworkManager 默认 shepherd-requirement
 ;;;      '(wireless-daemon) + 显式 wpa-supplicant 实例（pinned Guix
 ;;;      不会自动实例化 wpa-supplicant-service-type）；
-;;;   2. secrets：%laptop-secrets = mihomo + applications（无测试
-;;;      sentinel）；
+;;;   2. secrets：%laptop-secrets = mihomo + applications；
 ;;;   3. home：%laptop-guix-home（niri 'laptop variant selection +
 ;;;      laptop-only host capability %prime-run-wrapper）；
 ;;;   4. NVIDIA：最终 OS 套 nvidia-system-transformation（open kernel
@@ -44,7 +43,8 @@
                #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
                #:use-module (guixcfg apps model)      ; applications-secrets
                #:use-module (guixcfg apps selection)  ; application-configuration-selection
-               #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
+               #:use-module (guixcfg system machine-state-persistence) ; machine-state binds
+               #:use-module (guixcfg system network-manager-persistence) ; saved connection profiles
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind
                #:use-module (guixcfg system mihomo service) ; %mihomo-secrets、%mihomo-data-persistence-rule
                #:export (%laptop-storage-policy
@@ -109,21 +109,32 @@
   (machine-state-persistence-file-systems
    (list %noctalia-greeter-persistence-rule)))
 
+;; GUI-created NetworkManager keyfile profiles only.  Derived/volatile state
+;; under /var/lib/NetworkManager remains on the ephemeral root.
+(define %network-manager-machine-state-file-systems
+  (machine-state-persistence-file-systems
+   (list %network-manager-connections-persistence-rule)))
+
 (define %laptop-services
-  (make-host-services
-   ;; 实机网络：NetworkManager 默认配置 + 显式 wpa-supplicant。
-   ;; DNS 语义同 VM（docs/architecture/dns.md）。
-   #:network-services
-   (list (service network-manager-service-type)
-         (service wpa-supplicant-service-type))
-   #:keep-root-generations
-   (host-storage-policy-keep-root-generations %laptop-storage-policy)
-   #:persistent-mount-file-systems %persistent-mount-file-systems))
+  (append
+   (make-host-services
+    ;; 实机网络：NetworkManager 默认配置 + 显式 wpa-supplicant。
+    ;; DNS 语义同 VM（docs/architecture/dns.md）。
+    #:network-services
+    (list (service network-manager-service-type)
+          (service wpa-supplicant-service-type))
+    #:keep-root-generations
+    (host-storage-policy-keep-root-generations %laptop-storage-policy)
+    #:persistent-mount-file-systems %persistent-mount-file-systems)
+   ;; Activation precedes Shepherd's mounts and NetworkManager startup.
+   (list (network-manager-connections-persistence-service))))
 
 ;; 完整 user services（不含 account-databases 投影本身）。
 (define %laptop-user-services
   (make-host-user-services
    #:system-services %laptop-services
+   #:additional-machine-state-persistence-rules
+   (list %network-manager-connections-persistence-rule)
    #:secrets %laptop-secrets
    #:home-environment %laptop-guix-home))
 
@@ -136,6 +147,8 @@
    #:mihomo-machine-state-file-systems %mihomo-machine-state-file-systems
    #:noctalia-greeter-machine-state-file-systems
    %noctalia-greeter-machine-state-file-systems
+   #:additional-machine-state-file-systems
+   %network-manager-machine-state-file-systems
    #:user-services %laptop-user-services))
 
 ;; 最终 OS：account fold + machine-identity + account-databases 投影，

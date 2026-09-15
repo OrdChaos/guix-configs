@@ -5,10 +5,10 @@
 ;;; 对应 docs/operations/installation.md、docs/architecture/storage.md（磁盘布局）。
 
 (define-module (guixcfg storage partition)
-               #:use-module (guixcfg storage model)  ; by-partlabel-path（固定事实构造器）
+               #:use-module (guixcfg storage model)
+               #:use-module (guixcfg storage device) ; target-partition-path
                #:use-module (guix build utils)  ; invoke（失败即抛异常，配合 install.scm 的失败即停）
                #:use-module (ice-9 format)
-               #:use-module (srfi srfi-1)       ; every
                #:export (execute-wipe
                          execute-partition
                          execute-wait-udev))
@@ -32,14 +32,13 @@ ESP：1 号分区，大小来自 host policy（2–4 GiB），类型 EF00；
             device)))
 
 (define (execute-wait-udev device)
-  "等待 udev 为 /by-partlabel/ 节点就位（docs/architecture/storage.md）。"
+  "等待 udev 暴露已确认目标盘的分区节点。"
   (invoke "udevadm" "settle" "--timeout=15")
-  (let ((deadline (+ (current-time) 15))
-        (targets (map by-partlabel-path
-                      (list %esp-partlabel %system-partlabel))))
+  (let ((deadline (+ (current-time) 15)))
     (let loop ()
-      (unless (every file-exists? targets)
+      (unless (and (false-if-exception (target-partition-path device 1))
+                   (false-if-exception (target-partition-path device 2)))
         (when (> (current-time) deadline)
-          (error "timed out waiting for partition node" targets))
+          (error "timed out waiting for target partition nodes" device))
         (usleep 200000)
         (loop)))))

@@ -72,7 +72,7 @@ NOCOW、不压缩、预分配；@persist-swap 不做快照，swapfile 不进备�
 (define (execute-mount-subvolume name target options)
   (mount-subvol name target options))
 
-(define (execute-mount-esp target)
+(define (execute-mount-esp partition target)
   (mkdir-p target)
   (unless (mount-point-mounted? target)
-    (invoke "mount" (by-partlabel-path %esp-partlabel) target)))
+    (invoke "mount" partition target)))

@@ -493,6 +493,33 @@
 ;;; preflight checks 形态（只读，可安全求值——本机不是安装环境，
 ;;; 检查应 fail closed 而非抛错）
 
+(test-equal "physical fresh install accepts Setup Mode"
+            'ok
+            (car (install-secure-boot-preflight "laptop" 'setup-mode)))
+
+(test-equal "physical fresh install rejects User Mode with foreign keys"
+            'fail
+            (car (install-secure-boot-preflight "laptop"
+                                                'foreign-enrolled)))
+
+(test-equal "physical resume accepts User Mode only after own PK is proven"
+            'ok
+            (car (install-secure-boot-preflight "laptop" 'enrolled)))
+
+(test-equal "user preflight rejects fresh install when PK ownership is unverified"
+            'fail
+            (car (install-secure-boot-preflight
+                  "laptop" 'enrolled-unverified)))
+
+(test-equal "user preflight defers own-PK verification only for complete resume keys"
+            'ok
+            (car (install-secure-boot-preflight
+                  "laptop" 'enrolled-unverified 'complete)))
+
+(test-equal "VM install intentionally ignores physical firmware state"
+            'ok
+            (car (install-secure-boot-preflight "vm" 'unclear)))
+
 (test-assert "install preflight checks are ((label . thunk)) with (status . detail) results"
              (let ((checks (install-preflight-checks "/repo" "laptop"
                                                      "/dev/nvme0n1")))
@@ -511,7 +538,26 @@
                (eq? 'fail
                     (car ((cdr (find (lambda (c)
                                        (string=? (car c) "host known"))
-                                     checks)))))))
+                                       checks)))))))
+
+(let ((dir (mkdtemp "/tmp/guixcfg-installed-lifecycle-XXXXXX")))
+  (dynamic-wind
+   (lambda () #t)
+   (lambda ()
+     (let ((current (string-append dir "/current-system"))
+           (state (string-append dir "/persist/root-generations/state.scm")))
+       (test-assert "install lifecycle permits a LiveCD without target state"
+                    (not (installed-system-complete?
+                          #:current-system current
+                          #:root-generation-state state)))
+       (mkdir-p (dirname state))
+       (mkdir current)
+       (call-with-output-file state (lambda (port) (display "state\n" port)))
+       (test-assert "install lifecycle blocks an already-booted installed system"
+                    (installed-system-complete?
+                     #:current-system current
+                     #:root-generation-state state))))
+   (lambda () (false-if-exception (delete-file-recursively dir)))))
 
 (test-end "install-orchestration")
 

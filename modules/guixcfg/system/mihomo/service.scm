@@ -70,8 +70,8 @@
 
 ;; subscription URL 的 secret-decl（单一 owner = 本模块；所有设备共用
 ;; 同一密文，target-name 契约见 (guixcfg system mihomo config) 的
-;; %mihomo-secret-path）。测试 sentinel 密文（example.invalid 假订阅）；
-;; 真实订阅 URL 由宿主用 stable recipient 重加密后替换本文件。
+;; %mihomo-secret-path）。仓库中的 age 密文是实际订阅 URL；plaintext
+;; 只在运行期由 stable identity 解密，不进入 store。
 (define %mihomo-secrets
   (list (secret-decl
          (name 'mihomo-subscription)

@@ -14,12 +14,16 @@
                #:export (;; 纯解析（可测试）
                          <device-node>
                          device-node device-node?
-                         device-node-type device-node-size
-                         device-node-mountpoints device-node-children
-                         parse-lsblk-json
-                         device-node-mounted?
-                         ;; IO 探测
-                         probe-device
+                          device-node-type device-node-size
+                          device-node-mountpoints device-node-children
+                          parse-lsblk-json
+                          device-node-mounted?
+                          device-node-tree-mounted?
+                          ;; IO 探测
+                          probe-device
+                          canonical-device
+                          target-partition-path
+                          device-on-disk?
                          ;; 命令执行辅助（install.scm 的环境检查等使用）
                          first-command-line))
 
@@ -38,6 +42,11 @@
 (define (device-node-mounted? node)
   "该节点自身是否已挂载。"
   (not (null? (device-node-mountpoints node))))
+
+(define (device-node-tree-mounted? node)
+  "NODE 自身或任意深度的后代是否已挂载。"
+  (or (device-node-mounted? node)
+      (any device-node-tree-mounted? (device-node-children node))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; lsblk --json 解析。
@@ -98,6 +107,38 @@
 (define (canonical-device path)
   "解析符号链接，得到设备的真实路径（/dev/disk/by-* 链接也会解开）。"
   (or (first-command-line "readlink" "-f" path) path))
+
+(define (device-on-disk? device disk)
+  "DEVICE 是否以 DISK 为底层整盘。失败或异常拓扑一律返回 #f。"
+  (let ((owner (whole-disk-of (canonical-device device))))
+    (and owner
+         (string=? (canonical-device owner) (canonical-device disk)))))
+
+(define (target-partition-path disk number)
+  "返回 DISK 的 NUMBER 号分区路径。每次解析都用 lsblk 验证 DISK 是整盘、
+候选节点是分区、具有固定 PARTLABEL 且确实属于 DISK；任何不确定状态均抛错。"
+  (let* ((target (canonical-device disk))
+         (expected-label (case number
+                           ((1) "esp")
+                           ((2) "system")
+                           (else (error "unsupported target partition number"
+                                        number))))
+         (suffix (if (and (> (string-length target) 0)
+                          (char-numeric?
+                           (string-ref target (1- (string-length target)))))
+                   "p" ""))
+         (partition (string-append target suffix (number->string number))))
+    (unless (equal? "disk" (first-command-line "lsblk" "-dno" "TYPE" target))
+      (error "target is not an lsblk TYPE=disk" disk))
+    (unless (and (equal? "part"
+                         (first-command-line "lsblk" "-dno" "TYPE" partition))
+                 (equal? expected-label
+                         (first-command-line "lsblk" "-dno" "PARTLABEL"
+                                             partition))
+                 (device-on-disk? partition target))
+      (error "partition does not match confirmed target disk and PARTLABEL"
+             partition disk expected-label))
+    partition))
 
 (define (find-persistent-link path subdir)
   "在 /dev/disk/SUBDIR/ 中找指向 PATH 的符号链接，返回完整链接路径或 #f。
@@ -190,16 +231,14 @@ QEMU/virtio 盘在 eudev 下没有 by-id 链接，只有 by-path。"
                  (command-lines "lsblk" "--json" "-b"
                                 "-o" "NAME,PATH,TYPE,SIZE,MOUNTPOINTS"
                                 path))))
-         (mounted (and node
-                       (or (device-node-mounted? node)
-                           (any device-node-mounted?
-                                (device-node-children node)))))
+          (mounted (and node (device-node-tree-mounted? node)))
          (system-disk (system-disk-device))
          (on-system-disk (and system-disk
                               (string=? (canonical-device path) system-disk))))
     (device-facts
      (path path)
      (by-id (find-persistent-alias path))
+     (type (and node (device-node-type node)))
      (partition? (and node (equal? (device-node-type node) "part")))
      ;; LiveCD 的安装介质自身就是挂载着的（根或 /run 在它上面），
      ;; 因此 mounted? 检查已经能拦住它；live-media? 提供更准确的错误信息。
