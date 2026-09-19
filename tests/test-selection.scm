@@ -18,7 +18,7 @@
              (guixcfg apps registry) ; %applications（校验权威）
              (guixcfg apps selection)
              (guixcfg apps niri definition)
-             (guixcfg hosts laptop)
+             (guixcfg hosts lenovo-legion-y7000p)
              (ice-9 rdelim)          ; read-string
              (ice-9 ftw)             ; scandir
              (srfi srfi-1)
@@ -90,24 +90,24 @@
                      (map (lambda (s)
                             (list (application-configuration-selection-application s)
                                   (application-configuration-selection-variant s)))
-                          %laptop-application-configuration-selections)))
-(test-assert "hosts/laptop.scm contains no target path"
-             (let ((s (call-with-input-file "modules/guixcfg/hosts/laptop.scm"
+                           %lenovo-legion-y7000p-application-configuration-selections)))
+(test-assert "Lenovo host contains no target path"
+             (let ((s (call-with-input-file "modules/guixcfg/hosts/lenovo-legion-y7000p.scm"
                                             (lambda (p) (read-string p)))))
                (not (string-contains s "niri/host.kdl"))))
-(test-assert "hosts/laptop.scm contains no source file path"
-             (let ((s (call-with-input-file "modules/guixcfg/hosts/laptop.scm"
+(test-assert "Lenovo host contains no source file path"
+             (let ((s (call-with-input-file "modules/guixcfg/hosts/lenovo-legion-y7000p.scm"
                                             (lambda (p) (read-string p)))))
                (not (string-contains s ".kdl"))))
-(test-assert "hosts/laptop.scm does not use local-file"
-             (let ((s (call-with-input-file "modules/guixcfg/hosts/laptop.scm"
+(test-assert "Lenovo host does not use local-file"
+             (let ((s (call-with-input-file "modules/guixcfg/hosts/lenovo-legion-y7000p.scm"
                                             (lambda (p) (read-string p)))))
                (not (string-contains s "local-file"))))
 
 ;; ── 解析：laptop selection → 配置文件贡献 ────────────────────
 (define laptop-svcs
   (application-configuration-selections->home-services
-   %laptop-application-configuration-selections))
+   %lenovo-legion-y7000p-application-configuration-selections))
 
 (test-assert "laptop selection resolves to exactly one service"
              (= 1 (length laptop-svcs)))
@@ -336,7 +336,7 @@
 (define %lowered-laptop
   (lower-home
    (application-configuration-selections->home-services
-    %laptop-application-configuration-selections)))
+    %lenovo-legion-y7000p-application-configuration-selections)))
 
 (test-assert "laptop variant file installed under niri XDG config dir"
              (file-exists?

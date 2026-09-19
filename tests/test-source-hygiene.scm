@@ -43,14 +43,15 @@
 
 ;; ── 2. generic modules 无开发机身份 ─────────────────────────
 ;; 仓库代码不得出现开发者用户名 / 具体机器 checkout 绝对路径。
-;; （"user"/"vm"/"laptop" 等是项目 inventory 值，不在此列。）
-;; 例外：modules/guixcfg/users/ 是用户名结构事实的权威来源
-;; （%primary-user，AGENT.md §13）——真实用户名必然出现在那里，
-;; 检查范围排除该目录；generic 模块仍必须无泄漏。
+;; （"user"/"vm"/"lenovo-legion-y7000p" 等是项目 inventory 值，不在此列。）
+;; 例外：modules/guixcfg/users/ 与 inventory/ 分别是用户和部署机器
+;; 身份事实的权威来源——真实名称必然出现在其中；hosts/ 是具体机器
+;; 组装层。检查范围排除这些 inventory 层，generic 模块仍必须无泄漏。
 (define %generic-modules
   (filter (lambda (p)
-            (and (not (string-prefix? "modules/guixcfg/users/" p))
-                 (not (string-prefix? "modules/guixcfg/hosts/" p))
+             (and (not (string-prefix? "modules/guixcfg/users/" p))
+                  (not (string-prefix? "modules/guixcfg/inventory/" p))
+                  (not (string-prefix? "modules/guixcfg/hosts/" p))
                  (not (string-prefix? "modules/guixcfg/apps/" p))))
           (scheme-files-under "modules")))
 

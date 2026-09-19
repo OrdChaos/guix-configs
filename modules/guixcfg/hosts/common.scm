@@ -13,7 +13,7 @@
 ;;;   persistence rules         Flatpak 平台规则共享（2026-09：从
 ;;;                             VM-only 提升到 common——所有 host 都用）
 ;;;   secrets composition       VM 含测试 sentinel，Laptop 不含
-;;;   home environment          %guix-home vs %laptop-guix-home
+;;;   home environment          %guix-home vs model-specific Guix Home
 ;;;   final OS transformation   Laptop：nvidia-system-transformation；
 ;;;                             VM：identity
 ;;;

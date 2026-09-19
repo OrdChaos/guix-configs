@@ -87,21 +87,21 @@ secure-boot-keygen / secure-boot-enroll / tpm2-enroll）。
 # installer 环境（LiveCD）
 guix time-machine -C channels.lock.scm -- \
   shell -m manifests/development.scm -- \
-  blue -n install laptop /dev/nvme0n1
+  blue -n install lenovo-legion-y7000p /dev/nvme0n1
 
 guix time-machine -C channels.lock.scm -- \
   shell -m manifests/development.scm -- \
-  blue install laptop /dev/nvme0n1
+  blue install lenovo-legion-y7000p /dev/nvme0n1
 
 # 关机重启进入已安装系统（安装完成绝不自动 reboot）
 
-blue -n firstboot laptop
-blue firstboot laptop          # = reconfigure + enroll 相位 1（固件 PK/KEK/db）
+blue -n firstboot lenovo-legion-y7000p
+blue firstboot lenovo-legion-y7000p  # = reconfigure + enroll 相位 1（固件 PK/KEK/db）
 
 # reboot（Secure Boot 激活；LUKS 密码人工输入一次）
 
-blue enroll laptop             # enroll 相位 2：固件 skip → TPM enrollment
-# 之后 policy 变化的 replace / TPM 重建等，同样走 blue enroll laptop
+blue enroll lenovo-legion-y7000p     # enroll 相位 2：固件 skip → TPM enrollment
+# 之后 policy 变化的 replace / TPM 重建使用显式底层恢复工具
 ```
 
 `blue install` 的真实阶段（`blue -n install` 打印同一计划；已完成的
@@ -186,8 +186,8 @@ identity 已就位时走 `luks-recovery.age`（age 解密，不提示密码）�
 之后的一键收敛：
 
 ```bash
-blue -n firstboot laptop   # 只读：reconfigure 推导 plan + enrollment 计划
-blue firstboot laptop
+blue -n firstboot lenovo-legion-y7000p   # 只读：reconfigure 推导 plan + enrollment 计划
+blue firstboot lenovo-legion-y7000p
 ```
 
 `firstboot` 是一次性入口：执行前先做只读 lifecycle guard。固件 PK 一旦
@@ -210,7 +210,7 @@ blue firstboot laptop
    且该次 boot 的 LUKS 密码需人工输入一次——TPM 自动解锁从下下个
    boot 起生效）。
 
-之后日常更新只用 `blue reconfigure HOST`；机器绑定修复/重做使用下方
+之后日常更新只用 `blue reconfigure`（也可显式指定 HOST）；机器绑定修复/重做使用下方
 显式恢复工具，不能重跑已完成的 `blue enroll HOST`。
 
 ---

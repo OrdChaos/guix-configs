@@ -16,9 +16,10 @@
 ;;;   §4 repository-tests testable —— 薄包装 tests/run-tests.scm
 ;;;   §5 入口 —— (blueprint ...) 注册
 ;;;
-;;; Host 语义：EXPLICIT HOST ONLY。host ID 事实来自
+;;; Host 语义：除 reconfigure 外均为 EXPLICIT HOST ONLY。host ID 事实来自
 ;;; modules/guixcfg/hosts/*.scm 的文件名（(guixcfg system deploy)
-;;; 目录枚举），无自动检测、无 fallback。
+;;; 目录枚举）；无参数 reconfigure 按 hostname 经显式身份表精确反查，
+;;; 未知或不一致时 fail closed，无猜测 fallback。
 ;;;
 ;;; dry-run 契约（逐命令，见 docs/operations/reconfigure.md）：
 ;;;   build-os -n   → 下游 guix system build --dry-run（真 derivation plan）
@@ -147,7 +148,8 @@
       (set! %load-compiled-path (append %load-compiled-path cmp-dirs)))))
 
 (use-modules (guixcfg system deploy)        ; argv 构造 / 解析 / 只读检查素材 / host 枚举
-             (guixcfg system reconfigure)   ; gate transaction（privileged mode 执行）
+              (guixcfg inventory hosts)      ; 本机 hostname → Host ID
+              (guixcfg system reconfigure)   ; gate transaction（privileged mode 执行）
              (guixcfg utils channels)       ; channel 结构比较（update 摘要）
              (guixcfg utils atomic-file)    ; atomic-write-file!（锁重写）
              (guixcfg flatpak reconcile)    ; Flatpak 域操作与 dry-run plan
@@ -266,7 +268,27 @@ preflight（git status / describe 等）——blue -n 下也真实执行，以�
                      host (string-join (known-host-ids (%repo-root)) ", ")))))
          (_ (%usage-error
              (format #f "expected exactly one HOST argument; known hosts: ~a"
-                     (string-join (known-host-ids (%repo-root)) ", "))))))
+                      (string-join (known-host-ids (%repo-root)) ", "))))))
+
+(define (%reconfigure-host-argument arguments)
+  "reconfigure 接受零或一个 HOST。零参数时按当前 hostname 精确反查。"
+  (match arguments
+         (()
+          (let* ((hostname (gethostname))
+                 (host (host-id-for-hostname hostname))
+                 (known (known-host-ids (%repo-root))))
+            (cond
+             ((not host)
+              (%usage-error
+               (format #f "cannot identify local host from hostname: ~a~%known hosts: ~a~%usage: blue reconfigure [HOST]"
+                       hostname (string-join known ", "))))
+             ((not (host-id? known host))
+              (%usage-error
+               (format #f "local hostname ~a maps to unavailable host: ~a~%known hosts: ~a"
+                       hostname host (string-join known ", "))))
+             (else host))))
+         ((host) (%require-host-argument (list host)))
+         (_ (%usage-error "usage: blue reconfigure [HOST]"))))
 
 (define (build-os-hosts root arguments)
   "build-os 的 HOST|all 解析。绝不无参 fallback。"
@@ -513,8 +535,8 @@ guix system build --dry-run: derivation plan only, no store objects."))
 (define-command (reconfigure-command arguments)
                 ((invoke "reconfigure")
                  (category 'deployment)
-                 (synopsis "Deploy the system for HOST (clean committed worktree required)")
-                 (help "HOST
+                 (synopsis "Deploy this host or explicit HOST (clean committed worktree required)")
+                 (help "[HOST]
 Doctor preflight (including the git clean gate), then hand off to a
 privileged re-execution of this same Blue (sudo <this-blue> -f
 <blueprint> .reconfigure-root HOST HOME-USER) running the
@@ -525,8 +547,8 @@ failed (gate reopened); 2 system switched but Home/readiness failed
 With blue -n: validates the Guix system derivation/build plan only; it
 does not enter the privileged transaction (no sudo, no gate, no
 Shepherd restart, no Home hot activation)."))
-                (let* ((root (%repo-root))
-                       (host (%require-host-argument arguments)))
+                 (let* ((root (%repo-root))
+                        (host (%reconfigure-host-argument arguments)))
                   (if (dry-build?)
                     (begin
                      (%doctor root host)        ; 只读前置（含 git clean）在 -n 下照常执行
@@ -1071,7 +1093,7 @@ One-click first-boot entry for a freshly installed system:
       Boot state).
 Runs only once: after this system has written its firmware PK,
 firstboot is blocked before reconfigure. Use ordinary 'blue
-reconfigure HOST' for later updates.
+reconfigure' (or explicit HOST) for later updates.
 Stops at the first failing phase; that phase's exit code is
 propagated (reconfigure: 0/1/2; enroll: 0/1/2/3).
 With blue -n: system reconfigure derivation dry-run + enrollment

@@ -4,13 +4,13 @@
 ;;; 覆盖：
 ;;;   N1  disabled = identity：enabled? #f 时 transformation 返回原 OS
 ;;;       （VM/Intel-only 机器零 NVIDIA 贡献的机制保证）
-;;;   N2  kernel authority：transformation 不替换 kernel——%laptop-os
+;;;   N2  kernel authority：transformation 不替换 kernel——host OS
 ;;;       与 probe OS 的 kernel 仍是 (guixcfg system kernel-platform)
 ;;;       的 %kernel（唯一权威）；initrd/firmware 字段同样原样保留
 ;;;   N3  kernel arguments：nouveau/nova 黑名单与 nvidia_drm.modeset=1
 ;;;       由 transformation 自动加入，且排在原有 user kernel-arguments
 ;;;       之前；user arguments 原样保留
-;;;   N4  open kernel module wiring：%laptop-os 的 nvidia-service-type
+;;;   N4  open kernel module wiring：Lenovo host OS 的 nvidia-service-type
 ;;;       配置为 open 模块（package name "nvidia-module-open"，Ada
 ;;;       policy）+ nvidia-firmware + powerd #t（dynamic boost）+
 ;;;       settings #f（无 Xorg display manager）。注意 replace-mesa
@@ -37,7 +37,7 @@
 ;;; VM closure 无 NVIDIA）由 system build + closure 检查完成，不在
 ;;; 本文件（纯 Scheme 测试不触发构建）。
 
-(use-modules ((guixcfg hosts laptop) #:prefix laptop:)
+(use-modules ((guixcfg hosts lenovo-legion-y7000p) #:prefix host:)
              ((guixcfg hosts vm) #:prefix vm:)
              (guixcfg system graphics nvidia)
              (guixcfg system kernel-platform)
@@ -87,20 +87,22 @@
 
 ;; ── N2：kernel authority 保留 ───────────────────────────────
 (test-assert "N2: laptop %vm-os still selects %kernel (NVIDIA never replaces the kernel)"
-             (eq? (operating-system-kernel laptop:%laptop-os) %kernel))
+              (eq? (operating-system-kernel host:%lenovo-legion-y7000p-os)
+                   %kernel))
 
 (test-assert "N2: transformed probe OS still selects %kernel"
              (let ((t (nvidia-system-transformation probe-os)))
                (eq? (operating-system-kernel t) %kernel)))
 
 (test-assert "N2: laptop initrd composition unchanged"
-             (eq? (operating-system-initrd laptop:%laptop-os)
+              (eq? (operating-system-initrd host:%lenovo-legion-y7000p-os)
                   microcode-ephemeral-initrd))
 
 (test-assert "N2: laptop OS firmware field stays generic linux-firmware (NVIDIA firmware comes via nvidia-service-type)"
              (every (lambda (f)
                       (not (string-contains (package-name f) "nvidia")))
-                    (operating-system-firmware laptop:%laptop-os)))
+                     (operating-system-firmware
+                      host:%lenovo-legion-y7000p-os)))
 
 ;; ── N3：kernel arguments ────────────────────────────────────
 (test-assert "N3: transformation blacklists nouveau and nova, and enables DRM KMS"
@@ -120,7 +122,8 @@
                                    args)))))
 
 (test-assert "N3: laptop %vm-os carries the nvidia kernel arguments"
-             (let ((args (operating-system-user-kernel-arguments laptop:%laptop-os)))
+              (let ((args (operating-system-user-kernel-arguments
+                           host:%lenovo-legion-y7000p-os)))
                (member "nvidia_drm.modeset=1" args)))
 
 ;; ── N4：open kernel module wiring ───────────────────────────
@@ -141,7 +144,7 @@
 (define laptop-nvidia-service
   (find (lambda (s)
           (eq? (service-kind s) nvidia-service-type))
-        (operating-system-user-services laptop:%laptop-os)))
+         (operating-system-user-services host:%lenovo-legion-y7000p-os)))
 
 (test-assert "N4: laptop %vm-os includes nvidia-service-type"
              laptop-nvidia-service)
@@ -216,7 +219,8 @@
 
 ;; ── N7：laptop %vm-os 实例化 ───────────────────────────────────
 (test-assert "N7: laptop %vm-os instantiates (valid services field)"
-             (list? (operating-system-services laptop:%laptop-os)))
+              (list? (operating-system-services
+                      host:%lenovo-legion-y7000p-os)))
 
 ;; ── N8-N10：driver policy（rolling new-feature）────────────
 ;; 不变式（docs/architecture/graphics.md（NVIDIA driver policy））：

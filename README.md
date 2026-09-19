@@ -35,14 +35,14 @@ guix time-machine -C channels.lock.scm -- repl tools/disk-install.scm -- plan vm
 #  否则 preflight 拒绝。
 #  dry-run：只读 preflight + 完整安装计划，零 mutation、无 sudo
 guix time-machine -C channels.lock.scm -- \
-  shell -m manifests/development.scm -- blue -n install laptop /dev/nvme0n1
+  shell -m manifests/development.scm -- blue -n install lenovo-legion-y7000p /dev/nvme0n1
 guix time-machine -C channels.lock.scm -- \
-  shell -m manifests/development.scm -- blue install laptop /dev/nvme0n1
+  shell -m manifests/development.scm -- blue install lenovo-legion-y7000p /dev/nvme0n1
 # → reboot into the installed system
-blue -n firstboot laptop   # 只读：reconfigure 推导 plan + enrollment 计划
-blue firstboot laptop      # 首次启动收敛：reconfigure + 固件 enrollment
+blue -n firstboot lenovo-legion-y7000p   # 只读：reconfigure 推导 plan + enrollment 计划
+blue firstboot lenovo-legion-y7000p      # 首次启动收敛：reconfigure + 固件 enrollment
 # reboot once so Secure Boot becomes active, then enroll TPM:
-blue enroll laptop
+blue enroll lenovo-legion-y7000p
 # install / firstboot / enroll 完成后各自 fail closed，不作为日常重跑入口。
 # TPM repair/replace 使用文档中的显式底层恢复工具。
 
@@ -52,10 +52,10 @@ GUILE_LOAD_PATH="$PWD/modules" GUILE_LOAD_COMPILED_PATH="$PWD/modules" \
   guix time-machine -C channels.lock.scm -- system build modules/guixcfg/hosts/vm.scm
 
 # 日常入口（安装后，Blue 来自已部署 Guix Home profile）
-blue doctor laptop
-blue build-os laptop
-blue reconfigure laptop
-blue gc laptop
+blue doctor lenovo-legion-y7000p
+blue build-os lenovo-legion-y7000p
+blue reconfigure              # 按本机 hostname 自动选择 lenovo-legion-y7000p
+blue gc lenovo-legion-y7000p
 blue update            # 重写 channels.lock.scm（见 docs/operations/reconfigure.md）
 blue check
 
@@ -63,7 +63,7 @@ blue check
 guix time-machine -C channels.lock.scm -- \
   shell -m manifests/development.scm -- blue help
 guix time-machine -C channels.lock.scm -- \
-  shell -m manifests/development.scm -- blue reconfigure laptop
+  shell -m manifests/development.scm -- blue reconfigure
 
 # Flatpak 显式运维（唯一联网入口；全部 --user scope，
 # 详见 docs/architecture/flatpak.md；机制在 (guixcfg flatpak reconcile)）

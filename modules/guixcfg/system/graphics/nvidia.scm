@@ -64,7 +64,7 @@
 ;;;     Flatpak projection 都消费它；任何 NVIDIA offload 变量都
 ;;;     【不得】出现在 session-global 环境（graphics.md 契约）。
 ;;;   %prime-run-wrapper —— host projection：Home profile（laptop
-;;;     only，hosts/laptop.scm 组装）作用域 wrapper。根因背景：
+;;;     only，hosts/lenovo-legion-y7000p.scm 组装）作用域 wrapper。根因背景：
 ;;;     pinned Guix mesa 是经典构建（-Dglx=dri，无 glvnd dispatch），
 ;;;     Home 应用闭包只有 Intel；offload 需要把 libGL/libEGL 入口切
 ;;;     到 glvnd 并把 NVIDIA vendor 库/ICD 路径作用域注入（细节见
@@ -233,7 +233,7 @@ native-search-paths 契约作用域投影。"
    "\n"
    "exec \"$@\"\n"))
 
-;; host projection 包：Home profile（laptop only，hosts/laptop.scm
+;; host projection 包：Home profile（laptop only，hosts/lenovo-legion-y7000p.scm
 ;; 组装）提供 bin/prime-run，PATH 上遮蔽 system profile 里
 ;; nvidia-service-type 注入的 upstream nvidia-prime prime-run。
 ;; 零 inputs：无 build-time driver 耦合（运行时解析 system profile），

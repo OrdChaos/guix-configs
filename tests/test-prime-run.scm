@@ -29,7 +29,7 @@
 ;;;
 ;;; 纯 Scheme 静态断言，不触发任何 derivation 构建（AGENT.md §1/§2）。
 
-(use-modules ((guixcfg hosts laptop) #:prefix laptop:)
+(use-modules ((guixcfg hosts lenovo-legion-y7000p) #:prefix host:)
              ((guixcfg hosts vm) #:prefix vm:)
              (guixcfg system graphics nvidia)
              (guixcfg home user)          ; %guix-home（VM/default home）
@@ -149,7 +149,8 @@
              (find (lambda (p)
                      (string=? (package-name (home-package-entry p))
                                "prime-run"))
-                   (home-environment-packages laptop:%laptop-guix-home)))
+                    (home-environment-packages
+                     host:%lenovo-legion-y7000p-guix-home)))
 
 (test-assert "P5: default (VM) home does not provide prime-run"
              (not (find (lambda (p)
@@ -160,7 +161,8 @@
 ;; ── P6：无 session-global NVIDIA offload 变量 ────────────────
 (define %laptop-home-env
   (service-value
-   (fold-services (home-environment-services laptop:%laptop-guix-home)
+   (fold-services
+    (home-environment-services host:%lenovo-legion-y7000p-guix-home)
                   #:target-type home-environment-variables-service-type)))
 
 (define %forbidden-global-nvidia-vars

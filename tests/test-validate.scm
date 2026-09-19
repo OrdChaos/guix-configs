@@ -2,7 +2,7 @@
 
 (use-modules (guixcfg storage model)
              (guixcfg storage validate)
-             (guixcfg storage policies)   ; %vm-storage-policy、%laptop-storage-policy
+             (guixcfg storage policies)
              (srfi srfi-64))
 
 ;; 一个“好”的目标设备：整盘、未挂载、非系统盘、非 LiveCD、容量足够。
@@ -85,7 +85,8 @@
             (test-assert "built-in VM policy valid"
                          (null? (validate-policy %vm-storage-policy)))
             (test-assert "built-in Laptop policy valid"
-                         (null? (validate-policy %laptop-storage-policy)))
+                          (null? (validate-policy
+                                  %lenovo-legion-y7000p-storage-policy)))
             
             (test-equal "ESP outside 2-4 GiB range"
                         '(esp-size-in-range)

@@ -21,9 +21,10 @@
                #:use-module (gnu)                          ; operating-system、user-account、service 等
                #:use-module (gnu services networking)      ; network-manager-service-type
                #:use-module (guixcfg storage model)          ; host-storage-policy-keep-root-generations
-               #:use-module ((guixcfg storage policies) #:prefix storage:)
-               #:use-module (guixcfg hosts common)         ; 共享 host composition algorithm
-               #:use-module (guixcfg users user)           ; %primary-user（结构事实权威源）
+                #:use-module ((guixcfg storage policies) #:prefix storage:)
+                #:use-module (guixcfg hosts common)         ; 共享 host composition algorithm
+                #:use-module (guixcfg inventory hosts)      ; Host ID → hostname 单一映射
+                #:use-module (guixcfg users user)           ; %primary-user（结构事实权威源）
                #:use-module (guixcfg home user)            ; %guix-home（挂入 system）
                #:use-module (guixcfg security secrets)     ; secret-decl
                #:use-module (guixcfg utils repository-source) ; repository-file（VM 测试 sentinel 密文）
@@ -107,7 +108,7 @@
 ;; 仅用于折叠 account 列表；真正启动用 %vm-os。
 (define %os-without-account-databases
   (make-base-host-operating-system
-   #:host-name "guix-vm"
+   #:host-name (host-name-for-id "vm")
    #:persistent-mount-file-systems %persistent-mount-file-systems
    #:mihomo-machine-state-file-systems %mihomo-machine-state-file-systems
    #:noctalia-greeter-machine-state-file-systems

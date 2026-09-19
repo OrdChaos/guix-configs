@@ -43,7 +43,7 @@ xsettingsd。）
   只保证 clean committed worktree gate（deployment starts only from a
   clean committed worktree）；真正从固定 commit 快照（git archive /
   detached worktree）执行部署并记录 deployed commit 是后续工作。
-- Laptop：host 组装点已落地（`(guixcfg hosts laptop)` 完整 OS +
+- Lenovo Legion Y7000P：host 组装点已落地（`(guixcfg hosts lenovo-legion-y7000p)` 完整 OS +
   NVIDIA open module adapter + niri iGPU/offload 机器事实）；剩余：
   实机 firmware 选择、microcode revision 验收、实机运行验证清单
   （prime-run/vulkaninfo/nvidia-smi/powerd，见 graphics.md）。

@@ -1,8 +1,9 @@
 ;;; model.scm 的单元测试。由 tests/run-tests.scm 加载运行。
 
 (use-modules (guixcfg storage model)
+             (gnu system)
              (guixcfg hosts vm)
-             (guixcfg hosts laptop)
+             (guixcfg hosts lenovo-legion-y7000p)
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -47,12 +48,19 @@
 
 (test-group "host policy instances (docs/architecture/storage.md, defined in each host module)"
             (test-eq "VM policy name" 'vm (host-storage-policy-name %vm-storage-policy))
-            (test-eq "Laptop policy name" 'laptop (host-storage-policy-name %laptop-storage-policy))
+            (test-eq "Lenovo policy name" 'lenovo-legion-y7000p
+                     (host-storage-policy-name
+                      %lenovo-legion-y7000p-storage-policy))
             (test-assert "both policies' ESP within 2-4 GiB range"
                          (every (lambda (p) (<= %esp-min-size
                                                 (host-storage-policy-esp-size p)
                                                 %esp-max-size))
-                                (list %vm-storage-policy %laptop-storage-policy))))
+                                (list %vm-storage-policy
+                                      %lenovo-legion-y7000p-storage-policy))))
+
+(test-equal "Lenovo operating-system hostname"
+            "ordchaos-lenovo-pc"
+            (operating-system-host-name %lenovo-legion-y7000p-os))
 
 
 ;; ── persist-mount-point：/persist/* 语义路径单一 authority ────

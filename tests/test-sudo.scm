@@ -13,7 +13,7 @@
 
 (use-modules (guixcfg system sudo policy)
              (guixcfg hosts vm)
-             (guixcfg hosts laptop)
+             (guixcfg hosts lenovo-legion-y7000p)
              (gnu system)          ; operating-system-sudoers-file
              (guix gexp)           ; lower-object
              (guix monads)
@@ -58,7 +58,8 @@
              (let ((vm-s (lower-text
                           (operating-system-sudoers-file %vm-os)))
                    (lp-s (lower-text
-                          (operating-system-sudoers-file %laptop-os))))
+                           (operating-system-sudoers-file
+                            %lenovo-legion-y7000p-os))))
                (and (string-contains vm-s "Defaults lecture = never")
                     (string-contains lp-s "Defaults lecture = never")
                     (string-contains vm-s "[sudo] %p 的密码：")

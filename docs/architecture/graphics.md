@@ -131,7 +131,8 @@ interactive-session-ready（core readiness join barrier）
   `#:kernel-mode-setting? #t`、`#:configure-xorg? #f`（纯 Wayland：
   greetd/niri，无 Xorg DM）、`#:dynamic-boost? #t`（Ampere 起支持，
   `nvidia-powerd`）；
-- per-machine：只在 `(guixcfg hosts laptop)` 最终 `%laptop-os` 上调用；
+- per-machine：只在 `(guixcfg hosts lenovo-legion-y7000p)` 最终
+  `%lenovo-legion-y7000p-os` 上调用；
   VM/Intel-only 机器不调用，零 NVIDIA closure（test-nvidia N6 +
   K8 固定）；
 - Wayland：niri compositor 继续跑 Intel iGPU（`variants/laptop.kdl`
@@ -205,7 +206,7 @@ nvda-new-feature（rolling selector，不固定 major）
   消费同一数据渲染 `--env`（只投影环境语义，不投影 Guix store
   路径/profile/动态链接器）——本轮不实现。
 - **host projection**：`%prime-run-wrapper`（Home profile，
-  laptop only，`hosts/laptop.scm` 组装；遮蔽 system profile 中
+  laptop only，`hosts/lenovo-legion-y7000p.scm` 组装；遮蔽 system profile 中
   nvidia-service-type 注入的 upstream `nvidia-prime`）。用法保持
   `prime-run COMMAND [ARGS...]`。
   - 根因：pinned Guix mesa 是经典构建（`-Dglx=dri`，无 glvnd

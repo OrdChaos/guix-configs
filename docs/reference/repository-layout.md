@@ -44,13 +44,15 @@ modules/guixcfg/      全部配置模块（guile/repl 用绝对 -L；guix system
                        registry；guix-home 接受 host 的 logical
                        application-configuration-selections）+ 会话
                        环境变量（environment.scm）
-  hosts/               host 组装点（vm / laptop）+ 共享组装算法
+  hosts/               host 组装点（vm / lenovo-legion-y7000p）+ 共享组装算法
                        common.scm（services / user-services / 基础 OS
                        / account fold 的四个窄构造函数，deploy 枚举
                        排除）；host-owned inventory = %vm-test-secrets
                        （hosts/vm.scm 内的测试 sentinel，无独立
                        secrets 文件）；host 对应用只做 logical
-                       variant selection（不持有应用配置文件）
+                        variant selection（不持有应用配置文件）
+  inventory/           部署身份事实；hosts.scm 是 Host ID ↔ hostname
+                       映射的单一权威，供 host 组装与 Blue 本机识别共用
   security/            age、secrets、TPM2、证书；enroll.scm
                        （blue enroll 的 machine-bound enrollment
                        编排：TPM/SB 状态探测、计划、幂等判定、

@@ -190,7 +190,7 @@
 
 (define %plan-state
   (install-state
-   (host "laptop")
+   (host "lenovo-legion-y7000p")
    (device "/dev/nvme0n1")
    (device-model "SAMSUNG MZVL21T0")
    (stages (classify-install-probes %empty-disk-probes))))
@@ -198,7 +198,8 @@
 (define plan-text (string-join (install-plan-lines %plan-state) "\n"))
 
 (test-assert "plan shows host and device"
-             (and (string-contains plan-text "Host:   laptop")
+             (and (string-contains plan-text
+                                   "Host:   lenovo-legion-y7000p")
                   (string-contains plan-text "Device: /dev/nvme0n1")))
 
 (test-assert "plan shows model"
@@ -252,7 +253,7 @@
 ;;; ────────────────────────────────────────────────────────────
 ;;; argv（§13/§29/§47）
 
-(define init-argv (system-init-argv %root "laptop"))
+(define init-argv (system-init-argv %root "lenovo-legion-y7000p"))
 
 (test-assert "system init uses pinned channels.lock.scm"
              (and (member "-C" init-argv)
@@ -266,12 +267,12 @@
 
 (test-equal "system init puts FILE after options and /mnt last"
             '("system" "init"
-                       "modules/guixcfg/hosts/laptop.scm" "/mnt")
+                        "modules/guixcfg/hosts/lenovo-legion-y7000p.scm" "/mnt")
             (cdr (member "--" init-argv)))
 
 (define privileged (install-privileged-argv "/bin/blue"
                                             "/repo/blueprint.scm"
-                                            "laptop" "/dev/nvme0n1"))
+                                             "lenovo-legion-y7000p" "/dev/nvme0n1"))
 
 (test-assert "install handoff re-executes the same Blue via sudo"
              (and (equal? (car privileged) "sudo")
@@ -285,7 +286,7 @@
 
 (test-assert "install handoff argv separates HOST and DEVICE (no shell string)"
              (let ((tail (cdr (member ".install-root" privileged))))
-               (and (equal? tail '("laptop" "/dev/nvme0n1"))
+                (and (equal? tail '("lenovo-legion-y7000p" "/dev/nvme0n1"))
                     (not (any (lambda (x)
                                 (or (string-contains x "&&")
                                     (string-contains x ";")
@@ -294,7 +295,7 @@
 
 (define enroll-privileged (enroll-privileged-argv "/bin/blue"
                                                   "/repo/blueprint.scm"
-                                                  "laptop"))
+                                                  "lenovo-legion-y7000p"))
 
 (test-assert "enroll handoff uses the same model (sudo + same Blue + -f + .enroll-root HOST)"
              (let ((tail (cdr (member ".enroll-root" enroll-privileged))))
@@ -303,7 +304,7 @@
                     (member "/repo/blueprint.scm" enroll-privileged)
                     (member "--store-directory=/run/guixcfg/.blue-store"
                             enroll-privileged)
-                    (equal? tail '("laptop")))))
+                    (equal? tail '("lenovo-legion-y7000p")))))
 
 (test-equal "sb-keygen tool argv pins the lockfile and passes the keydir"
             "/mnt/persist/system/keys/secure-boot"
@@ -325,7 +326,8 @@
             (let ((argv (commit-root-tool-argv %root "/mnt")))
               (cdr (member "commit-root" argv))))
 
-(define install-cli (install-cli-argv %root "run" "laptop" "/dev/nvme0n1"))
+(define install-cli
+  (install-cli-argv %root "run" "lenovo-legion-y7000p" "/dev/nvme0n1"))
 
 (test-assert "install CLI runs in the pinned repl (not in-process)"
              (and (member "-C" install-cli)
@@ -333,17 +335,18 @@
                   (member "tools/install-cli.scm" install-cli)))
 
 (test-equal "install CLI argv separates mode, HOST and DEVICE"
-            '("run" "laptop" "/dev/nvme0n1")
+            '("run" "lenovo-legion-y7000p" "/dev/nvme0n1")
             (cddr (member "tools/install-cli.scm" install-cli)))
 
-(define enroll-cli (enroll-cli-argv %root "plan" "laptop"))
+(define enroll-cli
+  (enroll-cli-argv %root "plan" "lenovo-legion-y7000p"))
 
 (test-assert "enroll CLI runs in the pinned repl (not in-process)"
              (and (member "tools/enroll-cli.scm" enroll-cli)
                   (member "/repo/channels.lock.scm" enroll-cli)))
 
 (test-equal "enroll CLI argv separates mode and HOST"
-            '("plan" "laptop")
+            '("plan" "lenovo-legion-y7000p")
             (cddr (member "tools/enroll-cli.scm" enroll-cli)))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -479,13 +482,13 @@
 
 (test-equal "install transaction refuses non-root with exit 1 (no exec)"
             1
-            (install-transaction! "/repo" "laptop" "/dev/nvme0n1"
+             (install-transaction! "/repo" "lenovo-legion-y7000p" "/dev/nvme0n1"
                                   #:exec exploding-exec
                                   #:on-confirm exploding-confirm))
 
 (test-equal "enroll transaction refuses non-root with exit 1 (no exec)"
             1
-            (enroll-transaction! "/repo" "laptop"
+             (enroll-transaction! "/repo" "lenovo-legion-y7000p"
                                  #:exec exploding-exec
                                  #:on-firmware-confirm exploding-confirm))
 
@@ -495,33 +498,35 @@
 
 (test-equal "physical fresh install accepts Setup Mode"
             'ok
-            (car (install-secure-boot-preflight "laptop" 'setup-mode)))
+            (car (install-secure-boot-preflight
+                  "lenovo-legion-y7000p" 'setup-mode)))
 
 (test-equal "physical fresh install rejects User Mode with foreign keys"
             'fail
-            (car (install-secure-boot-preflight "laptop"
+            (car (install-secure-boot-preflight "lenovo-legion-y7000p"
                                                 'foreign-enrolled)))
 
 (test-equal "physical resume accepts User Mode only after own PK is proven"
             'ok
-            (car (install-secure-boot-preflight "laptop" 'enrolled)))
+            (car (install-secure-boot-preflight
+                  "lenovo-legion-y7000p" 'enrolled)))
 
 (test-equal "user preflight rejects fresh install when PK ownership is unverified"
             'fail
             (car (install-secure-boot-preflight
-                  "laptop" 'enrolled-unverified)))
+                  "lenovo-legion-y7000p" 'enrolled-unverified)))
 
 (test-equal "user preflight defers own-PK verification only for complete resume keys"
             'ok
             (car (install-secure-boot-preflight
-                  "laptop" 'enrolled-unverified 'complete)))
+                  "lenovo-legion-y7000p" 'enrolled-unverified 'complete)))
 
 (test-equal "VM install intentionally ignores physical firmware state"
             'ok
             (car (install-secure-boot-preflight "vm" 'unclear)))
 
 (test-assert "install preflight checks are ((label . thunk)) with (status . detail) results"
-             (let ((checks (install-preflight-checks "/repo" "laptop"
+              (let ((checks (install-preflight-checks "/repo" "lenovo-legion-y7000p"
                                                      "/dev/nvme0n1")))
                (every (lambda (check)
                         (and (pair? check)

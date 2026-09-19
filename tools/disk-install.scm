@@ -36,7 +36,7 @@
                                        (@root-installing -> @root-template + @root-0,
                                        target defaults to /mnt; then umount and reboot)
 
-host: vm, laptop~%"))
+host: vm, lenovo-legion-y7000p~%"))
 
 (define (load-policy host)
   "从纯存储模块加载 HOST policy；这里不能加载完整 host OS 模块。"

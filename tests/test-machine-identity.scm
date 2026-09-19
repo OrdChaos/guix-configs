@@ -14,7 +14,7 @@
 ;;;      dbus-uuidgen --ensure 直接失败——INVALID_FILE_CONTENT）；
 ;;;   G. canonical 损坏 → fail closed（不重新生成、不覆盖）；
 ;;;   H. dbus-uuidgen 包装：正常/失败/非法输出；
-;;;   I. host 接线时序：%vm-os / %laptop-os 的 activation 里，
+;;;   I. host 接线时序：%vm-os / %lenovo-legion-y7000p-os 的 activation 里，
 ;;;      machine-id restore 必须先于 D-Bus activation 的
 ;;;      dbus-uuidgen --ensure=/etc/machine-id。
 
@@ -29,7 +29,7 @@
              (guixcfg utils machine-id)
              (guixcfg system machine-identity)
              (guixcfg hosts vm)
-             (guixcfg hosts laptop)
+             (guixcfg hosts lenovo-legion-y7000p)
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -280,7 +280,8 @@
 (format #t "  vm: restore at ~a, dbus --ensure at ~a~%"
         vm-restore-idx vm-dbus-idx)
 
-(define %laptop-activation-gexps (activation-gexps %laptop-os))
+(define %laptop-activation-gexps
+  (activation-gexps %lenovo-legion-y7000p-os))
 (define laptop-restore-idx (gexp-index %laptop-activation-gexps "ensure-machine-id!"))
 (define laptop-dbus-idx (gexp-index %laptop-activation-gexps "--ensure=/etc/machine-id"))
 

@@ -193,10 +193,11 @@
 (define %enroll-status (status-of))
 
 (define plan-text
-  (string-join (enroll-plan-lines %enroll-status "laptop") "\n"))
+  (string-join
+   (enroll-plan-lines %enroll-status "lenovo-legion-y7000p") "\n"))
 
 (test-assert "enroll plan shows host"
-             (string-contains plan-text "Host: laptop"))
+             (string-contains plan-text "Host: lenovo-legion-y7000p"))
 
 (test-assert "enroll plan shows TPM device and action"
              (and (string-contains plan-text "/dev/tpmrm0")
@@ -216,21 +217,24 @@
 (test-assert "enroll plan marks an incompatible TPM as BLOCKED"
              (let ((text (string-join
                           (enroll-plan-lines
-                           (status-of '(tpm . incomplete)) "laptop")
+                           (status-of '(tpm . incomplete))
+                           "lenovo-legion-y7000p")
                           "\n")))
                (string-contains text "BLOCKED (incompatible enrollment")))
 
 (test-assert "enroll plan marks unclear firmware as BLOCKED"
              (let ((text (string-join
                           (enroll-plan-lines
-                           (status-of '(firmware . unclear)) "laptop")
+                           (status-of '(firmware . unclear))
+                           "lenovo-legion-y7000p")
                           "\n")))
                (string-contains text "BLOCKED (firmware state unclear)")))
 
 (test-assert "enroll plan marks pending-reboot firmware as awaiting reboot (not blocked)"
              (let ((text (string-join
                           (enroll-plan-lines
-                           (status-of '(firmware . pending-reboot)) "laptop")
+                           (status-of '(firmware . pending-reboot))
+                           "lenovo-legion-y7000p")
                           "\n")))
                (and (string-contains text
                                      "reboot to activate Secure Boot")
@@ -304,7 +308,9 @@
 ;;; 只读检查形态（soft 语义：本机不是目标系统 → 硬性环境项 fail）
 
 (test-assert "enroll readonly checks are ((label . thunk)) with ok/info/fail results"
-             (let ((checks (enroll-readonly-checks "/repo" "laptop")))
+              (let ((checks
+                     (enroll-readonly-checks
+                      "/repo" "lenovo-legion-y7000p")))
                (every (lambda (check)
                         (and (pair? check)
                              (string? (car check))
@@ -320,7 +326,8 @@
 ;; = 真缺失 → fail。
 (define* (enroll-check-status label #:key (soft? #t))
          (let ((check (find (lambda (c) (string=? (car c) label))
-                            (enroll-readonly-checks "/repo" "laptop"
+                             (enroll-readonly-checks "/repo"
+                                                     "lenovo-legion-y7000p"
                                                     #:soft? soft?))))
            (car ((cdr check)))))
 
@@ -351,7 +358,7 @@
 
 (test-equal "enroll transaction refuses non-root with exit 1 (no exec)"
             1
-            (enroll-transaction! "/repo" "laptop"
+             (enroll-transaction! "/repo" "lenovo-legion-y7000p"
                                  #:exec exploding-exec
                                  #:on-firmware-confirm exploding-confirm))
 

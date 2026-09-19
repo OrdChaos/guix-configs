@@ -12,9 +12,10 @@
          'vm
          (host-storage-policy-name (storage-policy-by-name "vm")))
 
-(test-eq "laptop policy by symbol"
-         'laptop
-         (host-storage-policy-name (storage-policy-by-name 'laptop)))
+(test-eq "Lenovo policy by symbol"
+         'lenovo-legion-y7000p
+         (host-storage-policy-name
+          (storage-policy-by-name 'lenovo-legion-y7000p)))
 
 (test-eq "unknown policy" #f (storage-policy-by-name "unknown"))
 

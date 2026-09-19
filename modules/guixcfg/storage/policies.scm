@@ -7,7 +7,7 @@
 (define-module (guixcfg storage policies)
                #:use-module (guixcfg storage model)
                #:export (%vm-storage-policy
-                         %laptop-storage-policy
+                          %lenovo-legion-y7000p-storage-policy
                          storage-policy-by-name))
 
 ;; QEMU 测试盘，容量小，不绑定具体 by-id（安装时必须显式传入设备）。
@@ -20,9 +20,9 @@
    (keep-root-generations 3)))
 
 ;; 实机参数；首次实机安装时按实际 SSD 容量和内存大小校准。
-(define %laptop-storage-policy
+(define %lenovo-legion-y7000p-storage-policy
   (host-storage-policy
-   (name 'laptop)
+   (name 'lenovo-legion-y7000p)
    (esp-size (gib 4))
    (min-disk-size (gib 200))
    (swapfile-size (gib 16))
@@ -32,5 +32,5 @@
   "返回 NAME 对应的 host storage policy。NAME 可为字符串或符号；未知时返回 #f。"
   (case (if (symbol? name) name (string->symbol name))
     ((vm) %vm-storage-policy)
-    ((laptop) %laptop-storage-policy)
+    ((lenovo-legion-y7000p) %lenovo-legion-y7000p-storage-policy)
     (else #f)))

@@ -1,6 +1,6 @@
 ;;; Laptop NetworkManager connection-profile persistence contract.
 
-(use-modules (guixcfg hosts laptop)
+(use-modules (guixcfg hosts lenovo-legion-y7000p)
              (guixcfg hosts vm)
              (guixcfg system machine-state-persistence)
              (guixcfg system network-manager-persistence)
@@ -22,7 +22,8 @@
 
 (define %consumer %network-manager-system-connections-directory)
 (define %backing %network-manager-connections-backing-directory)
-(define %laptop-mount (mount-at %laptop-os %consumer))
+(define %lenovo-legion-y7000p-mount
+  (mount-at %lenovo-legion-y7000p-os %consumer))
 
 (test-assert "connection profile rule is valid"
              (valid-machine-state-persistence-rule?
@@ -32,13 +33,16 @@
             (machine-state-persistence-rule-consumer
              %network-manager-connections-persistence-rule))
 (test-assert "laptop binds persistent connection profiles"
-             (and %laptop-mount
-                  (string=? %backing (file-system-device %laptop-mount))
-                  (memq 'bind-mount (file-system-flags %laptop-mount))))
+              (and %lenovo-legion-y7000p-mount
+                   (string=? %backing
+                             (file-system-device %lenovo-legion-y7000p-mount))
+                   (memq 'bind-mount
+                         (file-system-flags %lenovo-legion-y7000p-mount))))
 (test-assert "VM does not persist NetworkManager profiles"
              (not (mount-at %vm-os %consumer)))
 (test-assert "volatile NetworkManager state is not persisted"
-             (not (mount-at %laptop-os "/var/lib/NetworkManager")))
+              (not (mount-at %lenovo-legion-y7000p-os
+                             "/var/lib/NetworkManager")))
 
 (define %ownership-source
   (object->string
@@ -61,7 +65,7 @@
 (define %shepherd-services
   (shepherd-configuration-services
    (service-value
-    (fold-services (operating-system-services %laptop-os)
+    (fold-services (operating-system-services %lenovo-legion-y7000p-os)
                    #:target-type shepherd-root-service-type))))
 
 (define (service-providing provision)

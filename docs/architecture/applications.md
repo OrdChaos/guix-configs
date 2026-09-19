@@ -70,8 +70,8 @@ host/profile 只做 logical selection——**不知道文件、目标路径、
 source 位置**：
 
 ```scheme
-;; modules/guixcfg/hosts/laptop.scm
-(define %laptop-application-configuration-selections
+;; modules/guixcfg/hosts/lenovo-legion-y7000p.scm
+(define %lenovo-legion-y7000p-application-configuration-selections
   (list (application-configuration-selection
          (application 'niri)
          (variant 'laptop))))
@@ -80,7 +80,7 @@ source 位置**：
 ```scheme
 ;; modules/guixcfg/home/user.scm
 (guix-home #:application-configuration-selections
-           %laptop-application-configuration-selections)
+           %lenovo-legion-y7000p-application-configuration-selections)
 ```
 
 `application-configuration-selections->home-services` 解析：

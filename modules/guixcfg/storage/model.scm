@@ -88,7 +88,7 @@
 (define-record-type* <host-storage-policy>
                      host-storage-policy make-host-storage-policy
                      host-storage-policy?
-                     (name                  host-storage-policy-name)                  ; 符号：vm / laptop
+                     (name                  host-storage-policy-name) ; vm / lenovo-legion-y7000p
                      (esp-size              host-storage-policy-esp-size)              ; 字节，须在 2–4 GiB
                      (min-disk-size         host-storage-policy-min-disk-size)         ; 字节，目标盘容量下限
                      (swapfile-size         host-storage-policy-swapfile-size)         ; 字节

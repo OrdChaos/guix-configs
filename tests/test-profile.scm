@@ -14,7 +14,7 @@
 
 (use-modules (guixcfg system profile policy)
              (guixcfg hosts vm)
-             (guixcfg hosts laptop)
+             (guixcfg hosts lenovo-legion-y7000p)
              (gnu services)          ; etc-service-type、service-kind、service-value
              (gnu system)            ; operating-system-services
              (ice-9 rdelim)          ; read-string
@@ -66,7 +66,7 @@ guix-profile/current loop, privileged PATH, profile.d, bashrc)"
                                   (string=?
                                    (object->string (cadar profiles))
                                    (object->string %system-profile)))))
-                         (list %vm-os %laptop-os))))
+                          (list %vm-os %lenovo-legion-y7000p-os))))
                (and (= 2 (length results))
                     (every identity results))))
 
