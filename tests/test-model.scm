@@ -59,11 +59,11 @@
                                       %lenovo-legion-y7000p-storage-policy))))
 
 (test-equal "Lenovo operating-system hostname"
-            "ordchaos-lenovo-pc"
+            "ordchaos-lenovo-legion-y7000p"
             (operating-system-host-name %lenovo-legion-y7000p-os))
 
 (test-equal "VM operating-system hostname"
-            "ordchaos-guix-vm"
+            "ordchaos-vm"
             (operating-system-host-name %vm-os))
 
 

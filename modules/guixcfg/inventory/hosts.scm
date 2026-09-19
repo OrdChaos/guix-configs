@@ -11,8 +11,8 @@
                          host-name-for-id))
 
 (define %host-identity-table
-  '(("lenovo-legion-y7000p" . "ordchaos-lenovo-pc")
-    ("vm" . "ordchaos-guix-vm")))
+  '(("lenovo-legion-y7000p" . "ordchaos-lenovo-legion-y7000p")
+    ("vm" . "ordchaos-vm")))
 
 (define (host-identity-table-valid? table)
   "若 TABLE 是非空字符串组成且 Host ID/hostname 均唯一的 alist，返回真。"

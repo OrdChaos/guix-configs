@@ -11,7 +11,7 @@
 #   mark:<name>      保存当前输出快照到 /tmp/t7-snapshot-<name>.log
 import os, re, select, subprocess, sys, time, termios
 
-script = os.environ.get("T7_SCRIPT", "wait:Enter passphrase|send:t7-recovery-password|wait:root@ordchaos-guix-vm")
+script = os.environ.get("T7_SCRIPT", "wait:Enter passphrase|send:t7-recovery-password|wait:root@ordchaos-vm")
 steps = [s.split(":", 1) for s in script.split("|")]
 
 # 串口后端：优先用 QEMU unix socket chardev（@SOCK@）——纯字节流，

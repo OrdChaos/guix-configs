@@ -100,17 +100,17 @@
 
 (test-equal "physical hostname resolves to its Host ID"
             "lenovo-legion-y7000p"
-            (host-id-for-hostname "ordchaos-lenovo-pc"))
+            (host-id-for-hostname "ordchaos-lenovo-legion-y7000p"))
 
 (test-equal "VM hostname resolves to its Host ID"
             "vm"
-            (host-id-for-hostname "ordchaos-guix-vm"))
+            (host-id-for-hostname "ordchaos-vm"))
 
 (test-assert "unknown hostname fails closed"
              (not (host-id-for-hostname "unknown-host")))
 
 (test-equal "Host ID resolves to the configured physical hostname"
-            "ordchaos-lenovo-pc"
+            "ordchaos-lenovo-legion-y7000p"
             (host-name-for-id "lenovo-legion-y7000p"))
 
 (test-error "unknown Host ID has no hostname fallback" #t
