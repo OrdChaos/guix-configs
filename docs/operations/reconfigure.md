@@ -90,7 +90,8 @@ lifecycle,不属于 system provisioning。
   `build-os all` 构建全部 host（CI 用）。
 - `reconfigure` 可省略 Host ID：当前 hostname 必须在
   `(guixcfg inventory hosts)` 中精确映射到一个现存 Host ID。
-  未知或映射不一致时 fail closed，绝不猜测或回退 `vm`。
+  inventory 在模块加载时强制 Host ID 和 hostname 分别唯一；未知、
+  重复或映射不一致时 fail closed，绝不猜测或回退 `vm`。
 - hostname 改名尚未部署或身份映射需要修复时，使用显式
   `blue reconfigure HOST`。
 - host ID 的事实源是 `modules/guixcfg/hosts/*.scm` 的文件名

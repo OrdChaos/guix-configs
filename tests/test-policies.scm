@@ -19,8 +19,20 @@
 
 (test-eq "unknown policy" #f (storage-policy-by-name "unknown"))
 
-(test-assert "every deployable host has a storage policy"
-             (every storage-policy-by-name
+(test-equal "storage policy registry exactly matches deployable Host IDs"
+            (host-ids-in-directory "modules/guixcfg/hosts")
+            (sort (map (lambda (policy)
+                         (symbol->string (host-storage-policy-name policy)))
+                       %storage-policies)
+                  string<?))
+
+(test-assert "every policy lookup returns a policy named for that Host ID"
+             (every (lambda (host-id)
+                      (let ((policy (storage-policy-by-name host-id)))
+                        (and policy
+                             (string=? host-id
+                                       (symbol->string
+                                        (host-storage-policy-name policy))))))
                     (host-ids-in-directory "modules/guixcfg/hosts")))
 
 (test-end)

@@ -62,6 +62,10 @@
             "ordchaos-lenovo-pc"
             (operating-system-host-name %lenovo-legion-y7000p-os))
 
+(test-equal "VM operating-system hostname"
+            "ordchaos-guix-vm"
+            (operating-system-host-name %vm-os))
+
 
 ;; ── persist-mount-point：/persist/* 语义路径单一 authority ────
 (test-group "persist semantic mount points (single authority)"

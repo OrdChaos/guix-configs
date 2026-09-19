@@ -41,7 +41,7 @@ usage() {
 }
 
 vm-ssh() {
-    # sshd 依赖网络就绪（dhcpcd）与首次 host key 生成，root@guix-vm
+    # sshd 依赖网络就绪（dhcpcd）与首次 host key 生成，root@ordchaos-guix-vm
     # 出现后可能仍需 2-3 分钟；连接失败（255）重试最多 5 分钟，
     # 命令失败（其他退出码）直接返回。
     local tries=0 rc=255
@@ -120,7 +120,7 @@ sb-keygen() {
 # 保持 VM 运行（interact 默认结束即关，后续 vm-ssh 无法连接）。
 sb-enroll() {
     T7_KEEP_VM=1 tests/integration/t3/boot.sh interact sb-enroll \
-        "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
+        "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@ordchaos-guix-vm" >/dev/null
     vm-ssh 'mkdir -p /mnt/cfg && mount -t 9p -o trans=virtio guix-configs /mnt/cfg && \
             cd /mnt/cfg && \
             guix time-machine -C channels.lock.scm -- shell -m manifests/secure-boot-enroll.scm -- \
@@ -138,7 +138,7 @@ enroll-tpm() {
     # VARS 延续 sb-enroll 的（已注册 PK/db/KEK——Secure Boot on）。
     cp "$T7_DIR/vars-sb-enroll.fd" "$T7_DIR/vars-enroll-tpm.fd"
     T7_KEEP_VM=1 tests/integration/t3/boot.sh interact enroll-tpm \
-        "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
+        "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@ordchaos-guix-vm" >/dev/null
     vm-ssh 'modprobe 9p 9pnet_virtio 2>/dev/null; mkdir -p /mnt/cfg && mount -t 9p -o trans=virtio guix-configs /mnt/cfg'
     # 不用 guix repl：VM 的 guix 包在 3.0.11 下有 dynamic-wind arity
     # 问题（guix/ui.scm 加载时崩）。tpm2-enroll.scm 只依赖
@@ -184,7 +184,7 @@ scenario() {
         B|b)
             tests/integration/t3/boot.sh fresh-tpm stage-b
             T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
-                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
+                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@ordchaos-guix-vm" >/dev/null
             grep -a "falling back to passphrase" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && echo "* B tpm-clear fallback: PASS" || { echo "* B FAIL"; exit 1; }
             ;;
@@ -193,7 +193,7 @@ scenario() {
             # 不同）→ unseal 失败 → 密码回退。
             tests/integration/t3/boot.sh fresh-vars stage-b
             T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
-                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
+                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@ordchaos-guix-vm" >/dev/null
             grep -a "attempting automatic unlock" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && grep -a "falling back to passphrase" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && echo "* C PCR7 change fallback: PASS" || { echo "* C FAIL"; exit 1; }
@@ -203,7 +203,7 @@ scenario() {
             # RECOVERY.EFI（绝不 cp CURRENT.EFI——rootmode=recovery 门控
             # 必须真实），经 9p 拷回宿主作为 -kernel 引导文件。
             T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
-                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
+                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@ordchaos-guix-vm" >/dev/null
             vm-ssh 'modprobe 9p 9pnet_virtio 2>/dev/null; mkdir -p /mnt/cfg && \
                     mount -t 9p -o trans=virtio guix-configs /mnt/cfg && \
                     (cp /efi/EFI/Guix/A/RECOVERY.EFI /mnt/cfg/vms/t3/recovery-t3.efi 2>/dev/null || \
@@ -211,7 +211,7 @@ scenario() {
             vm-ssh 'herd power-off root' >/dev/null 2>&1 || true
             sleep 8
             T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
-                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" \
+                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@ordchaos-guix-vm" \
                 -kernel "$T7_DIR/recovery-t3.efi" >/dev/null
             grep -a "skipped (cmdline disabled" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && ! grep -a "attempting automatic unlock" "$T7_DIR/interact-stage-b.log" >/dev/null \
@@ -223,11 +223,11 @@ scenario() {
             # 会覆盖 qcow2 头毁掉磁盘（实测事故），且 qemu-nbd 依赖
             # 宿主 root。VM 写回最安全。
             T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
-                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
+                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@ordchaos-guix-vm" >/dev/null
             vm-ssh 'cd /efi/EFI/Guix/tpm2 && printf "\x00" | dd of=seal.priv bs=1 seek=10 count=1 conv=notrunc 2>/dev/null; herd power-off root' >/dev/null 2>&1 || true
             sleep 8
             T7_KEEP_VM=1 tests/integration/t3/boot.sh interact stage-b \
-                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@guix-vm" >/dev/null
+                "wait:Enter passphrase|send:$RECOVERY_PW|wait:root@ordchaos-guix-vm" >/dev/null
             grep -a "attempting automatic unlock" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && grep -a "falling back to passphrase" "$T7_DIR/interact-stage-b.log" >/dev/null \
                 && echo "* E corrupt artifact fallback: PASS" || { echo "* E FAIL"; exit 1; }

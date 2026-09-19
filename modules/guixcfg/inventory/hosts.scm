@@ -6,12 +6,32 @@
 (define-module (guixcfg inventory hosts)
                #:use-module (srfi srfi-1)
                #:export (%host-identity-table
+                         host-identity-table-valid?
                          host-id-for-hostname
                          host-name-for-id))
 
 (define %host-identity-table
   '(("lenovo-legion-y7000p" . "ordchaos-lenovo-pc")
-    ("vm" . "guix-vm")))
+    ("vm" . "ordchaos-guix-vm")))
+
+(define (host-identity-table-valid? table)
+  "若 TABLE 是非空字符串组成且 Host ID/hostname 均唯一的 alist，返回真。"
+  (and (list? table)
+       (every (lambda (entry)
+                (and (pair? entry)
+                     (string? (car entry))
+                     (string? (cdr entry))
+                     (positive? (string-length (car entry)))
+                     (positive? (string-length (cdr entry)))))
+              table)
+       (= (length table)
+          (length (delete-duplicates (map car table) string=?)))
+       (= (length table)
+          (length (delete-duplicates (map cdr table) string=?)))))
+
+(unless (host-identity-table-valid? %host-identity-table)
+  (error "invalid host identity table: Host IDs and hostnames must be unique"
+         %host-identity-table))
 
 (define (host-id-for-hostname hostname)
   "返回 HOSTNAME 精确对应的 Host ID；未知 hostname 返回 #f。"

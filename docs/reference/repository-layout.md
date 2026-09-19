@@ -52,7 +52,8 @@ modules/guixcfg/      全部配置模块（guile/repl 用绝对 -L；guix system
                        secrets 文件）；host 对应用只做 logical
                         variant selection（不持有应用配置文件）
   inventory/           部署身份事实；hosts.scm 是 Host ID ↔ hostname
-                       映射的单一权威，供 host 组装与 Blue 本机识别共用
+                       映射的单一权威（两侧均强制唯一），供 host 组装与
+                       Blue 本机识别共用
   security/            age、secrets、TPM2、证书；enroll.scm
                        （blue enroll 的 machine-bound enrollment
                        编排：TPM/SB 状态探测、计划、幂等判定、

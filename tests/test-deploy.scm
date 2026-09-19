@@ -76,13 +76,35 @@
             (host-ids-in-directory "modules/guixcfg/hosts")
             (sort (map car %host-identity-table) string<?))
 
+(test-assert "host identity table has unique Host IDs and hostnames"
+             (host-identity-table-valid? %host-identity-table))
+
+(test-assert "duplicate Host IDs are rejected"
+             (not (host-identity-table-valid?
+                   '(("vm" . "host-a") ("vm" . "host-b")))))
+
+(test-assert "duplicate hostnames are rejected"
+             (not (host-identity-table-valid?
+                   '(("host-a" . "same") ("host-b" . "same")))))
+
+(test-assert "malformed host identity entries are rejected"
+             (not (host-identity-table-valid? '(("vm" . "")))))
+
+(test-assert "every host identity round-trips"
+             (every (lambda (entry)
+                      (and (string=? (car entry)
+                                     (host-id-for-hostname (cdr entry)))
+                           (string=? (cdr entry)
+                                     (host-name-for-id (car entry)))))
+                    %host-identity-table))
+
 (test-equal "physical hostname resolves to its Host ID"
             "lenovo-legion-y7000p"
             (host-id-for-hostname "ordchaos-lenovo-pc"))
 
 (test-equal "VM hostname resolves to its Host ID"
             "vm"
-            (host-id-for-hostname "guix-vm"))
+            (host-id-for-hostname "ordchaos-guix-vm"))
 
 (test-assert "unknown hostname fails closed"
              (not (host-id-for-hostname "unknown-host")))
