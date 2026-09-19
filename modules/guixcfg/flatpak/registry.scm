@@ -22,9 +22,15 @@
                #:use-module (guixcfg flatpak model)
                #:use-module (guixcfg flatpak applications qq)
                #:use-module (guixcfg flatpak applications wechat)
+               #:use-module (guixcfg flatpak applications aagl)
+               #:use-module (guixcfg flatpak applications steam)
+               #:use-module (guixcfg flatpak extensions gamescope)
+               #:use-module (guixcfg flatpak extensions proton-ge)
                #:export (%flatpak-remotes
                          %flatpak-applications
-                         %flatpak-selection))
+                         %flatpak-selection
+                         %flatpak-extensions
+                         %flatpak-extension-selection))
 
 ;; Remote 声明（identity / bootstrap authority / transport 分离）：
 ;;   identity   = 'flathub
@@ -48,16 +54,32 @@
 ;; Catalog：已知 Flatpak 应用（纯聚合——定义在 applications/ 下）。
 (define %flatpak-applications
   (list %flatpak-qq
-        %flatpak-wechat))
+        %flatpak-wechat
+        %flatpak-aagl
+        %flatpak-steam))
 
-;; Selection：sync 应 ensure 的 logical names（desired lifecycle ≠
-;; persistence lifecycle 的结构分离；未来 per-host 差异时在
-;; hosts/*.scm 定义各自列表）。persistence 投影从 selection 派生：
-;; 未选中的 app 不产生 persistence mount（其 definition 里的
-;; persistence intent 随 selection 生效）。
+;; 应用 selection 缺省：公共子集（VM 即缺省）。host 差异
+;; （lenovo 的 aagl/steam）在各 host 模块定义各自的
+;; %<host>-flatpak-selection 并经 #:flatpak-selection 传入
+;; projection（guix-home / host persistence）与 blue flatpak
+;; （本机 hostname 反查 Host ID 动态取）——persistence/override
+;; 投影随 selection 生效，见 docs/architecture/flatpak.md
+;; （per-host selection）。
 (define %flatpak-selection
   '(qq wechat))
+
+;; Catalog：已知 extension（auxiliary ref；定义在 extensions/ 下）。
+(define %flatpak-extensions
+  (list %flatpak-extension-gamescope
+        %flatpak-extension-proton-ge))
+
+;; Extension selection 缺省：空（extension 是按需能力，如
+;; lenovo 的 gamescope/proton-ge 在 host 模块声明）。
+(define %flatpak-extension-selection '())
 
 ;; fail-fast（模块加载即校验；apps/registry.scm 同款）。
 (validate-flatpak-catalog! %flatpak-remotes %flatpak-applications)
 (validate-flatpak-selection! %flatpak-selection %flatpak-applications)
+(validate-flatpak-extension-catalog! %flatpak-remotes %flatpak-extensions)
+(validate-flatpak-extension-selection! %flatpak-extension-selection
+                                       %flatpak-extensions)

@@ -36,6 +36,7 @@
                          flatpak-selected-applications
                          flatpak-persistence-rules
                          flatpak-override-files
+                         flatpak-home-services
                          %flatpak-session-environment-service
                          %flatpak-overrides-service
                          %flatpak-home-services))
@@ -91,20 +92,23 @@ definition 声明的例外。"
   (cons (flatpak-default-persistence-rule app)
         (flatpak-extra-persistence-rules app)))
 
-(define (flatpak-selected-applications)
-  "selection（logical names）→ catalog lookup → 完整 definitions。"
-  (flatpak-select-applications %flatpak-selection
+(define* (flatpak-selected-applications
+          #:key (selection %flatpak-selection))
+  "selection（logical names）→ catalog lookup → 完整 definitions。
+SELECTION 缺省 registry 的 %flatpak-selection；host 传自己的
+selection（per-host seam，docs/architecture/flatpak.md）。"
+  (flatpak-select-applications selection
                                %flatpak-applications))
 
-(define (flatpak-persistence-rules)
+(define* (flatpak-persistence-rules #:key (selection %flatpak-selection))
   "平台全部 persistence rules：installation + 每个 **selected** app
 的 persistence intent。host 组装点把它与 applications-persistence
 一起交给 generic engine（file-systems bind + activation backing/
-owner）。未选中的 catalog app 不产生 mount（persistence 随
-selection 投影）。"
+owner）。未选中的 catalog app 不产生 mount（selection 投影）。"
   (cons %flatpak-installation-persistence-rule
         (append-map flatpak-application-persistence-rules
-                    (flatpak-selected-applications))))
+                    (flatpak-selected-applications
+                     #:selection selection))))
 
 ;;; ── override 完整文件（complete-file ownership）────────────
 
@@ -131,11 +135,24 @@ home-files 的 (target source) 条目：.local/share/flatpak/overrides/
   ;; override 与 persistence 使用同一个 selected definitions 事实
   ;; （docs/architecture/flatpak.md）：unselected 的 catalog app 不
   ;; 生成 declarative override 文件（selection 删除后下一 Home
-  ;; generation 即清除对应 symlink）。
+  ;; generation 即清除对应 symlink）。缺省 selection；
+  ;; (flatpak-home-services #:selection ...) 供 host 传自己的。
   (simple-service 'flatpak-overrides
                   home-files-service-type
                   (flatpak-override-files
                    (flatpak-selected-applications))))
+
+(define* (flatpak-home-services #:key (selection %flatpak-selection))
+  "Flatpak 平台 Home services（override 完整文件生成 +
+XDG_DATA_DIRS exports 追加）——按 SELECTION 投影（缺省 registry
+的 %flatpak-selection；host 的 per-host selection 经
+guix-home 的 #:flatpak-selection 传入）。"
+  (list (simple-service 'flatpak-overrides
+                        home-files-service-type
+                        (flatpak-override-files
+                         (flatpak-selected-applications
+                          #:selection selection)))
+        %flatpak-session-environment-service))
 
 ;;; ── session env（XDG_DATA_DIRS）────────────────────────────
 

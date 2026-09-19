@@ -270,6 +270,52 @@
             (string-append %fp-bin "/flatpak")
             (flatpak-binary))
 
+;; ── GL driver doctor（纯函数；离线）──────────────────────────
+(test-equal "GL doctor: no nvidia active and no nvidia refs -> silent"
+            '()
+            (flatpak-gl-driver-status-lines '() '()))
+
+(test-equal "GL doctor: matching extension installed -> silent"
+            '()
+            (flatpak-gl-driver-status-lines
+             '("nvidia-610-57-04")
+             '("org.freedesktop.Platform.GL.nvidia-610-57-04"
+               "com.valvesoftware.Steam")))
+
+(test-assert "GL doctor: active driver without extension -> actionable line"
+             (let ((lines (flatpak-gl-driver-status-lines
+                           '("nvidia-615-01-02")
+                           '())))
+               (and (= 1 (length lines))
+                    (string-contains (car lines) "nvidia-615-01-02")
+                    (string-contains (car lines) "update-runtimes"))))
+
+(test-assert "GL doctor: stale extension -> gc line"
+             (let ((lines (flatpak-gl-driver-status-lines
+                           '("nvidia-610-57-04")
+                           '("org.freedesktop.Platform.GL.nvidia-610-57-04"
+                             "org.freedesktop.Platform.GL.nvidia-580-1-2"))))
+               (and (= 1 (length lines))
+                    (string-contains (car lines) "580-1-2")
+                    (string-contains (car lines) "gc"))))
+
+(test-assert "GL doctor: missing and stale reported together"
+             (let ((lines (flatpak-gl-driver-status-lines
+                           '("nvidia-615-01-02")
+                           '("org.freedesktop.Platform.GL.nvidia-610-57-04"))))
+               (and (= 2 (length lines))
+                    (any (cut string-contains <> "nvidia-615-01-02") lines)
+                    (any (cut string-contains <> "610-57-04") lines))))
+
+(test-equal "GL doctor: non-nvidia drivers are not nvidia expectations"
+            '()
+            (flatpak-gl-driver-status-lines
+             '("nvidia-610-57-04" "default" "host")
+             '("org.freedesktop.Platform.GL.nvidia-610-57-04")))
+
+(test-assert "GL doctor: default/host alone are not nvidia active"
+             (equal? '() (flatpak-gl-driver-status-lines '("default" "host") '())))
+
 (test-end)
 
 ;; 恢复环境。

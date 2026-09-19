@@ -59,7 +59,8 @@
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind + 系统集成
                #:use-module (guixcfg system sudo policy) ; %sudoers-file（Defaults 声明：lecture/passprompt）
                #:use-module (guixcfg system profile policy) ; %system-profile（/etc/profile ownership）
-               #:use-module (guixcfg flatpak service) ; flatpak-persistence-rules（installation + 每 selected app，所有 host 共享）
+               #:use-module (guixcfg flatpak service) ; flatpak-persistence-rules（installation + 每 selected app）
+               #:use-module (guixcfg flatpak registry) ; %flatpak-selection（缺省 selection 权威）
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:use-module (srfi srfi-1)              ; remove
                #:export (make-host-services
@@ -76,19 +77,24 @@
 ;;; append：application rules + Flatpak 平台规则 + HOME persistence
 ;;; bind 列表在 common 单一构造，host 只消费）。
 
-(define (host-application-persistence-rules)
-  "全部 application persistence 规则：applications + Flatpak 平台
-（installation + 每 selected app）。所有 host 共享。"
+(define* (host-application-persistence-rules
+          #:key (flatpak-selection %flatpak-selection))
+  "application persistence 规则：applications（全部 registry app）+
+Flatpak 平台（installation + 每 FLATPAK-SELECTION selected app；
+缺省 registry 的 %flatpak-selection——host 可传自己的 selection，
+如 lenovo 含 aagl/steam）。"
   (append (applications-persistence %applications)
-          (flatpak-persistence-rules)))
+          (flatpak-persistence-rules #:selection flatpak-selection)))
 
-(define (host-persistent-mount-file-systems)
+(define* (host-persistent-mount-file-systems
+          #:key (flatpak-selection %flatpak-selection))
   "HOME persistence bind 列表（user data + app state，含 Flatpak）。
 gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
   (append (user-persistence-file-systems
            (user-profile-name %primary-user))
           (application-persistence-file-systems
-           (host-application-persistence-rules)
+           (host-application-persistence-rules
+            #:flatpak-selection flatpak-selection)
            (user-profile-name %primary-user))))
 
 ;;; ── TTY login prompt 的强语义（docs/architecture/accounts-sessions.md）
@@ -119,12 +125,16 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
 (define* (make-host-services #:key
                              (network-services '())
                              keep-root-generations
-                             persistent-mount-file-systems)
+                             persistent-mount-file-systems
+                             (additional-system-services '()))
          "共享 system services 列表。NETWORK-SERVICES 是 host 的网络服务
-  头（NetworkManager 配置 + 可选 wpa-supplicant，排在 DNS ownership
-  之前）；KEEP-ROOT-GENERATIONS 是 storage policy 的 keep 数；
-  PERSISTENT-MOUNT-FILE-SYSTEMS 是 HOME persistence bind 列表
-  （gvfs-mount-metadata 与 file-systems 字段共用）。"
+ 头（NetworkManager 配置 + 可选 wpa-supplicant，排在 DNS ownership
+ 之前）；KEEP-ROOT-GENERATIONS 是 storage policy 的 keep 数；
+ PERSISTENT-MOUNT-FILE-SYSTEMS 是 HOME persistence bind 列表
+ （gvfs-mount-metadata 与 file-systems 字段共用）；
+ ADDITIONAL-SYSTEM-SERVICES 是 host-only system services（如
+ lenovo 的 gaming 基础设施——steam-devices udev rules 与游戏库
+ 目录 activation，(guixcfg system gaming)）。"
          (append
           (append network-services
                   (list ;; 系统 DNS ownership（docs/architecture/dns.md）。
@@ -141,6 +151,8 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
           %common-services
           ;; applications 的 system services（composition root 契约保留）。
           (applications-system-services %applications)
+          ;; host-only system services（lenovo gaming 等）。
+          additional-system-services
           ;; TTY 强语义（mingetty gated + 无 tty1）。
           (host-tty-services)
           ;; M2 Wayland desktop：greetd（tty1，gated）+ niri session。

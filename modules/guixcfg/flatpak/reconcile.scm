@@ -43,7 +43,9 @@
                          flatpak-replace-remote!
                          flatpak-list-installed-apps
                          flatpak-list-installed-runtime-refs
+                         flatpak-list-installed-refs
                          flatpak-install-app!
+                         flatpak-install-extension!
                          flatpak-installed-commit
                          flatpak-sync
                          flatpak-status
@@ -61,7 +63,10 @@
                          flatpak-update-runtimes-plan
                          flatpak-remove-plan
                          flatpak-replace-remote-plan
-                         flatpak-gc-commands))
+                         flatpak-gc-commands
+                         ;; GL driver 一致性（离线 doctor）
+                         flatpak-active-gl-drivers
+                         flatpak-gl-driver-status-lines))
 
 (define (flatpak-binary-candidates)
   ;; 有序候选：会话 PATH 解析优先（显式覆盖），随后 guix 标准安装
@@ -209,7 +214,7 @@ trust 边界仍在：命令本身是显式的 destructive acknowledgment，sync
 
 (define (flatpak-list-installed-runtime-refs)
   "已安装 runtime 的 '<id>//<branch>' ref 列表（'flatpak list --user
---runtime --columns=application,branch'）。"
+ --runtime --columns=application,branch'）。"
   (filter-map
    (lambda (line)
      (let ((tokens (string-tokenize line)))
@@ -221,6 +226,17 @@ trust 边界仍在：命令本身是显式的 destructive acknowledgment，sync
                  (invoke-capture "flatpak" "list" "--user" "--runtime"
                                  "--columns=application,branch")
                  #\newline)))))
+
+(define (flatpak-list-installed-refs)
+  "已安装全部 ref 的 id 列表（app + runtime + extension；'flatpak
+list --user --columns=application'——extension 不是 --app 也不是
+独立类别，全量列表才有）。extension reconcile 的成员判断用。"
+  (filter (negate string-null?)
+          (map string-trim-both
+               (string-split
+                (invoke-capture "flatpak" "list" "--user"
+                                "--columns=application")
+                #\newline))))
 
 (define (flatpak-installed-commit id)
   "已安装 app 的本地 commit（'flatpak info --user --show-commit'）；
@@ -255,15 +271,37 @@ app pin 不隐含 runtime pin（不实现 dependency lockfile）。
         (invoke "flatpak" "update" "--user"
                 (string-append "--commit=" commit) ref)))))
 
+(define (flatpak-install-extension! ext)
+  "install extension ref（只增）+ optional commit pin deploy。与
+app 同一 pin 两步语义（pinned 1.16.6 install 无 --commit）。"
+  (let ((ref (flatpak-extension-ref ext))
+        (remote (symbol->string (flatpak-extension-remote ext))))
+    (format #t "Installing ~a from '~a'...~%" ref remote)
+    (invoke "flatpak" "install" "--user" "-y" remote ref)
+    (let ((commit (flatpak-extension-commit ext)))
+      (when commit
+        (format #t "Deploying pinned commit ~a for ~a...~%" commit ref)
+        (invoke "flatpak" "update" "--user"
+                (string-append "--commit=" commit) ref)))))
+
 (define* (flatpak-sync #:key (remotes %flatpak-remotes)
                        (applications %flatpak-applications)
-                       (selection %flatpak-selection))
-         "ensure declared remotes + ensure selected apps installed。
-只增不删：不 update 已装 app、不 remove 未声明 app、不 gc。
-sync 对【全部 declared remotes】做 ensure（缺即 bootstrap——新
+                       (selection %flatpak-selection)
+                       (extensions %flatpak-extensions)
+                       (extension-selection %flatpak-extension-selection))
+         "ensure declared remotes + ensure selected apps 与 selected
+extensions installed。只增不删：不 update 已装、不 remove 未声明、
+不 gc。sync 对【全部 declared remotes】做 ensure（缺即 bootstrap——新
 remote 首次引入 sync 即自动建立；drift 则 fail-loud），不依赖
-selected apps 是否引用它们（声明即意图）。返回本次安装的
+selected 是否引用它们（声明即意图）。返回本次安装的
 <flatpak-application> 列表。
+
+extension 语义（docs/architecture/flatpak.md）：auxiliary ref
+（Vulkan layer / compatibility tool），无 persistence/override；
+`flatpak uninstall --unused`（blue flatpak gc）可能把【无 app
+显式引用】的 extension 当 unused 卸掉（如 AAGL 经 PATH hack
+消费 gamescope，flatpak 元数据看不到引用）——gc 之后重跑
+sync 即重新 ensure。
 
 逐项报告（含 no-op）：已收敛时也要有输出——静默成功与失败在
 终端上不可区分，且会诱导用户误以为必须 sudo（sudo 落到 root
@@ -278,26 +316,107 @@ selected apps 是否引用它们（声明即意图）。返回本次安装的
          (for-each flatpak-ensure-remote! remotes)
          (let* ((selected (flatpak-select-applications selection applications))
                 (installed (flatpak-list-installed-apps))
-                (missing (flatpak-reconcile-plan selected installed)))
+                (missing (flatpak-reconcile-plan selected installed))
+                (selected-exts (flatpak-select-extensions
+                                extension-selection extensions))
+                (installed-refs (flatpak-list-installed-refs))
+                (missing-exts (filter (lambda (ext)
+                                        (not (member (flatpak-extension-id ext)
+                                                     installed-refs)))
+                                      selected-exts)))
            (for-each (lambda (app)
                        (when (member (flatpak-application-id app) installed)
                          (format #t "~a: already installed (no-op)~%"
                                  (flatpak-application-ref app))))
                      selected)
            (for-each flatpak-install-app! missing)
-           (format #t "sync complete: ~a remotes ensured, ~a application(s) installed~%"
-                   (length remotes) (length missing))
+           (for-each (lambda (ext)
+                       (when (member (flatpak-extension-id ext) installed-refs)
+                         (format #t "~a: already installed (no-op)~%"
+                                 (flatpak-extension-ref ext))))
+                     selected-exts)
+           (for-each flatpak-install-extension! missing-exts)
+           (format #t "sync complete: ~a remotes ensured, ~a application(s) + ~a extension(s) installed~%"
+                   (length remotes) (length missing) (length missing-exts))
            missing))
 
 ;;; ── status ─────────────────────────────────────────────────
 
+;;; ── GL driver 一致性（离线 doctor；docs/architecture/flatpak.md
+;;; （GL driver 一致性））─────────────────────────────────────
+;;; 上游机制：NVIDIA GL extension 是 runtime 的 related ref
+;;; （download-if: active-gl-driver）——任何包含 runtime op 的
+;;; install/update 事务自动拉取与 /sys/module/nvidia/version
+;;; 匹配的新 extension；旧版本由 autoprune（gc / 无参 update）
+;;; 清理。本 doctor 只做离线发散检测（不修复）：
+;;;   - active nvidia 驱动（flatpak --gl-drivers，离线：读
+;;;     /sys/module/nvidia/version）无对应已装 GL/GL32
+;;;     extension → 提示 reboot 后 update-runtimes（时序：
+;;;     /sys/module/nvidia/version 反映运行中模块——驱动升级后
+;;;     必须先 reboot 再 update，否则装的是旧驱动的 extension）；
+;;;   - 已装 nvidia extension 与 active 不匹配（stale）→ 提示
+;;;     blue flatpak gc。
+
+(define (flatpak-active-gl-drivers)
+  "'flatpak --gl-drivers' 输出中的 nvidia-* 驱动名列表（离线；
+无 nvidia 时为空列表）。"
+  (filter (lambda (line)
+            (string-prefix? "nvidia-" line))
+          (map string-trim-both
+               (string-split (invoke-capture "flatpak" "--gl-drivers")
+                             #\newline))))
+
+(define (flatpak-gl-driver-status-lines active-drivers installed-refs)
+  "纯函数：ACTIVE-DRIVERS（nvidia-x-y-z 列表）× INSTALLED-REFS
+（全部已装 ref id）→ doctor 输出行（strings；无发散为空）。
+GL=org.freedesktop.Platform.GL.nvidia-*，GL32=...GL32.nvidia-*。"
+  (let* ((gl-ids (filter (lambda (ref)
+                           (string-prefix? "org.freedesktop.Platform.GL.nvidia-" ref))
+                         installed-refs))
+         ;; 防御非 nvidia-* 条目（真实调用方
+         ;; flatpak-active-gl-drivers 已过滤；纯函数保持健壮）。
+         (nvidia-drivers (filter (lambda (driver)
+                                   (string-prefix? "nvidia-" driver))
+                                 active-drivers))
+         (expected (map (lambda (driver)
+                          (string-drop driver (string-length "nvidia-")))
+                        nvidia-drivers))
+         (missing (filter (lambda (version)
+                            (not (member (string-append
+                                          "org.freedesktop.Platform.GL.nvidia-"
+                                          version)
+                                         gl-ids)))
+                          expected))
+         (stale (filter (lambda (id)
+                          (let ((version (string-drop
+                                          id
+                                          (string-length
+                                           "org.freedesktop.Platform.GL.nvidia-"))))
+                            (not (member version expected))))
+                        gl-ids)))
+    (append
+     (map (lambda (version)
+            (format #f "GL driver mismatch: active nvidia-~a has no installed \
+org.freedesktop.Platform.GL extension.~%Fix: reboot (load the new kernel \
+module), then run 'blue flatpak update-runtimes'."
+                    version))
+          missing)
+     (map (lambda (id)
+            (format #f "stale GL extension: ~a does not match the active \
+driver.~%Fix: run 'blue flatpak gc' (autopruned refs)."
+                    id))
+          stale))))
+
 (define* (flatpak-status #:key (refresh? #f)
                          (applications %flatpak-applications)
-                         (selection %flatpak-selection))
-         "表格输出（catalog 顺序）。默认完全离线（本地 list/info）；
-REFRESH? 才 remote-info（失败显示 unknown，不修改状态、不破坏
-本地输出）。"
-         (let ((installed (flatpak-list-installed-apps)))
+                         (selection %flatpak-selection)
+                         (extensions %flatpak-extensions)
+                         (extension-selection %flatpak-extension-selection))
+         "表格输出（catalog 顺序）。默认完全离线（本地 list/info +
+GL doctor）；REFRESH? 才 remote-info（失败显示 unknown，不修改
+状态、不破坏本地输出）。"
+         (let ((installed (flatpak-list-installed-apps))
+               (installed-refs (flatpak-list-installed-refs)))
            (format #t "NAME\tID\tSELECTED\tINSTALLED\tBRANCH\tDECLARED-COMMIT\tINSTALLED-COMMIT~@[~a~]~%"
                    (if refresh? "\tREMOTE-COMMIT" ""))
            (for-each
@@ -326,26 +445,60 @@ REFRESH? 才 remote-info（失败显示 unknown，不修改状态、不破坏
                         (if refresh?
                           (string-append "\t" (or remote-commit "unknown"))
                           ""))))
-            applications)))
+            applications)
+           ;; extension 表（auxiliary ref）。
+           (format #t "~%EXTENSION~tID~tSELECTED~tINSTALLED~tBRANCH~%")
+           (for-each
+            (lambda (ext)
+              (format #t "~a\t~a\t~a\t~a\t~a~%"
+                      (flatpak-extension-name ext)
+                      (flatpak-extension-id ext)
+                      (if (memq (flatpak-extension-name ext)
+                                extension-selection)
+                        "yes" "no")
+                      (if (member (flatpak-extension-id ext) installed-refs)
+                        "yes" "no")
+                      (flatpak-extension-branch ext)))
+            extensions)
+           ;; GL driver doctor（离线）。
+           (let ((lines (flatpak-gl-driver-status-lines
+                         (flatpak-active-gl-drivers)
+                         installed-refs)))
+             (unless (null? lines)
+               (format #t "~%")
+               (for-each (lambda (line) (format #t "~a~%" line)) lines)))))
 
 ;;; ── update ─────────────────────────────────────────────────
 
 (define* (flatpak-update #:key (applications %flatpak-applications)
-                         (selection %flatpak-selection))
-         "更新目标 = selection ∩ installed ∩ unpinned（commit #f），显式
-ref 列表逐个 update。绝无无参全 installation update；commit pinned
-app 默认不进目标；无目标 → clean no-op。"
+                         (selection %flatpak-selection)
+                         (extensions %flatpak-extensions)
+                         (extension-selection %flatpak-extension-selection))
+         "更新目标 = selection ∩ installed ∩ unpinned（commit #f）的
+app + 已装且被选中的 extension ref（extension 只支持
+track-branch 进目标），显式 ref 列表逐个 update。绝无无参全
+installation update；commit pinned app 默认不进目标；无目标 →
+clean no-op。"
          (let* ((installed (flatpak-list-installed-apps))
-                (targets
+                (app-targets
                  (filter
                   (lambda (app)
                     (and (member (flatpak-application-id app) installed)
                          (not (flatpak-application-commit app))))
-                  (flatpak-select-applications selection applications))))
+                  (flatpak-select-applications selection applications)))
+                (installed-refs (flatpak-list-installed-refs))
+                (ext-targets
+                 (map flatpak-extension-ref
+                      (filter (lambda (ext)
+                                (member (flatpak-extension-id ext)
+                                        installed-refs))
+                              (flatpak-select-extensions
+                               extension-selection extensions))))
+                (targets (append (map flatpak-application-ref app-targets)
+                                 ext-targets)))
            (if (null? targets)
-             (format #t "No unpinned selected applications to update.~%")
-             (apply invoke "flatpak" "update" "--user" "-y"
-               (map flatpak-application-ref targets)))))
+             (format #t "No unpinned selected applications or extensions to update.~%")
+             (apply invoke "flatpak" "update" "--user" "-y" targets))))
 
 (define (flatpak-update-runtimes)
   "显式更新已安装 runtimes（pinned 1.16.6 无'更新全部 runtime'的
@@ -416,10 +569,13 @@ status 接受可选 --refresh；remove/remote-replace 恰好一个参数；其�
          (("gc") '(gc ()))
          (_ #f)))
 
-(define (flatpak-sync-plan remotes applications selection)
-  "sync 的只读 plan：remote 缺失清单 + 待安装 app 清单（每项一行）。
-不修改任何状态；remote drift 由 flatpak-check-remote! 照常
-fail-loud（dry-run 也报 drift）。"
+(define* (flatpak-sync-plan remotes applications selection
+                            #:key (extensions %flatpak-extensions)
+                            (extension-selection
+                             %flatpak-extension-selection))
+  "sync 的只读 plan：remote 缺失清单 + 待安装 app/extension 清单
+（每项一行）。不修改任何状态；remote drift 由
+flatpak-check-remote! 照常 fail-loud（dry-run 也报 drift）。"
   (append
    (map (lambda (r)
           (if (flatpak-check-remote! r)
@@ -439,16 +595,37 @@ fail-loud（dry-run 也报 drift）。"
                     "")))
         (flatpak-reconcile-plan
          (flatpak-select-applications selection applications)
-         (flatpak-list-installed-apps)))))
+         (flatpak-list-installed-apps)))
+   (let ((installed-refs (flatpak-list-installed-refs)))
+     (map (lambda (ext)
+            (format #f "would install extension ~a from ~a"
+                    (flatpak-extension-ref ext)
+                    (flatpak-extension-remote ext)))
+          (filter (lambda (ext)
+                    (not (member (flatpak-extension-id ext)
+                                 installed-refs)))
+                  (flatpak-select-extensions extension-selection
+                                             extensions))))))
 
-(define (flatpak-update-plan applications selection)
-  "update 的只读 plan：selection ∩ installed ∩ unpinned 的 ref 列表。"
-  (let ((installed (flatpak-list-installed-apps)))
-    (map flatpak-application-ref
-         (filter (lambda (app)
-                   (and (member (flatpak-application-id app) installed)
-                        (not (flatpak-application-commit app))))
-                 (flatpak-select-applications selection applications)))))
+(define* (flatpak-update-plan applications selection
+                              #:key (extensions %flatpak-extensions)
+                              (extension-selection
+                               %flatpak-extension-selection))
+  "update 的只读 plan：selection ∩ installed ∩ unpinned 的 app ref +
+已装选中 extension 的 ref 列表。"
+  (let ((installed (flatpak-list-installed-apps))
+        (installed-refs (flatpak-list-installed-refs)))
+    (append
+     (map flatpak-application-ref
+          (filter (lambda (app)
+                    (and (member (flatpak-application-id app) installed)
+                         (not (flatpak-application-commit app))))
+                  (flatpak-select-applications selection applications)))
+     (map flatpak-extension-ref
+          (filter (lambda (ext)
+                    (member (flatpak-extension-id ext) installed-refs))
+                  (flatpak-select-extensions extension-selection
+                                             extensions))))))
 
 (define (flatpak-update-runtimes-plan)
   "update-runtimes 的只读 plan：已安装 runtime 的 ref 列表。"

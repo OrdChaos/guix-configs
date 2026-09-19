@@ -63,6 +63,13 @@
                          flatpak-application-update-policy
                          flatpak-application-override-policy
                          flatpak-application-extra-persistence
+                         <flatpak-extension>
+                         flatpak-extension make-flatpak-extension flatpak-extension?
+                         flatpak-extension-name
+                         flatpak-extension-id
+                         flatpak-extension-remote
+                         flatpak-extension-branch
+                         flatpak-extension-update-policy
                          <flatpak-override>
                          flatpak-override make-flatpak-override flatpak-override?
                          flatpak-override-sockets
@@ -79,13 +86,19 @@
                          valid-flatpak-commit?
                          valid-flatpak-update-policy?
                          valid-flatpak-override-policy?
-                         valid-flatpak-application?
-                         validate-flatpak-catalog!
-                         validate-flatpak-selection!
-                         flatpak-select-applications
-                         flatpak-application-ref
-                         flatpak-application-commit
-                         flatpak-application-pinned?
+                          valid-flatpak-application?
+                          valid-flatpak-extension?
+                          validate-flatpak-catalog!
+                          validate-flatpak-extension-catalog!
+                          validate-flatpak-selection!
+                          validate-flatpak-extension-selection!
+                          flatpak-select-applications
+                          flatpak-select-extensions
+                          flatpak-application-ref
+                          flatpak-extension-ref
+                          flatpak-application-commit
+                          flatpak-application-pinned?
+                          flatpak-extension-commit
                          flatpak-application-managed-overrides
                          flatpak-reconcile-plan
                          flatpak-render-override-file))
@@ -113,8 +126,31 @@
                                     (default 'track-branch))
                      (override-policy flatpak-application-override-policy ; 'external | (managed-overrides <flatpak-override>)
                                       (default 'external))
-                     (extra-persistence flatpak-application-extra-persistence ; list of (consumer . backing)
+                      (extra-persistence flatpak-application-extra-persistence ; list of (consumer . backing)
                                         (default '())))
+
+;;; ── extension ──────────────────────────────────────────────
+(define-record-type* <flatpak-extension>
+                     flatpak-extension make-flatpak-extension
+                     flatpak-extension?
+                     (name flatpak-extension-name)              ; symbol：logical name（selection 的键）
+                     (id flatpak-extension-id)                  ; string：Flatpak ref id
+                     (remote flatpak-extension-remote)          ; symbol：remote name（查 remote 表）
+                     (branch flatpak-extension-branch)          ; string：与 runtime/app ABI 绑定（如 "25.08"）
+                     (update-policy flatpak-extension-update-policy ; 'track-branch | (flatpak-commit-pin "<hex>")
+                                    (default 'track-branch)))
+
+;;; ── extension（auxiliary ref；docs/architecture/flatpak.md
+;;; （application model））────────────────────────────────────
+;;; Flatpak 生态有一类不是 application 的 ref：Vulkan layer
+;;; （org.freedesktop.Platform.VulkanLayer.*，runtime extension）
+;;; 与 app 专属工具（com.valvesoftware.Steam.CompatibilityTool.*，
+;;; app extension）。它们：无 desktop 入口、无 ~/.var state、无
+;;; override——安装进 user installation 后由 runtime/app 的
+;;; extension point 自动挂载。建模为独立 record（复用 application
+;;; 的 identity/ref/update-policy 校验），persistence/override 明确
+;;; 不存在；GC 语义见 reconcile（extension 不阻止 uninstall
+;;; --unused，sync 负责重新 ensure）。
 
 ;;; ── override（只建模 v1 真实字段；非 Flatpak [Context] 全集）──
 ;;; 各字段是 string 列表：元素可为 "!xxx"（撤销 manifest 基线项）。
@@ -261,6 +297,33 @@ valid-relative-path? 契约）。默认 persistence（~/.var/app/<id>）
        (valid-flatpak-extra-persistence?
         (flatpak-application-extra-persistence app))))
 
+(define (valid-flatpak-extension? ext remote-names)
+  "EXT 结构合法且 remote ∈ REMOTE-NAMES。extension 无
+override/persistence 字段（机制上不存在，不是省略）。"
+  (and (flatpak-extension? ext)
+       (symbol? (flatpak-extension-name ext))
+       (valid-flatpak-app-id? (flatpak-extension-id ext))
+       (memq (flatpak-extension-remote ext) remote-names)
+       (valid-flatpak-branch? (flatpak-extension-branch ext))
+       (valid-flatpak-update-policy?
+        (flatpak-extension-update-policy ext))))
+
+(define (validate-flatpak-extension-catalog! remotes extensions)
+  "EXTENSIONS（catalog）fail-fast 校验：结构合法、remote 已知、
+logical name 唯一、ref id 唯一。违反抛错。"
+  (let ((remote-names (map flatpak-remote-name remotes)))
+    (for-each (lambda (ext)
+                (unless (valid-flatpak-extension? ext remote-names)
+                  (error "invalid flatpak extension" ext)))
+              extensions)
+    (let ((names (map flatpak-extension-name extensions)))
+      (unless (= (length names) (length (delete-duplicates names)))
+        (error "duplicate flatpak extension logical name" names)))
+    (let ((ids (map flatpak-extension-id extensions)))
+      (unless (= (length ids) (length (delete-duplicates ids string=?)))
+        (error "duplicate flatpak extension id" ids)))
+    #t))
+
 (define (validate-flatpak-catalog! remotes apps)
   "REMOTES/APPS（Catalog）fail-fast 校验：remote 名字唯一、remote
 结构合法；logical name 唯一、app-id 唯一、remote 已知、app 结构
@@ -301,15 +364,38 @@ fail-fast 并列出未知名与可用名。"
 (define (flatpak-select-applications names apps)
   "把 selection NAMES（logical name 列表）解析为 APPS（catalog）中
 对应 <flatpak-application> 列表（按 catalog 顺序）。未知 name
-fail-fast。host 层只知道 logical name，不知道 app-id。"
+fail-fast。"
   (validate-flatpak-selection! names apps)
   (filter (lambda (a) (memq (flatpak-application-name a) names))
           apps))
+
+(define (validate-flatpak-extension-selection! names extensions)
+  "NAMES（extension selection）⊆ EXTENSIONS（catalog）的 logical
+name 集合；违反 fail-fast 并列出未知名与可用名。"
+  (let ((catalog-names (map flatpak-extension-name extensions)))
+    (for-each (lambda (name)
+                (unless (memq name catalog-names)
+                  (error "flatpak extension selection refers to unknown extension"
+                         name catalog-names)))
+              names)
+    #t))
+
+(define (flatpak-select-extensions names extensions)
+  "把 extension selection NAMES 解析为 EXTENSIONS 中对应
+<flatpak-extension> 列表（按 catalog 顺序）。未知 name fail-fast。"
+  (validate-flatpak-extension-selection! names extensions)
+  (filter (lambda (e) (memq (flatpak-extension-name e) names))
+          extensions))
 
 (define (flatpak-application-ref app)
   "App 的 Flatpak ref：'<app-id>//<branch>'。"
   (string-append (flatpak-application-id app)
                  "//" (flatpak-application-branch app)))
+
+(define (flatpak-extension-ref ext)
+  "Extension 的 Flatpak ref：'<ext-id>//<branch>'。"
+  (string-append (flatpak-extension-id ext)
+                 "//" (flatpak-extension-branch ext)))
 
 (define (flatpak-application-commit app)
   "update-policy 的 commit 视图：#f = track branch；string = pin。"
@@ -322,6 +408,14 @@ fail-fast。host 层只知道 logical name，不知道 app-id。"
   "update-policy 是否 pin 了具体 commit。"
   (not (eq? 'track-branch
             (flatpak-application-update-policy app))))
+
+(define (flatpak-extension-commit ext)
+  "extension update-policy 的 commit 视图：#f = track branch；
+string = pin。"
+  (let ((policy (flatpak-extension-update-policy ext)))
+    (if (eq? 'track-branch policy)
+      #f
+      (cadr policy))))
 
 (define (flatpak-application-managed-overrides app)
   "override-policy 的 managed 视图：#f = external（user/Flatseal

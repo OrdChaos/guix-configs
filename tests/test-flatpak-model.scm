@@ -361,4 +361,66 @@
              (flatpak-override
               (session-bus '("org.freedesktop.secrets=talk")))))
 
+;; ── extension（auxiliary ref）───────────────────────────────
+(define %fp-ext
+  (flatpak-extension
+   (name 'layer)
+   (id "org.freedesktop.Platform.VulkanLayer.example")
+   (remote 'flathub)
+   (branch "25.08")))
+
+(test-assert "flatpak-extension constructible with defaults"
+             (and (flatpak-extension? %fp-ext)
+                  (eq? 'layer (flatpak-extension-name %fp-ext))
+                  (eq? 'track-branch
+                       (flatpak-extension-update-policy %fp-ext))))
+
+(test-equal "extension ref is id//branch"
+            "org.freedesktop.Platform.VulkanLayer.example//25.08"
+            (flatpak-extension-ref %fp-ext))
+
+(test-assert "extension validates against known remotes"
+             (valid-flatpak-extension? %fp-ext '(flathub)))
+
+(test-assert "extension rejects unknown remote"
+             (not (valid-flatpak-extension? %fp-ext '(other))))
+
+(test-assert "extension rejects bad id"
+             (not (valid-flatpak-extension?
+                   (flatpak-extension
+                    (name 'bad) (id "not-a-dbus-id")
+                    (remote 'flathub) (branch "stable"))
+                   '(flathub))))
+
+(test-equal "select-extensions resolves in catalog order"
+            '(a b)
+            (map flatpak-extension-name
+                 (flatpak-select-extensions
+                  '(b a)
+                  (list (flatpak-extension
+                         (name 'a) (id "org.example.A")
+                         (remote 'flathub) (branch "1"))
+                        (flatpak-extension
+                         (name 'b) (id "org.example.B")
+                         (remote 'flathub) (branch "1"))))))
+
+(test-assert "select-extensions rejects unknown names"
+             (catch #t
+               (lambda ()
+                 (flatpak-select-extensions '(ghost) (list %fp-ext))
+                 #f)
+               (lambda _ #t)))
+
+(test-error "extension catalog validation rejects duplicate ids"
+            #t
+            (validate-flatpak-extension-catalog!
+             (list (flatpak-remote
+                    (name 'flathub)
+                    (descriptor-url "https://example.invalid/f.flatpakrepo")
+                    (repository-url "https://example.invalid")))
+             (list %fp-ext
+                   (flatpak-extension
+                    (name 'dup) (id "org.freedesktop.Platform.VulkanLayer.example")
+                    (remote 'flathub) (branch "26.08")))))
+
 (test-end "flatpak-model")

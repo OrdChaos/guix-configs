@@ -32,7 +32,8 @@
                #:use-module (guixcfg home fonts)    ; %fonts、%fontconfig-service、%home-fonts-xdg-link-service
                #:use-module (guixcfg home environment) ; %session-environment-service
                #:use-module (guixcfg home assets)   ; %user-assets-service
-               #:use-module (guixcfg flatpak service) ; %flatpak-home-services（override 文件 + XDG_DATA_DIRS）
+               #:use-module (guixcfg flatpak service) ; flatpak-home-services（override 文件 + XDG_DATA_DIRS）
+               #:use-module (guixcfg flatpak registry) ; %flatpak-selection（缺省 selection 权威）
                #:use-module (guixcfg gsettings home-service) ; %gsettings-packages、gsettings-reconcile-service
                #:use-module (guixcfg gsettings model) ; gsettings-desired-state（desired state 聚合）
                #:use-module (guixcfg users user) ; %primary-user、user-profile-home-directory
@@ -45,12 +46,17 @@
 (define (%gsettings-desired-state)
   (gsettings-desired-state (applications-gsettings %applications)))
 
-(define* (guix-home #:key (application-configuration-selections '()))
+(define* (guix-home #:key (application-configuration-selections '())
+                    (flatpak-selection %flatpak-selection))
          "构造 home-environment：registry 应用聚合 + 统一策略服务。
 HOST/profile 的 application configuration variant selections 经
 APPLICATION-CONFIGURATION-SELECTIONS（<application-configuration-
 selection> 列表）贡献（generic mechanism，host 只做 logical
-selection，不知道文件/路径）。"
+selection，不知道文件/路径）。FLATPAK-SELECTION 是 host 的
+Flatpak application selection（缺省 registry 的
+%flatpak-selection）——Flatpak 平台 Home 投影（override 文件 +
+persistence）随之按 selection 生效；详见
+docs/architecture/flatpak.md（per-host selection）。"
          (home-environment
           (packages (append %fonts
                             %gsettings-packages   ; gsettings/dconf CLI（GSettings 投影机制自备 runtime 依赖）
@@ -71,7 +77,8 @@ selection，不知道文件/路径）。"
                             ;; Flatpak 平台 Home 集成（override 完整文件
                             ;; 生成 + XDG_DATA_DIRS exports 追加；零
                             ;; flatpak CLI、零网络）。
-                            %flatpak-home-services
+                            (flatpak-home-services
+                             #:selection flatpak-selection)
                             (application-configuration-selections->home-services
                              application-configuration-selections)
                             (applications-home-services %applications)))))

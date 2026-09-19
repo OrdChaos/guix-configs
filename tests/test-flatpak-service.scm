@@ -77,7 +77,12 @@
 
 ;; ── override files：managed 才生成（external = user-owned）────
 (test-equal "catalog apps with external override policy produce no override files"
-            '() (flatpak-override-files %flatpak-applications))
+            '()
+            (flatpak-override-files
+             (filter (lambda (app)
+                       (eq? 'external
+                            (flatpak-application-override-policy app)))
+                     %flatpak-applications)))
 ;; fixture：managed-overrides 的 app 生成完整文件（home-files
 ;; 条目 target = .local/share/flatpak/overrides/<id>）。
 (define %managed-override-files

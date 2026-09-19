@@ -709,6 +709,33 @@ rewrite, no knowledge of future channel revisions."))
 (define (%flatpak-print-lines lines)
   (for-each (lambda (line) (format #t "~a~%" line)) lines))
 
+(define (%local-flatpak-selections)
+  "本机 hostname → Host ID → host 模块声明的 flatpak selections
+（动态 resolve-interface——只在 flatpak 命令路径加载 host 模块；
+与 reconfigure 的 hostname 反查同一 authority（(guixcfg
+inventory hosts)）。未知 hostname → registry 缺省 selection +
+stderr 提示（status/sync 在任意机器可用；已知 host 用 host
+selection——per-host selection 的 CLI 投影，
+docs/architecture/flatpak.md）。"
+  (let ((host (host-id-for-hostname (gethostname))))
+    (if host
+      (let* ((iface (resolve-interface
+                     `(guixcfg hosts ,(string->symbol host))))
+             (selection
+              (module-ref iface
+                          (string->symbol
+                           (string-append "%" host "-flatpak-selection"))))
+             (extension-selection
+              (module-ref iface
+                          (string->symbol
+                           (string-append "%" host "-flatpak-extension-selection")))))
+        (values selection extension-selection))
+      (begin
+        (format (current-error-port)
+                "flatpak: hostname ~a is not a known host; using the registry default selection.~%"
+                (gethostname))
+        (values %flatpak-selection %flatpak-extension-selection)))))
+
 (define (%flatpak-command arguments)
   ;; 域函数抛错（drift / unknown name / unknown remote / flatpak
   ;; 缺失）统一转为单行打印 + exit 1——blue 的 backtrace 打印器对
@@ -738,27 +765,51 @@ rewrite, no knowledge of future channel revisions."))
              (#f (%flatpak-usage-error))
              ;; status 纯只读：dry-run 也真实执行（只读查询不拦截）。
              (('status ())
-              (flatpak-status))
+              (let-values (((selection extension-selection)
+                            (%local-flatpak-selections)))
+                (flatpak-status #:selection selection
+                                #:extension-selection extension-selection)))
              (('status (refresh))
-              (flatpak-status #:refresh? #t))
-             ;; sync -n：真实只读 plan（remote/app diff），绝不修改。
+              (let-values (((selection extension-selection)
+                            (%local-flatpak-selections)))
+                (flatpak-status #:refresh? #t
+                                #:selection selection
+                                #:extension-selection extension-selection)))
+             ;; sync -n：真实只读 plan（remote/app/extension diff），
+             ;; 绝不修改。
              (('sync ())
-              (if (dry-build?)
-                (%flatpak-print-lines
-                 (flatpak-sync-plan %flatpak-remotes
-                                    %flatpak-applications
-                                    %flatpak-selection))
-                (flatpak-sync)))
+              (let-values (((selection extension-selection)
+                            (%local-flatpak-selections)))
+                (if (dry-build?)
+                  (%flatpak-print-lines
+                   (flatpak-sync-plan %flatpak-remotes
+                                      %flatpak-applications
+                                      selection
+                                      #:extensions %flatpak-extensions
+                                      #:extension-selection
+                                      extension-selection))
+                  (flatpak-sync #:selection selection
+                                #:extensions %flatpak-extensions
+                                #:extension-selection
+                                extension-selection))))
              ;; update -n：真实只读 ref plan（不联网、不安装）。
              (('update ())
-              (if (dry-build?)
-                (let ((refs (flatpak-update-plan %flatpak-applications
-                                                 %flatpak-selection)))
-                  (if (null? refs)
-                    (format #t "No unpinned selected applications to update.~%")
-                    (%flatpak-print-lines
-                     (map (cut format #f "would update ~a" <>) refs))))
-                (flatpak-update)))
+              (let-values (((selection extension-selection)
+                            (%local-flatpak-selections)))
+                (if (dry-build?)
+                  (let ((refs (flatpak-update-plan %flatpak-applications
+                                                   selection
+                                                   #:extensions %flatpak-extensions
+                                                   #:extension-selection
+                                                   extension-selection)))
+                    (if (null? refs)
+                      (format #t "No unpinned selected applications to update.~%")
+                      (%flatpak-print-lines
+                       (map (cut format #f "would update ~a" <>) refs))))
+                  (flatpak-update #:selection selection
+                                  #:extensions %flatpak-extensions
+                                  #:extension-selection
+                                  extension-selection))))
              (('update-runtimes ())
               (if (dry-build?)
                 (let ((refs (flatpak-update-runtimes-plan)))
