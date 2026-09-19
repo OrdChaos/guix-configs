@@ -159,7 +159,10 @@ nvda-new-feature（rolling selector，不固定 major）
     ├── open kernel module（transformation 自动推导）
     ├── firmware / modprobe / settings / nvidia-service-type
     ├── prime-run host backend（版本无关，运行时解析）
-    └── future consumers（Steam/gamescope/Flatpak 同源引用）
+    └── consumers（同源引用）：Flatpak steam/aagl 的 managed
+        override 经 %prime-offload-environment-strings 投影
+        （flatpak/applications/{steam,aagl}.scm）；prime-run
+        wrapper（Home profile）
 ```
 
 - **selector stability ≠ realization version stability**：源代码里的

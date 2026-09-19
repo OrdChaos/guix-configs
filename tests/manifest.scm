@@ -6,6 +6,7 @@
     "tests/test-bash.scm"
     "tests/test-blue-app.scm"
     "tests/test-fonts-policy.scm"
+    "tests/test-gaming.scm"
     "tests/test-gnome-keyring.scm"
     "tests/test-gnupg.scm"
     "tests/test-java.scm"

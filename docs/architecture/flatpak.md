@@ -39,20 +39,49 @@ applications/<name>.scm          definition = 应用是什么（全部业务事�
     ├── update policy           'track-branch | (flatpak-commit-pin "<hex>")
     ├── override policy         'external | (managed-overrides <flatpak-override>)
     └── persistence intent      默认 ~/.var/app/<id>（ID 推导）+ extra-persistence 例外
-registry.scm                     纯 aggregation：import definitions → %flatpak-applications；
-                                 %flatpak-selection（logical names）；%flatpak-remotes；统一校验
+extensions/<name>.scm            auxiliary ref（非 application）：Vulkan layer
+                                 （org.freedesktop.Platform.VulkanLayer.*）、
+                                 compatibility tool
+                                 （com.valvesoftware.Steam.CompatibilityTool.*）
+                                 ——无 desktop 入口、无 ~/.var state、无
+                                 override；branch 与消费方 runtime ABI 绑定
+registry.scm                     纯 aggregation：applications →
+                                 %flatpak-applications / %flatpak-selection；
+                                 extensions → %flatpak-extensions /
+                                 %flatpak-extension-selection；
+                                 %flatpak-remotes；统一校验
 service projection（offline）    selected definitions → persistence rules + managed override 文件
-reconcile projection（mutable）  selected definitions → install/update plan
+reconcile projection（mutable）  selected definitions + extensions → install/update plan
 ```
 
 - **definition 是事实的唯一归属**：打开 `applications/qq.scm` 就能
   读完一个应用的全部声明；registry 只是索引，不含任何 inline
   `flatpak-application` 记录。
-- **selection 只选择**：`%flatpak-selection = '(qq wechat)`
+- **selection 只选择**：`%flatpak-selection` / `%flatpak-extension-selection`
   只含 logical names，不复制 id/branch/persistence；resolver
-  （`flatpak-select-applications`）做 catalog lookup（未知 name
-  fail-fast 并列出可用名）。即使 VM/Laptop 相同也独立存在：
-  **desired lifecycle ≠ persistence lifecycle** 的结构分离。
+  （`flatpak-select-applications` / `flatpak-select-extensions`）做
+  catalog lookup（未知 name fail-fast 并列出可用名）。即使
+  VM/Laptop 相同也独立存在：**desired lifecycle ≠ persistence
+  lifecycle** 的结构分离。
+
+### Per-host selection
+
+应用 selection 的缺省（`%flatpak-selection`）是**公共子集**（qq
+wechat）；含 NVIDIA PRIME managed override 的 app（steam、aagl）
+只适合有 nvidia 的 host——host 在自己的模块声明
+`%<host>-flatpak-selection` 与 `%<host>-flatpak-extension-selection`：
+lenovo 追加 `aagl steam` 与 `gamescope proton-ge`，VM 保持缺省。
+三个消费方：
+
+- **Home/System 投影**（offline）：host 把 selection 经
+  `guix-home` 的 `#:flatpak-selection` 与
+  `host-persistent-mount-file-systems` 的同名参数传入——
+  override 文件与 persistence mounts 随 selection 生效；
+- **`blue flatpak`**：按本机 hostname 反查 Host ID（与
+  reconfigure 同一 authority），动态 resolve host 模块取两个
+  selection；未知 hostname → registry 缺省 + stderr 提示；
+- **extension selection 缺省为空**：extension 是按需能力，由
+  host 显式声明。
 - **persistence 从 selected definitions 投影**：未选中的 catalog
   app 不产生 persistence mount（其 definition 里的 persistence
   intent 随 selection 生效）；默认 `~/.var/app/<id>` 由 application
@@ -223,14 +252,53 @@ guix time-machine -C channels.lock.scm -- \
 
 | 命令 | 语义 |
 |---|---|
-| `sync` | ensure remotes + ensure selected apps（**只增不删**：不 update 已装、不 uninstall 未声明、不 gc）。pin app：install 后 `update --commit=<H> <ref>`（pinned 1.16.6 的 install 无 `--commit`） |
-| `status` | 完全离线：logical name / app-id / selected? / installed? / branch / declared commit / installed commit。`--refresh` 才 remote-info（失败显示 unknown，不破坏本地输出） |
-| `update` | 目标 = **selection ∩ installed ∩ unpinned**，显式 ref 列表；绝无无参全 installation update；commit pinned app 默认不进目标 |
+| `sync` | ensure remotes + ensure selected apps 与 selected extensions（**只增不删**：不 update 已装、不 uninstall 未声明、不 gc）。pin app/extension：install 后 `update --commit=<H> <ref>`（pinned 1.16.6 的 install 无 `--commit`）。extension 被 gc 卸载后重跑 sync 即重新 ensure |
+| `status` | 完全离线：logical name / app-id / selected? / installed? / branch / declared commit / installed commit + extension 表 + **GL driver doctor**（发散检测，见下）。`--refresh` 才 remote-info（失败显示 unknown，不破坏本地输出） |
+| `update` | 目标 = **selection ∩ installed ∩ unpinned** 的 app + 已装选中 extension，显式 ref 列表；绝无无参全 installation update；commit pinned app 默认不进目标 |
 | `update-runtimes` | 枚举 installed runtimes → 显式 ref 更新（app pin 不隐含 runtime pin） |
 | `remove` | 显式 uninstall ref（logical name，catalog fail-fast 解析）；**userdata 与 persistence rule 保留（remove ≠ purge）** |
 | `remote-replace <name>` | **唯一换源入口**：显式 destructive acknowledgment——remote-delete + 按声明 bootstrap 重建（生成的 descriptor + keyring）；sync 的 drift 检查永远 fail-loud，绝不自动改 trust root |
-| `gc` | 显式维护：`uninstall --unused --user` + `repair --user`；不挂任何 hook |
+| `gc` | 显式维护：`uninstall --unused --user` + `repair --user`；不挂任何 hook。**注意**：extension（如 gamescope layer）不被任何 app 元数据引用时会被 `--unused` 卸载——gc 之后重跑 `blue flatpak sync` 重新 ensure |
 | `purge` | Phase 4（seam 已定义）：remove ref + 清空 userdata **内容**（绝不 `rm -rf` 仍 bind-mounted 的 backing root）；之后才允许从 Catalog 删除定义 |
+
+### GL driver 一致性（NVIDIA）
+
+NVIDIA GL/GL32 extension（`org.freedesktop.Platform.GL.nvidia-<version>`）
+是 runtime 的 related ref：`download-if: active-gl-driver` 使**任何
+包含 runtime op 的 install/update 事务自动拉取与
+`/sys/module/nvidia/version` 匹配的新 extension**（上游自动机制，
+distro 均无额外钩子）；旧版本由 autoprune 清理（`gc` / 无参
+update）。本仓库的增量只有一个：**离线发散检测**——`blue
+flatpak status` 对比 active GL driver 与已装 nvidia extension，
+失配时输出可操作的修复提示。
+
+运维仪式（驱动升级后）：`blue reconfigure` → **reboot**（
+`/sys/module/nvidia/version` 反映运行中模块——必须先加载新模块，
+否则装的是旧驱动的 extension）→ `blue flatpak update-runtimes`。
+发散症状：stale extension 不被挂载（`enable-if`），GL/Vulkan
+初始化失败。
+
+### Gaming（steam / aagl）
+
+Steam 全线 Flatpak 化（2026-09 调研结论：Guix/Nonguix 均无
+gamescope，Flatpak gamescope 是上游官方支持路径，且与 AAGL
+共用同一 extension）：
+
+- **NVIDIA PRIME**：steam/aagl 的 managed override 投影
+  `%prime-offload-environment-strings`（变量语义归
+  `(guixcfg system graphics nvidia)`）；游戏库
+  `/persist/data-nobackup/steam`（路径 authority 在
+  `(guixcfg system gaming)`，目录由其 activation 创建）。
+  手柄 udev rules 同属 gaming host infrastructure；
+- **Gamescope 逐游戏**（如 niri 兼容性差的游戏）：游戏属性
+  Launch Options 写 `gamescope -f -- %command%`（多显示器指针
+  逃逸时用 `gamescope --backend sdl -f -- %command%`）；**不要**
+  加 `--steam`（上游黑屏报告）。需要 gamescope 的游戏在
+  Compatibility 里选 `GE-Proton (Flatpak)`（官方 Proton 的嵌套
+  Pressure Vessel 与 Flatpak gamescope 不兼容）；
+- **Gamescope extension 分支绑定 runtime ABI**（当前 25.08）：
+  steam runtime 大版本迁移时同步更换
+  `extensions/gamescope.scm` 的 branch——唯一事实源。
 
 **网络边界（硬不变量）**：reconfigure / boot / home activation /
 login gate 不做任何联网 flatpak 操作（remote-add/install/update/

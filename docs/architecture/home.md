@@ -46,9 +46,15 @@ single-owner mechanism 执行：
 selection（`(guixcfg apps selection)`：application 名 + variant 名，
 不知道文件/路径）。`guix-home` 接受
 `#:application-configuration-selections` 参数；默认 `%guix-home`
-（无特殊 selection）供 VM 等组装点直接使用。依赖方向
+（无特殊 selection）供组装点直接使用。依赖方向
 application ← host（application 不读取 host；详见 applications.md
 （Host-agnostic boundary））。
+
+**Flatpak selection**：`guix-home` 还接受 `#:flatpak-selection`
+参数（host 的 Flatpak application selection，缺省 registry 的
+`%flatpak-selection`）——Flatpak 平台 Home 投影（managed
+override 文件 + persistence）随之按 selection 生效；见
+flatpak.md（per-host selection）。
 
 不实现 NixOS/RDE module framework（无 solver/priority/override/
 自动发现）。新增应用：`cp -r templates/application

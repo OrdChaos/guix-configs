@@ -33,23 +33,27 @@
                #:use-module (gnu)                          ; operating-system、user-account、service 等
                #:use-module (gnu home)                     ; home-environment（laptop home 组装）
                #:use-module (gnu services networking)      ; network-manager-service-type、wpa-supplicant-service-type
-               #:use-module (guixcfg storage model)          ; host-storage-policy-keep-root-generations
-               #:use-module ((guixcfg storage policies) #:prefix storage:)
+                #:use-module (guixcfg storage model)          ; host-storage-policy-keep-root-generations
+                #:use-module ((guixcfg storage policies) #:prefix storage:)
                 #:use-module (guixcfg hosts common)         ; 共享 host composition algorithm
                 #:use-module (guixcfg inventory hosts)      ; Host ID → hostname 单一映射
                 #:use-module (guixcfg system graphics nvidia) ; nvidia-system-transformation（laptop 专属）
+                #:use-module (guixcfg system gaming)        ; gaming host infrastructure（controller udev + 游戏库目录）
                #:use-module (guixcfg users user)           ; %primary-user（结构事实权威源）
                #:use-module (guixcfg home user)            ; guix-home（挂入 system）
                #:use-module (guixcfg security secrets)     ; secrets 部署机制
                #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
                #:use-module (guixcfg apps model)      ; applications-secrets
                #:use-module (guixcfg apps selection)  ; application-configuration-selection
+               #:use-module (guixcfg flatpak registry) ; %flatpak-selection（缺省）
                #:use-module (guixcfg system machine-state-persistence) ; machine-state binds
                #:use-module (guixcfg system network-manager-persistence) ; saved connection profiles
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind
                #:use-module (guixcfg system mihomo service) ; %mihomo-secrets、%mihomo-data-persistence-rule
                #:export (%lenovo-legion-y7000p-storage-policy
                           %lenovo-legion-y7000p-application-configuration-selections
+                          %lenovo-legion-y7000p-flatpak-selection
+                          %lenovo-legion-y7000p-flatpak-extension-selection
                           %lenovo-legion-y7000p-guix-home
                           %lenovo-legion-y7000p-services
                           %lenovo-legion-y7000p-user-services
@@ -68,20 +72,50 @@
          (application 'niri)
          (variant 'laptop))))
 
+;; laptop 的 Flatpak selection：缺省（qq wechat）+ aagl + steam。
+;; aagl/steam 的 managed override 含 NVIDIA PRIME offload 变量
+;; （%prime-offload-environment 投影）——只适合有 nvidia 的
+;; host，VM 保持缺省不安装。extension selection：Gamescope
+;; Vulkan layer（steam wrapper 与 aagl wrapper 都经
+;; /usr/lib/extensions/vulkan/gamescope/bin 发现）+ Flatpak
+;; Proton-GE（官方 Proton 的嵌套 Pressure Vessel 与 Flatpak
+;; gamescope 不兼容——需要 gamescope 的游戏在 Steam 兼容性
+;; 设置里选 GE-Proton (Flatpak)；flathub steam wiki）。branch
+;; 与 app runtime 绑定：steam = Freedesktop 25.08；runtime 大
+;; 版本迁移时同步更换（registry definition 注释记录）。
+(define %lenovo-legion-y7000p-flatpak-selection
+  (append %flatpak-selection '(aagl steam)))
+
+(define %lenovo-legion-y7000p-flatpak-extension-selection
+  '(gamescope proton-ge))
+
+;; laptop 的 Guix Home 组合：默认 home + logical selections（由
+;; generic resolver 解析为配置文件贡献）+ laptop-only host
+;; capability：NVIDIA PRIME offload 的 host projection
+;; （%prime-run-wrapper，Home profile 遮蔽 system profile 的
+;; upstream nvidia-prime prime-run）+ laptop 的 Flatpak
+;; selection（override 文件与 persistence 随 selection 投影）。
+;; VM 不获得该 capability（%guix-home 不含 wrapper；VM system
+;; 无 nvidia-service-type）。
+(define %lenovo-legion-y7000p-guix-home
+  (let ((base (guix-home
+               #:application-configuration-selections
+               %lenovo-legion-y7000p-application-configuration-selections
+               #:flatpak-selection
+               %lenovo-legion-y7000p-flatpak-selection)))
+    (home-environment
+     (inherit base)
+     (packages (cons %prime-run-wrapper
+                     (home-environment-packages base))))))
+
 ;; laptop 的 Guix Home 组合：默认 home + logical selections（由
 ;; generic resolver 解析为配置文件贡献）+ laptop-only host
 ;; capability：NVIDIA PRIME offload 的 host projection
 ;; （%prime-run-wrapper，Home profile 遮蔽 system profile 的
 ;; upstream nvidia-prime prime-run）。VM 不获得该 capability
 ;; （%guix-home 不含 wrapper；VM system 无 nvidia-service-type）。
-(define %lenovo-legion-y7000p-guix-home
-  (let ((base (guix-home
-               #:application-configuration-selections
-                %lenovo-legion-y7000p-application-configuration-selections)))
-    (home-environment
-     (inherit base)
-     (packages (cons %prime-run-wrapper
-                     (home-environment-packages base))))))
+;; （%lenovo-legion-y7000p-guix-home 定义已上移至 flatpak selection
+;; 声明之后，单一定义。）
 
 ;; laptop 的 runtime secrets：mihomo（模块持有，所有设备共用）+
 ;; applications（registry 聚合）。无 VM 测试 sentinel（那是测试机专属）。
@@ -94,7 +128,8 @@
 ;; 共用）。列表本身是 common 的共享事实（含 Flatpak 平台规则——
 ;; 所有 host 都用，2026-09 起不再是 host 差异）。
 (define %persistent-mount-file-systems
-  (host-persistent-mount-file-systems))
+  (host-persistent-mount-file-systems
+   #:flatpak-selection %lenovo-legion-y7000p-flatpak-selection))
 
 ;; Mihomo 数据目录（providers cache + 选中节点/组状态）的 machine-state
 ;; bind（root-owned system state；backing/consumer 0700 由 mihomo
@@ -128,7 +163,10 @@
     #:keep-root-generations
     (host-storage-policy-keep-root-generations
      %lenovo-legion-y7000p-storage-policy)
-    #:persistent-mount-file-systems %persistent-mount-file-systems)
+    #:persistent-mount-file-systems %persistent-mount-file-systems
+    ;; laptop gaming host infrastructure：controller udev rules +
+    ;; 游戏库目录 activation（(guixcfg system gaming)）。
+    #:additional-system-services %gaming-system-services)
    ;; Activation precedes Shepherd's mounts and NetworkManager startup.
    (list (network-manager-connections-persistence-service))))
 

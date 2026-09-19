@@ -1,0 +1,72 @@
+;;; Gaming host infrastructure：游戏相关、不属于任何单一应用的
+;;; host-level system 集成（当前 laptop-only，由
+;;; hosts/lenovo-legion-y7000p.scm 组装进 system services）。
+;;;
+;;; 归属决策（2026-09，Steam 全线 Flatpak 化后）：
+;;;   - steam-devices udev rules：手柄/VR 设备权限（pinned
+;;;     gnu packages games 的 steam-devices-udev-rules）。Nonguix
+;;;     容器时代它随 steam app 走；Flatpak Steam 的 controller
+;;;     支持同样依赖宿主 udev rules（flathub steam wiki）——它是
+;;;     机器能力（有没有手柄），不是某个 launcher 的属性；
+;;;   - 游戏库目录 /persist/data-nobackup/steam：direct-access
+;;;     bulk storage（docs/architecture/persistence.md（
+;;;     data-nobackup）），经 Flatpak steam 的 managed
+;;;     override（filesystem）暴露进 sandbox（路径 authority 在本
+;;;     模块，definition 引用，不重复拼写）。目录必须预先存在且
+;;;     归 USER（Flatpak filesystem 指向不存在路径虽可容忍，但
+;;;     Steam 添加库需要可写目录）——activation 创建 + chown
+;;;     （noctalia-greeter backing ownership 同款模式：owner 经
+;;;     /etc/passwd 运行时解析，不硬编码 uid/gid）。
+;;;
+;;; NVIDIA PRIME offload 变量不在此投影——Flatpak NVIDIA app 的
+;;; override 从 %prime-offload-environment-strings 取
+;;; （(guixcfg system graphics nvidia) 单一 authority）。
+
+(define-module (guixcfg system gaming)
+               #:use-module (gnu packages games)   ; steam-devices-udev-rules
+               #:use-module (gnu services)         ; simple-service
+               #:use-module (gnu services base)    ; udev-rules-service、activation-service-type
+               #:use-module (guix gexp)            ; with-imported-modules
+               #:use-module (guix modules)         ; source-module-closure
+               #:use-module (guixcfg storage model) ; persist-mount-point
+               #:use-module (guixcfg users user)    ; %primary-user（owner 推导）
+               #:export (%steam-games-library-path
+                         %gaming-system-services))
+
+;; 游戏库 canonical 位置：/persist/data-nobackup/steam（persist-
+;; mount-point 是 /persist/* 语义路径唯一 authority——AGENT.md §13）。
+(define %steam-games-library-path
+  (string-append (persist-mount-point "@persist-data-nobackup") "/steam"))
+
+;; 游戏库目录 activation：mkdir + 归还 USER（幂等，不触碰已存在
+;; 内容）。account projection 先于 activation 写 /etc/passwd。
+(define (steam-games-library-activation)
+  (with-imported-modules (source-module-closure
+                          '((gnu build accounts)   ; read-passwd、password-entry-*
+                            (guix build utils)
+                            (srfi srfi-1)))        ; find
+    #~(begin
+        (use-modules (gnu build accounts)
+                     (guix build utils)
+                     (srfi srfi-1))
+        (let* ((dir #$%steam-games-library-path)
+               (user-name #$(user-profile-name %primary-user))
+               (user (find (lambda (entry)
+                             (string=? (password-entry-name entry)
+                                       user-name))
+                           (read-passwd "/etc/passwd"))))
+          (unless user
+            (error "steam: games library owner account missing \
+from /etc/passwd" user-name))
+          (mkdir-p dir)
+          (chown dir (password-entry-uid user) (password-entry-gid user))
+          (chmod dir #o755)
+          #t))))
+
+;; laptop gaming system services：controller udev rules + 游戏库
+;; 目录 activation。VM 不组装（无手柄/游戏库需求）。
+(define %gaming-system-services
+  (list (udev-rules-service 'steam-devices steam-devices-udev-rules)
+        (simple-service 'steam-games-library-directory
+                        activation-service-type
+                        (steam-games-library-activation))))

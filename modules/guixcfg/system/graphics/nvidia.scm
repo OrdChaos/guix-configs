@@ -52,9 +52,11 @@
 ;;; （tests/test-nvidia.scm N8-N10、tests/test-prime-run.scm）。
 ;;; 注意：nonguix README 明确 nvda-new-feature 为 "not
 ;;; production-ready"（rolling branch 的固有属性，本仓库 policy 已
-;;; 接受）。未来 Steam/gamescope/Flatpak 等 consumers 同源引用
-;;; %nvidia-driver，禁止散落任何 version-specific 字面量（580/595/
-;;; 610 等只允许出现在测试的 package metadata 断言与验证输出中）。
+;;; 接受）。consumers 同源引用（Flatpak steam/aagl 的 managed
+;;; override 经 %prime-offload-environment-strings 投影；
+;;; prime-run wrapper），禁止散落任何 version-specific
+;;; 字面量（580/595/610 等只允许出现在测试的 package metadata
+;;; 断言与验证输出中）。
 ;;;
 ;;; PRIME offload policy 与 host projection：
 ;;;   %prime-offload-environment —— 中性 policy 数据（变量语义与
@@ -63,6 +65,10 @@
 ;;;     __GLX_VENDOR_LIBRARY_NAME）。host projection 与未来的
 ;;;     Flatpak projection 都消费它；任何 NVIDIA offload 变量都
 ;;;     【不得】出现在 session-global 环境（graphics.md 契约）。
+;;;   %prime-offload-environment-strings —— 中性 policy 数据的
+;;;     "NAME=VALUE" 字符串视图（Flatpak override 的 [Context]
+;;;     environment 条目形态）——Flatpak NVIDIA app（steam/aagl）
+;;;     的 managed override 经此投影，不复制变量字面量。
 ;;;   %prime-run-wrapper —— host projection：Home profile（laptop
 ;;;     only，hosts/lenovo-legion-y7000p.scm 组装）作用域 wrapper。根因背景：
 ;;;     pinned Guix mesa 是经典构建（-Dglx=dri，无 glvnd dispatch），
@@ -103,6 +109,7 @@
                          %nvidia-driver
                          nvidia-kernel-arguments
                          %prime-offload-environment
+                         %prime-offload-environment-strings
                          %prime-run-wrapper
                          nvidia-system-transformation))
 
@@ -116,8 +123,8 @@
 ;; 禁止在仓库任何 consumer 中写死 major。本模块的 transformation
 ;; 与 host prime-run projection 都从这里取；配套（open module /
 ;; firmware / modprobe / settings）由 pinned Nonguix transformation
-;; 按同一 binding 自动推导（见文件头）。未来 Steam（steam-for
-;; %nvidia-driver）等 consumers 同源引用。
+;; 按同一 binding 自动推导（见文件头）。consumers 同源引用
+;; （Flatpak steam/aagl override 的 env 投影、prime-run wrapper）。
 (define %nvidia-driver nvda-new-feature)
 
 ;; NVIDIA 特定 kernel arguments 的 host 级调优 seam（当前空）：
@@ -142,6 +149,14 @@
   '(("__NV_PRIME_RENDER_OFFLOAD" . "1")
     ("__VK_LAYER_NV_optimus" . "NVIDIA_only")
     ("__GLX_VENDOR_LIBRARY_NAME" . "nvidia")))
+
+;; policy 数据的 "NAME=VALUE" 字符串视图（Flatpak override
+;; environment 条目形态；Flatpak 的 NVIDIA app——steam/aagl——
+;; managed override 经此投影，变量语义仍归本 authority）。
+(define %prime-offload-environment-strings
+  (map (lambda (entry)
+         (string-append (car entry) "=" (cdr entry)))
+       %prime-offload-environment))
 
 (define (shell-variable-name? s)
   "S 是合法 POSIX shell 变量名（策略数据防注入；允许下划线开头，
