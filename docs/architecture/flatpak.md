@@ -43,8 +43,9 @@ extensions/<name>.scm            auxiliary ref（非 application）：Vulkan lay
                                  （org.freedesktop.Platform.VulkanLayer.*）、
                                  compatibility tool
                                  （com.valvesoftware.Steam.CompatibilityTool.*）
-                                 ——无 desktop 入口、无 ~/.var state、无
-                                 override；branch 与消费方 runtime ABI 绑定
+                                  ——无 desktop 入口、无 ~/.var state、无
+                                  override；branch 与消费方 runtime ABI 绑定；
+                                  update policy 仅 track-branch
 registry.scm                     纯 aggregation：applications →
                                  %flatpak-applications / %flatpak-selection；
                                  extensions → %flatpak-extensions /
@@ -79,7 +80,8 @@ lenovo 追加 `aagl steam` 与 `gamescope proton-ge`，VM 保持缺省。
   override 文件与 persistence mounts 随 selection 生效；
 - **`blue flatpak`**：按本机 hostname 反查 Host ID（与
   reconfigure 同一 authority），动态 resolve host 模块取两个
-  selection；未知 hostname → registry 缺省 + stderr 提示；
+  selection；未知 hostname 时只读 status 回退 registry 缺省并提示，
+  所有实际 mutation fail closed，避免在错误机器套用公共 policy；
 - **extension selection 缺省为空**：extension 是按需能力，由
   host 显式声明。
 - **persistence 从 selected definitions 投影**：未选中的 catalog
@@ -220,6 +222,8 @@ home-files 生成**完整** `~/.local/share/flatpak/overrides/<app-id>`
 （deterministic GKeyFile renderer——store symlink = derived state，
 随 generation/rollback）。无 declaration：仓库不产生文件，user /
 Flatseal owns。**repo 与 Flatseal 永不 merge-write。**
+普通权限写入 `[Context]`；环境变量按 Flatpak keyfile 规范逐项写入
+`[Environment]`（不是 `[Context] environment=...` 列表）。
 
 repo-owned override 是 **read-only declarative state**，不建议直接
 用 Flatseal 修改（pinned Guix Home symlink-manager 的真实行为：
@@ -252,13 +256,13 @@ guix time-machine -C channels.lock.scm -- \
 
 | 命令 | 语义 |
 |---|---|
-| `sync` | ensure remotes + ensure selected apps 与 selected extensions（**只增不删**：不 update 已装、不 uninstall 未声明、不 gc）。pin app/extension：install 后 `update --commit=<H> <ref>`（pinned 1.16.6 的 install 无 `--commit`）。extension 被 gc 卸载后重跑 sync 即重新 ensure |
+| `sync` | ensure remotes + ensure selected apps 与 selected extensions（**只增不删**：不 update 已装、不 uninstall 未声明、不 gc）。pinned app：install 后 `update --commit=<H> <ref>`（pinned 1.16.6 的 install 无 `--commit`）。selected extension 只支持 track-branch，并通过 `flatpak pin --user <ref>` 防止 gc/autoprune 删除 |
 | `status` | 完全离线：logical name / app-id / selected? / installed? / branch / declared commit / installed commit + extension 表 + **GL driver doctor**（发散检测，见下）。`--refresh` 才 remote-info（失败显示 unknown，不破坏本地输出） |
 | `update` | 目标 = **selection ∩ installed ∩ unpinned** 的 app + 已装选中 extension，显式 ref 列表；绝无无参全 installation update；commit pinned app 默认不进目标 |
 | `update-runtimes` | 枚举 installed runtimes → 显式 ref 更新（app pin 不隐含 runtime pin） |
 | `remove` | 显式 uninstall ref（logical name，catalog fail-fast 解析）；**userdata 与 persistence rule 保留（remove ≠ purge）** |
 | `remote-replace <name>` | **唯一换源入口**：显式 destructive acknowledgment——remote-delete + 按声明 bootstrap 重建（生成的 descriptor + keyring）；sync 的 drift 检查永远 fail-loud，绝不自动改 trust root |
-| `gc` | 显式维护：`uninstall --unused --user` + `repair --user`；不挂任何 hook。**注意**：extension（如 gamescope layer）不被任何 app 元数据引用时会被 `--unused` 卸载——gc 之后重跑 `blue flatpak sync` 重新 ensure |
+| `gc` | 显式维护：先解除 catalog 中已取消选择或已更换 branch 的旧 extension pin，再执行 `uninstall --unused --user` + `repair --user`；不挂任何 hook。selected extension 的 pin 保留，不会作为 unused 被删除 |
 | `purge` | Phase 4（seam 已定义）：remove ref + 清空 userdata **内容**（绝不 `rm -rf` 仍 bind-mounted 的 backing root）；之后才允许从 Catalog 删除定义 |
 
 ### GL driver 一致性（NVIDIA）
@@ -326,6 +330,10 @@ definition 的 update-policy 显式表达：
 (update-policy 'track-branch)                 ; 默认：跟随 branch
 (update-policy (flatpak-commit-pin "<hex>"))  ; optional pin（必须注释理由）
 ```
+
+该 commit pin 仅用于 application。extension 会进入 runtime 批量更新
+路径，当前只允许 `track-branch`；声明 extension commit pin 会在 catalog
+校验时 fail closed，而不是提供无法兑现的锁定语义。
 
 只有 regression 规避 / 特殊版本要求 / 排查期才 pin。pin 不等价
 Guix source pin：remote 可 prune 历史 commit、无自建 mirror——因此

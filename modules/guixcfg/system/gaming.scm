@@ -58,10 +58,17 @@
           (unless user
             (error "steam: games library owner account missing \
 from /etc/passwd" user-name))
-          (mkdir-p dir)
-          (chown dir (password-entry-uid user) (password-entry-gid user))
-          (chmod dir #o755)
-          #t))))
+           (let ((existing (false-if-exception (lstat dir))))
+             (when (and existing
+                        (not (eq? 'directory (stat:type existing))))
+               (error "steam: games library path exists but is not a directory"
+                      dir))
+             (unless existing
+               (mkdir-p dir)))
+           (chown dir (password-entry-uid user) (password-entry-gid user))
+           ;; 收敛旧版本创建的 0755；游戏库仅 primary user 可遍历。
+           (chmod dir #o700)
+           #t))))
 
 ;; laptop gaming system services：controller udev rules + 游戏库
 ;; 目录 activation。VM 不组装（无手柄/游戏库需求）。

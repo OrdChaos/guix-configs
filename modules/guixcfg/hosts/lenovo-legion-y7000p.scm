@@ -20,8 +20,8 @@
 ;;;      laptop-only host capability %prime-run-wrapper）；
 ;;;   4. NVIDIA：最终 OS 套 nvidia-system-transformation（open kernel
 ;;;      module + dynamic boost；kernel 不被替换）。
-;;; （Flatpak 与 application persistence 规则自 2026-09 起在 common
-;;; 共享——不再是 host 差异。）
+;;;   5. Flatpak：机制在 common 共享，selection 是 host policy；
+;;;      laptop 额外选择 AAGL/Steam 与 Gamescope/Proton-GE。
 ;;;
 ;;; 构建（需要 machine facts，见 (guixcfg system file-systems) 头注释）：
 ;;;   GUIX_CONFIG_FACTS=<facts> GUILE_LOAD_PATH="$PWD/modules" \
@@ -125,8 +125,7 @@
 
 ;; HOME persistence bind mounts（user data + app state；单一定义，
 ;; %lenovo-legion-y7000p-services 的 gvfs-mount-metadata 服务与 file-systems 字段
-;; 共用）。列表本身是 common 的共享事实（含 Flatpak 平台规则——
-;; 所有 host 都用，2026-09 起不再是 host 差异）。
+;; 共用）。生成机制在 common 共享，输入 selection 是 host 差异。
 (define %persistent-mount-file-systems
   (host-persistent-mount-file-systems
    #:flatpak-selection %lenovo-legion-y7000p-flatpak-selection))
@@ -174,6 +173,9 @@
 (define %lenovo-legion-y7000p-user-services
   (make-host-user-services
    #:system-services %lenovo-legion-y7000p-services
+   #:application-persistence-rules
+   (host-application-persistence-rules
+    #:flatpak-selection %lenovo-legion-y7000p-flatpak-selection)
    #:additional-machine-state-persistence-rules
    (list %network-manager-connections-persistence-rule)
    #:secrets %lenovo-legion-y7000p-secrets

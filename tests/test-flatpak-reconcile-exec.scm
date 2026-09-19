@@ -38,6 +38,7 @@
 (define %fp-info-out (string-append %fp-dir "/info.out"))
 (define %fp-remotes-out (string-append %fp-dir "/remotes.out"))
 (define %fp-remote-info-out (string-append %fp-dir "/remote-info.out"))
+(define %fp-pins-out (string-append %fp-dir "/pins.out"))
 
 (define %fp-original-path (getenv "PATH"))
 
@@ -66,9 +67,14 @@
                            (display "  remote-delete)\n" p)
                            (display "    : > \"${FP_FAKE_REMOTES_OUT:-/dev/null}\"\n" p)
                            (display "    ;;\n" p)
-                           (display "  remote-info)\n" p)
+                            (display "  remote-info)\n" p)
                            (display "    cat \"${FP_FAKE_REMOTE_INFO_OUT:-/dev/null}\" 2>/dev/null\n" p)
-                           (display "    ;;\n" p)
+                            (display "    ;;\n" p)
+                            (display "  pin)\n" p)
+                            (display "    case \"$*\" in\n" p)
+                            (display "      \"pin --user\") cat \"${FP_FAKE_PINS_OUT:-/dev/null}\" 2>/dev/null ;;\n" p)
+                            (display "    esac\n" p)
+                            (display "    ;;\n" p)
                            (display "esac\n" p)
                            (display "if [ -n \"${FP_FAKE_FAIL_ON:-}\" ]; then\n" p)
                            (display "  case \"$*\" in\n" p)
@@ -87,6 +93,7 @@
   (setenv "FP_FAKE_INFO_OUT" %fp-info-out)
   (setenv "FP_FAKE_REMOTES_OUT" %fp-remotes-out)
   (setenv "FP_FAKE_REMOTE_INFO_OUT" %fp-remote-info-out)
+  (setenv "FP_FAKE_PINS_OUT" %fp-pins-out)
   (setenv "FP_FAKE_FAIL_ON" ""))
 
 (define (fp-clear-log!)
@@ -130,6 +137,12 @@
         (flatpak-application
          (name 'unselected) (id "org.example.Unselected")
          (remote 'flathub) (branch "stable"))))
+(define %fp-exts
+  (list (flatpak-extension
+         (name 'layer)
+         (id "org.freedesktop.Platform.VulkanLayer.example")
+         (remote 'flathub)
+         (branch "25.08"))))
 
 (dynamic-wind
  (lambda ()
@@ -196,8 +209,8 @@
    ;; ── 2. sync：全部已装 + unmanaged/runtime → no-op ─────────
    (fp-write-file %fp-remotes-out
                   "flathub\thttps://dl.flathub.org/repo/\n")
-   (fp-write-file %fp-list-app-out
-                  "com.tencent.WeChat\norg.example.Pinned\norg.other.Unmanaged\norg.freedesktop.Platform\n")
+    (fp-write-file %fp-list-app-out
+                   "com.tencent.WeChat\tstable\norg.example.Pinned\tstable\norg.other.Unmanaged\tstable\norg.freedesktop.Platform\t25.08\n")
    (fp-clear-log!)
    (let ((missing (flatpak-sync #:remotes (list (car %fp-remotes))
                                 #:applications %fp-apps
@@ -210,8 +223,37 @@
                   (not (fp-log-has? "install")))
      (test-assert "sync: unmanaged app never appears in any argv"
                   (not (fp-log-has? "org.other.Unmanaged")))
-     (test-assert "sync: runtime refs never appear in any argv"
-                  (not (fp-log-has? "org.freedesktop.Platform"))))
+      (test-assert "sync: runtime refs never appear in any argv"
+                   (not (fp-log-has? "org.freedesktop.Platform"))))
+
+    ;; 同 ID 的错误 branch 不满足 selection；安装正确 ABI branch，
+    ;; 并 pin 声明 ref，避免 gc/autoprune 破坏 desired state。
+    (fp-write-file %fp-list-app-out
+                   "org.freedesktop.Platform.VulkanLayer.example\t24.08\n")
+    (fp-write-file %fp-pins-out "")
+    (fp-clear-log!)
+    (flatpak-sync #:remotes (list (car %fp-remotes))
+                  #:applications %fp-apps #:selection '()
+                  #:extensions %fp-exts #:extension-selection '(layer))
+    (test-assert "sync: wrong extension branch installs declared branch"
+                 (fp-log-has?
+                  "flatpak install --user -y flathub org.freedesktop.Platform.VulkanLayer.example//25.08"))
+    (test-assert "sync: selected extension is pinned against gc"
+                 (fp-log-has?
+                  "flatpak pin --user org.freedesktop.Platform.VulkanLayer.example//25.08"))
+    (fp-write-file %fp-list-app-out
+                   "org.freedesktop.Platform.VulkanLayer.example\t25.08\n")
+    (fp-write-file %fp-pins-out
+                   "org.freedesktop.Platform.VulkanLayer.example//25.08\n")
+    (fp-clear-log!)
+    (flatpak-sync #:remotes (list (car %fp-remotes))
+                  #:applications %fp-apps #:selection '()
+                  #:extensions %fp-exts #:extension-selection '(layer))
+    (test-assert "sync: matching extension branch is not reinstalled"
+                 (not (fp-log-has? "flatpak install")))
+    (test-assert "sync: converged extension pin is not rewritten"
+                 (not (fp-log-has?
+                       "flatpak pin --user org.freedesktop.Platform.VulkanLayer.example//25.08")))
    
    ;; ── 3. remote drift → fail，绝不 auto-modify ──────────────
    (fp-write-file %fp-remotes-out
@@ -300,8 +342,8 @@
    ;; ── 4. update：显式 unpinned selected targets ─────────────
    (fp-write-file %fp-remotes-out
                   "flathub\thttps://dl.flathub.org/repo/\n")
-   (fp-write-file %fp-list-app-out
-                  "com.tencent.WeChat\norg.example.Unselected\norg.other.Unmanaged\n")
+    (fp-write-file %fp-list-app-out
+                   "com.tencent.WeChat\tstable\norg.example.Unselected\tstable\norg.other.Unmanaged\tstable\n")
    (fp-clear-log!)
    (flatpak-update #:applications %fp-apps
                    #:selection '(wechat pinned unselected))
@@ -310,8 +352,16 @@
                  "flatpak update --user -y com.tencent.WeChat//stable org.example.Unselected//stable"))
    (test-assert "update: pinned app never in target list"
                 (not (fp-log-has? "org.example.Pinned")))
-   (test-assert "update: unmanaged app never in target list"
-                (not (fp-log-has? "org.other.Unmanaged")))
+    (test-assert "update: unmanaged app never in target list"
+                 (not (fp-log-has? "org.other.Unmanaged")))
+    (fp-write-file %fp-list-app-out
+                   "org.freedesktop.Platform.VulkanLayer.example\t25.08\n")
+    (fp-clear-log!)
+    (flatpak-update #:applications %fp-apps #:selection '()
+                    #:extensions %fp-exts #:extension-selection '(layer))
+    (test-assert "update: installed selected extension uses full ref"
+                 (fp-log-has?
+                  "flatpak update --user -y org.freedesktop.Platform.VulkanLayer.example//25.08"))
    (fp-clear-log!)
    (flatpak-update #:applications %fp-apps #:selection '())
    (test-assert "update: no targets -> no bare update command"
@@ -332,7 +382,7 @@
                 (not (fp-log-has? "flatpak update")))
    
    ;; ── 6. status：默认离线；--refresh 才 remote-info ─────────
-   (fp-write-file %fp-list-app-out "com.tencent.WeChat\n")
+    (fp-write-file %fp-list-app-out "com.tencent.WeChat\tstable\n")
    (fp-write-file %fp-info-out "Commit: 0123456789abcdef0123456789abcdef\n")
    (fp-clear-log!)
    (flatpak-status #:applications %fp-apps #:selection '(wechat))
@@ -355,25 +405,39 @@
    ;; ── 7. remove：只 uninstall ref ───────────────────────────
    (fp-clear-log!)
    (flatpak-remove 'wechat #:applications %fp-apps)
-   (test-assert "remove: explicit --user uninstall of the ref only"
-                (fp-log-has?
-                 "flatpak uninstall --user -y com.tencent.WeChat"))
+    (test-assert "remove: explicit --user uninstall of the ref only"
+                 (fp-log-has?
+                  "flatpak uninstall --user -y com.tencent.WeChat//stable"))
    (test-assert "remove: no other mutation (no update/repair)"
                 (and (not (fp-log-has? "flatpak update"))
                      (not (fp-log-has? "repair"))))
    (test-error "remove: unknown logical name fails fast" #t
                (flatpak-remove 'ghost #:applications %fp-apps))
    
-   ;; ── 8. gc：只有维护操作 ───────────────────────────────────
-   (fp-clear-log!)
-   (flatpak-gc)
+    ;; ── 8. gc：只有维护操作 ───────────────────────────────────
+    (fp-write-file %fp-pins-out
+                   "org.freedesktop.Platform.VulkanLayer.example//24.08\norg.freedesktop.Platform.VulkanLayer.example//25.08\nruntime/org.freedesktop.Platform.VulkanLayer.example/x86_64/24.08\nruntime/org.freedesktop.Platform.VulkanLayer.example/x86_64/25.08\n")
+    (fp-clear-log!)
+    (flatpak-gc #:extensions %fp-exts #:extension-selection '(layer))
+    (test-assert "gc: unpins obsolete managed extension branch"
+                 (fp-log-has?
+                  "flatpak pin --user --remove org.freedesktop.Platform.VulkanLayer.example//24.08"))
+    (test-assert "gc: keeps selected managed extension pin"
+                 (not (fp-log-has?
+                       "flatpak pin --user --remove org.freedesktop.Platform.VulkanLayer.example//25.08")))
+    (test-assert "gc: unpins obsolete automatic canonical pin"
+                 (fp-log-has?
+                  "flatpak pin --user --remove runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/24.08"))
+    (test-assert "gc: keeps selected automatic canonical pin"
+                 (not (fp-log-has?
+                       "flatpak pin --user --remove runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/25.08")))
    (test-assert "gc: uninstall --unused --user"
                 (fp-log-has? "flatpak uninstall --unused --user -y"))
    (test-assert "gc: repair --user"
                 (fp-log-has? "flatpak repair --user"))
-   (test-assert "gc: nothing else"
-                (let ((lines (fp-log-lines)))
-                  (= 2 (length lines))))
+    (test-assert "gc: pin query + stale unpins + two maintenance commands"
+                 (let ((lines (fp-log-lines)))
+                   (= 5 (length lines))))
    
    ;; ── 9. network failure：干净失败、无半成品操作 ────────────
    (fp-write-file %fp-remotes-out "")
@@ -394,7 +458,8 @@
    (for-each (lambda (var)
                (setenv var ""))
              '("FP_FAKE_LOG" "FP_FAKE_LIST_APP_OUT" "FP_FAKE_LIST_RUNTIME_OUT"
-                             "FP_FAKE_INFO_OUT" "FP_FAKE_REMOTES_OUT" "FP_FAKE_REMOTE_INFO_OUT"
+                              "FP_FAKE_INFO_OUT" "FP_FAKE_REMOTES_OUT" "FP_FAKE_REMOTE_INFO_OUT"
+                              "FP_FAKE_PINS_OUT"
                              "FP_FAKE_FAIL_ON"))
    (false-if-exception (delete-file-recursively %fp-dir))))
 

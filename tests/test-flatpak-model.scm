@@ -186,6 +186,15 @@
                      (list 'managed-overrides
                            (flatpak-override
                             (environment '("NOVAR"))))))
+                    '(flathub))))
+(test-assert "invalid environment entry: malformed variable name"
+             (not (valid-flatpak-application?
+                   (flatpak-application
+                    (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
+                    (override-policy
+                     (list 'managed-overrides
+                           (flatpak-override
+                            (environment '("BAD KEY=value"))))))
                    '(flathub))))
 
 ;; ── extra-persistence 校验 ─────────────────────────────────
@@ -245,7 +254,20 @@
                    (flatpak-application (name 'x) (id "com.x.X")
                                         (remote 'flathub) (branch "stable")
                                         (update-policy 'magic))
-                   '(flathub))))
+                    '(flathub))))
+(test-assert "flatpak id requires three segments"
+             (not (valid-flatpak-app-id? "org.App")))
+(test-assert "flatpak id rejects a digit-leading segment"
+             (not (valid-flatpak-app-id? "org.1bad.App")))
+(test-assert "flatpak id permits hyphen only in final segment"
+             (and (valid-flatpak-app-id? "org.example.My-App")
+                  (not (valid-flatpak-app-id? "org.ex-ample.App"))))
+(test-assert "flatpak id is ASCII-only"
+             (not (valid-flatpak-app-id? "org.example.应用")))
+(test-assert "flatpak branch syntax is strict"
+             (and (valid-flatpak-branch? "25.08-beta_1")
+                  (not (valid-flatpak-branch? ".hidden"))
+                  (not (valid-flatpak-branch? "bad:branch"))))
 
 ;; ── catalog / selection fail-fast ──────────────────────────
 (test-assert "valid catalog passes"
@@ -307,30 +329,32 @@
              '()))
 (test-equal "plan: already installed -> no-op"
             '()
-            (flatpak-reconcile-plan
-             (flatpak-select-applications '(wechat pinned) %fp-apps)
-             '("com.tencent.WeChat" "org.example.Pinned")))
+             (flatpak-reconcile-plan
+              (flatpak-select-applications '(wechat pinned) %fp-apps)
+              '("com.tencent.WeChat//stable" "org.example.Pinned//stable")))
 (test-equal "plan: unmanaged installed app untouched"
             '("com.tencent.WeChat")
             (map flatpak-application-id
                  (flatpak-reconcile-plan
-                  (flatpak-select-applications '(wechat) %fp-apps)
-                  '("org.other.Unmanaged" "org.freedesktop.Platform"))))
+                   (flatpak-select-applications '(wechat) %fp-apps)
+                   '("org.other.Unmanaged//stable"
+                     "org.freedesktop.Platform//25.08"))))
 (test-equal "plan: runtime refs never enter comparison"
             '()
             (flatpak-reconcile-plan
-             (flatpak-select-applications '() %fp-apps)
-             '("org.freedesktop.Platform" "org.freedesktop.Platform.GL.default")))
+              (flatpak-select-applications '() %fp-apps)
+              '("org.freedesktop.Platform//25.08"
+                "org.freedesktop.Platform.GL.default//25.08")))
 (test-equal "plan: unselected catalog app never planned"
             '()
             (map flatpak-application-id
                  (flatpak-reconcile-plan
-                  (flatpak-select-applications '(wechat) %fp-apps)
-                  '("com.tencent.WeChat"))))
+                   (flatpak-select-applications '(wechat) %fp-apps)
+                   '("com.tencent.WeChat//stable"))))
 
 ;; ── override renderer（确定性 fixture）─────────────────────
 (test-equal "renderer deterministic complete-file"
-            "[Context]\nsockets=wayland;fallback-x11;\nfilesystems=xdg-download:ro;!host;\nenvironment=LC_ALL=zh_CN.UTF-8;\n\n[Session Bus Policy]\norg.freedesktop.secrets=talk\n\n[System Bus Policy]\norg.freedesktop.UPower=talk\n"
+            "[Context]\nsockets=wayland;fallback-x11;\nfilesystems=xdg-download:ro;!host;\n\n[Environment]\nLC_ALL=zh_CN.UTF-8\n\n[Session Bus Policy]\norg.freedesktop.secrets=talk\n\n[System Bus Policy]\norg.freedesktop.UPower=talk\n"
             (flatpak-render-override-file
              (flatpak-override
               (sockets '("wayland" "fallback-x11"))
@@ -351,7 +375,12 @@
 (test-equal "renderer escapes backslash and semicolon"
             "[Context]\nfilesystems=a\\\\b;a\\;b;\n"
             (flatpak-render-override-file
-             (flatpak-override (filesystems '("a\\b" "a;b")))))
+              (flatpak-override (filesystems '("a\\b" "a;b")))))
+(test-equal "renderer escapes GKeyFile environment scalar values"
+            "[Environment]\nPATH=C:\\\\tools;bin\nLEADING=\\svalue\n"
+            (flatpak-render-override-file
+             (flatpak-override
+              (environment '("PATH=C:\\tools;bin" "LEADING= value")))))
 (test-equal "renderer empty override -> empty string"
             ""
             (flatpak-render-override-file (flatpak-override)))
@@ -411,16 +440,36 @@
                  #f)
                (lambda _ #t)))
 
-(test-error "extension catalog validation rejects duplicate ids"
+(define %fp-extension-remote
+  (list (flatpak-remote
+         (name 'flathub)
+         (descriptor-url "https://example.invalid/f.flatpakrepo")
+         (repository-url "https://example.invalid"))))
+
+(test-assert "extension catalog permits one id on different ABI branches"
+             (validate-flatpak-extension-catalog!
+              %fp-extension-remote
+              (list %fp-ext
+                    (flatpak-extension
+                     (name 'next) (id "org.freedesktop.Platform.VulkanLayer.example")
+                     (remote 'flathub) (branch "26.08")))))
+
+(test-error "extension catalog rejects duplicate full refs"
             #t
             (validate-flatpak-extension-catalog!
-             (list (flatpak-remote
-                    (name 'flathub)
-                    (descriptor-url "https://example.invalid/f.flatpakrepo")
-                    (repository-url "https://example.invalid")))
+             %fp-extension-remote
              (list %fp-ext
                    (flatpak-extension
                     (name 'dup) (id "org.freedesktop.Platform.VulkanLayer.example")
-                    (remote 'flathub) (branch "26.08")))))
+                    (remote 'flathub) (branch "25.08")))))
+
+(test-assert "extension commit pins fail closed"
+             (not (valid-flatpak-extension?
+                   (flatpak-extension
+                    (name 'pinned) (id "org.example.PinnedExtension")
+                    (remote 'flathub) (branch "stable")
+                    (update-policy
+                     '(flatpak-commit-pin "0123456789abcdef")))
+                   '(flathub))))
 
 (test-end "flatpak-model")

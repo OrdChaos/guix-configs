@@ -25,8 +25,10 @@
              (guixcfg flatpak extensions gamescope)
              (guixcfg flatpak extensions proton-ge)
              (guixcfg storage model) ; persist-mount-point
-             (guixcfg system gaming)
-             (guixcfg system graphics nvidia) ; %prime-offload-environment-strings
+              (guixcfg system gaming)
+              (guixcfg system application-persistence)
+              (guixcfg system graphics nvidia) ; %prime-offload-environment-strings
+              (guixcfg hosts common)
              (guixcfg hosts vm)
              (guixcfg hosts lenovo-legion-y7000p))
 
@@ -74,8 +76,13 @@
             (flatpak-override-filesystems %steam-overrides))
 
 (test-equal "steam override projects the PRIME offload environment"
-            %prime-offload-environment-strings
-            (flatpak-override-environment %steam-overrides))
+             %prime-offload-environment-strings
+             (flatpak-override-environment %steam-overrides))
+
+(test-assert "steam PRIME variables render in Flatpak Environment section"
+             (let ((text (flatpak-render-override-file %steam-overrides)))
+               (and (string-contains text "[Environment]")
+                    (not (string-contains text "environment=")))))
 
 ;; ── flatpak aagl definition ─────────────────────────────────
 
@@ -120,7 +127,17 @@
              (every (lambda (name)
                       (memq name
                             %lenovo-legion-y7000p-flatpak-extension-selection))
-                    '(gamescope proton-ge)))
+                     '(gamescope proton-ge)))
+
+(test-assert "lenovo activation rules cover Steam and AAGL bind sources"
+             (let ((consumers
+                    (map application-persistence-rule-consumer
+                         (host-application-persistence-rules
+                          #:flatpak-selection
+                          %lenovo-legion-y7000p-flatpak-selection))))
+               (every (lambda (consumer) (member consumer consumers))
+                      '(".var/app/com.valvesoftware.Steam"
+                        ".var/app/moe.launcher.an-anime-game-launcher"))))
 
 (test-assert "VM keeps the default flatpak selection"
              (equal? %flatpak-selection %vm-flatpak-selection))

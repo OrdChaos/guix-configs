@@ -86,7 +86,7 @@ interact() { # $1=name $2=script [extra qemu args...]
 case "${1:-}" in
     interact) shift; interact "$@";;
     boot)     shift; name="$1"; shift
-              T7_SCRIPT="wait:root@ordchaos-guix-vm" T7_LOG="$T7/interact-$name.log" \
+              T7_SCRIPT="wait:root@ordchaos-vm" T7_LOG="$T7/interact-$name.log" \
                   timeout 1200 python3 tools/t7-interact.py \
                   $(qemu_args "$name" -drive file="$DISK",format=qcow2,if=none,id=hd0 \
                               -device virtio-blk-pci,drive=hd0,serial=guix-t7-disk "$@")

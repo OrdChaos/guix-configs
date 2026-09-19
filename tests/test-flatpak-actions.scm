@@ -154,7 +154,26 @@
                (any (lambda (l)
                       (and (string-contains l "would install")
                            (string-contains l " from ")))
-                    lines)))
+                     lines)))
+
+(define %wrong-branch-ext
+  (flatpak-extension
+   (name 'layer)
+   (id "org.freedesktop.Platform.VulkanLayer.example")
+   (remote 'flathub)
+   (branch "25.08")))
+(fp-write-file %fp-list-app-out
+               "org.freedesktop.Platform.VulkanLayer.example\t24.08\n")
+(test-assert "sync-plan: wrong extension branch remains missing"
+             (any (lambda (line)
+                    (string-contains
+                     line
+                     "org.freedesktop.Platform.VulkanLayer.example//25.08"))
+                  (flatpak-sync-plan
+                   %flatpak-remotes %flatpak-applications '()
+                   #:extensions (list %wrong-branch-ext)
+                   #:extension-selection '(layer))))
+(fp-write-file %fp-list-app-out "")
 
 (test-assert "sync-plan: performs no mutation (log has only read-only commands)"
              (begin
@@ -172,16 +191,17 @@
 ;; update-plan：装两个（一个 unpinned selected，一个 pinned selected，
 ;; 一个 unselected）→ 只出 unpinned selected 的 ref。
 (fp-write-file %fp-list-app-out
-               (string-append
-                (flatpak-application-id (car (flatpak-select-applications %flatpak-selection %flatpak-applications)))
-                "\n"))
+                (string-append
+                 (flatpak-application-id (car (flatpak-select-applications %flatpak-selection %flatpak-applications)))
+                 "\tstable\n"))
 (test-assert "update-plan: yields refs for selected+installed+unpinned only"
              (let* ((selected (flatpak-select-applications %flatpak-selection %flatpak-applications))
-                    (installed-ids (flatpak-list-installed-apps))
+                     (installed-refs (flatpak-list-installed-apps))
                     (expected
                      (map flatpak-application-ref
                           (filter (lambda (a)
-                                    (and (member (flatpak-application-id a) installed-ids)
+                                     (and (member (flatpak-application-ref a)
+                                                  installed-refs)
                                          (not (flatpak-application-commit a))))
                                   selected))))
                (equal? expected
@@ -231,7 +251,19 @@
                (and (every (lambda (argv) (member "--user" argv)) all)
                     (not (any (lambda (argv) (member "--system" argv)) all))
                     (not (any (lambda (argv) (member "sudo" argv)) all))
-                    (every list? all))))
+                     (every list? all))))
+
+(test-equal "gc: stale catalog extension pins exclude selected ref"
+            '("org.freedesktop.Platform.VulkanLayer.example//24.08"
+              "runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/24.08")
+            (flatpak-stale-extension-pins
+             '("org.freedesktop.Platform.VulkanLayer.example//24.08"
+               "org.freedesktop.Platform.VulkanLayer.example//25.08"
+               "runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/24.08"
+               "runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/25.08"
+               "org.example.UserRuntime//stable")
+             #:extensions (list %wrong-branch-ext)
+             #:extension-selection '(layer)))
 
 ;; sync 收敛契约：已声明 remote + 全部 selected 已装 → 只打印
 ;; no-op 报告、零 mutation 命令、返回空安装列表（收敛的 sync 必须
@@ -242,10 +274,13 @@
                                (car %flatpak-remotes))
                               "\n"))
 (fp-write-file %fp-list-app-out
-               (string-join
-                (map flatpak-application-id
-                     (flatpak-select-applications
-                      %flatpak-selection %flatpak-applications))
+                (string-join
+                 (map (lambda (app)
+                        (string-append (flatpak-application-id app)
+                                       "\t"
+                                       (flatpak-application-branch app)))
+                      (flatpak-select-applications
+                       %flatpak-selection %flatpak-applications))
                 "\n"))
 (test-assert "sync converged: zero mutation commands, empty install list"
              (let ((result (flatpak-sync)))
@@ -315,6 +350,32 @@
 
 (test-assert "GL doctor: default/host alone are not nvidia active"
              (equal? '() (flatpak-gl-driver-status-lines '("default" "host") '())))
+
+(test-assert "GL doctor: Steam requires matching GL32"
+             (let ((lines (flatpak-gl-driver-status-lines
+                           '("nvidia-610-57-04")
+                           '("org.freedesktop.Platform.GL.nvidia-610-57-04//1.4")
+                           #:require-gl32? #t)))
+               (and (= 1 (length lines))
+                    (string-contains (car lines) "GL32"))))
+
+(test-assert "GL doctor: stale GL32 is reported"
+             (let ((lines (flatpak-gl-driver-status-lines
+                           '("nvidia-610-57-04")
+                           '("org.freedesktop.Platform.GL.nvidia-610-57-04//1.4"
+                             "org.freedesktop.Platform.GL32.nvidia-580-1-2//1.4")
+                           #:require-gl32? #t)))
+               (and (= 2 (length lines))
+                    (any (cut string-contains <> "GL32") lines)
+                    (any (cut string-contains <> "580-1-2") lines))))
+
+(test-equal "GL doctor: matching GL and GL32 full refs are healthy"
+            '()
+            (flatpak-gl-driver-status-lines
+             '("nvidia-610-57-04")
+             '("org.freedesktop.Platform.GL.nvidia-610-57-04//1.4"
+               "org.freedesktop.Platform.GL32.nvidia-610-57-04//1.4")
+             #:require-gl32? #t))
 
 (test-end)
 

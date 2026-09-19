@@ -22,13 +22,15 @@
 ;;;     URL——镜像只改变 transport，不改变 identity 与 trust）
 ;;;   本模块不生成任何 descriptor、不 vendor 任何 key 文件。
 ;;;
-;;; update policy（显式领域语义，替代裸 commit 字段）：
+;;; application update policy（显式领域语义，替代裸 commit 字段）：
 ;;;   'track-branch                   默认：跟随 branch
 ;;;   (flatpak-commit-pin "<hex>")    optional 例外 pin（必须注释
 ;;;                                   理由）：Flatpak commit 不等价
 ;;;                                   Guix source pin（remote 可
 ;;;                                   prune 历史 commit），因此不设
 ;;;                                   mandatory lockfile。
+;;; Extension 当前仅允许 'track-branch：update-runtimes 会批量更新
+;;; runtime refs，无法兑现 commit pin 时必须 fail closed。
 ;;;
 ;;; override policy（complete-file ownership，不 merge）：
 ;;;   'external                       仓库不拥有 override 文件
@@ -85,7 +87,7 @@
                          valid-flatpak-branch?
                          valid-flatpak-commit?
                          valid-flatpak-update-policy?
-                         valid-flatpak-override-policy?
+                          valid-flatpak-override-policy?
                           valid-flatpak-application?
                           valid-flatpak-extension?
                           validate-flatpak-catalog!
@@ -98,8 +100,7 @@
                           flatpak-extension-ref
                           flatpak-application-commit
                           flatpak-application-pinned?
-                          flatpak-extension-commit
-                         flatpak-application-managed-overrides
+                          flatpak-application-managed-overrides
                          flatpak-reconcile-plan
                          flatpak-render-override-file))
 
@@ -137,7 +138,7 @@
                      (id flatpak-extension-id)                  ; string：Flatpak ref id
                      (remote flatpak-extension-remote)          ; symbol：remote name（查 remote 表）
                      (branch flatpak-extension-branch)          ; string：与 runtime/app ABI 绑定（如 "25.08"）
-                     (update-policy flatpak-extension-update-policy ; 'track-branch | (flatpak-commit-pin "<hex>")
+                     (update-policy flatpak-extension-update-policy ; extension 仅支持 'track-branch
                                     (default 'track-branch)))
 
 ;;; ── extension（auxiliary ref；docs/architecture/flatpak.md
@@ -148,9 +149,8 @@
 ;;; app extension）。它们：无 desktop 入口、无 ~/.var state、无
 ;;; override——安装进 user installation 后由 runtime/app 的
 ;;; extension point 自动挂载。建模为独立 record（复用 application
-;;; 的 identity/ref/update-policy 校验），persistence/override 明确
-;;; 不存在；GC 语义见 reconcile（extension 不阻止 uninstall
-;;; --unused，sync 负责重新 ensure）。
+;;; 的 identity/ref 校验），persistence/override 明确不存在；sync
+;;; 把 selected extension 显式 pin，防止 GC/autoprune 删除。
 
 ;;; ── override（只建模 v1 真实字段；非 Flatpak [Context] 全集）──
 ;;; 各字段是 string 列表：元素可为 "!xxx"（撤销 manifest 基线项）。
@@ -170,28 +170,44 @@
 
 ;;; ── 校验 ──────────────────────────────────────────────────
 
-(define (app-id-segment-char? c)
-  (or (char-alphabetic? c) (char-numeric? c)
-      (char=? c #\_) (char=? c #\-)))
+(define (ascii-alpha? c)
+  (or (and (char>=? c #\a) (char<=? c #\z))
+      (and (char>=? c #\A) (char<=? c #\Z))))
+
+(define (ascii-digit? c)
+  (and (char>=? c #\0) (char<=? c #\9)))
+
+(define (valid-app-id-segment? segment final?)
+  (and (> (string-length segment) 0)
+       (not (ascii-digit? (string-ref segment 0)))
+       (string-every (lambda (c)
+                       (or (ascii-alpha? c) (ascii-digit? c)
+                           (char=? c #\_)
+                           (and final? (char=? c #\-))))
+                     segment)))
 
 (define (valid-flatpak-app-id? id)
-  "ID 是合法 Flatpak app-id：≥2 个 '.' 分隔的非空段，每段只含
-字母数字、'_'、'-'（D-Bus 风格分段名）。"
+  "ID 遵循 Flatpak name 语法：3+ 个 ASCII 段、≤255 字符、段首
+非数字；'-' 只允许出现在最后一段。"
   (and (string? id)
-       (> (string-length id) 0)
+       (<= 1 (string-length id) 255)
        (let ((segments (string-split id #\.)))
-         (and (>= (length segments) 2)
-              (every (lambda (s)
-                       (and (> (string-length s) 0)
-                            (string-every app-id-segment-char? s)))
-                     segments)))))
+         (and (>= (length segments) 3)
+              (every (lambda (entry)
+                       (valid-app-id-segment? (car entry) (cdr entry)))
+                     (map (lambda (segment index)
+                            (cons segment (= index (1- (length segments)))))
+                          segments (iota (length segments))))))))
 
 (define (valid-flatpak-branch? branch)
-  "BRANCH 是非空字符串且不含 '/' 与空白（Flatpak ref 语法）。"
+  "BRANCH 是 Flatpak branch：ASCII [A-Za-z0-9_.-]+，且不以 '.' 开头。"
   (and (string? branch)
        (> (string-length branch) 0)
-       (not (string-contains branch "/"))
-       (not (string-any char-whitespace? branch))))
+       (not (char=? #\. (string-ref branch 0)))
+       (string-every (lambda (c)
+                       (or (ascii-alpha? c) (ascii-digit? c)
+                           (char=? c #\_) (char=? c #\.) (char=? c #\-)))
+                     branch)))
 
 (define (hex-char? c)
   (or (char-numeric? c)
@@ -207,8 +223,13 @@
 (define (non-empty-string-list? f)
   (and (list? f)
        (every (lambda (e)
-                (and (string? e) (> (string-length e) 0)))
-              f)))
+                 (and (string? e) (> (string-length e) 0)
+                      (not (string-any (lambda (c)
+                                         (or (char=? c #\newline)
+                                             (char=? c #\return)
+                                             (char=? c #\nul)))
+                                       e))))
+               f)))
 
 (define (valid-bus-policy? e)
   "Bus policy 条目形态 'org.name=talk|own|see|none'。"
@@ -219,11 +240,23 @@
                       '("talk" "own" "see" "none"))))))
 
 (define (valid-environment-entry? e)
-  "environment 条目形态 'VAR=VALUE'，无换行。"
+  "environment 条目形态 'VAR=VALUE'；VAR 为 POSIX 风格变量名。"
   (and (string? e)
        (let ((i (string-index e #\=)))
-         (and i (> i 0)
-              (not (string-contains e "\n"))))))
+          (and i (> i 0)
+               (let ((name (substring e 0 i))
+                     (value (substring e (1+ i))))
+                 (and (or (ascii-alpha? (string-ref name 0))
+                          (char=? #\_ (string-ref name 0)))
+                      (string-every (lambda (c)
+                                      (or (ascii-alpha? c) (ascii-digit? c)
+                                          (char=? c #\_)))
+                                    name)
+                      (not (string-any (lambda (c)
+                                         (or (char=? c #\newline)
+                                             (char=? c #\return)
+                                             (char=? c #\nul)))
+                                       value))))))))
 
 (define (valid-flatpak-remote? remote)
   (and (flatpak-remote? remote)
@@ -305,12 +338,13 @@ override/persistence 字段（机制上不存在，不是省略）。"
        (valid-flatpak-app-id? (flatpak-extension-id ext))
        (memq (flatpak-extension-remote ext) remote-names)
        (valid-flatpak-branch? (flatpak-extension-branch ext))
-       (valid-flatpak-update-policy?
-        (flatpak-extension-update-policy ext))))
+       ;; update-runtimes 会更新已安装 runtime refs，无法可靠保留
+       ;; extension commit pin；在实现完整 lock 语义前 fail closed。
+       (eq? 'track-branch (flatpak-extension-update-policy ext))))
 
 (define (validate-flatpak-extension-catalog! remotes extensions)
   "EXTENSIONS（catalog）fail-fast 校验：结构合法、remote 已知、
-logical name 唯一、ref id 唯一。违反抛错。"
+logical name 唯一、branch-qualified ref 唯一。违反抛错。"
   (let ((remote-names (map flatpak-remote-name remotes)))
     (for-each (lambda (ext)
                 (unless (valid-flatpak-extension? ext remote-names)
@@ -319,9 +353,9 @@ logical name 唯一、ref id 唯一。违反抛错。"
     (let ((names (map flatpak-extension-name extensions)))
       (unless (= (length names) (length (delete-duplicates names)))
         (error "duplicate flatpak extension logical name" names)))
-    (let ((ids (map flatpak-extension-id extensions)))
-      (unless (= (length ids) (length (delete-duplicates ids string=?)))
-        (error "duplicate flatpak extension id" ids)))
+    (let ((refs (map flatpak-extension-ref extensions)))
+      (unless (= (length refs) (length (delete-duplicates refs string=?)))
+        (error "duplicate flatpak extension ref" refs)))
     #t))
 
 (define (validate-flatpak-catalog! remotes apps)
@@ -409,14 +443,6 @@ name 集合；违反 fail-fast 并列出未知名与可用名。"
   (not (eq? 'track-branch
             (flatpak-application-update-policy app))))
 
-(define (flatpak-extension-commit ext)
-  "extension update-policy 的 commit 视图：#f = track branch；
-string = pin。"
-  (let ((policy (flatpak-extension-update-policy ext)))
-    (if (eq? 'track-branch policy)
-      #f
-      (cadr policy))))
-
 (define (flatpak-application-managed-overrides app)
   "override-policy 的 managed 视图：#f = external（user/Flatseal
 owns）；<flatpak-override> = repo owns whole file。"
@@ -428,13 +454,13 @@ owns）；<flatpak-override> = repo owns whole file。"
 ;;; ── reconcile plan（纯函数，只增不删）─────────────────────
 
 (define (flatpak-reconcile-plan desired installed)
-  "DESIRED（selected <flatpak-application> 列表）中 app-id 不在
-INSTALLED（已安装 app-id 字符串列表）的应用 = 需安装列表（保持
+  "DESIRED（selected <flatpak-application> 列表）中 id//branch 不在
+INSTALLED（已安装 id//branch 字符串列表）的应用 = 需安装列表（保持
 desired 顺序）。只做 desired − installed；绝不计划 uninstall/
 update/GC；runtime refs 不参与（INSTALLED 由 'flatpak list --user
 --app' 产出，天然不含 runtime）。"
   (filter (lambda (app)
-            (not (member (flatpak-application-id app) installed)))
+            (not (member (flatpak-application-ref app) installed)))
           desired))
 
 ;;; ── override renderer（deterministic complete GKeyFile）────
@@ -452,19 +478,23 @@ update/GC；runtime refs 不参与（INSTALLED 由 'flatpak list --user
         (cons "sockets" flatpak-override-sockets)
         (cons "devices" flatpak-override-devices)
         (cons "features" flatpak-override-features)
-        (cons "filesystems" flatpak-override-filesystems)
-        (cons "environment" flatpak-override-environment)))
+        (cons "filesystems" flatpak-override-filesystems)))
+
+(define (escape-keyfile-string s list-element?)
+  "按 GKeyFile string 规则转义；LIST-ELEMENT? 额外转义 ';'。"
+  (let loop ((chars (string->list s)) (first? #t) (out '()))
+    (if (null? chars)
+      (string-concatenate-reverse out)
+      (let* ((c (car chars))
+             (escaped (cond ((char=? c #\\) "\\\\")
+                        ((char=? c #\tab) "\\t")
+                        ((and first? (char=? c #\space)) "\\s")
+                        ((and list-element? (char=? c #\;)) "\\;")
+                        (else (string c)))))
+        (loop (cdr chars) #f (cons escaped out))))))
 
 (define (escape-keyfile-entry s)
-  "GKeyFile 列表元素转义：'\\' → '\\\\'，';' → '\\;'（换行已在
-校验层拒绝）。"
-  (string-fold
-   (lambda (c acc)
-     (string-append acc
-                    (cond ((char=? c #\\) "\\\\")
-                      ((char=? c #\;) "\\;")
-                      (else (string c)))))
-   "" s))
+  (escape-keyfile-string s #t))
 
 (define (render-context-lines overrides)
   "非空字段 → (\"key=values\") 行（字段顺序固定；列表顺序 = 声明
@@ -491,6 +521,23 @@ override 文件格式逐字节一致（GLib keyfile 解析两端等价；
     (string-append "[" title "]\n"
                    (string-join policies "\n") "\n")))
 
+(define (render-environment-section entries)
+  "Flatpak override 的环境变量是 [Environment] 中逐项 KEY=VALUE，
+不是 [Context] 的分号列表。"
+  (if (null? entries)
+    ""
+    (string-append
+     "[Environment]\n"
+     (string-join
+      (map (lambda (entry)
+             (let ((i (string-index entry #\=)))
+               (string-append (substring entry 0 i) "="
+                              (escape-keyfile-string
+                               (substring entry (1+ i)) #f))))
+           entries)
+      "\n")
+     "\n")))
+
 (define (flatpak-render-override-file overrides)
   "把 <flatpak-override> 渲染为完整 override 文件文本（确定性）。
 所有字段为空 → 空串（不产生文件；user/Flatseal owns）。"
@@ -500,10 +547,12 @@ override 文件格式逐字节一致（GLib keyfile 解析两端等价；
            (negate string-null?)
            (list (if (null? context-lines)
                    ""
-                   (string-append "[Context]\n"
-                                  (string-join context-lines "\n")
-                                  "\n"))
-                 (render-bus-section "Session Bus Policy"
+                    (string-append "[Context]\n"
+                                   (string-join context-lines "\n")
+                                   "\n"))
+                  (render-environment-section
+                   (flatpak-override-environment overrides))
+                  (render-bus-section "Session Bus Policy"
                                      (flatpak-override-session-bus
                                       overrides))
                  (render-bus-section "System Bus Policy"

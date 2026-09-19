@@ -709,13 +709,18 @@ rewrite, no knowledge of future channel revisions."))
 (define (%flatpak-print-lines lines)
   (for-each (lambda (line) (format #t "~a~%" line)) lines))
 
-(define (%local-flatpak-selections)
+(define (%require-known-flatpak-host!)
+  (or (host-id-for-hostname (gethostname))
+      (error "hostname is not declared; refusing a mutating Flatpak operation"
+             (gethostname))))
+
+(define (%local-flatpak-selections allow-default?)
   "本机 hostname → Host ID → host 模块声明的 flatpak selections
 （动态 resolve-interface——只在 flatpak 命令路径加载 host 模块；
 与 reconfigure 的 hostname 反查同一 authority（(guixcfg
-inventory hosts)）。未知 hostname → registry 缺省 selection +
-stderr 提示（status/sync 在任意机器可用；已知 host 用 host
-selection——per-host selection 的 CLI 投影，
+ inventory hosts)）。未知 hostname：只读 status 可用 registry 缺省
+ selection；sync/update fail closed，避免在错误机器套用公共 policy。
+ 已知 host 用 host selection——per-host selection 的 CLI 投影，
 docs/architecture/flatpak.md）。"
   (let ((host (host-id-for-hostname (gethostname))))
     (if host
@@ -729,12 +734,18 @@ docs/architecture/flatpak.md）。"
               (module-ref iface
                           (string->symbol
                            (string-append "%" host "-flatpak-extension-selection")))))
+        ;; 动态 host module 的 selection 也在 CLI 边界 fail-fast 校验。
+        (flatpak-select-applications selection %flatpak-applications)
+        (flatpak-select-extensions extension-selection %flatpak-extensions)
         (values selection extension-selection))
-      (begin
-        (format (current-error-port)
-                "flatpak: hostname ~a is not a known host; using the registry default selection.~%"
-                (gethostname))
-        (values %flatpak-selection %flatpak-extension-selection)))))
+      (if allow-default?
+        (begin
+          (format (current-error-port)
+                 "flatpak: hostname ~a is not a known host; using the registry default selection.~%"
+                 (gethostname))
+          (values %flatpak-selection %flatpak-extension-selection))
+        (error "hostname is not declared; refusing a mutating Flatpak operation"
+               (gethostname)))))
 
 (define (%flatpak-command arguments)
   ;; 域函数抛错（drift / unknown name / unknown remote / flatpak
@@ -766,12 +777,12 @@ docs/architecture/flatpak.md）。"
              ;; status 纯只读：dry-run 也真实执行（只读查询不拦截）。
              (('status ())
               (let-values (((selection extension-selection)
-                            (%local-flatpak-selections)))
+                            (%local-flatpak-selections #t)))
                 (flatpak-status #:selection selection
                                 #:extension-selection extension-selection)))
              (('status (refresh))
               (let-values (((selection extension-selection)
-                            (%local-flatpak-selections)))
+                            (%local-flatpak-selections #t)))
                 (flatpak-status #:refresh? #t
                                 #:selection selection
                                 #:extension-selection extension-selection)))
@@ -779,7 +790,7 @@ docs/architecture/flatpak.md）。"
              ;; 绝不修改。
              (('sync ())
               (let-values (((selection extension-selection)
-                            (%local-flatpak-selections)))
+                            (%local-flatpak-selections #f)))
                 (if (dry-build?)
                   (%flatpak-print-lines
                    (flatpak-sync-plan %flatpak-remotes
@@ -795,7 +806,7 @@ docs/architecture/flatpak.md）。"
              ;; update -n：真实只读 ref plan（不联网、不安装）。
              (('update ())
               (let-values (((selection extension-selection)
-                            (%local-flatpak-selections)))
+                            (%local-flatpak-selections #f)))
                 (if (dry-build?)
                   (let ((refs (flatpak-update-plan %flatpak-applications
                                                    selection
@@ -811,25 +822,29 @@ docs/architecture/flatpak.md）。"
                                   #:extension-selection
                                   extension-selection))))
              (('update-runtimes ())
-              (if (dry-build?)
+               (if (dry-build?)
                 (let ((refs (flatpak-update-runtimes-plan)))
                   (if (null? refs)
                     (format #t "No installed runtimes to update.~%")
                     (%flatpak-print-lines
                      (map (cut format #f "would update runtime ~a" <>) refs))))
-                (flatpak-update-runtimes)))
+                 (begin
+                   (%require-known-flatpak-host!)
+                   (flatpak-update-runtimes))))
              ;; remove -n：目标预览（参数解析照常，未知 name 照常报错）。
              (('remove (name))
-              (if (dry-build?)
+               (if (dry-build?)
                 (let ((app (flatpak-remove-plan (string->symbol name)
                                                 %flatpak-applications)))
                   (format #t "would uninstall ~a (user data under ~~/.var/app/~a preserved)~%"
                           (flatpak-application-id app)
                           (flatpak-application-id app)))
-                (flatpak-remove (string->symbol name))))
+                 (begin
+                   (%require-known-flatpak-host!)
+                   (flatpak-remove (string->symbol name)))))
              ;; remote-replace -n：当前/目标 remote 与将发生的操作预览。
              (('remote-replace (name))
-              (let ((remote (flatpak-remote-by-name (string->symbol name))))
+               (let ((remote (flatpak-remote-by-name (string->symbol name))))
                 (if (dry-build?)
                   (let ((current (flatpak-replace-remote-plan remote)))
                     (format #t "remote ~a: current url ~a~%"
@@ -840,17 +855,28 @@ docs/architecture/flatpak.md）。"
                     (format #t "  descriptor: ~a~%  transport:  ~a~%"
                             (flatpak-remote-descriptor-url remote)
                             (flatpak-remote-repository-url remote)))
-                  (flatpak-replace-remote! remote))))
+                   (begin
+                     (%require-known-flatpak-host!)
+                     (flatpak-replace-remote! remote)))))
              ;; gc -n：command preview only（pinned Flatpak 无 unused
              ;; runtime 只读枚举；不伪造删除列表）。
              (('gc ())
-              (if (dry-build?)
-                (begin
-                 (format #t "gc preview (no read-only equivalent; commands that would run):~%")
-                 (%flatpak-print-lines
-                  (map (lambda (argv) (format #f "  ~{ ~a~}" argv))
-                       (flatpak-gc-commands))))
-                (flatpak-gc)))))
+               (let-values (((_selection extension-selection)
+                             (%local-flatpak-selections #f)))
+                 (if (dry-build?)
+                   (begin
+                     (format #t "gc preview (unused refs cannot be enumerated without mutation):~%")
+                     (%flatpak-print-lines
+                      (map (cut format #f "  would unpin extension ~a" <>)
+                           (flatpak-gc-unpin-plan
+                            #:extensions %flatpak-extensions
+                            #:extension-selection extension-selection)))
+                     (%flatpak-print-lines
+                      (map (lambda (argv) (format #f "  ~{ ~a~}" argv))
+                           (flatpak-gc-commands))))
+                   (flatpak-gc
+                    #:extensions %flatpak-extensions
+                    #:extension-selection extension-selection))))))
     (lambda (key . args)
       (format (current-error-port) "flatpak: ~a~%"
               (string-join (exception-strings args) " "))
