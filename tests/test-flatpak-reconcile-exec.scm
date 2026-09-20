@@ -181,6 +181,9 @@
                    "flatpak install --user -y flathub com.tencent.WeChat//stable"))
      (test-assert "sync: never installs unselected catalog app"
                   (not (fp-log-has? "org.example.Unselected")))
+     (test-assert "sync: custom app selection does not inherit production extensions"
+                  (and (not (fp-log-has? "VulkanLayer.gamescope"))
+                       (not (fp-log-has? "CompatibilityTool.Proton-GE"))))
      (test-assert "sync: pinned app deploys via update --commit after install"
                   (let ((lines (fp-log-lines)))
                     (and (any (lambda (l)

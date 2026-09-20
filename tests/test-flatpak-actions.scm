@@ -15,6 +15,7 @@
              (ice-9 rdelim)              ; read-string
              (srfi srfi-1)
              (srfi srfi-13)              ; string-contains
+             (srfi srfi-26)              ; cut
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -30,6 +31,7 @@
 (define %fp-list-app-out (string-append %fp-dir "/list-app.out"))
 (define %fp-list-runtime-out (string-append %fp-dir "/list-runtime.out"))
 (define %fp-remotes-out (string-append %fp-dir "/remotes.out"))
+(define %fp-pins-out (string-append %fp-dir "/pins.out"))
 (define %fp-original-path (getenv "PATH"))
 
 (define (fp-write-file path content)
@@ -51,6 +53,11 @@
                            (display "  remotes)\n" p)
                            (display "    cat \"${FP_FAKE_REMOTES_OUT:-/dev/null}\" 2>/dev/null\n" p)
                            (display "    ;;\n" p)
+                           (display "  pin)\n" p)
+                           (display "    case \"$*\" in\n" p)
+                           (display "      \"pin --user\") cat \"${FP_FAKE_PINS_OUT:-/dev/null}\" 2>/dev/null ;;\n" p)
+                           (display "    esac\n" p)
+                           (display "    ;;\n" p)
                            (display "  info)\n" p)
                            (display "    printf 'Commit: deadbeef\\n'\n" p)
                            (display "    ;;\n" p)
@@ -66,7 +73,9 @@
   (setenv "FP_FAKE_LOG" %fp-log)
   (setenv "FP_FAKE_LIST_APP_OUT" %fp-list-app-out)
   (setenv "FP_FAKE_LIST_RUNTIME_OUT" %fp-list-runtime-out)
-  (setenv "FP_FAKE_REMOTES_OUT" %fp-remotes-out))
+  (setenv "FP_FAKE_REMOTES_OUT" %fp-remotes-out)
+  (setenv "FP_FAKE_PINS_OUT" %fp-pins-out)
+  (fp-write-file %fp-pins-out ""))
 
 (define (fp-log-lines)
   (call-with-input-file %fp-log
@@ -273,15 +282,6 @@
                               (flatpak-remote-repository-url
                                (car %flatpak-remotes))
                               "\n"))
-(fp-write-file %fp-list-app-out
-                (string-join
-                 (map (lambda (app)
-                        (string-append (flatpak-application-id app)
-                                       "\t"
-                                       (flatpak-application-branch app)))
-                      (flatpak-select-applications
-                       %flatpak-selection %flatpak-applications))
-                 "\n"))
 ;; 全局 extension selection 的 refs 也计入"已装"集合：converged
 ;; 判定覆盖 apps + extensions（零 mutation 契约适用于全部 selection）。
 (fp-write-file %fp-list-app-out
@@ -300,14 +300,24 @@
                        (flatpak-select-extensions
                         %flatpak-extension-selection %flatpak-extensions)))
                  "\n"))
+(fp-write-file %fp-pins-out
+               (string-join
+                (map flatpak-extension-ref
+                     (flatpak-select-extensions
+                      %flatpak-extension-selection %flatpak-extensions))
+                "\n"))
 (test-assert "sync converged: zero mutation commands, empty install list"
-             (let ((result (flatpak-sync)))
+             (let ((result (flatpak-sync
+                            #:extensions %flatpak-extensions
+                            #:extension-selection
+                            %flatpak-extension-selection)))
                (and (null? result)
                     (let ((log (fp-log-lines)))
                       (not (any (lambda (line)
                                   (or (string-contains line "remote-add")
                                       (string-contains line "remote-modify")
-                                      (string-contains line "install")))
+                                      (string-contains line "install")
+                                      (string-contains line " pin --user ")))
                                 log))))))
 
 ;; flatpak-binary 解析契约：会话 PATH 优先（显式覆盖），随后 guix

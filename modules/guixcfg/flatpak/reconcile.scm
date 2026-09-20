@@ -292,7 +292,7 @@ app pin 不隐含 runtime pin（不实现 dependency lockfile）。
                        (applications %flatpak-applications)
                        (selection %flatpak-selection)
                        (extensions %flatpak-extensions)
-                       (extension-selection %flatpak-extension-selection))
+                       (extension-selection '()))
          "ensure declared remotes + ensure selected apps 与 selected
 extensions installed。只增不删：不 update 已装、不 remove 未声明、
 不 gc。sync 对【全部 declared remotes】做 ensure（缺即 bootstrap——新
@@ -647,8 +647,7 @@ status 接受可选 --refresh；remove/remote-replace 恰好一个参数；其�
 
 (define* (flatpak-sync-plan remotes applications selection
                             #:key (extensions %flatpak-extensions)
-                            (extension-selection
-                             %flatpak-extension-selection))
+                            (extension-selection '()))
   "sync 的只读 plan：remote 缺失清单 + 待安装 app/extension 清单
 （每项一行）。不修改任何状态；remote drift 由
 flatpak-check-remote! 照常 fail-loud（dry-run 也报 drift）。"

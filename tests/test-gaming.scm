@@ -19,6 +19,7 @@
              (gnu services base)     ; udev-service-type、activation-service-type
              (srfi srfi-1)           ; find
              (srfi srfi-13)          ; string-prefix?
+             (srfi srfi-26)          ; cut
              (srfi srfi-64)
              (guixcfg flatpak model)
              (guixcfg flatpak registry)
@@ -153,6 +154,18 @@
                     (lambda (key . args)
                       (and (eq? key 'misc-error)
                            (any (cut string-contains <> "duplicate")
+                                (map object->string args))))))
+
+(test-assert "overlay with unknown target fails closed"
+             (catch #t
+                    (lambda ()
+                      (flatpak-applications-with-environments
+                       '((typo . ("FOO=bar")))
+                       %flatpak-applications)
+                      #f)
+                    (lambda (key . args)
+                      (and (eq? key 'misc-error)
+                           (any (cut string-contains <> "unknown")
                                 (map object->string args))))))
 
 ;; ── registry：catalog 与缺省 selection ──────────────────────

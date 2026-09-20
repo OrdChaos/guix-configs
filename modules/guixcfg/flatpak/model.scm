@@ -464,37 +464,53 @@ closed——仓库策略必须显式。"
       (error "environment override targets a non-managed flatpak application"
              (flatpak-application-name app)))
     (let* ((base-env (flatpak-override-environment base))
-           (names (map (lambda (entry)
-                         (substring entry 0 (string-index entry #\=)))
-                       (append base-env environment))))
-      (unless (= (length names) (length (delete-duplicates names)))
-        (error "duplicate environment variable in flatpak override"
-               (flatpak-application-name app)))
-      (unless (every valid-environment-entry? (append base-env environment))
+           (combined-env (append base-env environment)))
+      (unless (every valid-environment-entry? combined-env)
         (error "invalid environment entry in flatpak override"
                (flatpak-application-name app)))
-      (flatpak-application
-       (inherit app)
-       (override-policy
-        (list 'managed-overrides
-              (flatpak-override
-               (inherit base)
-               (environment (append base-env environment)))))))))
+      (let ((names (map (lambda (entry)
+                          (substring entry 0 (string-index entry #\=)))
+                        combined-env)))
+        (unless (= (length names) (length (delete-duplicates names)))
+          (error "duplicate environment variable in flatpak override"
+                 (flatpak-application-name app)))
+        (flatpak-application
+         (inherit app)
+         (override-policy
+          (list 'managed-overrides
+                (flatpak-override
+                 (inherit base)
+                 (environment combined-env)))))))))
 
 (define (flatpak-applications-with-environments environment-overrides apps)
   "把硬件 adapter 声明的 ENVIRONMENT-OVERRIDES 映射到 MANAGED-OVERRIDE
-APPS：键为 logical name，值为 'VAR=VALUE' 条目列表；未选择的 app 忽略、
-未知 app 与 external target fail closed。"
-  (map (lambda (app)
-         (let* ((name (flatpak-application-name app))
-                (env (and (assq name environment-overrides) (cdr (assq name environment-overrides)))))
-           (cond ((not env) app)
-                 ((flatpak-application-managed-overrides app)
-                  (flatpak-application-with-environment app env))
-                 (else
-                  (error "environment override targets a non-managed flatpak application"
-                         name)))))
-       apps))
+APPS：键为 logical name，值为 'VAR=VALUE' 条目列表；重复或未知 target
+与 external target fail closed。"
+  (let* ((app-names (map flatpak-application-name apps))
+         (override-names
+          (map (lambda (entry)
+                 (unless (and (pair? entry) (symbol? (car entry)))
+                   (error "invalid flatpak environment override target" entry))
+                 (car entry))
+               environment-overrides)))
+    (unless (= (length override-names)
+               (length (delete-duplicates override-names)))
+      (error "duplicate flatpak environment override target" override-names))
+    (for-each (lambda (name)
+                (unless (memq name app-names)
+                  (error "unknown flatpak environment override target" name)))
+              override-names)
+    (map (lambda (app)
+           (let* ((name (flatpak-application-name app))
+                  (entry (assq name environment-overrides))
+                  (env (and entry (cdr entry))))
+             (cond ((not env) app)
+                   ((flatpak-application-managed-overrides app)
+                    (flatpak-application-with-environment app env))
+                   (else
+                    (error "environment override targets a non-managed flatpak application"
+                           name)))))
+         apps)))
 
 ;;; ── reconcile plan（纯函数，只增不删）─────────────────────
 

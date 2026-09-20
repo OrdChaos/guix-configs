@@ -165,12 +165,8 @@
 ;; 把这份 overlay 传给 flatpak-home-services，对 managed override
 ;; 追加 PRIME 环境；非 NVIDIA host 传空 overlay。
 (define %flatpak-prime-environment-overrides
-  '((aagl . ("__NV_PRIME_RENDER_OFFLOAD=1"
-             "__VK_LAYER_NV_optimus=NVIDIA_only"
-             "__GLX_VENDOR_LIBRARY_NAME=nvidia"))
-    (steam . ("__NV_PRIME_RENDER_OFFLOAD=1"
-              "__VK_LAYER_NV_optimus=NVIDIA_only"
-              "__GLX_VENDOR_LIBRARY_NAME=nvidia"))))
+  `((aagl . ,%prime-offload-environment-strings)
+    (steam . ,%prime-offload-environment-strings)))
 
 (define (shell-variable-name? s)
   "S 是合法 POSIX shell 变量名（策略数据防注入；允许下划线开头，

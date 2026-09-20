@@ -145,9 +145,10 @@ declaration removal 不是"永久销毁用户数据"的充分授权
   不产生 mount。
 - 全部经 `(guixcfg system application-persistence)` generic engine
   （bind-directory + activation backing/owner + home-path helper）——
-  **零 Flatpak 专属 mount 代码**；host 组装点
-  （`hosts/vm.scm`）把 `flatpak-persistence-rules` 与
-  `applications-persistence` 一起交给 engine。
+  **零 Flatpak 专属 mount 代码**；共享 host 组装点
+  （`hosts/common.scm`）把 `flatpak-persistence-rules` 与
+  `applications-persistence` 一起交给 engine，所有 host 消费同一
+  projection。
 - installation 是**一个完整 persistence unit**：repo/remotes/
   exports/overrides 内部结构由 Flatpak 自己管理，不拆。
 - `~/.var/app/<id>` 整体持久化（含 sandbox 内 cache——不做目录
