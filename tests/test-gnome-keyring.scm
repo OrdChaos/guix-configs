@@ -144,26 +144,10 @@
                     (append-map (lambda (r)
                                   (list (application-persistence-rule-consumer r)))
                                 (applications-persistence %applications))))
-               ;; .local/share 下只放行审计过的精确叶子（添加即表态）：
-               ;; gnome-keyring vault、fcitx5 的 Rime 学习词库
-               ;; （rime_ice.userdb——pinned schema 唯一可写 leveldb）、
-               ;; gnome-text-editor 的 application data 目录
-               ;; （草稿正文 drafts/<uuid> 与草稿映射 session.gvariant
-               ;; 同目录原子单元——只持久化 drafts/ 会被 restore 的
-               ;; delete_unused_worker 当作无引用草稿删除；
-               ;; apps/gnome-text-editor/definition.scm 头注释审计）、
-               ;; noctalia 的用户插件目录（app-private，目录级 bind）、
-               ;; onlyoffice 的 application data 目录（自定义词典、
-               ;; 插件、autosave/recovery——app-private，目录级 bind；
-               ;; apps/onlyoffice/definition.scm 头注释审计）。
-               (every (lambda (c)
-                        (or (not (string-prefix? ".local/share/" c))
-                            (member c '(".local/share/keyrings"
-                                        ".local/share/fcitx5/rime/rime_ice.userdb"
-                                        ".local/share/gnome-text-editor"
-                                        ".local/share/noctalia/plugins"
-                                        ".local/share/onlyoffice"))))
-                      consumers)))
+               ;; 精确的 app-private 子目录由各 application definition
+               ;; 审计；这里只守住跨应用不变量，避免每新增应用都维护
+               ;; 一份重复 allowlist。
+               (not (member ".local/share" consumers))))
 
 (test-assert "GK4: no /run/user persistence anywhere"
              (every (lambda (r)

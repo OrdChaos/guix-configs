@@ -52,6 +52,7 @@
                #:use-module (guixcfg apps vscode definition)
                #:use-module (guixcfg apps onlyoffice definition)
                #:use-module (guixcfg apps nushell definition)
+               #:use-module (guixcfg apps opencode definition)
                #:use-module (guixcfg apps starship definition)
                #:use-module (guixcfg apps blue definition)
                #:export (%applications))
@@ -101,6 +102,7 @@
         %vscode
         %onlyoffice
         %nushell
+        %opencode
         %starship
         %blue))
 
