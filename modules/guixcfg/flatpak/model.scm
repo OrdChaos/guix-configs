@@ -101,7 +101,9 @@
                           flatpak-application-commit
                           flatpak-application-pinned?
                           flatpak-application-managed-overrides
-                         flatpak-reconcile-plan
+                          flatpak-application-with-environment
+                          flatpak-applications-with-environments
+                          flatpak-reconcile-plan
                          flatpak-render-override-file))
 
 ;;; ── remote（identity / trust / transport）──────────────────
@@ -451,6 +453,49 @@ owns）；<flatpak-override> = repo owns whole file。"
       #f
       (cadr policy))))
 
+(define (flatpak-application-with-environment app environment)
+  "对 managed-overrides APP 追加 ENVIRONMENT 并返回新的
+<flatpak-application>；external app 报错（repo 不拥有其 override
+文件，硬件差异不得在 user-owned surface 上投影）。ENVIRONMENT
+条目与 <flatpak-override> 校验同构：'VAR=VALUE' 且重复变量 fail
+closed——仓库策略必须显式。"
+  (let ((base (flatpak-application-managed-overrides app)))
+    (unless base
+      (error "environment override targets a non-managed flatpak application"
+             (flatpak-application-name app)))
+    (let* ((base-env (flatpak-override-environment base))
+           (names (map (lambda (entry)
+                         (substring entry 0 (string-index entry #\=)))
+                       (append base-env environment))))
+      (unless (= (length names) (length (delete-duplicates names)))
+        (error "duplicate environment variable in flatpak override"
+               (flatpak-application-name app)))
+      (unless (every valid-environment-entry? (append base-env environment))
+        (error "invalid environment entry in flatpak override"
+               (flatpak-application-name app)))
+      (flatpak-application
+       (inherit app)
+       (override-policy
+        (list 'managed-overrides
+              (flatpak-override
+               (inherit base)
+               (environment (append base-env environment)))))))))
+
+(define (flatpak-applications-with-environments environment-overrides apps)
+  "把硬件 adapter 声明的 ENVIRONMENT-OVERRIDES 映射到 MANAGED-OVERRIDE
+APPS：键为 logical name，值为 'VAR=VALUE' 条目列表；未选择的 app 忽略、
+未知 app 与 external target fail closed。"
+  (map (lambda (app)
+         (let* ((name (flatpak-application-name app))
+                (env (and (assq name environment-overrides) (cdr (assq name environment-overrides)))))
+           (cond ((not env) app)
+                 ((flatpak-application-managed-overrides app)
+                  (flatpak-application-with-environment app env))
+                 (else
+                  (error "environment override targets a non-managed flatpak application"
+                         name)))))
+       apps))
+
 ;;; ── reconcile plan（纯函数，只增不删）─────────────────────
 
 (define (flatpak-reconcile-plan desired installed)
@@ -464,7 +509,7 @@ update/GC；runtime refs 不参与（INSTALLED 由 'flatpak list --user
           desired))
 
 ;;; ── override renderer（deterministic complete GKeyFile）────
-;;; 键名/组名对应 pinned Flatpak 1.16.6 的 overrides 文件格式
+;;; 键名/组名对应 pinned Flatpak 1.18.2 的 overrides 文件格式
 ;;; （GKeyFile；[Context] 组 + [Session Bus Policy]/[System Bus
 ;;; Policy] 组；列表元素以 ';' 连接，'!' 前缀撤销 manifest 基线项）。
 ;;; 实施时以 `guix build --source flatpak` 的 app/flatpak-dir.c /

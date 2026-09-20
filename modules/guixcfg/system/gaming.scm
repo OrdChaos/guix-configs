@@ -1,6 +1,7 @@
 ;;; Gaming host infrastructure：游戏相关、不属于任何单一应用的
-;;; host-level system 集成（当前 laptop-only，由
-;;; hosts/lenovo-legion-y7000p.scm 组装进 system services）。
+;;; host-level system 集成（Steam 是全局用户软件，controller udev
+;;; rules 与游戏库目录 activation 对所有 host 一致，由
+;;; (guixcfg hosts common) 组装进 system services）。
 ;;;
 ;;; 归属决策（2026-09，Steam 全线 Flatpak 化后）：
 ;;;   - steam-devices udev rules：手柄/VR 设备权限（pinned
@@ -18,9 +19,9 @@
 ;;;     （noctalia-greeter backing ownership 同款模式：owner 经
 ;;;     /etc/passwd 运行时解析，不硬编码 uid/gid）。
 ;;;
-;;; NVIDIA PRIME offload 变量不在此投影——Flatpak NVIDIA app 的
-;;; override 从 %prime-offload-environment-strings 取
-;;; （(guixcfg system graphics nvidia) 单一 authority）。
+;;; NVIDIA PRIME offload 变量不在此投影——Flatpak managed override
+;;; 的环境差异由 %flatpak-prime-environment-overrides 在 host Guix
+;;; Home 追加（(guixcfg system graphics nvidia) 单一 authority）。
 
 (define-module (guixcfg system gaming)
                #:use-module (gnu packages games)   ; steam-devices-udev-rules
@@ -70,8 +71,8 @@ from /etc/passwd" user-name))
            (chmod dir #o700)
            #t))))
 
-;; laptop gaming system services：controller udev rules + 游戏库
-;; 目录 activation。VM 不组装（无手柄/游戏库需求）。
+;; gaming system services：controller udev rules + 游戏库目录
+;; activation（所有 host 共享——Steam 属全局用户软件）。
 (define %gaming-system-services
   (list (udev-rules-service 'steam-devices steam-devices-udev-rules)
         (simple-service 'steam-games-library-directory

@@ -11,7 +11,8 @@
 ;;;                             默认 + wpa-supplicant
 ;;;   storage policy            keep-root-generations 参数
 ;;;   persistence rules         Flatpak 平台规则共享（2026-09：从
-;;;                             VM-only 提升到 common——所有 host 都用）
+;;;                             VM-only 提升到 common——所有 host 都用；
+;;;                             Flatpak selection 本身也是全局用户 policy）
 ;;;   secrets composition       VM 含测试 sentinel，Laptop 不含
 ;;;   home environment          %guix-home vs model-specific Guix Home
 ;;;   final OS transformation   Laptop：nvidia-system-transformation；
@@ -58,10 +59,10 @@
                #:use-module (guixcfg system machine-identity) ; /etc/machine-id 持久化（先于 D-Bus activation）
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind + 系统集成
                #:use-module (guixcfg system sudo policy) ; %sudoers-file（Defaults 声明：lecture/passprompt）
-               #:use-module (guixcfg system profile policy) ; %system-profile（/etc/profile ownership）
-               #:use-module (guixcfg flatpak service) ; flatpak-persistence-rules（installation + 每 selected app）
-               #:use-module (guixcfg flatpak registry) ; %flatpak-selection（缺省 selection 权威）
-               #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
+                #:use-module (guixcfg system profile policy) ; %system-profile（/etc/profile ownership）
+                #:use-module (guixcfg flatpak service) ; flatpak-persistence-rules（installation + 全局 selected app）
+                #:use-module (guixcfg system gaming) ; %gaming-system-services（Steam 游戏库 + controller udev）
+                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:use-module (srfi srfi-1)              ; remove
                #:export (make-host-services
                          make-host-user-services
@@ -77,24 +78,20 @@
 ;;; append：application rules + Flatpak 平台规则 + HOME persistence
 ;;; bind 列表在 common 单一构造，host 只消费）。
 
-(define* (host-application-persistence-rules
-          #:key (flatpak-selection %flatpak-selection))
+(define (host-application-persistence-rules)
   "application persistence 规则：applications（全部 registry app）+
-Flatpak 平台（installation + 每 FLATPAK-SELECTION selected app；
-缺省 registry 的 %flatpak-selection——host 可传自己的 selection，
-如 lenovo 含 aagl/steam）。"
+Flatpak 平台（installation + 全局 selected app；Flatpak selection 是
+跨设备一致的用户软件 policy，不再由 host 传参）。"
   (append (applications-persistence %applications)
-          (flatpak-persistence-rules #:selection flatpak-selection)))
+          (flatpak-persistence-rules)))
 
-(define* (host-persistent-mount-file-systems
-          #:key (flatpak-selection %flatpak-selection))
+(define (host-persistent-mount-file-systems)
   "HOME persistence bind 列表（user data + app state，含 Flatpak）。
 gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
   (append (user-persistence-file-systems
            (user-profile-name %primary-user))
           (application-persistence-file-systems
-           (host-application-persistence-rules
-            #:flatpak-selection flatpak-selection)
+           (host-application-persistence-rules)
            (user-profile-name %primary-user))))
 
 ;;; ── TTY login prompt 的强语义（docs/architecture/accounts-sessions.md）
@@ -132,9 +129,9 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
  之前）；KEEP-ROOT-GENERATIONS 是 storage policy 的 keep 数；
  PERSISTENT-MOUNT-FILE-SYSTEMS 是 HOME persistence bind 列表
  （gvfs-mount-metadata 与 file-systems 字段共用）；
- ADDITIONAL-SYSTEM-SERVICES 是 host-only system services（如
- lenovo 的 gaming 基础设施——steam-devices udev rules 与游戏库
- 目录 activation，(guixcfg system gaming)）。"
+  ADDITIONAL-SYSTEM-SERVICES 是 host-only system services；
+  gaming 基础设施（steam-devices udev + 游戏库目录 activation）
+  已提升为全局共享（Steam 属全局用户软件）。"
          (append
           (append network-services
                   (list ;; 系统 DNS ownership（docs/architecture/dns.md）。
@@ -151,7 +148,12 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
           %common-services
           ;; applications 的 system services（composition root 契约保留）。
           (applications-system-services %applications)
-          ;; host-only system services（lenovo gaming 等）。
+          ;; Steam 游戏相关 host-level system 集成（controller udev +
+          ;; 游戏库目录 activation）：Steam 是全局用户软件，其基础
+          ;; 基础设施不再按设备差异组装（NVIDIA PRIME 差异只留在
+          ;; Home/environment adapter 与 OS transformation）。
+          %gaming-system-services
+          ;; host-only system services。
           additional-system-services
           ;; TTY 强语义（mingetty gated + 无 tty1）。
           (host-tty-services)

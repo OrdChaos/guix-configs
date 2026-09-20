@@ -13,14 +13,12 @@
 ;;;
 ;;; override policy：(managed-overrides ...)——本 app 只经
 ;;; Flatpak 分发（Nonguix steam 容器方案已放弃），仓库拥有完整
-;;; override 文件：
-;;;   - filesystem=/persist/data-nobackup/steam：游戏库
-;;;     （direct-access bulk storage；路径 authority 在
-;;;     (guixcfg system gaming)，目录由其 activation 创建并
-;;;     归还 USER）；
-;;;   - environment：NVIDIA PRIME offload（投影自
-;;;     %prime-offload-environment-strings——变量语义归
-;;;     (guixcfg system graphics nvidia) 单一 authority）。
+;;; override 文件：filesystem=/persist/data-nobackup/steam（
+;;; direct-access bulk storage；路径 authority 在
+;;; (guixcfg system gaming)，目录由其 activation 创建并归还
+;;; USER）。NVIDIA PRIME offload 只由 hardware adapter 在 Lenovo
+;;; Guix Home 经 (flatpak-applications-with-environments) 追加
+;;; （变量语义归 (guixcfg system graphics nvidia) 单一 authority）。
 ;;;
 ;;; 消费方式（mutable user state，不属本声明）：游戏属性 →
 ;;; Launch Options 写 `gamescope -f -- %command%`；需要
@@ -28,18 +26,11 @@
 ;;; (Flatpak)（proton-ge extension）。已知上游边界（gamescope
 ;;; 仓库 issue #483）：不要用 gamescope --steam 参数。
 ;;;
-;;; Host enablement：本 definition 含 NVIDIA PRIME override——
-;;; 只适合有 nvidia 的 host；selection 由 host 决定（lenovo
-;;; 选入，VM 缺省不选）。steam-devices udev rules 与游戏库
-;;; 目录 activation 属 host 基础设施（(guixcfg system gaming)），
-;;; 不随本 definition。
-;;;
 ;;; persistence：默认 ~/.var/app/com.valvesoftware.Steam 由 ID
 ;;; 推导（service 投影）。
 
 (define-module (guixcfg flatpak applications steam)
                #:use-module (guixcfg flatpak model)
-               #:use-module (guixcfg system graphics nvidia) ; %prime-offload-environment-strings
                #:use-module (guixcfg system gaming)          ; %steam-games-library-path
                #:export (%flatpak-steam))
 
@@ -53,5 +44,4 @@
    (override-policy
     (list 'managed-overrides
           (flatpak-override
-           (filesystems (list %steam-games-library-path))
-           (environment %prime-offload-environment-strings))))))
+           (filesystems (list %steam-games-library-path)))))))

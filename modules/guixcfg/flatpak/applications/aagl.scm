@@ -13,28 +13,22 @@
 ;;;
 ;;; update policy：'track-branch（默认策略）。
 ;;;
-;;; override policy：(managed-overrides ...)——追加 NVIDIA PRIME
-;;; offload 环境（投影自 %prime-offload-environment-strings，变量
-;;; 语义归 (guixcfg system graphics nvidia)）。本 app 因此只适合
-;;; 有 nvidia 的 host：selection 是 host 决策（lenovo 选入，VM
-;;; 缺省不选——VM 无 nvidia GLX vendor，__GLX_VENDOR_LIBRARY_NAME
-;;; 会导致 GLX 初始化失败）。Gamescope 支持来自上游 wrapper
+;;; override policy：(managed-overrides <flatpak-override>)——文件本身
+;;; 硬件中性（空 <flatpak-override> = 只声明 repo 拥有完整文件）。
+;;; 硬件差异（如 NVIDIA PRIME offload）由 hardware adapter 在
+;;; Lenovo Guix Home 经 (flatpak-applications-with-environments)
+;;; 追加 environment（变量语义归 (guixcfg system graphics nvidia)
+;;; 单一 authority）——global selection 与 definition 保持
+;;; hardware-neutral。Gamescope 支持来自上游 wrapper
 ;;; （/usr/lib/extensions/vulkan/gamescope/bin 的 PATH；gamescope
-;;; extension 见 extensions/gamescope.scm，按需安装）。
+;;; extension 见 extensions/gamescope.scm，全局 selection 安装）。
 ;;;
 ;;; persistence：默认 ~/.var/app/moe.launcher.an-anime-game-launcher
 ;;; 由 ID 推导（service 投影，无需在此声明）。
-;;;
-;;; Gamescope：上游 wrapper 支持
-;;; org.freedesktop.Platform.VulkanLayer.gamescope（经
-;;; /usr/lib/extensions/vulkan/gamescope/bin 的 PATH）；
-;;; extension 由 host 的 extension selection 管理
-;;; （extensions/gamescope.scm，docs/architecture/flatpak.md）。
 
 (define-module (guixcfg flatpak applications aagl)
-               #:use-module (guixcfg flatpak model)
-               #:use-module (guixcfg system graphics nvidia) ; %prime-offload-environment-strings
-               #:export (%flatpak-aagl))
+                #:use-module (guixcfg flatpak model)
+                #:export (%flatpak-aagl))
 
 (define %flatpak-aagl
   (flatpak-application
@@ -43,7 +37,4 @@
    (remote 'flathub)
    (branch "stable")
    (update-policy 'track-branch)
-   (override-policy
-    (list 'managed-overrides
-          (flatpak-override
-           (environment %prime-offload-environment-strings))))))
+   (override-policy (list 'managed-overrides (flatpak-override)))))

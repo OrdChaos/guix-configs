@@ -109,8 +109,9 @@
                          %nvidia-driver
                          nvidia-kernel-arguments
                          %prime-offload-environment
-                         %prime-offload-environment-strings
-                         %prime-run-wrapper
+                          %prime-offload-environment-strings
+                          %flatpak-prime-environment-overrides
+                          %prime-run-wrapper
                          nvidia-system-transformation))
 
 ;; 是否启用 NVIDIA（当前 #t：laptop host policy；VM/Intel-only 机器
@@ -157,6 +158,19 @@
   (map (lambda (entry)
          (string-append (car entry) "=" (cdr entry)))
        %prime-offload-environment))
+
+;; Flatpak 侧的 NVIDIA adapter（docs/architecture/flatpak.md）：target 是
+;; 全局 selection 里的 logical names，不是本模块的选择——Flatpak
+;; 应用 definition 保持 hardware-neutral，NVIDIA host 的 Guix Home
+;; 把这份 overlay 传给 flatpak-home-services，对 managed override
+;; 追加 PRIME 环境；非 NVIDIA host 传空 overlay。
+(define %flatpak-prime-environment-overrides
+  '((aagl . ("__NV_PRIME_RENDER_OFFLOAD=1"
+             "__VK_LAYER_NV_optimus=NVIDIA_only"
+             "__GLX_VENDOR_LIBRARY_NAME=nvidia"))
+    (steam . ("__NV_PRIME_RENDER_OFFLOAD=1"
+              "__VK_LAYER_NV_optimus=NVIDIA_only"
+              "__GLX_VENDOR_LIBRARY_NAME=nvidia"))))
 
 (define (shell-variable-name? s)
   "S 是合法 POSIX shell 变量名（策略数据防注入；允许下划线开头，

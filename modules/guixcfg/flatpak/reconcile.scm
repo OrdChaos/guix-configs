@@ -141,7 +141,7 @@ to replace or modify it."))))))
 
 (define (flatpak-remote-set-url! remote)
   "把 remote 的 effective URL 强制设为声明的 repository-url。
-pinned 1.16.6 实测：remote-add --from 抓取 summary 时会【无条件】
+pinned 1.18.2 实测：remote-add --from 抓取 summary 时会【无条件】
 应用 summary 里的 xa.redirect-url（Flathub 的 summary 自带
 redirect 回 dl.flathub.org——镜像 URL 会被静默改写回官方；
 --no-follow_redirect flag 在 --from 路径上无效，VM -vv 实测），而
@@ -155,7 +155,7 @@ remote-ls 的 summary 抓取不会再次改写 URL。"
 
 (define* (flatpak-bootstrap-remote! remote)
          "领域操作：从零建立 remote 并落定为声明状态——封装 pinned
-Flatpak 1.16.6 的 bootstrap 细节，调用方不需要理解：
+Flatpak 1.18.2 的 bootstrap 细节，调用方不需要理解：
     1. remote-add --from NAME DESCRIPTOR-URL
        （flatpak 下载官方 descriptor、导入其当前 GPGKey——trust
        lifecycle 由官方持有：续期/轮换在本次 bootstrap 自然获取；
@@ -252,7 +252,7 @@ trust 边界仍在：命令本身是显式的 destructive acknowledgment，sync
 
 (define (flatpak-install-app! app)
   "install（只增）+ optional commit pin deploy。pinned Flatpak
-1.16.6：install 无 --commit 参数——pin 经两步：
+1.18.2：install 无 --commit 参数——pin 经两步：
   install <remote> <ref> → update --commit=<H> <ref>。
 app pin 不隐含 runtime pin（不实现 dependency lockfile）。
 
@@ -532,7 +532,7 @@ clean no-op。"
              (apply invoke "flatpak" "update" "--user" "-y" targets))))
 
 (define (flatpak-update-runtimes)
-  "显式更新已安装 runtimes（pinned 1.16.6 无'更新全部 runtime'的
+  "显式更新已安装 runtimes（pinned 1.18.2 无'更新全部 runtime'的
 裸开关——先枚举再逐 ref）。无 runtime → clean no-op。"
   (let ((refs (flatpak-list-installed-runtime-refs)))
     (if (null? refs)

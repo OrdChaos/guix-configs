@@ -11,13 +11,10 @@
 ;;;      pinned 默认 requirement '(wireless-daemon) 会因缺服务
 ;;;      fail-fast），无 wpa-supplicant；
 ;;;   2. secrets：含 %vm-test-secrets（本测试机的机制 sentinel）；
-;;;   3. home：默认 %guix-home（无 host variant selection）；Flatpak
-;;;      selection = registry 缺省（qq wechat）；
+;;;   3. home：默认 %guix-home（无 host variant selection、无 Flatpak
+;;;      environment adapter——全局 Flatpak selection 跨设备一致）；
 ;;;   4. 无 NVIDIA/PRIME capability（nvidia-service-type 零贡献，
-;;;      tests/test-nvidia.scm N6 断言）、无 gaming 基础设施。
-;;; （application persistence 规则自 2026-09 起在 common 共享；
-;;; Flatpak selection 是 host 差异——见 flatpak.md（per-host
-;;; selection）。）
+;;;      tests/test-nvidia.scm N6 断言）。
 
 (define-module (guixcfg hosts vm)
                #:use-module (gnu)                          ; operating-system、user-account、service 等
@@ -30,15 +27,13 @@
                #:use-module (guixcfg home user)            ; %guix-home（挂入 system）
                #:use-module (guixcfg security secrets)     ; secret-decl
                #:use-module (guixcfg utils repository-source) ; repository-file（VM 测试 sentinel 密文）
-               #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
-               #:use-module (guixcfg apps model)      ; applications-secrets
-               #:use-module (guixcfg flatpak registry) ; %flatpak-selection（VM = 缺省）
-               #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
+                #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
+                #:use-module (guixcfg apps model)      ; applications-secrets
+                #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind
                #:use-module (guixcfg system mihomo service) ; %mihomo-secrets、%mihomo-data-persistence-rule
-               #:export (%vm-storage-policy %vm-services %vm-test-secrets
-                         %vm-flatpak-selection %vm-flatpak-extension-selection
-                         %vm-os))
+                #:export (%vm-storage-policy %vm-services %vm-test-secrets
+                          %vm-os))
 
 ;; 保留 host 模块原有导出名；实际 policy 放在纯存储模块中，避免早期
 ;; disk-install 为取 policy 而加载完整 OS/UKI/channel 依赖。
@@ -65,21 +60,11 @@
          (owner-user (user-profile-name %primary-user))
          (mode #o600))))
 
-;; VM 的 Flatpak selection：registry 缺省（qq wechat）——NVIDIA
-;; PRIME 依赖的 flatpak app（aagl/steam）只属于 lenovo（managed
-;; override 含 __NV_* 变量，VM 无 nvidia GLX vendor 会初始化失败）。
-;; blue flatpak 经本机 hostname 反查 Host ID、动态取本表的
-;; %<host>-flatpak-selection（blueprint.scm）。
-(define %vm-flatpak-selection %flatpak-selection)
-(define %vm-flatpak-extension-selection '())
-
 ;; HOME persistence bind mounts（user data + app state；单一定义，
 ;; %vm-services 的 gvfs-mount-metadata 服务与 file-systems 字段共用）。
-;; 列表本身是 common 的共享事实；Flatpak app 部分按 VM 的
-;; flatpak selection 投影（per-host selection seam）。
+;; Flatpak 部分使用 common 的共享事实（全局 selection 投影）。
 (define %persistent-mount-file-systems
-  (host-persistent-mount-file-systems
-   #:flatpak-selection %vm-flatpak-selection))
+  (host-persistent-mount-file-systems))
 
 ;; Mihomo 数据目录（providers cache + 选中节点/组状态）的 machine-state
 ;; bind（root-owned system state；backing/consumer 0700 由 mihomo
@@ -114,13 +99,11 @@
   (make-host-user-services
    #:system-services %vm-services
    #:application-persistence-rules
-   (host-application-persistence-rules
-    #:flatpak-selection %vm-flatpak-selection)
+   (host-application-persistence-rules)
    #:secrets (append %vm-test-secrets
-                     %mihomo-secrets
-                     (applications-secrets %applications))
-   #:home-environment (guix-home #:flatpak-selection
-                                 %vm-flatpak-selection)))
+                      %mihomo-secrets
+                      (applications-secrets %applications))
+   #:home-environment (guix-home)))
 
 ;; 基础 OS：与最终 %vm-os 完全相同，只是不含 account-databases 投影。
 ;; 仅用于折叠 account 列表；真正启动用 %vm-os。

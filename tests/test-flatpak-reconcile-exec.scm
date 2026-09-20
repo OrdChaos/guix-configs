@@ -5,7 +5,7 @@
 ;;;   - sync：remote 只在缺失时 add；install 只装 missing selected；
 ;;;     绝不 update 已装、绝不 uninstall；
 ;;;   - remote drift：fail，绝不 auto-modify/delete；
-;;;   - pin：install 后 update --commit（pinned 1.16.6 install 无
+;;;   - pin：install 后 update --commit（pinned 1.18.2 install 无
 ;;;     --commit 的两步路径）；
 ;;;   - update：只有显式 unpinned selected targets，绝无裸 update；
 ;;;   - status：默认无 remote-info；--refresh 才 remote-info；
@@ -206,25 +206,35 @@
      (test-assert "sync: never uninstall"
                   (not (fp-log-has? "uninstall"))))
    
-   ;; ── 2. sync：全部已装 + unmanaged/runtime → no-op ─────────
-   (fp-write-file %fp-remotes-out
-                  "flathub\thttps://dl.flathub.org/repo/\n")
+    ;; ── 2. sync：全部已装 + unmanaged/runtime → no-op ─────────
+    (fp-write-file %fp-remotes-out
+                   "flathub\thttps://dl.flathub.org/repo/\n")
     (fp-write-file %fp-list-app-out
-                   "com.tencent.WeChat\tstable\norg.example.Pinned\tstable\norg.other.Unmanaged\tstable\norg.freedesktop.Platform\t25.08\n")
-   (fp-clear-log!)
-   (let ((missing (flatpak-sync #:remotes (list (car %fp-remotes))
-                                #:applications %fp-apps
-                                #:selection '(wechat pinned))))
-     (test-equal "sync: nothing missing"
-                 '() missing)
-     (test-assert "sync: no remote-add when remote matches declaration"
-                  (not (fp-log-has? "remote-add")))
-     (test-assert "sync: no install when already installed"
-                  (not (fp-log-has? "install")))
-     (test-assert "sync: unmanaged app never appears in any argv"
-                  (not (fp-log-has? "org.other.Unmanaged")))
+                   "com.tencent.WeChat\tstable\norg.example.Pinned\tstable\norg.other.Unmanaged\tstable\norg.freedesktop.Platform\t25.08\norg.freedesktop.Platform.VulkanLayer.example\t25.08\n")
+    (fp-write-file %fp-pins-out
+                   "org.freedesktop.Platform.VulkanLayer.example//25.08\n")
+    (fp-clear-log!)
+    (let ((missing (flatpak-sync #:remotes (list (car %fp-remotes))
+                                 #:applications %fp-apps
+                                 #:selection '(wechat pinned)
+                                 #:extensions %fp-exts
+                                 #:extension-selection '(layer))))
+      (test-equal "sync: nothing missing"
+                  '() missing)
+      (test-assert "sync: no remote-add when remote matches declaration"
+                   (not (fp-log-has? "remote-add")))
+      (test-assert "sync: no install when already installed"
+                   (not (fp-log-has? "install")))
+      (test-assert "sync: unmanaged app never appears in any argv"
+                   (not (fp-log-has? "org.other.Unmanaged")))
+      ;; runtime 与 extension refs 不进 app 安装目标（extension 已装
+      ;; 且 pin 在册时绝不 reinstall——全局 extension selection 的
+      ;; no-op 路径）。
       (test-assert "sync: runtime refs never appear in any argv"
-                   (not (fp-log-has? "org.freedesktop.Platform"))))
+                   (not (any (lambda (line)
+                               (and (string-contains line "install")
+                                    (string-contains line "org.freedesktop.Platform")))
+                             (fp-log-lines)))))
 
     ;; 同 ID 的错误 branch 不满足 selection；安装正确 ABI branch，
     ;; 并 pin 声明 ref，避免 gc/autoprune 破坏 desired state。

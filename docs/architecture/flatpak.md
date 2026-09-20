@@ -19,11 +19,14 @@ mutable external state，不随 generation 回滚。`flatpak status` 如实
 ## 五层模型
 
 ```text
-1. Host / Selection        sync 应该 ensure 哪些 logical names
+1. Global Selection        所有设备共享的用户软件 policy（logical names）
 2. Flatpak Applications    Catalog：identity + resource ownership
+                           （hardware-neutral definition）
 3. Flatpak Platform        remote / desired-state / reconcile /
                            overrides / validation（generic，不知具体 app）
 4. Guix Home + System      package / session env / persistence 接线
+   └─ Host driver adapter  硬件差异在此叠加（如 NVIDIA PRIME environment
+                           overlay），不进入 selection / catalog
 5. Persistent Runtime      /persist/data-app/flatpak/{installation,apps/<id>}
 ```
 
@@ -57,36 +60,45 @@ reconcile projection（mutable）  selected definitions + extensions → install
 
 - **definition 是事实的唯一归属**：打开 `applications/qq.scm` 就能
   读完一个应用的全部声明；registry 只是索引，不含任何 inline
-  `flatpak-application` 记录。
+  `flatpak-application` 记录。definition 保持 **hardware-neutral**
+  （identity / ref metadata / update policy / 通用 override /
+  persistence intent），不直接导入 NVIDIA 或其他硬件模块。
 - **selection 只选择**：`%flatpak-selection` / `%flatpak-extension-selection`
   只含 logical names，不复制 id/branch/persistence；resolver
   （`flatpak-select-applications` / `flatpak-select-extensions`）做
-  catalog lookup（未知 name fail-fast 并列出可用名）。即使
-  VM/Laptop 相同也独立存在：**desired lifecycle ≠ persistence
-  lifecycle** 的结构分离。
+  catalog lookup（未知 name fail-fast 并列出可用名）。**selection
+  是全局用户软件 policy**（所有设备一致），不再由 host 模块声明。
 
-### Per-host selection
+### Global selection 与 host driver adapter
 
-应用 selection 的缺省（`%flatpak-selection`）是**公共子集**（qq
-wechat）；含 NVIDIA PRIME managed override 的 app（steam、aagl）
-只适合有 nvidia 的 host——host 在自己的模块声明
-`%<host>-flatpak-selection` 与 `%<host>-flatpak-extension-selection`：
-lenovo 追加 `aagl steam` 与 `gamescope proton-ge`，VM 保持缺省。
-三个消费方：
+用户态 Flatpak 集合跨设备一致：应用 selection 含 `qq wechat aagl
+steam`，extension selection 含 `gamescope proton-ge`。两个消费方：
 
-- **Home/System 投影**（offline）：host 把 selection 经
-  `guix-home` 的 `#:flatpak-selection` 与
-  `host-persistent-mount-file-systems` 的同名参数传入——
-  override 文件与 persistence mounts 随 selection 生效；
-- **`blue flatpak`**：按本机 hostname 反查 Host ID（与
-  reconfigure 同一 authority），动态 resolve host 模块取两个
-  selection；未知 hostname 时只读 status 回退 registry 缺省并提示，
-  所有实际 mutation fail closed，避免在错误机器套用公共 policy；
-- **extension selection 缺省为空**：extension 是按需能力，由
-  host 显式声明。
+- **Home/System 投影**（offline）：`guix-home` 与
+  `host-persistent-mount-file-systems` 直接使用 registry 的全局
+  selection——override 文件与 persistence mounts 在所有设备相同；
+- **`blue flatpak`**：直接使用 registry 的全局 selection，不再按
+  hostname 反查 host 模块或动态加载 host inventory。
+
+**硬件差异不通过 selection 表达**——唯一允许的设备差异是显式
+driver adapter（如 NVIDIA PRIME environment overlay）：
+
+- NVIDIA adapter（`(guixcfg system graphics nvidia)` 的
+  `%flatpak-prime-environment-overrides`）声明 target logical names
+  与 `VAR=VALUE` 环境条目（变量语义仍归 NVIDIA 单一 authority）；
+- Lenovo Guix Home 把该 adapter 传给 `guix-home` 的
+  `#:flatpak-environment-overrides`，经
+  `(flatpak-applications-with-environments)` 对 **managed-overrides**
+  app 追加环境并生成单一完整 override 文件（complete-file single
+  owner 不变）；VM 传空 overlay，AAGL/Steam override 不含 `__NV_*`；
+- external app（user/Flatseal owns）拒绝环境 overlay（fail
+  fast）；未知 app、重复变量、非法条目同样 fail closed。
+- **extension selection 与硬件驱动**：gamescope / proton-ge 是
+  全局用户能力（不是驱动）；真正的 NVIDIA GL/GL32 extension 由
+  Flatpak 依据 active GL driver 自动匹配（见下文 GL driver 一致性），
+  不进入本 selection。
 - **persistence 从 selected definitions 投影**：未选中的 catalog
-  app 不产生 persistence mount（其 definition 里的 persistence
-  intent 随 selection 生效）；默认 `~/.var/app/<id>` 由 application
+  app 不产生 persistence mount；默认 `~/.var/app/<id>` 由 application
   ID 推导（definition 无需重复拼写），例外用 extra-persistence
   （(consumer backing) 两元素列表，与 seeds 约定同构）。
 - **新增应用 = 一个 definition 文件 + registry aggregation 一行 +
@@ -173,13 +185,13 @@ declaration removal 不是"永久销毁用户数据"的充分授权
 
 ### Bootstrap（封装为领域操作，见 reconcile.scm）
 
-`flatpak-bootstrap-remote!` 封装 pinned Flatpak 1.16.6 的 bootstrap
+`flatpak-bootstrap-remote!` 封装 pinned Flatpak 1.18.2 的 bootstrap
 语义，调用方不需要理解：
 
 ```text
 remote-add --user --if-not-exists --from NAME <descriptor-url>
                          ← flatpak 下载官方 descriptor、导入其当前
-                           GPGKey（--from 直接接受 URL，1.16.6 实测；
+                           GPGKey（--from 直接接受 URL，1.18.2 实测；
                            descriptor 下载失败 = bootstrap 失败，
                            绝不 fallback 到镜像 descriptor / 缓存 /
                            --no-gpg-verify / 裸 URL）
@@ -256,7 +268,7 @@ guix time-machine -C channels.lock.scm -- \
 
 | 命令 | 语义 |
 |---|---|
-| `sync` | ensure remotes + ensure selected apps 与 selected extensions（**只增不删**：不 update 已装、不 uninstall 未声明、不 gc）。pinned app：install 后 `update --commit=<H> <ref>`（pinned 1.16.6 的 install 无 `--commit`）。selected extension 只支持 track-branch，并通过 `flatpak pin --user <ref>` 防止 gc/autoprune 删除 |
+| `sync` | ensure remotes + ensure selected apps 与 selected extensions（**只增不删**：不 update 已装、不 uninstall 未声明、不 gc）。pinned app：install 后 `update --commit=<H> <ref>`（pinned 1.18.2 的 install 无 `--commit`）。selected extension 只支持 track-branch，并通过 `flatpak pin --user <ref>` 防止 gc/autoprune 删除 |
 | `status` | 完全离线：logical name / app-id / selected? / installed? / branch / declared commit / installed commit + extension 表 + **GL driver doctor**（发散检测，见下）。`--refresh` 才 remote-info（失败显示 unknown，不破坏本地输出） |
 | `update` | 目标 = **selection ∩ installed ∩ unpinned** 的 app + 已装选中 extension，显式 ref 列表；绝无无参全 installation update；commit pinned app 默认不进目标 |
 | `update-runtimes` | 枚举 installed runtimes → 显式 ref 更新（app pin 不隐含 runtime pin） |
@@ -284,16 +296,22 @@ flatpak status` 对比 active GL driver 与已装 nvidia extension，
 
 ### Gaming（steam / aagl）
 
-Steam 全线 Flatpak 化（2026-09 调研结论：Guix/Nonguix 均无
-gamescope，Flatpak gamescope 是上游官方支持路径，且与 AAGL
-共用同一 extension）：
+Steam 与 AAGL 是全局用户软件（所有设备 selection 一致）；其
+host-level system 集成（controller udev rules + 游戏库目录
+activation，`(guixcfg system gaming)`）也在 `(guixcfg hosts
+common)` 共享组装。Steam 全线 Flatpak 化（2026-09 调研结论：
+Guix/Nonguix 均无 gamescope，Flatpak gamescope 是上游官方支持
+路径，且与 AAGL 共用同一 extension）：
 
-- **NVIDIA PRIME**：steam/aagl 的 managed override 投影
-  `%prime-offload-environment-strings`（变量语义归
-  `(guixcfg system graphics nvidia)`）；游戏库
+- **NVIDIA PRIME（唯一 host driver adapter）**：steam/aagl 的
+  definition 保持 hardware-neutral；NVIDIA host 的 Guix Home 把
+  `%flatpak-prime-environment-overrides` 传给
+  `(flatpak-applications-with-environments)`，对 managed override
+  追加 `%prime-offload-environment-strings`（变量语义归
+  `(guixcfg system graphics nvidia)`）。游戏库
   `/persist/data-nobackup/steam`（路径 authority 在
-  `(guixcfg system gaming)`，目录由其 activation 创建）。
-  手柄 udev rules 同属 gaming host infrastructure；
+  `(guixcfg system gaming)`，目录由其 activation 创建）与手柄
+  udev rules 是全局共享的 gaming host infrastructure。
 - **Gamescope 逐游戏**（如 niri 兼容性差的游戏）：游戏属性
   Launch Options 写 `gamescope -f -- %command%`（多显示器指针
   逃逸时用 `gamescope --backend sdl -f -- %command%`）；**不要**

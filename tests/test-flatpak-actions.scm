@@ -281,7 +281,25 @@
                                        (flatpak-application-branch app)))
                       (flatpak-select-applications
                        %flatpak-selection %flatpak-applications))
-                "\n"))
+                 "\n"))
+;; 全局 extension selection 的 refs 也计入"已装"集合：converged
+;; 判定覆盖 apps + extensions（零 mutation 契约适用于全部 selection）。
+(fp-write-file %fp-list-app-out
+                (string-join
+                 (append
+                  (map (lambda (app)
+                         (string-append (flatpak-application-id app)
+                                        "\t"
+                                        (flatpak-application-branch app)))
+                       (flatpak-select-applications
+                        %flatpak-selection %flatpak-applications))
+                  (map (lambda (ext)
+                         (string-append (flatpak-extension-id ext)
+                                        "\t"
+                                        (flatpak-extension-branch ext)))
+                       (flatpak-select-extensions
+                        %flatpak-extension-selection %flatpak-extensions)))
+                 "\n"))
 (test-assert "sync converged: zero mutation commands, empty install list"
              (let ((result (flatpak-sync)))
                (and (null? result)

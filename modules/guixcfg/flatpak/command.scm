@@ -1,7 +1,6 @@
 ;;; Blue Flatpak command adapter, loaded only by the public flatpak command.
 
 (define-module (guixcfg flatpak command)
-               #:use-module (guixcfg inventory hosts)    ; host-id-for-hostname
                #:use-module (guixcfg flatpak model)
                #:use-module (guixcfg flatpak reconcile)
                #:use-module (guixcfg flatpak registry)
@@ -29,39 +28,11 @@
 (define (print-lines lines)
   (for-each (lambda (line) (format #t "~a~%" line)) lines))
 
-(define (require-known-host!)
-  (or (host-id-for-hostname (gethostname))
-      (error "hostname is not declared; refusing a mutating Flatpak operation"
-             (gethostname))))
-
-(define (local-selections allow-default?)
-  "本机 hostname -> Host ID -> host 模块声明的 Flatpak selections。未知
-hostname 仅允许只读 status 使用 registry 缺省；mutating actions fail
-closed，避免在错误机器套用公共 policy。"
-  (let ((host (host-id-for-hostname (gethostname))))
-    (if host
-      (let* ((iface (resolve-interface
-                     `(guixcfg hosts ,(string->symbol host))))
-             (selection
-              (module-ref iface
-                          (string->symbol
-                           (string-append "%" host "-flatpak-selection"))))
-             (extension-selection
-              (module-ref iface
-                          (string->symbol
-                           (string-append "%" host
-                                          "-flatpak-extension-selection")))))
-        (flatpak-select-applications selection %flatpak-applications)
-        (flatpak-select-extensions extension-selection %flatpak-extensions)
-        (values selection extension-selection))
-      (if allow-default?
-        (begin
-          (format (current-error-port)
-                  "flatpak: hostname ~a is not a known host; using the registry default selection.~%"
-                  (gethostname))
-          (values %flatpak-selection %flatpak-extension-selection))
-        (error "hostname is not declared; refusing a mutating Flatpak operation"
-               (gethostname))))))
+(define (local-selections _allow-default?)
+  "Flatpak selections：全局用户软件 policy（所有设备一致）。硬件驱动
+差异不通过 selection 表达——desired app/extension 集合不再依赖
+hostname 或 host 模块（docs/architecture/flatpak.md）。"
+  (values %flatpak-selection %flatpak-extension-selection))
 
 (define (run-flatpak-command arguments dry-run?)
   "Run the validated user-scope Flatpak command represented by ARGUMENTS.
@@ -127,9 +98,7 @@ DRY-RUN? selects read-only plans for mutating actions."
                (format #t "No installed runtimes to update.~%")
                (print-lines
                 (map (cut format #f "would update runtime ~a" <>) refs))))
-           (begin
-             (require-known-host!)
-             (flatpak-update-runtimes))))
+            (flatpak-update-runtimes)))
         (('remove (name))
          (if dry-run?
            (let ((app (flatpak-remove-plan (string->symbol name)
@@ -137,9 +106,7 @@ DRY-RUN? selects read-only plans for mutating actions."
              (format #t "would uninstall ~a (user data under ~~/.var/app/~a preserved)~%"
                      (flatpak-application-id app)
                      (flatpak-application-id app)))
-           (begin
-             (require-known-host!)
-             (flatpak-remove (string->symbol name)))))
+            (flatpak-remove (string->symbol name))))
         (('remote-replace (name))
          (let ((remote (flatpak-remote-by-name (string->symbol name))))
            (if dry-run?
@@ -152,9 +119,7 @@ DRY-RUN? selects read-only plans for mutating actions."
                (format #t "  descriptor: ~a~%  transport:  ~a~%"
                        (flatpak-remote-descriptor-url remote)
                        (flatpak-remote-repository-url remote)))
-             (begin
-               (require-known-host!)
-               (flatpak-replace-remote! remote)))))
+              (flatpak-replace-remote! remote))))
         (('gc ())
          (let-values (((_selection extension-selection)
                        (local-selections #f)))

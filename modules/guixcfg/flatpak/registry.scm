@@ -4,9 +4,9 @@
 ;;; 本文件不包含任何应用的业务声明——应用事实全部在各
 ;;; applications/<name>.scm 的自包含 definition 里。registry 只做：
 ;;;   - 导入 definitions，构造 %flatpak-applications（Catalog）；
-;;;   - 构造 %flatpak-selection（Selection：设备要哪些 logical
-;;;     names——不复制 app 事实，resolution 由 model 的
-;;;     flatpak-select-applications 做 catalog lookup）；
+;;;   - 构造 %flatpak-selection（Selection：全局用户软件 policy——
+;;;     每台设备都安装这些 logical names，不复制 app 事实，resolution
+;;;     由 model 的 flatpak-select-applications 做 catalog lookup）；
 ;;;   - 构造 %flatpak-remotes（identity / descriptor authority /
 ;;;     transport 声明）；
 ;;;   - 模块加载时统一 fail-fast 校验（名字查重、remote 已知、
@@ -58,24 +58,23 @@
         %flatpak-aagl
         %flatpak-steam))
 
-;; 应用 selection 缺省：公共子集（VM 即缺省）。host 差异
-;; （lenovo 的 aagl/steam）在各 host 模块定义各自的
-;; %<host>-flatpak-selection 并经 #:flatpak-selection 传入
-;; projection（guix-home / host persistence）与 blue flatpak
-;; （本机 hostname 反查 Host ID 动态取）——persistence/override
-;; 投影随 selection 生效，见 docs/architecture/flatpak.md
-;; （per-host selection）。
+;; 应用 selection 缺省：全局用户软件 policy——每台设备的用户态
+;; Flatpak 集合完全一致；硬件差异不通过 selection 表达，只经
+;; (flatpak-applications-with-environments) 对 managed override
+;; 追加 environment adapter（如 NVIDIA PRIME），见
+;; docs/architecture/flatpak.md（driver overlays）。
 (define %flatpak-selection
-  '(qq wechat))
+  '(qq wechat aagl steam))
 
 ;; Catalog：已知 extension（auxiliary ref；定义在 extensions/ 下）。
 (define %flatpak-extensions
   (list %flatpak-extension-gamescope
         %flatpak-extension-proton-ge))
 
-;; Extension selection 缺省：空（extension 是按需能力，如
-;; lenovo 的 gamescope/proton-ge 在 host 模块声明）。
-(define %flatpak-extension-selection '())
+;; Extension selection 缺省：全局用户能力。gamescope / proton-ge 不是
+;; 硬件驱动；真正的 NVIDIA GL/GL32 extension 由 Flatpak 依据 active
+;; GL driver 自动匹配，不进入本 selection。
+(define %flatpak-extension-selection '(gamescope proton-ge))
 
 ;; fail-fast（模块加载即校验；apps/registry.scm 同款）。
 (validate-flatpak-catalog! %flatpak-remotes %flatpak-applications)
