@@ -25,7 +25,8 @@ normal operation
 
 - `blue install HOST DEVICE` = 从空白/可复用磁盘到「可启动、完整配置、
   已验证」的目标系统（含仓库 checkout 复制到
-  `/persist/data-home/<user>/guix-configs`）；**不包含** TPM final
+  `/persist/data-home/<user>/Projects/guix-configs`，首次启动后经现有
+  `Projects` bind 显示为 `~/Projects/guix-configs`）；**不包含** TPM final
   enrollment 与固件 PK enrollment（归 `blue enroll`）。
 - `blue firstboot HOST` = 首次正常启动后的一键收敛：先
   `reconfigure`（把 system + Home 收敛到本 checkout），再 `enroll`
@@ -42,6 +43,9 @@ normal operation
   显式 `tools/tpm2-enroll.scm` 入口，不能误走正常生命周期命令。
 - HOST 与 DEVICE 均显式：无 fallback、无 hostname/machine-id 自动检测。
 - dry-run（`blue -n`）零 mutation、不 sudo、不要求确认。
+- 完整 validate 成功后，root wrapper 自动在 `/root` 工作目录执行
+  `herd stop cow-store` 与 `sync`，然后返回 installer shell；不自动
+  unmount、poweroff 或 reboot。失败/中止/partial 状态不执行该清理。
 - 退出码：`0` 成功；`1` 前置失败（含生命周期已完成，未 mutation）；`2` 部分
   mutation 无法安全自动继续；`3` 用户显式中止。
 - resume：已完成的阶段按可观察事实检测并跳过；ambiguous /
@@ -95,6 +99,7 @@ guix time-machine -C channels.lock.scm -- \
 
 # 关机重启进入已安装系统（安装完成绝不自动 reboot）
 
+cd ~/Projects/guix-configs
 blue -n firstboot lenovo-legion-y7000p
 blue firstboot lenovo-legion-y7000p  # = reconfigure + enroll 相位 1（固件 PK/KEK/db）
 
@@ -120,7 +125,7 @@ blue enroll lenovo-legion-y7000p     # enroll 相位 2：固件 skip → TPM enr
   system-init      GUIX_CONFIG_FACTS + guix system init → /mnt
   commit-root      @root-template 只读发布 + @root-0（幂等 + 中断恢复）
   repo             仓库 checkout 复制到 /mnt/persist/data-home/<user>/
-                   guix-configs（runbook 阶段 8 机制化；tar 排除
+                   Projects/guix-configs（runbook 阶段 8 机制化；tar 排除
                    vms/*.log + chown -R 归还 USER ownership）
   validate         /mnt 布局 / facts / system generation / ESP artifacts /
                    secrets / commit state / SB key material / repo copy
@@ -131,8 +136,10 @@ repo 阶段语义：检测 = `channels.lock.scm`/`modules`/`tools`/`docs`/
 `manifests`/`.git` 全部在位 → complete（skip）；缺失/部分 → 幂等重放
 tar 复制（resume 安全）。`.git` 刻意保留——已装系统上用户
 `git pull` 更新仓库的入口；install 的 repo 复制只做 bootstrap，后续
-更新走正常 git 流程（AGENT.md §5 的 ownership 收尾语义在复制时一次
-性完成，boot 期 user-persistence activation 只 chown 顶层目录）。
+更新走正常 git 流程。仓库没有独立 bind：user-persistence 只挂载
+`Projects`，checkout 是其中普通子目录。AGENT.md §5 的 ownership
+收尾语义在复制时一次性完成，boot 期 activation 只 chown `Projects`
+顶层目录。
 
 identity unlock（runbook 阶段 1 的语义已并入 `blue install`）：runtime
 与 installed identity 都缺失时，事务前置会交互提示 master password
@@ -186,6 +193,7 @@ identity 已就位时走 `luks-recovery.age`（age 解密，不提示密码）�
 之后的一键收敛：
 
 ```bash
+cd ~/Projects/guix-configs
 blue -n firstboot lenovo-legion-y7000p   # 只读：reconfigure 推导 plan + enrollment 计划
 blue firstboot lenovo-legion-y7000p
 ```
@@ -356,10 +364,10 @@ committed、state = `(boot-status . first-boot)`、UKI 部署 B committed。
 > 见 Blue 主路径）；以下为机制细节与恢复/专家参考。
 
 ```bash
-mkdir -p /mnt/persist/data-home/ordchaos/guix-configs
+mkdir -p /mnt/persist/data-home/ordchaos/Projects/guix-configs
 cd /root/guix-configs
 tar cf - --exclude='./vms' --exclude='*.log' . | \
-  tar xf - -C /mnt/persist/data-home/ordchaos/guix-configs
+  tar xf - -C /mnt/persist/data-home/ordchaos/Projects/guix-configs
 # uid/gid 字面量：1000 = %primary-user uid；998 = LiveCD users 组 gid
 # （chown 在 LiveCD 上执行，目标账户还不存在，只能用数字——目标系统
 # 的 users 组 GID 可能不同，但 boot 时 user-persistence activation
@@ -370,22 +378,56 @@ chown -R 1000:998 /mnt/persist/data-home/ordchaos
 验证 channels.lock.scm/modules/tools/docs/manifests 存在、无 vms 泄漏。
 
 > 变体（无人值守安装/后续在已启动系统上以 root clone 或 pull）：同样
-> 必须以 `chown -R <user>:users <backing>/guix-configs` 收尾。
+> 必须以 `chown -R <user>:users <backing>/Projects/guix-configs` 收尾。
 > user-persistence activation 只 chown 顶层目录、不递归——root 克隆
 > 的内容会一直 root:root，用户侧 `git pull` 报
 > "cannot open '.git/FETCH_HEAD': Permission denied"（已实测一次）。
 
-## 收尾（正常关机，不重启）
+### 已安装机器从旧独立 bind 迁移
+
+旧版本使用 `/persist/data-home/<user>/guix-configs` 独立 bind 到
+`~/guix-configs`。迁移保持显式，绝不在 activation 中自动 merge 两个
+可能都存在的 checkout。部署移除旧 bind 的 generation 前，先在同一
+`data-home` 文件系统内原子移动 canonical backing：
+
+```bash
+cd /
+sudo test -d /persist/data-home/ordchaos/guix-configs/.git
+sudo test ! -e /persist/data-home/ordchaos/Projects/guix-configs
+sudo mkdir -p /persist/data-home/ordchaos/Projects
+sudo mv /persist/data-home/ordchaos/guix-configs \
+  /persist/data-home/ordchaos/Projects/guix-configs
+sudo chown -R ordchaos:users \
+  /persist/data-home/ordchaos/Projects/guix-configs
+
+cd /home/ordchaos/Projects/guix-configs
+blue doctor lenovo-legion-y7000p
+blue reconfigure
+```
+
+移动后旧 bind 在本次 boot 可能仍指向同一目录对象；从新路径启动
+reconfigure，避免 shell/CWD 占用旧 mount。reconfigure 后 reboot，再验收：
+
+```bash
+findmnt --mountpoint /home/ordchaos/Projects
+! findmnt --mountpoint /home/ordchaos/Projects/guix-configs
+! findmnt --mountpoint /home/ordchaos/guix-configs
+test -d /persist/data-home/ordchaos/Projects/guix-configs/.git
+```
+
+## 收尾（自动停止 cow-store + sync，不自动关机）
+
+`blue install` 仅在完整 validate 成功后自动等价执行：
 
 ```bash
 cd /root
 herd stop cow-store
-umount -R /mnt
 sync
-# 正常关机（安装完成绝不 reboot——2026-08 用户明确要求；
-# LiveCD 无 poweroff 命令，用 shepherd 的关机动作）
-herd power-off root
 ```
+
+命令随后返回 installer shell，刻意不执行 `umount -R /mnt`、
+`herd power-off root` 或 reboot，便于安装后检查。用户确认无误后自行
+决定关机或重启。cleanup 任一步失败会停止并返回非零，绝不继续关机。
 
 ## TPM enrollment（Secure Boot 启用后，可选）
 

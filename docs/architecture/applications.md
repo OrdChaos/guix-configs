@@ -355,10 +355,10 @@ runtime → repository checkout
 例如：
 
 ```text
-ExecStart=/home/foo/guix-configs/scripts/bar      ; 禁止
-~/.config/foo -> ~/guix-configs/foo               ; 禁止（symlink 回 checkout）
+ExecStart=/home/foo/Projects/guix-configs/scripts/bar ; 禁止
+~/.config/foo -> ~/Projects/guix-configs/foo          ; 禁止（symlink 回 checkout）
 ```
 
-`/persist/data-home/<user>/guix-configs` 可以**作为用户数据目录本身**
-存在（用户自己维护的 checkout），但 runtime subsystem 不得因配置
-执行而依赖它。
+`/persist/data-home/<user>/Projects/guix-configs` 可以作为 `Projects`
+backing 内的普通用户 checkout 存在，但 runtime subsystem 不得因配置
+执行而依赖它，也不得为它增加独立 bind mount。

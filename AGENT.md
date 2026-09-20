@@ -81,10 +81,10 @@
   并部署签名 UKI。目标系统首次启动后运行 `blue firstboot` 写入
   db/KEK/PK，重启使 Secure Boot 生效，再运行 `blue enroll` 完成 TPM
   PCR7 enrollment。VM 重置固件状态时需重建 OVMF VARS 文件。
-- **仓库放进 persistent user data 后必须以正确 owner 收尾**：无人
-  值守安装/后续以 root clone 或 pull 到 bind backing 后，必须
-  `chown -R <user>:users <backing>/guix-configs`（user-persistence
-  activation 只 chown 顶层目录、绝不递归——每次 boot 递归 chown
+- **仓库放进 persistent Projects 后必须以正确 owner 收尾**：无人
+  值守安装/后续以 root clone 或 pull 到 Projects backing 后，必须
+  `chown -R <user>:users <backing>/Projects/guix-configs`（user-persistence
+  activation 只 chown Projects 顶层、绝不递归——每次 boot 递归 chown
   用户数据会覆盖用户自己的所有权选择）。root 克隆的内容会一直
   root:root：读没问题，用户侧 `git pull` 报
   "cannot open '.git/FETCH_HEAD': Permission denied"（已实测一次）。

@@ -47,7 +47,8 @@
 
 ;; 持久化用户数据（XDG user directories 全集，与 (guixcfg home xdg)
 ;; 的 %xdg-user-dirs-service 对应——一致性由 tests/test-user-persistence.scm
-;; 回归）+ 仓库 checkout + Guix channel cache。
+;; 回归）+ Guix channel cache。仓库 checkout 是持久化 Projects
+;; backing 下的普通子目录 Projects/guix-configs，不单独 bind。
 ;;
 ;; Guix channel cache（backing cache-guix → consumer $HOME/.cache/guix）：
 ;; `guix time-machine -C channels.lock.scm` 把各频道 git 仓库抓到
@@ -66,8 +67,7 @@
 ;; 2.86 glocalfile.c）。home trash 随 ephemeral /home 每 boot 重建
 ;; 是符合无状态系统语义的正确行为（docs/architecture/home.md）。
 (define %persistent-user-dirs
-  (list (persistent-user-dir (backing "guix-configs") (consumer "guix-configs"))
-        (persistent-user-dir (backing "Projects") (consumer "Projects"))
+  (list (persistent-user-dir (backing "Projects") (consumer "Projects"))
         (persistent-user-dir (backing "Desktop") (consumer "Desktop"))
         (persistent-user-dir (backing "Documents") (consumer "Documents"))
         (persistent-user-dir (backing "Downloads") (consumer "Downloads"))

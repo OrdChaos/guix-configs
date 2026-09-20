@@ -69,7 +69,11 @@ python3 -c 'import socket;s=socket.socket(socket.AF_UNIX);s.connect("vms/monitor
    `findmnt` 确认 `/persist/system`、`/persist/data-app`、
    `/persist/data-home` 等是 Btrfs 子卷挂载、`/gnu/store`、
    `/var/guix` 是 bind mount；`/etc` 由 ephemeral root 投影而非
-   独立持久化（无重复 writer）。
+   独立持久化（无重复 writer）。`findmnt --mountpoint
+   /home/<user>/Projects` 成功；`findmnt --mountpoint
+   /home/<user>/Projects/guix-configs` 与旧路径
+   `/home/<user>/guix-configs` 均失败，同时
+   `/persist/data-home/<user>/Projects/guix-configs/.git` 存在。
 5. **/etc/shadow verifier == persistent hash**
    `/etc/shadow` 中用户的 password 字段与
    `/persist/system/accounts/<user>/password.hash` 内容完全一致；

@@ -6,15 +6,17 @@
 ;;; guix system init。
 
 (use-modules (guixcfg system install)
-             (guixcfg system deploy)
-             (guixcfg security enroll)
+              (guixcfg system deploy)
+              (guixcfg storage install)    ; %required-commands（cleanup preflight）
+              (guixcfg security enroll)
              (guixcfg storage model)      ; persist-mount-point（repo 目标路径断言）
              (guixcfg users facts)        ; %primary-user / user-profile-name（fixture 免硬编码）
              (guix build utils)           ; mkdir-p / delete-file-recursively（repo fixture）
              (srfi srfi-64)
-             (srfi srfi-1)
-             (srfi srfi-13)
-             (ice-9 regex))
+              (srfi srfi-1)
+              (srfi srfi-13)
+              (ice-9 rdelim)
+              (ice-9 regex))
 
 (test-runner-current (test-runner-simple))
 
@@ -336,7 +338,39 @@
 
 (test-equal "install CLI argv separates mode, HOST and DEVICE"
             '("run" "lenovo-legion-y7000p" "/dev/nvme0n1")
-            (cddr (member "tools/install-cli.scm" install-cli)))
+             (cddr (member "tools/install-cli.scm" install-cli)))
+
+(test-equal "successful install cleanup stops cow-store and syncs only"
+            '(("herd" "stop" "cow-store")
+              ("sync"))
+            (install-success-cleanup-commands))
+
+(test-assert "successful install cleanup never powers off, reboots, or unmounts"
+             (not (any (lambda (argv)
+                         (any (lambda (arg)
+                                (member arg '("power-off" "poweroff"
+                                              "reboot" "umount")))
+                              argv))
+                       (install-success-cleanup-commands))))
+
+(test-assert "install preflight requires cleanup commands before mutation"
+             (every (lambda (command) (member command %required-commands))
+                    '("herd" "sync")))
+
+(test-assert "privileged install wires cleanup after the success-gated CLI in /root"
+             (let* ((source (call-with-input-file "blueprint.scm" read-string))
+                    (transaction (string-contains
+                                  source
+                                  "(%exec (install-cli-argv (%repo-root)"))
+                    (cleanup (string-contains
+                              source
+                              "(install-success-cleanup-commands)"))
+                    (root-cwd (string-contains
+                               source
+                               "#:working-directory \"/root\"")))
+               (and transaction cleanup root-cwd
+                    (< transaction root-cwd)
+                    (< root-cwd cleanup))))
 
 (define enroll-cli
   (enroll-cli-argv %root "plan" "lenovo-legion-y7000p"))
@@ -352,12 +386,18 @@
 ;;; ────────────────────────────────────────────────────────────
 ;;; repo 复制机制（installation.md 阶段 8 的机制化）
 
-(test-equal "repo path is the user-persistence guix-configs backing"
+(test-equal "repo path is an ordinary project below persistent Projects"
             (string-append "/mnt"
                            (persist-mount-point "@persist-data-home")
                            "/" (user-profile-name %primary-user)
-                           "/guix-configs")
-            (install-repo-path "/mnt"))
+                            "/Projects/guix-configs")
+             (install-repo-path "/mnt"))
+
+(test-equal "post-install instructions enter the installed checkout"
+            '("  cd ~/Projects/guix-configs"
+              "  blue firstboot lenovo-legion-y7000p")
+            (take (drop (install-next-step-lines "lenovo-legion-y7000p") 4)
+                  2))
 
 (define %repo-fixture-target
   (string-append "/tmp/guixcfg-test-repo-copy-"

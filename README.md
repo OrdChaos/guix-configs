@@ -38,6 +38,7 @@ guix time-machine -C channels.lock.scm -- \
   shell -m manifests/development.scm -- blue -n install lenovo-legion-y7000p /dev/nvme0n1
 guix time-machine -C channels.lock.scm -- \
   shell -m manifests/development.scm -- blue install lenovo-legion-y7000p /dev/nvme0n1
+# validate 成功后自动 stop cow-store + sync；不自动关机/重启
 # → reboot into the installed system
 blue -n firstboot lenovo-legion-y7000p   # 只读：reconfigure 推导 plan + enrollment 计划
 blue firstboot lenovo-legion-y7000p      # 首次启动收敛：reconfigure + 固件 enrollment
@@ -52,6 +53,7 @@ GUILE_LOAD_PATH="$PWD/modules" GUILE_LOAD_COMPILED_PATH="$PWD/modules" \
   guix time-machine -C channels.lock.scm -- system build modules/guixcfg/hosts/vm.scm
 
 # 日常入口（安装后，Blue 来自已部署 Guix Home profile）
+cd ~/Projects/guix-configs
 blue doctor lenovo-legion-y7000p
 blue build-os lenovo-legion-y7000p
 blue reconfigure              # 按本机 hostname 自动选择 lenovo-legion-y7000p

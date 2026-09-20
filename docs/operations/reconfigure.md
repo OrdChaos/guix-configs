@@ -1,6 +1,8 @@
 # Reconfigure
 
 日常已安装系统的更新流程。安装见 `operations/installation.md`。
+正常安装后的 checkout 是 `~/Projects/guix-configs`（`Projects` 是
+持久化 bind，checkout 是普通子目录）；以下命令均从该目录执行。
 
 ## Blue 入口（Phase 1 推荐）
 

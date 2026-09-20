@@ -61,8 +61,29 @@
                       (member d (map persistent-user-dir-consumer
                                      %persistent-user-dirs)))
                     '("Desktop" "Documents" "Downloads" "Music"
-                                "Pictures" "Projects" "Public" "Templates"
-                                "Videos")))
+                                 "Pictures" "Projects" "Public" "Templates"
+                                 "Videos")))
+
+(test-assert "repository has no dedicated persistence entry"
+             (not (any (lambda (d)
+                         (or (member (persistent-user-dir-backing d)
+                                     '("guix-configs"
+                                       "Projects/guix-configs"))
+                             (member (persistent-user-dir-consumer d)
+                                     '("guix-configs"
+                                       "Projects/guix-configs"))))
+                       %persistent-user-dirs)))
+
+(test-assert "Projects is the repository's only persistence mount"
+             (and (find (lambda (fs)
+                          (string=? "/home/user/Projects"
+                                    (file-system-mount-point fs)))
+                        fss)
+                  (not (any (lambda (fs)
+                              (member (file-system-mount-point fs)
+                                      '("/home/user/guix-configs"
+                                        "/home/user/Projects/guix-configs")))
+                            fss))))
 
 ;; ── Guix channel cache 持久化（唯一持久化 cache；精确到
 ;;    ~/.cache/guix，绝不持久化整个 ~/.cache）──────────────────

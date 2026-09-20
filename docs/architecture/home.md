@@ -70,12 +70,15 @@ contract、layout、local-file 语义、ownership 决策表、secret/
 `/home/<user>` 本身是 ephemeral（无状态 root）。持久化用户数据由
 系统从 `/persist/data-home/<user>/` bind mount
 （`%persistent-user-dirs`，modules/guixcfg/system/user-persistence.scm）
-——标准 XDG user directories 全集 + 仓库 checkout：
+——标准 XDG user directories 全集：
 
 ```text
-guix-configs / Projects / Desktop / Documents / Downloads /
+Projects / Desktop / Documents / Downloads /
 Music / Pictures / Public / Templates / Videos
 ```
+
+仓库 checkout 位于 `Projects/guix-configs`，是 `Projects` backing 中的
+普通项目目录；不声明仓库专属 bind mount，也不声明嵌套 bind mount。
 
 每个条目是 `(backing, consumer)` 相对路径对：backing 位于
 `/persist/data-home/<user>/` 下（canonical 数据位置），consumer 是

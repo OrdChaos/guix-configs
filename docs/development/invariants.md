@@ -137,7 +137,8 @@ subprocess capture helper、第二个 persistence deployment mechanism、
 22. 先完成 VM，再适配 Laptop。
 23. 在真实重复出现之后再进行抽象。
 24. 少量明确重复优于维护一个自制的 NixOS module system。
-25. 配置仓库随用户数据持久化，不单独拆分子卷。
+25. 配置仓库是持久化 `Projects` backing 内的普通项目目录，不单独
+    拆分子卷或 bind mount。
 26. 驱动通过 kernel、firmware、module 和 service 声明进入 system
     generation，不使用独立安装器。
 27. 打印机队列声明式创建，不持久化 CUPS 命令式状态。

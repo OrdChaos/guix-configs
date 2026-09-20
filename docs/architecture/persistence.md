@@ -44,7 +44,7 @@ atomic replace（write temp → rename）产生新 inode，破坏 hardlink；
 | `/gnu/store` | `@persist-gnu-store` | `/gnu/store` | direct（subvol mount） | no | no |
 | `/var/guix` | `@persist-var-guix` | `/var/guix` | direct（安装期不挂） | yes | no |
 | user dirs | `/persist/data-home/<user>/<d>` | `/home/<user>/<d>` | directory bind | yes | no |
-| guix-configs | `/persist/data-home/<user>/guix-configs` | `/home/<user>/guix-configs` | directory bind | yes | no |
+| guix-configs | `/persist/data-home/<user>/Projects/guix-configs` | `/home/<user>/Projects/guix-configs` | ordinary child of the `Projects` directory bind（无独立 mount） | yes | no |
 | Guix channel cache | `/persist/data-home/<user>/cache-guix` | `/home/<user>/.cache/guix` | directory bind | yes | no |
 | SSH host keys | `/persist/system/ssh/ssh_host_ed25519_key` | sshd HostKey | direct reference | yes | no |
 | **machine-id** | **`/persist/system/machine-id`** | **`/etc/machine-id`** | **activation projection** | **yes** | **no** |

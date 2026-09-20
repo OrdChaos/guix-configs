@@ -164,10 +164,10 @@ LiveCD resume paths do not expose it at the current-system paths."
                                       "/EFI/Guix/A/RECOVERY.EFI"))
 
 ;; 仓库 checkout 复制（installation.md 手动 runbook 阶段 8 的机制化）：
-;; 目标 = @persist-data-home/<user>/guix-configs（与
-;; (guixcfg system user-persistence) 的 guix-configs bind backing
-;; 一致——首次 boot 即 bind 到 ~/guix-configs）。检测与验证共用同一
-;; 标记集合；.git 必须保留（已装系统上用户 git pull 的入口）。
+;; 目标 = @persist-data-home/<user>/Projects/guix-configs。
+;; (guixcfg system user-persistence) 只 bind 整个 Projects，checkout
+;; 是 ~/Projects 下的普通项目目录，不是独立 mount。检测与验证共用
+;; 同一标记集合；.git 必须保留（已装系统上用户 git pull 的入口）。
 (define %repo-copy-markers
   '("channels.lock.scm" "modules" "tools" "docs" "manifests" ".git"))
 
@@ -176,7 +176,7 @@ LiveCD resume paths do not expose it at the current-system paths."
   (string-append target
                  (persist-mount-point "@persist-data-home")
                  "/" (user-profile-name %primary-user)
-                 "/guix-configs"))
+                  "/Projects/guix-configs"))
 
 (define (repo-copy-present? target)
   "复制标记是否全部在位（resume 检测 + validate 共用）。"
@@ -779,7 +779,8 @@ physical installs require Setup Mode, except ownership-proven resume states."
     gid))
 
 (define (install-repository! exec root target)
-  "把仓库 checkout 复制到 /mnt/persist/data-home/USER/guix-configs
+  "把仓库 checkout 复制到
+/mnt/persist/data-home/USER/Projects/guix-configs
 （installation.md 手动 runbook 阶段 8 的同一语义：tar 排除 vms/ 与
 *.log，保留 .git）。两段 tar 经 staging 文件（/tmp）——EXEC 是单
 argv 子进程，不经 shell 管道（无引号风险）。chown -R 归还 USER
@@ -1090,6 +1091,7 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
         "Installation complete."
         ""
         "Next step: shut down, reboot into the installed system, then run:"
+        "  cd ~/Projects/guix-configs"
         (format #f "  blue firstboot ~a" host)
         ""
-        "Do not reboot automatically; shut down the installer cleanly first."))
+        "Blue will now stop cow-store and sync. It will not power off or reboot."))

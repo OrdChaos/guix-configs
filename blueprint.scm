@@ -193,7 +193,7 @@ primitive-exit 不做 Guile backtrace——非零退出是预期内失败。"
                (%subprocess-fail! status command))
              #t)))
 
-(define* (%exec command #:key input)
+(define* (%exec command #:key input (working-directory (%repo-root)))
          "总是真实执行（无 dry-run 短路）。只允许用于 Blue dry-run 映射到
 下游 Guix dry-run 的两个特殊路径：build-os -n / reconfigure -n——
 执行的命令自带 guix --dry-run，无副作用（pinned Guix 的 build-handler
@@ -202,9 +202,9 @@ primitive-exit 不做 Guile backtrace——非零退出是预期内失败。"
          (let ((status (if input
                          (popen (car command) (cdr command)
                                 #:input input
-                                #:working-directory (%repo-root))
-                         (popen (car command) (cdr command)
-                                #:working-directory (%repo-root)))))
+                                 #:working-directory working-directory)
+                          (popen (car command) (cdr command)
+                                 #:working-directory working-directory))))
            (unless (zero? status)
              (%subprocess-fail! status command))
            #t))
@@ -1036,8 +1036,11 @@ Install the complete bootable system for HOST onto the whole block
 device DEVICE, from a LiveCD/installer environment. Orchestrates:
 disk layout -> mounts -> machine facts -> Secure Boot keys ->
 secrets -> Secure Boot keystore -> guix system init -> commit-root
--> repository copy (@persist-data-home/<user>/guix-configs, so the
-installed system can manage itself) -> validation. Resume: completed
+ -> repository copy (@persist-data-home/<user>/Projects/guix-configs;
+  ordinary project under the existing ~/Projects bind) -> validation.
+ On validation success, stops the install-time cow-store and runs sync;
+ it does not unmount, power off, or reboot.
+ Resume: completed
 stages are detected and skipped; ambiguous/incompatible partial
 states fail closed (the disk is never re-formatted automatically).
 Destructive confirmation: the full device path must be typed before
@@ -1078,17 +1081,25 @@ mutation, no sudo, no confirmation."))
                  (help "HOST DEVICE
 Internal mode for blue install's sudo handoff. Requires effective
 UID 0. Runs the pinned install transaction (tools/install-cli.scm:
-confirmation UI, stage detection/resume, validation) and exits with
-its exact status (0 success / 1 preflight / 2 partial mutation /
-3 user abort)."))
+ confirmation UI, stage detection/resume, validation). On status 0,
+ stops cow-store and syncs, then returns without unmount/poweroff/reboot.
+ Transaction failures preserve their exact status (1 preflight /
+ 2 partial mutation / 3 user abort)."))
                 (unless (zero? (getuid))
                   (%usage-error
                    "privileged install mode requires root (effective UID 0)"))
                 (match arguments
-                       ((host device)
-                        (%exec (install-cli-argv (%repo-root)
-                                                 "run" host device)
-                               #:input (current-input-port)))
+                        ((host device)
+                         ;; %exec 非零会直接退出，因此 cleanup 只可能在
+                         ;; 完整 validate 成功后执行。工作目录离开 checkout；
+                         ;; 不 unmount、不 poweroff、不 reboot。
+                         (%exec (install-cli-argv (%repo-root)
+                                                  "run" host device)
+                                #:input (current-input-port))
+                         (for-each
+                          (lambda (command)
+                            (%exec command #:working-directory "/root"))
+                          (install-success-cleanup-commands)))
                        (_ (%usage-error
                            "usage (internal): HOST DEVICE"))))
 

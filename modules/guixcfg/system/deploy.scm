@@ -39,9 +39,10 @@
                          reconfigure-privileged-argv
                          install-privileged-argv
                          enroll-privileged-argv
-                         gc-privileged-argv
-                         install-cli-argv
-                         enroll-cli-argv
+                          gc-privileged-argv
+                          install-cli-argv
+                          install-success-cleanup-commands
+                          enroll-cli-argv
                          gc-cli-argv
                          sb-keygen-tool-argv
                          sb-keystore-tool-argv
@@ -244,8 +245,15 @@ ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMM
   ;; time-machine repl 自带全部频道模块 load path，工具自行加入
   ;; 仓库 modules/（从仓库根运行）。
   (guix-time-machine-argv root %channels-lock-file
-                          `("repl" "tools/install-cli.scm" "--"
-                                   ,mode ,host ,device)))
+                           `("repl" "tools/install-cli.scm" "--"
+                                    ,mode ,host ,device)))
+
+(define (install-success-cleanup-commands)
+  "安装完整 validate 成功后、返回 installer shell 前的 root 清理 argv。
+只停止 install-time cow-store 并落盘；刻意不 unmount、不 poweroff、
+不 reboot。"
+  '(("herd" "stop" "cow-store")
+    ("sync")))
 
 (define (enroll-cli-argv root mode host)
   ;; blue enroll 的 pinned 执行入口 argv（tools/enroll-cli.scm）。
