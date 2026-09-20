@@ -95,6 +95,10 @@
     (firmware-confirmed? input)))
 
 (define (run-command host)
+  (unless (zero? (getuid))
+    (format (current-error-port)
+            "enroll transaction requires root (effective UID 0)~%")
+    (exit 1))
   (let ((root (repo-root)))
     (exit
      (enroll-transaction!

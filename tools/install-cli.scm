@@ -20,6 +20,7 @@
 (add-to-load-path (string-append (getcwd) "/modules"))
 
 (use-modules (guixcfg system install)
+             (guixcfg system deploy)
              (ice-9 match)
              (ice-9 rdelim))
 
@@ -82,18 +83,33 @@
     (install-confirmed? input device)))
 
 (define (run-command host device)
+  (unless (zero? (getuid))
+    (format (current-error-port)
+            "install transaction requires root (effective UID 0)~%")
+    (exit 1))
   (let ((root (repo-root)))
-    (exit
-     (install-transaction!
-      root host device
-      ;; exec 契约：cwd = 仓库根（本进程由 Blue 以仓库根启动）。
-      #:exec
-      (lambda (argv)
-        (format #t "  [exec] ~{ ~a~}~%" argv)
-        (status:exit-val (apply system* argv)))
-      #:on-confirm
-      (lambda (state)
-        (confirm-device-ui state device))))))
+    (let ((code
+           (install-transaction!
+            root host device
+            ;; exec 契约：cwd = 仓库根（本进程由 Blue 以仓库根启动）。
+            #:exec
+            (lambda (argv)
+              (format #t "  [exec] ~{ ~a~}~%" argv)
+              (status:exit-val (apply system* argv)))
+            #:on-confirm
+            (lambda (state)
+              (confirm-device-ui state device)))))
+      ;; 只在完整 validate 成功后停止 install-time cow-store 并落盘；
+      ;; 不 unmount、不 poweroff、不 reboot。
+      (when (zero? code)
+        (chdir "/root")
+        (for-each
+         (lambda (argv)
+           (let ((status (apply system* argv)))
+             (unless (zero? status)
+               (exit (or (status:exit-val status) 1)))))
+         (install-success-cleanup-commands)))
+      (exit code))))
 
 ;;; ────────────────────────────────────────────────────────────
 

@@ -201,39 +201,38 @@
              (and (not (member "sudo" reconfigure-dry-argv))
                   (not (any (cut string-contains <> "reconfigure.sh") reconfigure-dry-argv))))
 
-(test-equal "reconfigure privileged handoff: sudo re-executes the same blue with explicit blueprint"
-            '("sudo" "/store/blue" "--store-directory=/run/guixcfg/.blue-store"
-                     "-f" "/repo/blueprint.scm" ".reconfigure-root" "vm" "alice")
-            (reconfigure-privileged-argv "/store/blue" "/repo/blueprint.scm" "vm" "alice"))
+(test-equal "reconfigure privileged handoff: sudo runs the pinned transaction CLI"
+            '("sudo" "env" "GUILE_LOAD_PATH=/repo/modules"
+                     "GUILE_LOAD_COMPILED_PATH=/repo/modules"
+                     "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
+                     "repl" "/repo/tools/reconfigure-cli.scm" "--" "vm" "alice")
+            (reconfigure-privileged-argv "/repo" "vm" "alice"))
 
-(test-assert "privileged blue store is an explicit /run location, never inside the user repository"
-             (let ((argv (reconfigure-privileged-argv
-                          "/store/blue" "/repo/blueprint.scm" "vm" "alice")))
-               (and (member "--store-directory=/run/guixcfg/.blue-store" argv)
-                    ;; 绝不允许 store 指向用户仓库（默认 getcwd/.blue-store
-                    ;; 的 root-所有文件污染根因）；其余元素只读引用仓库无妨。
-                    (not (any (lambda (elt)
-                                (and (string-prefix? "--store-directory=" elt)
-                                     (string-contains elt "/repo")))
-                              argv)))))
+(test-assert "reconfigure privileged handoff never starts a root Blue process"
+             (let ((argv (reconfigure-privileged-argv "/repo" "vm" "alice")))
+               (and (not (member ".reconfigure-root" argv))
+                    (not (member "--store-directory=/run/guixcfg/.blue-store"
+                                 argv)))))
 
 (test-assert "privileged handoff argv has no shell metacharacters"
              (no-shell-metacharacters?
-              (reconfigure-privileged-argv "/store/blue" "/repo/blueprint.scm" "vm" "alice")))
+              (reconfigure-privileged-argv "/repo" "vm" "alice")))
 
 ;; ---- gc（system generation 回收）----
 
-(test-equal "gc privileged handoff: sudo re-executes the same blue (.gc-root)"
-            '("sudo" "/store/blue" "--store-directory=/run/guixcfg/.blue-store"
-                     "-f" "/repo/blueprint.scm" ".gc-root" "vm")
-            (gc-privileged-argv "/store/blue" "/repo/blueprint.scm" "vm" '()))
+(test-equal "gc privileged handoff: sudo runs the pinned gc CLI"
+            '("sudo" "env" "GUILE_LOAD_PATH=/repo/modules"
+                     "GUILE_LOAD_COMPILED_PATH=/repo/modules"
+                     "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
+                     "repl" "tools/gc-cli.scm" "--" "run" "vm")
+            (gc-privileged-argv "/repo" "vm" '()))
 
 (test-equal "gc privileged handoff forwards explicit options"
-            '("sudo" "/store/blue" "--store-directory=/run/guixcfg/.blue-store"
-                     "-f" "/repo/blueprint.scm" ".gc-root" "vm"
-                     "--keep" "2")
-            (gc-privileged-argv "/store/blue" "/repo/blueprint.scm" "vm"
-                                '("--keep" "2")))
+            '("sudo" "env" "GUILE_LOAD_PATH=/repo/modules"
+                     "GUILE_LOAD_COMPILED_PATH=/repo/modules"
+                     "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
+                     "repl" "tools/gc-cli.scm" "--" "run" "vm" "--keep" "2")
+            (gc-privileged-argv "/repo" "vm" '("--keep" "2")))
 
 (test-equal "gc-cli-argv runs the pinned gc tool with env-injected modules"
             '("env" "GUILE_LOAD_PATH=/repo/modules"
@@ -244,9 +243,9 @@
 
 (test-assert "gc argv has no shell metacharacters"
              (and (no-shell-metacharacters?
-                   (gc-privileged-argv "/store/blue" "/repo/blueprint.scm" "vm" '()))
-                  (no-shell-metacharacters?
-                   (gc-cli-argv %root "run" "vm" '("--keep" "3")))))
+                    (gc-privileged-argv "/repo" "vm" '()))
+                   (no-shell-metacharacters?
+                    (gc-cli-argv %root "run" "vm" '("--keep" "3")))))
 
 (test-equal "system-reconfigure-argv (transaction core) is pinned, env-injected modules"
             '("env" "GUILE_LOAD_PATH=/repo/modules"

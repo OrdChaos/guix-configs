@@ -121,12 +121,11 @@ WARNING）。真正从固定 commit 快照执行（Level 2）是未来工作，�
 ## 正式入口的机制
 
 `blue reconfigure [HOST]` = 本机身份解析（省略 HOST 时）→ doctor preflight（含 git clean gate）→
-privilege handoff（`sudo <同一个 blue>
---store-directory=/run/guixcfg/.blue-store -f <仓库 blueprint.scm>
-.reconfigure-root HOST HOME-USER`，root phase 非 root 直接拒绝；
-root 进程的 Blue store 指向 /run 的项目命名空间，绝不向用户仓库
-的 .blue-store 写入 root 所有文件——否则之后普通用户运行 blue 会
-因打不开 .lock 报权限不足）→
+privilege handoff（`sudo env GUILE_LOAD_PATH=<仓库>/modules
+GUILE_LOAD_COMPILED_PATH=<仓库>/modules guix time-machine -C
+<仓库>/channels.lock.scm -- repl <仓库>/tools/reconfigure-cli.scm --
+HOST HOME-USER`；root phase 非 root 直接拒绝；不重新启动 Blue，避免
+sudo 清理用户 channel load path 后重新编译整份 blueprint）→
 `(guixcfg system reconfigure)` gate transaction（Guile 实现，机制
 事实源；gate 的 path/close/open 唯一 authority 是
 (guixcfg system session-gate)）→ postflight 漂移检查。transaction
@@ -194,8 +193,8 @@ blue gc HOST --delete LIST      LIST 逗号分隔、支持 3..5 区间
 - current 与 last-good generation 永不删除；generation 0 由 Guix
   （delete-generation）保护。
 - 域逻辑在 `(guixcfg system system-generations)`，执行在
-  `tools/gc-cli.scm`（pinned 子进程）；`blue gc` 经 sudo handoff 到
-  内部 `.gc-root`（写 `/var/guix/profiles` 需要 root）。
+  `tools/gc-cli.scm`；`blue gc` 经 sudo 直接进入该 pinned CLI 的
+  `run` 模式（写 `/var/guix/profiles` 需要 root），不重新启动 Blue。
 - 用 `guix package -p <system-profile> --delete-generations=...` 而非
   `guix system delete-generations`：后者会 `reinstall-bootloader`，经
   `lookup-bootloader-by-name` 在 profile 的 `gnu/bootloader` 命名空间查

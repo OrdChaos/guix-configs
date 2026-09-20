@@ -43,7 +43,9 @@ normal operation
   显式 `tools/tpm2-enroll.scm` 入口，不能误走正常生命周期命令。
 - HOST 与 DEVICE 均显式：无 fallback、无 hostname/machine-id 自动检测。
 - dry-run（`blue -n`）零 mutation、不 sudo、不要求确认。
-- 完整 validate 成功后，root wrapper 自动在 `/root` 工作目录执行
+- privilege handoff 通过 sudo 直接进入 pinned `tools/install-cli.scm`
+  / `tools/enroll-cli.scm`，不以 root 重新加载完整 Blue blueprint。
+- 完整 validate 成功后，pinned install CLI 自动在 `/root` 工作目录执行
   `herd stop cow-store` 与 `sync`，然后返回 installer shell；不自动
   unmount、poweroff 或 reboot。失败/中止/partial 状态不执行该清理。
 - 退出码：`0` 成功；`1` 前置失败（含生命周期已完成，未 mutation）；`2` 部分

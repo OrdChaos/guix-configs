@@ -272,41 +272,39 @@
                         "modules/guixcfg/hosts/lenovo-legion-y7000p.scm" "/mnt")
             (cdr (member "--" init-argv)))
 
-(define privileged (install-privileged-argv "/bin/blue"
-                                            "/repo/blueprint.scm"
+(define privileged (install-privileged-argv "/repo"
                                              "lenovo-legion-y7000p" "/dev/nvme0n1"))
 
-(test-assert "install handoff re-executes the same Blue via sudo"
+(test-assert "install handoff runs the pinned CLI via sudo"
              (and (equal? (car privileged) "sudo")
-                  (member "/bin/blue" privileged)
-                  (member "-f" privileged)
-                  (member "/repo/blueprint.scm" privileged)))
+                  (member "/repo/channels.lock.scm" privileged)
+                  (member "tools/install-cli.scm" privileged)
+                  (member "run" privileged)))
 
-(test-assert "install handoff uses the privileged Blue store"
-             (member "--store-directory=/run/guixcfg/.blue-store"
-                     privileged))
+(test-assert "install handoff never starts a root Blue process"
+             (and (not (member ".install-root" privileged))
+                  (not (member "--store-directory=/run/guixcfg/.blue-store"
+                               privileged))))
 
 (test-assert "install handoff argv separates HOST and DEVICE (no shell string)"
-             (let ((tail (cdr (member ".install-root" privileged))))
-                (and (equal? tail '("lenovo-legion-y7000p" "/dev/nvme0n1"))
-                    (not (any (lambda (x)
-                                (or (string-contains x "&&")
-                                    (string-contains x ";")
+             (let ((tail (cdr (member "run" privileged))))
+                 (and (equal? tail '("lenovo-legion-y7000p" "/dev/nvme0n1"))
+                     (not (any (lambda (x)
+                                 (or (string-contains x "&&")
+                                     (string-contains x ";")
                                     (string-contains x "|")))
                               privileged)))))
 
-(define enroll-privileged (enroll-privileged-argv "/bin/blue"
-                                                  "/repo/blueprint.scm"
-                                                  "lenovo-legion-y7000p"))
+(define enroll-privileged (enroll-privileged-argv "/repo"
+                                                   "lenovo-legion-y7000p"))
 
-(test-assert "enroll handoff uses the same model (sudo + same Blue + -f + .enroll-root HOST)"
-             (let ((tail (cdr (member ".enroll-root" enroll-privileged))))
+(test-assert "enroll handoff runs the pinned CLI directly via sudo"
+             (let ((tail (cdr (member "run" enroll-privileged))))
                (and (equal? (car enroll-privileged) "sudo")
-                    (member "/bin/blue" enroll-privileged)
-                    (member "/repo/blueprint.scm" enroll-privileged)
-                    (member "--store-directory=/run/guixcfg/.blue-store"
-                            enroll-privileged)
-                    (equal? tail '("lenovo-legion-y7000p")))))
+                     (member "/repo/channels.lock.scm" enroll-privileged)
+                     (member "tools/enroll-cli.scm" enroll-privileged)
+                     (not (member ".enroll-root" enroll-privileged))
+                     (equal? tail '("lenovo-legion-y7000p")))))
 
 (test-equal "sb-keygen tool argv pins the lockfile and passes the keydir"
             "/mnt/persist/system/keys/secure-boot"
@@ -357,20 +355,20 @@
              (every (lambda (command) (member command %required-commands))
                     '("herd" "sync")))
 
-(test-assert "privileged install wires cleanup after the success-gated CLI in /root"
-             (let* ((source (call-with-input-file "blueprint.scm" read-string))
-                    (transaction (string-contains
-                                  source
-                                  "(%exec (install-cli-argv (%repo-root)"))
-                    (cleanup (string-contains
-                              source
-                              "(install-success-cleanup-commands)"))
-                    (root-cwd (string-contains
+(test-assert "pinned install CLI wires cleanup after the success-gated transaction in /root"
+             (let* ((source (call-with-input-file "tools/install-cli.scm" read-string))
+                     (transaction (string-contains
+                                   source
+                                   "(install-transaction!"))
+                     (cleanup (string-contains
                                source
-                               "#:working-directory \"/root\"")))
+                               "(install-success-cleanup-commands)"))
+                     (root-cwd (string-contains
+                                source
+                                "(chdir \"/root\")")))
                (and transaction cleanup root-cwd
-                    (< transaction root-cwd)
-                    (< root-cwd cleanup))))
+                     (< transaction root-cwd)
+                     (< root-cwd cleanup))))
 
 (define enroll-cli
   (enroll-cli-argv %root "plan" "lenovo-legion-y7000p"))

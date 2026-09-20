@@ -13,8 +13,8 @@
 ;;; 只做 argv 解析与子进程执行（blueprint 编译期不导入该模块——gsettings/
 ;;; install/enroll 同款决策）。
 ;;;
-;;; 需要 root（写 /var/guix/profiles）。blue gc 经 sudo handoff 到
-;;; .gc-root 后以 root 运行 run；plan 可普通用户运行（只读）。
+;;; 需要 root（写 /var/guix/profiles）。blue gc 经 sudo 直接以 root
+;;; 运行本工具的 run；plan 可普通用户运行（只读）。
 ;;;
 ;;; 退出码：0 成功；1 参数/执行失败（fail closed）。
 
@@ -101,6 +101,12 @@ tools/gc-cli.scm -- ACTION HOST [--keep N | --delete LIST]~%actions: plan | run~
        (apply invoke (delete-generations-argv %system-profile to-delete))))))
 
 (define (main args)
+  (when (and (pair? args)
+             (string=? (car args) "run")
+             (not (zero? (getuid))))
+    (format (current-error-port)
+            "gc transaction requires root (effective UID 0)~%")
+    (exit 1))
   (catch #t
     (lambda ()
       (match args
@@ -108,8 +114,8 @@ tools/gc-cli.scm -- ACTION HOST [--keep N | --delete LIST]~%actions: plan | run~
               (unless (member mode '("plan" "run"))
                 (usage))
               (call-with-values (lambda () (parse-options rest))
-                                (lambda (keep delete)
-                                  (let ((plan (system-generation-plan
+                                 (lambda (keep delete)
+                                   (let ((plan (system-generation-plan
                                                #:host host #:keep keep #:delete delete)))
                                     (print-plan plan)
                                     (when (string=? mode "run")

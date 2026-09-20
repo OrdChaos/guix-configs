@@ -14,7 +14,7 @@
 ;;;
 ;;; 纯函数化的目的是让 tests/test-deploy.scm 在不跑真实 guix 的情况下
 ;;; 断言 argv 形态：pinned channels.lock.scm、绝对 -L、dry-run 语义、
-;;; sudo 边界（privilege handoff 用同一个 Blue executable）、
+;;; sudo 边界（privilege handoff 直接进入 pinned CLI）、
 ;;; reconfigure -n 不进入 privileged transaction。
 
 (define-module (guixcfg system deploy)
@@ -37,8 +37,8 @@
                          system-reconfigure-dry-run-argv
                          system-init-argv
                          reconfigure-privileged-argv
-                         install-privileged-argv
-                         enroll-privileged-argv
+                          install-privileged-argv
+                          enroll-privileged-argv
                           gc-privileged-argv
                           install-cli-argv
                           install-success-cleanup-commands
@@ -60,12 +60,6 @@
 (define %channels-file "channels.scm")
 (define %channels-lock-file "channels.lock.scm")
 (define %modules-dir "modules")
-
-;; privileged 模式（sudo 后 root 进程）的 Blue store 位置。与
-;; (guixcfg system session-gate) 的 %session-gate-directory
-;; （/run/guixcfg）同根：项目在 /run 的 privileged 运行时命名空间，
-;; root 所有、tmpfs、重启即清。
-(define %privileged-blue-store "/run/guixcfg/.blue-store")
 
 ;;; ---------- host ID 枚举与校验 ----------
 
@@ -193,50 +187,30 @@ ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMM
                                      ,(host-source-relative-path host)
                                      "/mnt")))
 
-(define (reconfigure-privileged-argv blue-executable blueprint-path host home-user)
-  ;; blue reconfigure 的 privilege handoff argv：sudo 重新执行【同一
-  ;; 个】Blue executable（绝对路径，绝不依赖 root PATH 重新查找），
-  ;; -f 显式指定仓库 blueprint.scm，内部模式 .reconfigure-root 分项
-  ;; 传递 HOST 与 HOME_USER。
-  ;;
-  ;; --store-directory 把 root 进程的 Blue store 指到
-  ;; /run/guixcfg/.blue-store：sudo 继承调用者 cwd，若沿用默认
-  ;; store（cwd/.blue-store）会在用户仓库里留下 root 所有的
-  ;; .lock / local-compile .go，之后普通用户运行 blue 会报权限
-  ;; 不足（make-store 每次启动都要以写模式打开 .lock）。
-  ;; argv 列表，无 shell 拼接。
-  `("sudo" ,blue-executable
-            ,(string-append "--store-directory=" %privileged-blue-store)
-            "-f" ,blueprint-path
-            ".reconfigure-root" ,host ,home-user))
+(define (reconfigure-privileged-argv root host home-user)
+  ;; root phase 直接进入 pinned CLI，不重新编译整份 blueprint。sudo 会
+  ;; 重置 HOME，root Blue 无法解析用户 guix current 的 channel modules；
+  ;; 冷 privileged Blue store 还会触发 Guile linker out-of-range。事务
+  ;; authority 仍是 (guixcfg system reconfigure)，此处只构造 argv。
+  (cons "sudo"
+        (guix-time-machine-argv
+         root %channels-lock-file
+         `("repl" ,(string-append root "/tools/reconfigure-cli.scm")
+                   "--" ,host ,home-user))))
 
-(define (install-privileged-argv blue-executable blueprint-path host device)
-  ;; blue install 的 privilege handoff（与 reconfigure 同一模型）：
-  ;; sudo 重新执行【同一个】Blue executable（绝对路径），-f 同一
-  ;; blueprint，内部模式 .install-root 分项传递 HOST 与 DEVICE。
-  ;; --store-directory 语义与 reconfigure-privileged-argv 相同。
-  ;; argv 列表，无 shell 拼接；DEVICE 是独立 argv 项。
-  `("sudo" ,blue-executable
-            ,(string-append "--store-directory=" %privileged-blue-store)
-            "-f" ,blueprint-path
-            ".install-root" ,host ,device))
+(define (install-privileged-argv root host device)
+  ;; root phase 直接进入 pinned install CLI；确认 UI、事务与成功清理均由
+  ;; tools/install-cli.scm 持有，不重新编译整份 blueprint。
+  (cons "sudo" (install-cli-argv root "run" host device)))
 
-(define (enroll-privileged-argv blue-executable blueprint-path host)
-  ;; blue enroll 的 privilege handoff（同一模型）。enroll 在目标系统
-  ;; 上运行，HOST 同样显式传递，绝不自动检测。
-  `("sudo" ,blue-executable
-            ,(string-append "--store-directory=" %privileged-blue-store)
-            "-f" ,blueprint-path
-            ".enroll-root" ,host))
+(define (enroll-privileged-argv root host)
+  ;; HOST 显式传递，绝不自动检测；root phase 直接进入 pinned CLI。
+  (cons "sudo" (enroll-cli-argv root "run" host)))
 
-(define (gc-privileged-argv blue-executable blueprint-path host extra)
-  ;; blue gc 的 privilege handoff（同一模型）：删除 system generation /
-  ;; guix gc 需要写 /var/guix/profiles，root 才能做。EXTRA 是
+(define (gc-privileged-argv root host extra)
+  ;; 删除 system generation 需要写 /var/guix/profiles；EXTRA 是
   ;; ("--keep" "N") / ("--delete" "LIST") / '() 透传。
-  `("sudo" ,blue-executable
-            ,(string-append "--store-directory=" %privileged-blue-store)
-            "-f" ,blueprint-path
-            ".gc-root" ,host ,@extra))
+  (cons "sudo" (gc-cli-argv root "run" host extra)))
 
 (define (install-cli-argv root mode host device)
   ;; blue install 的 pinned 执行入口 argv（tools/install-cli.scm）：

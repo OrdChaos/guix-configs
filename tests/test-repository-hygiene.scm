@@ -18,13 +18,27 @@
   (or (string-contains blueprint "(commands (list")
       (error "blueprint command table not found")))
 
-(test-assert "gc public and privileged commands are registered"
+(test-assert "privileged deployment paths do not register root Blue commands"
              (let ((registered (substring blueprint command-table)))
                (and (string-contains registered "gc-command")
-                    (string-contains registered "gc-root-command"))))
+                    (not (string-contains registered "gc-root-command"))
+                    (not (string-contains registered "install-root-command"))
+                    (not (string-contains registered "enroll-root-command")))))
 
 (test-assert "channel update decodes subprocess failures"
              (string-contains blueprint "(%subprocess-fail! status argv)"))
+
+(test-assert "blueprint lazy-loads the user-only Flatpak dependency graph"
+             (let* ((imports-end (or (string-contains blueprint
+                                                     "(primitive-load")
+                                     (error "blueprint import boundary not found")))
+                    (eager-imports (substring blueprint 0 imports-end)))
+               (and (not (string-contains eager-imports
+                                          "(guixcfg flatpak reconcile)"))
+                    (not (string-contains eager-imports
+                                          "(guixcfg flatpak registry)"))
+                    (string-contains blueprint
+                                     "tools/flatpak.scm"))))
 
 (define (tracked-files)
   (let* ((port (open-pipe* OPEN_READ "git" "ls-files"))

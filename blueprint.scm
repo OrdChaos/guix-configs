@@ -149,13 +149,9 @@
 
 (use-modules (guixcfg system deploy)        ; argv 构造 / 解析 / 只读检查素材 / host 枚举
               (guixcfg inventory hosts)      ; 本机 hostname → Host ID
-              (guixcfg system reconfigure)   ; gate transaction（privileged mode 执行）
              (guixcfg utils channels)       ; channel 结构比较（update 摘要）
-             (guixcfg utils atomic-file)    ; atomic-write-file!（锁重写）
-             (guixcfg flatpak reconcile)    ; Flatpak 域操作与 dry-run plan
-             (guixcfg flatpak model)        ; Flatpak 访问器（dry-run 输出）
-             (guixcfg flatpak registry)     ; %flatpak-remotes/applications/selection
-             (guixcfg users facts))         ; %primary-user（HOME_USER 默认权威源；channel-free）
+              (guixcfg utils atomic-file)    ; atomic-write-file!（锁重写）
+              (guixcfg users facts))         ; %primary-user（HOME_USER 默认权威源；channel-free）
 
 (primitive-load (string-append (%repo-root) "/tests/manifest.scm"))
 
@@ -195,10 +191,11 @@ primitive-exit 不做 Guile backtrace——非零退出是预期内失败。"
 
 (define* (%exec command #:key input (working-directory (%repo-root)))
          "总是真实执行（无 dry-run 短路）。只允许用于 Blue dry-run 映射到
-下游 Guix dry-run 的两个特殊路径：build-os -n / reconfigure -n——
-执行的命令自带 guix --dry-run，无副作用（pinned Guix 的 build-handler
-只累积请求不执行）。install/enroll 的 pinned CLI 子进程（含交互确认）
-也走这里；INPUT 语义同 %run。其余一切子进程必须走 %run。"
+         下游 Guix dry-run 的两个特殊路径：build-os -n / reconfigure -n——
+         执行的命令自带 guix --dry-run，无副作用（pinned Guix 的 build-handler
+         只累积请求不执行）。install/enroll 的 pinned CLI 子进程（含交互确认）
+         及自行实现只读 dry-run 的 Flatpak/GSettings pinned CLI 也走这里；
+         INPUT 语义同 %run。其余一切子进程必须走 %run。"
          (let ((status (if input
                          (popen (car command) (cdr command)
                                 #:input input
@@ -469,16 +466,15 @@ tools/gc-cli.scm（域校验在子进程；blueprint 只校验 host）。"
 postflight 漂移检查。子进程非零退出经 %run 原样传播（0/1/2）。"
   (%doctor root host)
   (let ((head-before (%head-commit root)))
-    ;; privilege handoff：sudo 重新执行【同一个】Blue executable
-    ;;（绝对路径），root phase 运行 Guile transaction 并原样返回
-    ;; exit code（0/1/2）。
+    ;; privilege handoff：sudo 进入 pinned reconfigure CLI，避免 root
+    ;; 重新编译整份 blueprint；transaction exit code（0/1/2）原样传播。
     (%run (reconfigure-privileged-argv
-           (car (program-arguments))
-           (string-append root "/blueprint.scm")
+           root
            host
            (or (let ((hu (getenv "HOME_USER")))
                  (and hu (not (string-null? hu)) hu))
-               (user-profile-name %primary-user))))
+                (user-profile-name %primary-user)))
+          #:working-directory root)
     (%postflight-drift root head-before)))
 
 (define (%enroll-host root host)
@@ -486,8 +482,7 @@ postflight 漂移检查。子进程非零退出经 %run 原样传播（0/1/2）�
 privilege handoff。子进程非零退出经 %run 原样传播（0/1/2/3）。"
   (%exec (enroll-cli-argv root "plan" host))
   (%run (enroll-privileged-argv
-         (car (program-arguments))
-         (string-append root "/blueprint.scm")
+         root
          host)
         #:input (current-input-port)))
 
@@ -537,10 +532,9 @@ guix system build --dry-run: derivation plan only, no store objects."))
                  (category 'deployment)
                  (synopsis "Deploy this host or explicit HOST (clean committed worktree required)")
                  (help "[HOST]
-Doctor preflight (including the git clean gate), then hand off to a
-privileged re-execution of this same Blue (sudo <this-blue> -f
-<blueprint> .reconfigure-root HOST HOME-USER) running the
-(guixcfg system reconfigure) gate transaction, then check for
+Doctor preflight (including the git clean gate), then hand off to the
+pinned privileged reconfigure CLI running the (guixcfg system
+reconfigure) gate transaction, then check for
 HEAD/worktree drift. Exit codes: 0 full success; 1 system reconfigure
 failed (gate reopened); 2 system switched but Home/readiness failed
 (gate remains closed).
@@ -554,44 +548,6 @@ Shepherd restart, no Home hot activation)."))
                      (%doctor root host)        ; 只读前置（含 git clean）在 -n 下照常执行
                      (%exec (system-reconfigure-dry-run-argv root host)))
                     (%reconfigure-host root host))))
-
-;; 内部 privileged mode（Blue self-reexec 的 root phase）。
-;; dot 前缀：blue help 默认过滤 dot command，不作为用户命令宣传；
-;; 非 root 调用直接拒绝。
-(define-command (reconfigure-root-command arguments)
-                ((invoke ".reconfigure-root")
-                 (category 'internal)
-                 (synopsis "Internal privileged reconfigure transaction (root only)")
-                 (help "HOST [HOME_USER]
-Internal mode for blue reconfigure's sudo handoff. Requires effective
-UID 0. Runs the (guixcfg system reconfigure) gate transaction and exits
-with its exact status (0 success / 1 system failure / 2 post-system
-failure)."))
-                (unless (zero? (getuid))
-                  (%usage-error
-                   "privileged reconfigure mode requires root (effective UID 0)"))
-                (match arguments
-                       ((host home-user)
-                        (let ((code (reconfigure-transaction!
-                                     host
-                                     (if (string-null? home-user)
-                                       (user-profile-name %primary-user)
-                                       home-user))))
-                          ;; reconfigure 成功后自动删除旧 system
-                          ;; generation（按 host policy；见 blue gc）。
-                          ;; 只删 generation，不跑 guix gc（见命令帮助）。
-                          ;; best-effort：失败只 WARNING，不改变已完成
-                          ;; 部署的退出码（0）。
-                          (when (zero? code)
-                            (unless (zero? (%run-soft
-                                            (gc-cli-argv (%repo-root)
-                                                         "run" host '())))
-                              (format (current-error-port)
-                                      "WARNING: post-reconfigure generation deletion failed; run 'blue gc ~a' manually~%"
-                                      host)))
-                          (primitive-exit code)))
-                       (_ (%usage-error
-                           "usage (internal): HOST HOME_USER"))))
 
 ;;; ---------- gc（system generation 回收） ----------
 
@@ -609,37 +565,16 @@ This does NOT run 'guix gc': deleting generations alone reclaims no
 store space (a global guix gc would also collect on-demand store
 content such as rust-toolchain proxies' realized toolchains). Run
 'guix gc' yourself if you want to reclaim store space. Needs root:
-hands off to a privileged re-execution of this same Blue.
+hands off directly to the pinned privileged gc CLI.
 With blue -n: read-only plan only (existing/current/last-good/
 to-delete); no mutation, no sudo."))
                 (call-with-values
                  (lambda () (%require-gc-arguments arguments))
-                 (lambda (host extra)
-                   (let ((root (%repo-root)))
-                     (if (dry-build?)
-                       (%exec (gc-cli-argv root "plan" host extra))
-                       (%run (gc-privileged-argv
-                              (car (program-arguments))
-                              (string-append root "/blueprint.scm")
-                              host extra)))))))
-
-;; 内部 privileged mode（Blue self-reexec 的 root phase；与
-;; .reconfigure-root 同一模型）。回收需要写 /var/guix/profiles。
-(define-command (gc-root-command arguments)
-                ((invoke ".gc-root")
-                 (category 'internal)
-                 (synopsis "Internal privileged generation deletion (root only)")
-                 (help "HOST [--keep N | --delete LIST]
-Internal mode for blue gc's sudo handoff. Requires effective UID 0.
-Runs tools/gc-cli.scm run (delete old system generations; no guix gc)."))
-                (unless (zero? (getuid))
-                  (%usage-error
-                   "privileged gc mode requires root (effective UID 0)"))
-                (match arguments
-                       ((host . extra)
-                        (%exec (gc-cli-argv (%repo-root) "run" host extra)))
-                       (_ (%usage-error
-                           "usage (internal): HOST [--keep N | --delete LIST]"))))
+                  (lambda (host extra)
+                    (let ((root (%repo-root)))
+                      (if (dry-build?)
+                        (%exec (gc-cli-argv root "plan" host extra))
+                        (%run (gc-privileged-argv root host extra)))))))
 
 ;;; ---------- update ----------
 
@@ -694,193 +629,16 @@ rewrite, no knowledge of future channel revisions."))
 
 ;;; ---------- flatpak（user application lifecycle） ----------
 
-;; 域机制全部在 (guixcfg flatpak reconcile)/(model)；这里只做
-;; action dispatch、dry-run 集成与错误传播（Blue owns invocation,
-;; Flatpak module owns behavior）。action 契约（集合/参数形态）的
-;; 单一事实源是 reconcile 的 %flatpak-actions /
-;; flatpak-validate-action-arguments。
-
-(define (%flatpak-usage-error)
-  (format (current-error-port)
-          "Usage: blue flatpak ACTION [ARGS...]~%actions: ~a~%"
-          (string-join (flatpak-actions) ", "))
-  (primitive-exit 1))
-
-(define (%flatpak-print-lines lines)
-  (for-each (lambda (line) (format #t "~a~%" line)) lines))
-
-(define (%require-known-flatpak-host!)
-  (or (host-id-for-hostname (gethostname))
-      (error "hostname is not declared; refusing a mutating Flatpak operation"
-             (gethostname))))
-
-(define (%local-flatpak-selections allow-default?)
-  "本机 hostname → Host ID → host 模块声明的 flatpak selections
-（动态 resolve-interface——只在 flatpak 命令路径加载 host 模块；
-与 reconfigure 的 hostname 反查同一 authority（(guixcfg
- inventory hosts)）。未知 hostname：只读 status 可用 registry 缺省
- selection；sync/update fail closed，避免在错误机器套用公共 policy。
- 已知 host 用 host selection——per-host selection 的 CLI 投影，
-docs/architecture/flatpak.md）。"
-  (let ((host (host-id-for-hostname (gethostname))))
-    (if host
-      (let* ((iface (resolve-interface
-                     `(guixcfg hosts ,(string->symbol host))))
-             (selection
-              (module-ref iface
-                          (string->symbol
-                           (string-append "%" host "-flatpak-selection"))))
-             (extension-selection
-              (module-ref iface
-                          (string->symbol
-                           (string-append "%" host "-flatpak-extension-selection")))))
-        ;; 动态 host module 的 selection 也在 CLI 边界 fail-fast 校验。
-        (flatpak-select-applications selection %flatpak-applications)
-        (flatpak-select-extensions extension-selection %flatpak-extensions)
-        (values selection extension-selection))
-      (if allow-default?
-        (begin
-          (format (current-error-port)
-                 "flatpak: hostname ~a is not a known host; using the registry default selection.~%"
-                 (gethostname))
-          (values %flatpak-selection %flatpak-extension-selection))
-        (error "hostname is not declared; refusing a mutating Flatpak operation"
-               (gethostname)))))
+(define (%flatpak-script-argv arguments)
+  (guix-time-machine-argv
+   (%repo-root) "channels.lock.scm"
+   `("repl" ,(string-append (%repo-root) "/tools/flatpak.scm")
+             "--" ,(if (dry-build?) "dry-run" "run") ,@arguments)))
 
 (define (%flatpak-command arguments)
-  ;; 域函数抛错（drift / unknown name / unknown remote / flatpak
-  ;; 缺失）统一转为单行打印 + exit 1——blue 的 backtrace 打印器对
-  ;; 含多字节注释的源文件会 out-of-range 崩溃（见 %usage-error 注释）。
-  (catch #t
-    (lambda ()
-      ;; flatpak 一切操作 --user scope：root 运行会把状态落到
-      ;; /root/.local/share/flatpak（root 自己的 user installation），
-      ;; 与真实用户状态完全平行、绝不正确，且"有输出"会诱导误判
-      ;; 成功——直接拒绝。
-      (when (zero? (getuid))
-        (format (current-error-port)
-                "flatpak: refusing to run as root (all operations are --user scope; root would act on /root/.local/share/flatpak, not your user installation).~%")
-        (primitive-exit 1))
-      ;; flatpak-binary 显式回退到 guix 标准安装位置（VM system
-      ;; profile），并把其目录前置进 PATH：reconcile 全程用 PATH
-      ;; 解析子进程（invoke "flatpak" …），ssh 非 login shell 的
-      ;; PATH 没有 system profile，不补这里所有子调用都会找不到。
-      (let ((binary (flatpak-binary)))
-        (setenv "FLATPAK_BINARY" binary)
-        (setenv "PATH" (string-append (dirname binary)
-                                      ":"
-                                      (or (getenv "PATH") ""))))
-      (match (flatpak-validate-action-arguments
-              (and (pair? arguments) (car arguments))
-              (if (pair? arguments) (cdr arguments) '()))
-             (#f (%flatpak-usage-error))
-             ;; status 纯只读：dry-run 也真实执行（只读查询不拦截）。
-             (('status ())
-              (let-values (((selection extension-selection)
-                            (%local-flatpak-selections #t)))
-                (flatpak-status #:selection selection
-                                #:extension-selection extension-selection)))
-             (('status (refresh))
-              (let-values (((selection extension-selection)
-                            (%local-flatpak-selections #t)))
-                (flatpak-status #:refresh? #t
-                                #:selection selection
-                                #:extension-selection extension-selection)))
-             ;; sync -n：真实只读 plan（remote/app/extension diff），
-             ;; 绝不修改。
-             (('sync ())
-              (let-values (((selection extension-selection)
-                            (%local-flatpak-selections #f)))
-                (if (dry-build?)
-                  (%flatpak-print-lines
-                   (flatpak-sync-plan %flatpak-remotes
-                                      %flatpak-applications
-                                      selection
-                                      #:extensions %flatpak-extensions
-                                      #:extension-selection
-                                      extension-selection))
-                  (flatpak-sync #:selection selection
-                                #:extensions %flatpak-extensions
-                                #:extension-selection
-                                extension-selection))))
-             ;; update -n：真实只读 ref plan（不联网、不安装）。
-             (('update ())
-              (let-values (((selection extension-selection)
-                            (%local-flatpak-selections #f)))
-                (if (dry-build?)
-                  (let ((refs (flatpak-update-plan %flatpak-applications
-                                                   selection
-                                                   #:extensions %flatpak-extensions
-                                                   #:extension-selection
-                                                   extension-selection)))
-                    (if (null? refs)
-                      (format #t "No unpinned selected applications to update.~%")
-                      (%flatpak-print-lines
-                       (map (cut format #f "would update ~a" <>) refs))))
-                  (flatpak-update #:selection selection
-                                  #:extensions %flatpak-extensions
-                                  #:extension-selection
-                                  extension-selection))))
-             (('update-runtimes ())
-               (if (dry-build?)
-                (let ((refs (flatpak-update-runtimes-plan)))
-                  (if (null? refs)
-                    (format #t "No installed runtimes to update.~%")
-                    (%flatpak-print-lines
-                     (map (cut format #f "would update runtime ~a" <>) refs))))
-                 (begin
-                   (%require-known-flatpak-host!)
-                   (flatpak-update-runtimes))))
-             ;; remove -n：目标预览（参数解析照常，未知 name 照常报错）。
-             (('remove (name))
-               (if (dry-build?)
-                (let ((app (flatpak-remove-plan (string->symbol name)
-                                                %flatpak-applications)))
-                  (format #t "would uninstall ~a (user data under ~~/.var/app/~a preserved)~%"
-                          (flatpak-application-id app)
-                          (flatpak-application-id app)))
-                 (begin
-                   (%require-known-flatpak-host!)
-                   (flatpak-remove (string->symbol name)))))
-             ;; remote-replace -n：当前/目标 remote 与将发生的操作预览。
-             (('remote-replace (name))
-               (let ((remote (flatpak-remote-by-name (string->symbol name))))
-                (if (dry-build?)
-                  (let ((current (flatpak-replace-remote-plan remote)))
-                    (format #t "remote ~a: current url ~a~%"
-                            name (or current "(not configured)"))
-                    (format #t (if current
-                                 "would explicitly delete the existing remote and rebuild it~%"
-                                 "would add the remote (bootstrap + canonicalize)~%"))
-                    (format #t "  descriptor: ~a~%  transport:  ~a~%"
-                            (flatpak-remote-descriptor-url remote)
-                            (flatpak-remote-repository-url remote)))
-                   (begin
-                     (%require-known-flatpak-host!)
-                     (flatpak-replace-remote! remote)))))
-             ;; gc -n：command preview only（pinned Flatpak 无 unused
-             ;; runtime 只读枚举；不伪造删除列表）。
-             (('gc ())
-               (let-values (((_selection extension-selection)
-                             (%local-flatpak-selections #f)))
-                 (if (dry-build?)
-                   (begin
-                     (format #t "gc preview (unused refs cannot be enumerated without mutation):~%")
-                     (%flatpak-print-lines
-                      (map (cut format #f "  would unpin extension ~a" <>)
-                           (flatpak-gc-unpin-plan
-                            #:extensions %flatpak-extensions
-                            #:extension-selection extension-selection)))
-                     (%flatpak-print-lines
-                      (map (lambda (argv) (format #f "  ~{ ~a~}" argv))
-                           (flatpak-gc-commands))))
-                   (flatpak-gc
-                    #:extensions %flatpak-extensions
-                    #:extension-selection extension-selection))))))
-    (lambda (key . args)
-      (format (current-error-port) "flatpak: ~a~%"
-              (string-join (exception-strings args) " "))
-      (primitive-exit 1))))
+  ;; Registry 经 gaming policy 加载 Nonguix NVIDIA 模块；与 gsettings
+  ;; 同样进入 pinned repl，避免 Blue ambient channel / nested compile。
+  (%exec (%flatpak-script-argv arguments)))
 
 (define-command (flatpak-command arguments)
                 ((invoke "flatpak")
@@ -1060,48 +818,14 @@ mutation, no sudo, no confirmation."))
                       (begin
                        (%exec (install-cli-argv root "plan" host device))
                        (format #t "  [dry-run] no mutation; no sudo; no confirmation.~%"))
-                      (begin
-                       ;; 用户态只读前置（fail early），然后 privilege
-                       ;; handoff（sudo 重新执行同一 Blue；root phase
-                       ;; 重新做环境类检查并执行事务）。
-                       (%exec (install-cli-argv root "plan" host device))
-                       (%run (install-privileged-argv
-                              (car (program-arguments))
-                              (string-append root "/blueprint.scm")
-                              host device)
-                             #:input (current-input-port)))))))
-
-;; 内部 privileged mode（Blue self-reexec 的 root phase；与
-;; .reconfigure-root 同一模型）。事务（含破坏性确认 UI）在 pinned
-;; 子进程执行，退出码原样传播（%exec 非零即以其状态退出）。
-(define-command (install-root-command arguments)
-                ((invoke ".install-root")
-                 (category 'internal)
-                 (synopsis "Internal privileged install transaction (root only)")
-                 (help "HOST DEVICE
-Internal mode for blue install's sudo handoff. Requires effective
-UID 0. Runs the pinned install transaction (tools/install-cli.scm:
- confirmation UI, stage detection/resume, validation). On status 0,
- stops cow-store and syncs, then returns without unmount/poweroff/reboot.
- Transaction failures preserve their exact status (1 preflight /
- 2 partial mutation / 3 user abort)."))
-                (unless (zero? (getuid))
-                  (%usage-error
-                   "privileged install mode requires root (effective UID 0)"))
-                (match arguments
-                        ((host device)
-                         ;; %exec 非零会直接退出，因此 cleanup 只可能在
-                         ;; 完整 validate 成功后执行。工作目录离开 checkout；
-                         ;; 不 unmount、不 poweroff、不 reboot。
-                         (%exec (install-cli-argv (%repo-root)
-                                                  "run" host device)
-                                #:input (current-input-port))
-                         (for-each
-                          (lambda (command)
-                            (%exec command #:working-directory "/root"))
-                          (install-success-cleanup-commands)))
-                       (_ (%usage-error
-                           "usage (internal): HOST DEVICE"))))
+                       (begin
+                        ;; 用户态只读前置（fail early），然后 privilege
+                        ;; handoff（sudo 直接进入 pinned CLI；root phase
+                        ;; 重新做环境类检查并执行事务与成功清理）。
+                        (%exec (install-cli-argv root "plan" host device))
+                        (%run (install-privileged-argv
+                               root host device)
+                              #:input (current-input-port)))))))
 
 (define-command (enroll-command arguments)
                 ((invoke "enroll")
@@ -1132,29 +856,6 @@ mutation, no sudo, no confirmation."))
                      (%exec (enroll-cli-argv root "plan" host))
                      (format #t "  [dry-run] no mutation; no sudo; no confirmation.~%"))
                     (%enroll-host root host))))
-
-;; 内部 privileged mode（Blue self-reexec 的 root phase；与
-;; .reconfigure-root 同一模型）。事务（含固件写入确认 UI）在 pinned
-;; 子进程执行，退出码原样传播。
-(define-command (enroll-root-command arguments)
-                ((invoke ".enroll-root")
-                 (category 'internal)
-                 (synopsis "Internal privileged enroll transaction (root only)")
-                 (help "HOST
-Internal mode for blue enroll's sudo handoff. Requires effective
-UID 0. Runs the pinned enrollment transaction (tools/enroll-cli.scm:
-firmware enrollment confirmation UI, TPM enrollment, post-enrollment
-validation) and exits with its exact status (0 success / 1 preflight
-/ 2 partial mutation / 3 user abort)."))
-                (unless (zero? (getuid))
-                  (%usage-error
-                   "privileged enroll mode requires root (effective UID 0)"))
-                (match arguments
-                       ((host)
-                        (%exec (enroll-cli-argv (%repo-root) "run" host)
-                               #:input (current-input-port)))
-                       (_ (%usage-error
-                           "usage (internal): HOST"))))
 
 ;;; ============================================================
 ;;; §3.9 firstboot（首次启动收敛：reconfigure → enroll 的一键入口）
@@ -1260,14 +961,10 @@ plan only; zero mutation, no sudo, no confirmation."))
  (commands (list doctor-command
                  build-os-command
                  reconfigure-command
-                 reconfigure-root-command
                  install-command
-                 install-root-command
                  enroll-command
-                 enroll-root-command
                  firstboot-command
                  gc-command
-                 gc-root-command
                  update-command
                  flatpak-command
                  gsettings-command)))
