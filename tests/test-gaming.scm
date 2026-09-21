@@ -90,12 +90,21 @@
 
 ;; ── flatpak aagl definition：hardware-neutral managed file ──
 
+(define %aagl-base-environment
+  '("GIT_EXEC_PATH=/app/libexec/git-core"))
+
 (test-assert "aagl base definition owns a hardware-neutral override file"
-             (let ((managed (flatpak-application-managed-overrides
-                             %flatpak-aagl)))
-               (and managed
-                    (null? (flatpak-override-environment managed))
-                    (null? (flatpak-override-filesystems managed)))))
+             (flatpak-application-managed-overrides %flatpak-aagl))
+
+(test-equal "aagl uses its bundled Git helpers inside the sandbox"
+            %aagl-base-environment
+            (flatpak-override-environment
+             (flatpak-application-managed-overrides %flatpak-aagl)))
+
+(test-equal "aagl base override exposes no host filesystem"
+            '()
+            (flatpak-override-filesystems
+             (flatpak-application-managed-overrides %flatpak-aagl)))
 
 ;; ── NVIDIA adapter → managed override overlay ───────────────
 
@@ -115,7 +124,8 @@
              (flatpak-application-managed-overrides %prime-overlayed-steam)))
 
 (test-equal "NVIDIA adapter overlays PRIME env onto aagl override"
-            %prime-offload-environment-strings
+            (append %aagl-base-environment
+                    %prime-offload-environment-strings)
             (flatpak-override-environment
              (flatpak-application-managed-overrides %prime-overlayed-aagl)))
 

@@ -326,6 +326,11 @@ Guix/Nonguix 均无 gamescope，Flatpak gamescope 是上游官方支持
   `~/.var/app/<id>` persistence unit 内的 app-owned mutable state。
   此结论核对过 AAGL 3.19.8 / anime-launcher-sdk 1.36.11；本仓库跟踪
   stable branch，未来若上游拆出只读 policy/schema，需重新审计后再接入。
+- **AAGL 使用包内 Git helpers**：Guix 会话会导出宿主 profile 的
+  `GIT_EXEC_PATH`，而 Flatpak sandbox 不可访问该路径。AAGL 的组件索引
+  同步调用 Flathub 包内 `/app/bin/git`，因此 managed override 将
+  `GIT_EXEC_PATH` 固定为 `/app/libexec/git-core`；否则 `git clone` 失败，
+  上游 3.19.8 又会把该退出状态掩盖成组件目录 `ENOENT`。
 - **Gamescope 逐游戏**（如 niri 兼容性差的游戏）：游戏属性
   Launch Options 写 `gamescope -f -- %command%`（多显示器指针
   逃逸时用 `gamescope --backend sdl -f -- %command%`）；**不要**
