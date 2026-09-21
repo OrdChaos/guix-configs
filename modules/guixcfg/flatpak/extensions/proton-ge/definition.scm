@@ -15,7 +15,7 @@
 ;;; 已知 cons（上游 README 明示）：更新可能破坏个别游戏兼容；
 ;;; 同时只能装一个 GE 版本；回退需 pin commit。
 
-(define-module (guixcfg flatpak extensions proton-ge)
+(define-module (guixcfg flatpak extensions proton-ge definition)
                #:use-module (guixcfg flatpak model)
                #:export (%flatpak-extension-proton-ge))
 

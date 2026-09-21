@@ -21,14 +21,18 @@
 ;;; 单一 authority）——global selection 与 definition 保持
 ;;; hardware-neutral。Gamescope 支持来自上游 wrapper
 ;;; （/usr/lib/extensions/vulkan/gamescope/bin 的 PATH；gamescope
-;;; extension 见 extensions/gamescope.scm，全局 selection 安装）。
+;;; extension 见 extensions/gamescope/definition.scm，全局 selection
+;;; 安装）。
 ;;;
 ;;; persistence：默认 ~/.var/app/moe.launcher.an-anime-game-launcher
-;;; 由 ID 推导（service 投影，无需在此声明）。
+;;; 由 ID 推导（service 投影，无需在此声明）。AAGL 的 config.json 位于
+;;; data/anime-game-launcher/，混合偏好、机器路径与下载组件状态，并由
+;;; launcher 整文件重写；因此它属于 app-owned mutable state，不作为
+;;; Home file 或 seed 从仓库派生（详见 flatpak.md（AAGL config））。
 
-(define-module (guixcfg flatpak applications aagl)
-                #:use-module (guixcfg flatpak model)
-                #:export (%flatpak-aagl))
+(define-module (guixcfg flatpak applications aagl definition)
+               #:use-module (guixcfg flatpak model)
+               #:export (%flatpak-aagl))
 
 (define %flatpak-aagl
   (flatpak-application

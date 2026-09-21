@@ -21,7 +21,7 @@
 ;;;   - gamescope --steam 参数有黑屏报告（flathub gamescope
 ;;;     issue #483）——launch options 不用 --steam。
 
-(define-module (guixcfg flatpak extensions gamescope)
+(define-module (guixcfg flatpak extensions gamescope definition)
                #:use-module (guixcfg flatpak model)
                #:export (%flatpak-extension-gamescope))
 

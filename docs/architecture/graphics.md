@@ -161,7 +161,7 @@ nvda-new-feature（rolling selector，不固定 major）
     ├── prime-run host backend（版本无关，运行时解析）
     └── consumers（同源引用）：Flatpak steam/aagl 的 managed
         override 经 %prime-offload-environment-strings 投影
-        （flatpak/applications/{steam,aagl}.scm）；prime-run
+        （flatpak/applications/{steam,aagl}/definition.scm）；prime-run
         wrapper（Home profile）
 ```
 

@@ -182,8 +182,10 @@
   (list (cons "model.scm" (module-source "model.scm"))
         (cons "registry.scm" (module-source "registry.scm"))
         (cons "service.scm" (module-source "service.scm"))
-        (cons "applications/qq.scm" (module-source "applications/qq.scm"))
-        (cons "applications/wechat.scm" (module-source "applications/wechat.scm"))))
+        (cons "applications/qq/definition.scm"
+              (module-source "applications/qq/definition.scm"))
+        (cons "applications/wechat/definition.scm"
+              (module-source "applications/wechat/definition.scm"))))
 
 ;; 精确扫描：只禁止 (a) reconcile 模块的 import 形式；(b) Scheme 子
 ;; 进程调用原语。注释里出现 CLI 名词（如 remote-add 的文档性说明）

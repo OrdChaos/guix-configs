@@ -4,7 +4,8 @@
 ;;; descriptor 生成。
 ;;;
 ;;; Application model（定义 = 应用是什么；selection = 设备要哪些）：
-;;;   每个 Flatpak 应用是自包含 definition（applications/<name>.scm），
+;;;   每个 Flatpak 应用是自包含 definition
+;;;   （applications/<name>/definition.scm），
 ;;;   拥有自己的 identity / ref metadata / update policy / override
 ;;;   policy / persistence intent；registry 只做聚合（见
 ;;;   (guixcfg flatpak registry)），投影由 service（persistence +

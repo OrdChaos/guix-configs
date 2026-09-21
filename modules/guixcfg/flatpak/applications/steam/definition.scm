@@ -29,9 +29,9 @@
 ;;; persistence：默认 ~/.var/app/com.valvesoftware.Steam 由 ID
 ;;; 推导（service 投影）。
 
-(define-module (guixcfg flatpak applications steam)
+(define-module (guixcfg flatpak applications steam definition)
                #:use-module (guixcfg flatpak model)
-               #:use-module (guixcfg system gaming)          ; %steam-games-library-path
+               #:use-module (guixcfg system gaming) ; %steam-games-library-path
                #:export (%flatpak-steam))
 
 (define %flatpak-steam

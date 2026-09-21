@@ -2,7 +2,7 @@
 ;;; flatpak.md）。
 ;;;
 ;;; 本文件不包含任何应用的业务声明——应用事实全部在各
-;;; applications/<name>.scm 的自包含 definition 里。registry 只做：
+;;; applications/<name>/definition.scm 的自包含 definition 里。registry 只做：
 ;;;   - 导入 definitions，构造 %flatpak-applications（Catalog）；
 ;;;   - 构造 %flatpak-selection（Selection：全局用户软件 policy——
 ;;;     每台设备都安装这些 logical names，不复制 app 事实，resolution
@@ -12,7 +12,7 @@
 ;;;   - 模块加载时统一 fail-fast 校验（名字查重、remote 已知、
 ;;;     selection ⊆ catalog）。
 ;;;
-;;; 新增应用 = 新建 applications/<name>.scm + 在 aggregation list
+;;; 新增应用 = 新建 applications/<name>/definition.scm + 在 aggregation list
 ;;; 加一次 + 在 selection 加一次。不改 service/persistence/host。
 ;;; 新增 remote = 在此加一个 <flatpak-remote> 记录（+ 引用它的 app
 ;;; definition 写 remote name）——无 key 文件、无 descriptor 文件、
@@ -20,12 +20,12 @@
 
 (define-module (guixcfg flatpak registry)
                #:use-module (guixcfg flatpak model)
-               #:use-module (guixcfg flatpak applications qq)
-               #:use-module (guixcfg flatpak applications wechat)
-               #:use-module (guixcfg flatpak applications aagl)
-               #:use-module (guixcfg flatpak applications steam)
-               #:use-module (guixcfg flatpak extensions gamescope)
-               #:use-module (guixcfg flatpak extensions proton-ge)
+               #:use-module (guixcfg flatpak applications qq definition)
+               #:use-module (guixcfg flatpak applications wechat definition)
+               #:use-module (guixcfg flatpak applications aagl definition)
+               #:use-module (guixcfg flatpak applications steam definition)
+               #:use-module (guixcfg flatpak extensions gamescope definition)
+               #:use-module (guixcfg flatpak extensions proton-ge definition)
                #:export (%flatpak-remotes
                          %flatpak-applications
                          %flatpak-selection

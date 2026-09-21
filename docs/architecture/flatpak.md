@@ -36,13 +36,14 @@ Flatpak 应用与仓库原生应用同构：**自包含 definition + 纯聚合
 registry + logical selection + generic projection**。
 
 ```text
-applications/<name>.scm          definition = 应用是什么（全部业务事实）
+applications/<name>/definition.scm
+                                 definition = 应用是什么（全部业务事实）
     ├── identity                logical name、Flatpak app-id
     ├── ref metadata            remote、branch
     ├── update policy           'track-branch | (flatpak-commit-pin "<hex>")
     ├── override policy         'external | (managed-overrides <flatpak-override>)
     └── persistence intent      默认 ~/.var/app/<id>（ID 推导）+ extra-persistence 例外
-extensions/<name>.scm            auxiliary ref（非 application）：Vulkan layer
+extensions/<name>/definition.scm auxiliary ref（非 application）：Vulkan layer
                                  （org.freedesktop.Platform.VulkanLayer.*）、
                                  compatibility tool
                                  （com.valvesoftware.Steam.CompatibilityTool.*）
@@ -58,7 +59,8 @@ service projection（offline）    selected definitions → persistence rules + 
 reconcile projection（mutable）  selected definitions + extensions → install/update plan
 ```
 
-- **definition 是事实的唯一归属**：打开 `applications/qq.scm` 就能
+- **definition 是事实的唯一归属**：打开
+  `applications/qq/definition.scm` 就能
   读完一个应用的全部声明；registry 只是索引，不含任何 inline
   `flatpak-application` 记录。definition 保持 **hardware-neutral**
   （identity / ref metadata / update policy / 通用 override /
@@ -101,10 +103,11 @@ driver adapter（如 NVIDIA PRIME environment overlay）：
   app 不产生 persistence mount；默认 `~/.var/app/<id>` 由 application
   ID 推导（definition 无需重复拼写），例外用 extra-persistence
   （(consumer backing) 两元素列表，与 seeds 约定同构）。
-- **新增应用 = 一个 definition 文件 + registry aggregation 一行 +
-  selection 一行**；service/persistence/host 表格零改动。模板：
+- **新增应用 = 一个 application 目录（`definition.scm` + 可选同置
+  资源）+ registry aggregation 一行 + selection 一行**；service/
+  persistence/host 表格零改动。模板：
   `templates/flatpak-application/definition.scm`（生产参考
-  `applications/qq.scm`）。
+  `applications/qq/definition.scm`）。
 - **默认应用/MIME 关联不属于 definition**："是否被选作默认"是用户级
   策略，与仓库原生应用同构地由统一 XDG 模块 `(guixcfg home xdg)`
   声明（依赖方向 policy → app metadata，definition 不反向依赖 xdg）。
@@ -313,6 +316,16 @@ Guix/Nonguix 均无 gamescope，Flatpak gamescope 是上游官方支持
   `/persist/data-nobackup/steam`（路径 authority 在
   `(guixcfg system gaming)`，目录由其 activation 创建）与手柄
   udev rules 是全局共享的 gaming host infrastructure。
+- **AAGL config 不从仓库派生**：Flatpak 内 `$XDG_DATA_HOME` 对应宿主
+  `~/.var/app/moe.launcher.an-anime-game-launcher/data`，AAGL 的完整配置
+  因而位于其下的 `anime-game-launcher/config.json`。上游 schema 把
+  launcher 偏好与游戏路径、Wine prefix/build、DXVK/component 下载
+  状态放在同一 JSON，并在 preferences/main window 关闭及组件变化时
+  整文件重写。Home store symlink 会与应用形成双 owner；seed-once 又会
+  提前创建配置并改变 first-run 初始化。因此该文件继续作为整个
+  `~/.var/app/<id>` persistence unit 内的 app-owned mutable state。
+  此结论核对过 AAGL 3.19.8 / anime-launcher-sdk 1.36.11；本仓库跟踪
+  stable branch，未来若上游拆出只读 policy/schema，需重新审计后再接入。
 - **Gamescope 逐游戏**（如 niri 兼容性差的游戏）：游戏属性
   Launch Options 写 `gamescope -f -- %command%`（多显示器指针
   逃逸时用 `gamescope --backend sdl -f -- %command%`）；**不要**
@@ -321,7 +334,7 @@ Guix/Nonguix 均无 gamescope，Flatpak gamescope 是上游官方支持
   Pressure Vessel 与 Flatpak gamescope 不兼容）；
 - **Gamescope extension 分支绑定 runtime ABI**（当前 25.08）：
   steam runtime 大版本迁移时同步更换
-  `extensions/gamescope.scm` 的 branch——唯一事实源。
+  `extensions/gamescope/definition.scm` 的 branch——唯一事实源。
 
 **网络边界（硬不变量）**：reconfigure / boot / home activation /
 login gate 不做任何联网 flatpak 操作（remote-add/install/update/

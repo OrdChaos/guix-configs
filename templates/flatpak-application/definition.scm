@@ -2,9 +2,9 @@
 ;;; flatpak.md（application model））。
 ;;;
 ;;; 标准流程：
-;;;   cp templates/flatpak-application/definition.scm \
-;;;      modules/guixcfg/flatpak/applications/wechat.scm
-;;;   1. 修改模块名 (guixcfg flatpak applications wechat)；
+;;;   cp -r templates/flatpak-application \
+;;;      modules/guixcfg/flatpak/applications/wechat
+;;;   1. 修改模块名 (guixcfg flatpak applications wechat definition)；
 ;;;   2. 修改 %FLATPAK-APP → %flatpak-wechat、'app → 'wechat、
 ;;;      id/branch 等字段（app-id/branch 以 Flathub 官方页面核实）；
 ;;;   3. 在 modules/guixcfg/flatpak/registry.scm：
@@ -34,9 +34,9 @@
 ;;;     %onlyoffice-desktop-entry——原生与 Flatpak 同构）；
 ;;;   - 目录存在 != 应用启用：启用必须进 registry 与 selection。
 ;;;
-;;; 生产参考：modules/guixcfg/flatpak/applications/qq.scm。
+;;; 生产参考：modules/guixcfg/flatpak/applications/qq/definition.scm。
 
-(define-module (guixcfg flatpak applications app)
+(define-module (guixcfg flatpak applications app definition)
                #:use-module (guixcfg flatpak model) ; flatpak-application
                #:export (%flatpak-app))
 

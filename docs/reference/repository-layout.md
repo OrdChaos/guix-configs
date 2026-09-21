@@ -20,6 +20,10 @@ modules/guixcfg/      全部配置模块（guile/repl 用绝对 -L；guix system
   boot/                initrd、UKI、TPM 解锁、boot-state、Recovery、
                        layout（ESP/部署路径固定事实的唯一 authority）
   flatpak/             Flatpak 平台（docs/architecture/flatpak.md）：
+                       applications/<name>/definition.scm（每个 Flatpak
+                       应用一个纵向目录；可选静态资源同置）、
+                       extensions/<name>/definition.scm（auxiliary ref
+                       也按逻辑名独立成目录）、
                        model.scm（remote/application/override 记录 +
                        校验 + reconcile plan + override renderer）、
                        registry.scm（Catalog %flatpak-applications +
