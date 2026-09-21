@@ -7,9 +7,9 @@
 ;;;   每个 Flatpak 应用是自包含 definition
 ;;;   （applications/<name>/definition.scm），
 ;;;   拥有自己的 identity / ref metadata / update policy / override
-;;;   policy / persistence intent；registry 只做聚合（见
+;;;   policy / persistence intent / desktop shadows；registry 只做聚合（见
 ;;;   (guixcfg flatpak registry)），投影由 service（persistence +
-;;;   overrides，offline）与 reconcile（install/update plan，
+;;;   override / desktop files，offline）与 reconcile（install/update plan，
 ;;;   mutable/network）从 definition 推导。
 ;;;
 ;;; Remote model（identity / bootstrap authority / transport）：
@@ -44,8 +44,15 @@
 ;;;   默认 ~/.var/app/<id> 由 application ID 推导（service 投影）；
 ;;;   extra-persistence 只声明默认之外的例外（(consumer backing)
 ;;;   两元素列表，backing 相对 flatpak/apps/ 命名空间）。
+;;;
+;;; desktop-files：
+;;;   optional list of (basename source-file-like)。仅用于上游 desktop
+;;;   metadata 不适合本地 launcher、且完整 shadow 的维护成本已审计为
+;;;   可接受的应用；service 投影到 ~/.local/share/applications/，由 XDG
+;;;   precedence 覆盖 Flatpak export。完整文件 single-owner，不 merge。
 
 (define-module (guixcfg flatpak model)
+               #:use-module (guix gexp)         ; file-like?
                #:use-module (guix records)
                #:use-module (guixcfg utils paths) ; valid-relative-path?（extra-persistence 契约共享）
                #:use-module (srfi srfi-1)  ; every、member、filter、delete-duplicates
@@ -66,6 +73,7 @@
                          flatpak-application-update-policy
                          flatpak-application-override-policy
                          flatpak-application-extra-persistence
+                         flatpak-application-desktop-files
                          <flatpak-extension>
                          flatpak-extension make-flatpak-extension flatpak-extension?
                          flatpak-extension-name
@@ -130,8 +138,10 @@
                                     (default 'track-branch))
                      (override-policy flatpak-application-override-policy ; 'external | (managed-overrides <flatpak-override>)
                                       (default 'external))
-                      (extra-persistence flatpak-application-extra-persistence ; list of (consumer . backing)
-                                        (default '())))
+                     (extra-persistence flatpak-application-extra-persistence ; list of (consumer . backing)
+                                        (default '()))
+                     (desktop-files flatpak-application-desktop-files ; list of (basename source-file-like)
+                                    (default '())))
 
 ;;; ── extension ──────────────────────────────────────────────
 (define-record-type* <flatpak-extension>
@@ -319,6 +329,22 @@ valid-relative-path? 契约）。默认 persistence（~/.var/app/<id>）
                      (valid-relative-path? (cadr entry))))
               extras)))
 
+(define (valid-flatpak-desktop-files? files)
+  "FILES 是 (basename source-file-like) 两元素列表；basename 必须是
+不含路径分隔符的 .desktop 文件名。"
+  (and (list? files)
+       (every (lambda (entry)
+                (and (list? entry)
+                     (= 2 (length entry))
+                     (let ((name (car entry)))
+                       (and (string? name)
+                            (string-suffix? ".desktop" name)
+                            (> (string-length name)
+                               (string-length ".desktop"))
+                            (not (string-index name #\/))))
+                     (file-like? (cadr entry))))
+              files)))
+
 (define (valid-flatpak-application? app remote-names)
   "APP 结构合法且 remote ∈ REMOTE-NAMES（symbol 列表）。"
   (and (flatpak-application? app)
@@ -331,7 +357,9 @@ valid-relative-path? 契约）。默认 persistence（~/.var/app/<id>）
        (valid-flatpak-override-policy?
         (flatpak-application-override-policy app))
        (valid-flatpak-extra-persistence?
-        (flatpak-application-extra-persistence app))))
+        (flatpak-application-extra-persistence app))
+       (valid-flatpak-desktop-files?
+        (flatpak-application-desktop-files app))))
 
 (define (valid-flatpak-extension? ext remote-names)
   "EXT 结构合法且 remote ∈ REMOTE-NAMES。extension 无
@@ -385,6 +413,13 @@ logical name 唯一、branch-qualified ref 唯一。违反抛错。"
                (length (delete-duplicates (map flatpak-application-id apps))))
       (error "duplicate flatpak application id"
              (map flatpak-application-id apps)))
+    (let ((desktop-targets
+           (append-map (lambda (app)
+                         (map car (flatpak-application-desktop-files app)))
+                       apps)))
+      (unless (= (length desktop-targets)
+                 (length (delete-duplicates desktop-targets string=?)))
+        (error "duplicate flatpak desktop shadow target" desktop-targets)))
     #t))
 
 (define (validate-flatpak-selection! names apps)

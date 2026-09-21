@@ -14,6 +14,9 @@
 ;;;     derived state，随 generation/rollback；complete-file
 ;;;     ownership，repo 与 Flatseal 永不 merge）；'external →
 ;;;     不生成（user/Flatseal owns）；
+;;;   - desktop shadow：selected definition 的 desktop-files 投影到
+;;;     ~/.local/share/applications/，经 XDG precedence 覆盖 Flatpak
+;;;     export；完整文件 single-owner，不做字段级 merge；
 ;;;   - persistence rules：installation（平台拥有）+ 每个
 ;;;     **selected** app 的 persistence intent（默认
 ;;;     ~/.var/app/<id> 从 application ID 推导 + definition 的
@@ -35,11 +38,12 @@
                          flatpak-application-persistence-rules
                          flatpak-selected-applications
                          flatpak-persistence-rules
-                          flatpak-override-files
-                          flatpak-override-files* ; overlay-aware
-                          flatpak-home-services
+                         flatpak-override-files
+                         flatpak-override-files* ; overlay-aware
+                         flatpak-desktop-files
+                         flatpak-home-services
                          %flatpak-session-environment-service
-                         %flatpak-overrides-service
+                         %flatpak-files-service
                          %flatpak-home-services))
 
 ;;; ── persistence rules（data-app 映射，docs/architecture/
@@ -130,16 +134,6 @@ home-files 的 (target source) 条目：.local/share/flatpak/overrides/
                           rendered)))))))
    apps))
 
-(define %flatpak-overrides-service
-  ;; override 与 persistence 使用同一个 selected definitions 事实
-  ;; （docs/architecture/flatpak.md）：unselected 的 catalog app 不
-  ;; 生成 declarative override 文件（selection 删除后下一 Home
-  ;; generation 即清除对应 symlink）。
-  (simple-service 'flatpak-overrides
-                  home-files-service-type
-                  (flatpak-override-files
-                   (flatpak-selected-applications))))
-
 (define* (flatpak-override-files* #:key (environment-overrides '()))
   "overlay-aware override 投影：先按全局 selection 解析 definitions，
 再应用硬件 adapter 声明的 ENVIRONMENT-OVERRIDES（logical name →
@@ -150,15 +144,36 @@ external app 与未知 target fail closed）。"
     environment-overrides
     (flatpak-selected-applications))))
 
+(define (flatpak-desktop-files apps)
+  "APPS 的 desktop-files contribution → home-files 条目。definition 只
+声明 basename；projection 统一拥有 XDG applications target。"
+  (append-map
+   (lambda (app)
+     (map (lambda (entry)
+            (list (string-append ".local/share/applications/" (car entry))
+                  (cadr entry)))
+          (flatpak-application-desktop-files app)))
+   apps))
+
+(define* (flatpak-home-files #:key (environment-overrides '()))
+  (append (flatpak-override-files*
+           #:environment-overrides environment-overrides)
+          (flatpak-desktop-files (flatpak-selected-applications))))
+
+(define %flatpak-files-service
+  (simple-service 'flatpak-files
+                  home-files-service-type
+                  (flatpak-home-files)))
+
 (define* (flatpak-home-services #:key (environment-overrides '()))
-  "Flatpak 平台 Home services（override 完整文件生成 +
+  "Flatpak 平台 Home services（override / desktop 完整文件生成 +
 XDG_DATA_DIRS exports 追加）。SELECTION 是全局用户软件 policy；
 ENVIRONMENT-OVERRIDES 是 host adapter 的硬件驱动差异（如 NVIDIA
 PRIME），只作用于 managed override。"
-  (list (simple-service 'flatpak-overrides
+  (list (simple-service 'flatpak-files
                         home-files-service-type
-                        (flatpak-override-files* #:environment-overrides
-                                                 environment-overrides))
+                        (flatpak-home-files #:environment-overrides
+                                            environment-overrides))
         %flatpak-session-environment-service))
 
 ;;; ── session env（XDG_DATA_DIRS）────────────────────────────
@@ -175,5 +190,5 @@ PRIME），只作用于 managed override。"
                      . "$XDG_DATA_DIRS:$HOME/.local/share/flatpak/exports/share"))))
 
 (define %flatpak-home-services
-  (list %flatpak-overrides-service
+  (list %flatpak-files-service
         %flatpak-session-environment-service))

@@ -21,6 +21,7 @@
              (srfi srfi-13)          ; string-prefix?
              (srfi srfi-26)          ; cut
              (srfi srfi-64)
+             (ice-9 rdelim)          ; read-string
              (guixcfg flatpak model)
              (guixcfg flatpak registry)
              (guixcfg flatpak applications steam definition)
@@ -28,10 +29,10 @@
              (guixcfg flatpak extensions gamescope definition)
              (guixcfg flatpak extensions proton-ge definition)
              (guixcfg storage model) ; persist-mount-point
-              (guixcfg system gaming)
-              (guixcfg system application-persistence)
-              (guixcfg system graphics nvidia) ; %prime-offload-environment-strings
-              (guixcfg hosts common)
+             (guixcfg system gaming)
+             (guixcfg system application-persistence)
+             (guixcfg system graphics nvidia) ; %prime-offload-environment-strings
+             (guixcfg hosts common)
              (guixcfg hosts vm)
              (guixcfg hosts lenovo-legion-y7000p))
 
@@ -87,6 +88,28 @@
                (and (string-contains text "[Context]")
                     (string-contains text "filesystems=")
                     (not (string-contains text "[Environment]")))))
+
+(define %steam-desktop-shadow
+  (call-with-input-file
+   "modules/guixcfg/flatpak/applications/steam/com.valvesoftware.Steam.desktop"
+   (lambda (port) (read-string port))))
+
+(test-equal "steam owns one complete desktop shadow"
+            '("com.valvesoftware.Steam.desktop")
+            (map car (flatpak-application-desktop-files %flatpak-steam)))
+(test-assert "steam desktop shadow keeps the Flatpak launch contract"
+             (and (string-contains %steam-desktop-shadow
+                                   "X-Flatpak=com.valvesoftware.Steam")
+                  (string-contains %steam-desktop-shadow
+                                   "--command=/app/bin/steam")
+                  (string-contains %steam-desktop-shadow
+                                   "MimeType=x-scheme-handler/steam;x-scheme-handler/steamlink;")
+                  (string-contains %steam-desktop-shadow
+                                   "Actions=Store;Community;Library;Servers;Screenshots;News;Settings;BigPicture;Friends;")))
+(test-assert "steam desktop shadow has one unambiguous main category"
+             (and (string-contains %steam-desktop-shadow "Categories=Game;\n")
+                  (not (string-contains %steam-desktop-shadow
+                                        "Categories=Network;FileTransfer;Game;"))))
 
 ;; ── flatpak aagl definition：hardware-neutral managed file ──
 

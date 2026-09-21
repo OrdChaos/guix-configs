@@ -1,7 +1,7 @@
 ;;; Flatpak composition 测试（docs/architecture/flatpak.md）：
 ;;;   - system profile 含 flatpak executable 与共享 %fonts 投影；
-;;;   - Home 含 XDG_DATA_DIRS exports 贡献（追加不覆盖）与 override
-;;;     home-files service；
+;;;   - Home 含 XDG_DATA_DIRS exports 贡献（追加不覆盖）与 declarative
+;;;     Flatpak files（override + desktop shadow）home-files service；
 ;;;   - %vm-os 的 file-systems 含 installation bind；
 ;;;   - 静态回归：platform service/model/registry 模块不 import
 ;;;     reconcile、不含任何 flatpak CLI 调用面（reconfigure/boot/
@@ -17,6 +17,7 @@
              (guixcfg flatpak model)
              (guixcfg flatpak registry)
              (guixcfg flatpak service)
+             (guix gexp)                 ; plain-file
              (gnu packages package-management) ; flatpak
              (gnu packages)              ; package-name
              (gnu system)                ; operating-system-file-systems
@@ -49,7 +50,7 @@
 
 (test-equal "flatpak home services: exactly two services"
             2 (length %flatpak-home-services))
-(test-assert "one service extends home-files (override complete-file)"
+(test-assert "one service extends home-files (override and desktop complete-files)"
              (any (lambda (svc)
                     (service-extends? svc home-files-service-type))
                   %flatpak-home-services))
@@ -137,6 +138,27 @@
 (test-equal "override projection with empty selection produces nothing"
             '()
             (override-targets-for '()))
+
+;; ── desktop shadows 随 selection 投影 ───────────────────────
+(define %desktop-source
+  (plain-file "selected.desktop" "[Desktop Entry]\nType=Application\n"))
+(define %desktop-app
+  (flatpak-application
+   (name 'desktop-app) (id "org.example.DesktopApp")
+   (remote 'flathub) (branch "stable")
+   (desktop-files (list (list "org.example.DesktopApp.desktop"
+                              %desktop-source)))))
+(test-equal "selected desktop shadow projects under XDG applications"
+            '(".local/share/applications/org.example.DesktopApp.desktop")
+            (map car (flatpak-desktop-files (list %desktop-app))))
+(test-equal "unselected desktop shadow produces no home file"
+            '()
+            (flatpak-desktop-files '()))
+(test-equal "selected catalog projects the Steam desktop shadow"
+            '(".local/share/applications/com.valvesoftware.Steam.desktop")
+            (map car
+                 (flatpak-desktop-files
+                  (flatpak-selected-applications))))
 
 ;; ── %vm-os persistence wiring ─────────────────────────────────
 (define %fp-user (user-profile-name %primary-user))

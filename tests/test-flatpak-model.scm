@@ -9,6 +9,7 @@
 ;;; 全部纯数据——不触 flatpak CLI、不触网络。
 
 (use-modules (guixcfg flatpak model)
+             (guix gexp) ; plain-file
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -70,6 +71,8 @@
             (flatpak-application-override-policy (car %fp-apps)))
 (test-equal "application default extra-persistence is empty"
             '() (flatpak-application-extra-persistence (car %fp-apps)))
+(test-equal "application default desktop-files is empty"
+            '() (flatpak-application-desktop-files (car %fp-apps)))
 (test-equal "application ref"
             "com.tencent.WeChat//stable"
             (flatpak-application-ref (car %fp-apps)))
@@ -255,6 +258,32 @@
                                         (remote 'flathub) (branch "stable")
                                         (update-policy 'magic))
                     '(flathub))))
+
+;; ── desktop shadow 校验 ─────────────────────────────────────
+(define %desktop-fixture
+  (plain-file "fixture.desktop" "[Desktop Entry]\nType=Application\n"))
+
+(test-assert "valid desktop shadow contribution"
+             (valid-flatpak-application?
+              (flatpak-application
+               (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
+               (desktop-files
+                (list (list "com.x.A.desktop" %desktop-fixture))))
+              '(flathub)))
+(test-assert "desktop shadow rejects nested target"
+             (not (valid-flatpak-application?
+                   (flatpak-application
+                    (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
+                    (desktop-files
+                     (list (list "nested/com.x.A.desktop" %desktop-fixture))))
+                   '(flathub))))
+(test-assert "desktop shadow rejects non-file-like source"
+             (not (valid-flatpak-application?
+                   (flatpak-application
+                    (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
+                    (desktop-files
+                     (list (list "com.x.A.desktop" "./mutable.desktop"))))
+                   '(flathub))))
 (test-assert "flatpak id requires three segments"
              (not (valid-flatpak-app-id? "org.App")))
 (test-assert "flatpak id rejects a digit-leading segment"
@@ -304,6 +333,19 @@
              %fp-remotes
              (list (flatpak-application (name 'x) (id "com.x.X")
                                         (remote 'nope) (branch "stable")))))
+(test-error "catalog duplicate desktop shadow target" #t
+            (validate-flatpak-catalog!
+             %fp-remotes
+             (list (flatpak-application
+                    (name 'one) (id "com.x.One")
+                    (remote 'flathub) (branch "stable")
+                    (desktop-files
+                     (list (list "shared.desktop" %desktop-fixture))))
+                   (flatpak-application
+                    (name 'two) (id "com.x.Two")
+                    (remote 'flathub) (branch "stable")
+                    (desktop-files
+                     (list (list "shared.desktop" %desktop-fixture)))))))
 
 (test-assert "valid selection passes"
              (validate-flatpak-selection! '(wechat) %fp-apps))
