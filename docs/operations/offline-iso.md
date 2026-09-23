@@ -28,8 +28,9 @@
 - 完整仓库 snapshot（含 `.git`；排除 `.blue-store`、`.zcode`、`vms`），
   activation 后位于 `/home/guest/guix-configs`，并兼容链接
   `/root/guix-configs`；
-- Lenovo 目标 System + Home closure（包括 Nonguix kernel/firmware/
-  microcode 与 NVIDIA runtime packages）；
+- 与安装时完全相同的 Lenovo 目标 System + Home closure：target OS
+  已用 pinned channel profile 作为 GC root 包装（包括 Nonguix
+  kernel/firmware/microcode 与 NVIDIA runtime packages）；
 - installer-only 工具：blue、git、ukify、openssl、efitools、
   sbsigntools（qemu 不属于安装器）。
 
@@ -39,9 +40,13 @@ profile。`guix time-machine` 对 full commit 的 cache hit 只要求该目录
 存在，因此安装阶段不再访问 Git channel。
 
 `blue install` 的 `system-init` 表达式在检测到唯一预置 root inferior
-cache 时，会把该 channel profile 包进目标 OS 的 GC roots；安装事务随后
-把同一 cache 复制到目标 `/var/guix/profiles/per-user/{root,<user>}`。
-因此 firstboot/enroll 的 time-machine 在目标系统上也继续离线命中。
+cache 时，会把该 channel profile 包进目标 OS 的 GC roots；ISO helper
+在构建媒体时对 target OS 做完全相同的包装，并把这个精确 system
+derivation 放进媒体（不是只把 raw target 与 channel profile 作为并列
+roots）。否则 `guix system init` 会得到新的 system derivation，并为其
+下载约 290 MiB 构建输入。安装事务随后把同一 cache 复制到目标
+`/var/guix/profiles/per-user/{root,<user>}`，因此 firstboot/enroll 的
+time-machine 在目标系统上也继续离线命中。
 
 ## 构建
 

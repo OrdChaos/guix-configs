@@ -29,8 +29,9 @@
                #:use-module (rnrs bytevectors)   ; string->utf8
                #:use-module (srfi srfi-1)       ; member
                #:export (channel-profile-cache-key
-                         repository-snapshot
-                         offline-installer-payload-program
+                          repository-snapshot
+                          offline-target-os
+                          offline-installer-payload-program
                          offline-installer-skel-service
                          offline-installer-payload-service
                          offline-installation-os))
@@ -232,19 +233,30 @@ inferior caches；mingetty 的 shepherd requirement 会等待本服务。"
 ;;; ────────────────────────────────────────────────────────────
 ;;; installation OS assembly
 
+(define (offline-target-os target-os channel-profile)
+  "Return TARGET-OS with CHANNEL-PROFILE retained as a GC root.
+
+This must match system-init-expression exactly: installing a differently
+rooted OS changes the final system derivation and requires build-time inputs
+that are intentionally absent from the runtime-only ISO closure."
+  (operating-system-with-gc-roots target-os (list channel-profile)))
+
 (define* (offline-installation-os target-os
                                   #:key
                                   channel-profile
                                   repository
                                   cache-key
                                   (extra-packages '()))
-         "TARGET-OS + CHANNEL-PROFILE + REPOSITORY 作为 official installation OS
-的额外 GC roots；EXTRA-PACKAGES 进入 installer system profile。返回可
-直接作为 `guix system image -t iso9660 FILE` 最后表达式的 OS。"
-         (let* ((with-roots
-                 (operating-system-with-gc-roots
-                  installation-os
-                  (list target-os channel-profile repository)))
+         "先给 TARGET-OS 加与 system init 相同的 CHANNEL-PROFILE GC root，
+再把该精确 target system + CHANNEL-PROFILE + REPOSITORY 作为 official
+installation OS 的额外 GC roots；EXTRA-PACKAGES 进入 installer system
+profile。返回可直接作为 `guix system image -t iso9660 FILE` 最后表达式
+的 OS。"
+         (let* ((target-os* (offline-target-os target-os channel-profile))
+                (with-roots
+                  (operating-system-with-gc-roots
+                   installation-os
+                   (list target-os* channel-profile repository)))
                 (skel
                  (offline-installer-skel-service repository
                                                  channel-profile

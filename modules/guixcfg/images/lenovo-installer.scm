@@ -6,10 +6,10 @@
 ;;; helper 会把该 profile 作为 GC root 并预置到 installer inferior
 ;;; cache，保证安装期与 firstboot 的 guix time-machine 离线 cache hit。
 ;;;
-;;; 目标 OS 在构建 ISO 时需要一组 machine facts。fresh-install ISO 只
-;;; 用它们预取 heavy closure；真正 install 时 blue install 会按目标盘
-;;; 写入真实 LUKS UUID，system init 在同一 ISO store 上离线重建小型
-;;; system derivation（包闭包已全部在盘内）。
+;;; helper 给目标 OS 加与 system-init-expression 完全相同的 pinned
+;;; channel-profile GC root，再把该精确 system derivation 放进 ISO。
+;;; LUKS UUID 是 initrd 从 ESP 读取的运行时事实，不进 derivation；因此
+;;; blue install 的 guix system init 可直接复用 ISO 内 system，零重建。
 
 (define-module (guixcfg images lenovo-installer)
                #:use-module (gnu packages)      ; specification->package

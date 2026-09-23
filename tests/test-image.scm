@@ -1,7 +1,7 @@
 ;;; Offline installer image helper 测试（docs/operations/offline-iso.md）：
 ;;;   - pinned inferior cache key 与 Guix cached-channel-instance 算法兼容；
-;;;   - offline installation OS 确实把 target/channel-profile/repository
-;;;     注册为 GC roots；
+;;;   - offline installation OS 把与 system init 同样 channel-rooted 的
+;;;     target system、channel-profile、repository 注册为 GC roots；
 ;;;   - repository skeleton 经 activation 写入，最终 payload 是
 ;;;     Shepherd one-shot，且 mingetty 等待 payload 后再出登录提示。
 ;;;
@@ -54,12 +54,12 @@
                                     (commit "1123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
                            (channel (inherit %one-commit) (name 'one))))))
 
-(define %target-root (plain-file "target-system" "target"))
+(define %target-os installation-os)
 (define %channel-root (plain-file "channel-profile" "profile"))
 (define %repository-root (plain-file "repository" "repo"))
 
 (define %installer-os
-  (offline-installation-os %target-root
+  (offline-installation-os %target-os
                            #:channel-profile %channel-root
                            #:repository %repository-root
                            #:cache-key "cache-key"
@@ -80,14 +80,26 @@
               (filter (lambda (service)
                         (service-extends? service
                                           gc-root-service-type))
-                      (operating-system-user-services %installer-os))))
+                       (operating-system-user-services %installer-os))))
 
-(test-assert "offline installation roots retain target, channel profile and repository"
-             (every (lambda (root)
-                      (member root %installer-roots))
-                    (list %target-root
-                          %channel-root
-                          %repository-root)))
+(define %rooted-target-os
+  (find operating-system? %installer-roots))
+
+(define %target-roots
+  (and %rooted-target-os
+       (append-map service-value
+                   (filter (lambda (service)
+                             (service-extends? service gc-root-service-type))
+                           (operating-system-user-services
+                            %rooted-target-os)))))
+
+(test-assert "offline installation roots retain channel-rooted target and payload"
+             (and %rooted-target-os
+                  (member %channel-root %installer-roots)
+                  (member %repository-root %installer-roots)))
+
+(test-assert "offline target retains the same channel profile as system init"
+             (member %channel-root %target-roots))
 
 (test-assert "offline repository skeleton activation service is present"
              (find (lambda (service)
