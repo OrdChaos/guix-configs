@@ -53,11 +53,13 @@
                #:use-module (guixcfg security secure-boot-material)
                #:use-module (guixcfg security enroll)      ; firmware state + PK ownership probe
                #:use-module (guixcfg system machine-facts) ; load-machine-facts（facts 内容校验）
-               #:use-module (guixcfg system deploy)      ; system-init-argv / sb-keygen-tool-argv / sb-keystore-tool-argv / commit-root-tool-argv / channels-structure-ok?
+               #:use-module (guixcfg system deploy)      ; system-init-argv / sb-keygen-tool-argv / sb-keystore-tool-argv / commit-root-tool-argv / channels-structure-ok? / %root-inferior-cache-directory
+               #:use-module (guix build utils)           ; mkdir-p
                #:use-module (guixcfg boot layout)        ; %esp-mount-point
                #:use-module (guixcfg users facts)        ; %primary-user（账户事实唯一来源）
                #:use-module (guix records)
                #:use-module (ice-9 match)
+               #:use-module (ice-9 ftw)                 ; scandir（唯一 inferior cache entry）
                #:use-module (ice-9 popen)               ; open-pipe* / close-pipe（cryptsetup isLuks 退出码探针）
                #:use-module (ice-9 rdelim)
                #:use-module (ice-9 format)
@@ -183,6 +185,53 @@ LiveCD resume paths do not expose it at the current-system paths."
   (every (lambda (m)
            (file-exists? (string-append (install-repo-path target) "/" m)))
          %repo-copy-markers))
+
+(define (single-directory-entry directory)
+  "DIRECTORY 中恰好一个非点文件/目录时返回其名字，否则返回 #f。"
+  (and (file-exists? directory)
+       (let ((entries (scandir directory
+                               (lambda (name)
+                                 (not (member name '("." "..")))))))
+         (and (= 1 (length entries))
+              (car entries)))))
+
+(define (install-time-machine-cache! exec target user uid gid)
+  "离线 ISO 契约：install 阶段把 LiveOS root inferior cache 中的唯一
+channel profile 复制为 TARGET 上 root 与目标用户 USER 的 time-machine
+cache symlink。system-init 表达式已把该 profile 包进目标 OS GC roots，
+因此 TARGET/gnu/store 中必然存在 profile store item。无预置 cache 时
+是在线安装语义，保持 no-op。"
+  (let ((entry (single-directory-entry
+                %root-inferior-cache-directory)))
+    (when entry
+      (let ((profile (readlink (string-append
+                                %root-inferior-cache-directory
+                                "/" entry))))
+        (unless (file-exists? (string-append target profile))
+          (error "offline channel profile missing from target store"
+                 profile))
+        (for-each
+         (lambda (user-name uid gid)
+           (let* ((user-dir (string-append target
+                                           "/var/guix/profiles/per-user/"
+                                           user-name))
+                  (cache-dir (string-append user-dir "/inferiors"))
+                  (link (string-append cache-dir "/" entry))
+                  (owner (string-append (number->string uid)
+                                        ":"
+                                        (number->string gid)))
+                  (st (false-if-exception (lstat link))))
+             (mkdir-p cache-dir)
+             (chown user-dir uid gid)
+             (chown cache-dir uid gid)
+             (when st
+               (delete-file link))
+             (symlink profile link)
+             (run-checked-exec! exec 'system-init
+                                `("chown" "-h" ,owner ,link))))
+         (list "root" user)
+         (list 0 uid)
+         (list 0 gid))))))
 
 (define (sb-key-material-complete? target)
   "TARGET 下 SB keydir 的 6 密钥 + keystore 3 .auth 是否完整。validate
@@ -992,10 +1041,19 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
                                              (setenv "GUIX_CONFIG_FACTS"
                                                      (install-facts-path target))
                                              (set! mutated? #t)
-                                             (run-checked-exec!
-                                              exec 'system-init
-                                              (system-init-argv root host))))
-                                ;; 8. commit-root（CLI 子进程隔离硬 exit；
+                                              (run-checked-exec!
+                                               exec 'system-init
+                                               (system-init-argv root host))
+                                              ;; 离线 ISO：把 pinned channel
+                                              ;; profile 的 cache 也落到目标
+                                              ;; /var/guix（firstboot/enroll
+                                              ;; 的 time-machine 继续离线）。
+                                              (install-time-machine-cache!
+                                               exec target
+                                               (user-profile-name %primary-user)
+                                               (user-profile-uid %primary-user)
+                                               (resolve-primary-user-gid))))
+                                 ;; 8. commit-root（CLI 子进程隔离硬 exit；
                                 ;;    幂等 + 中断恢复）
                                 (run-stage 'commit-root
                                            (lambda ()

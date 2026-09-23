@@ -26,7 +26,8 @@
                #:use-module (guix transformations)
                #:use-module (guix records)
                #:use-module (guixcfg apps model)
-               #:export (%blue))
+               #:export (blue-compatible
+                         %blue))
 
 (define blue-compatible
   ((options->transformation

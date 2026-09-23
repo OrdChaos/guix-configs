@@ -256,6 +256,7 @@
 ;;; argv（§13/§29/§47）
 
 (define init-argv (system-init-argv %root "lenovo-legion-y7000p"))
+(define init-expression (list-ref (cdr (member "--" init-argv)) 3))
 
 (test-assert "system init uses pinned channels.lock.scm"
              (and (member "-C" init-argv)
@@ -267,10 +268,26 @@
 (test-assert "system init never puts modules on the package search path (-L)"
              (not (member "-L" init-argv)))
 
-(test-equal "system init puts FILE after options and /mnt last"
-            '("system" "init"
-                        "modules/guixcfg/hosts/lenovo-legion-y7000p.scm" "/mnt")
-            (cdr (member "--" init-argv)))
+(test-equal "system init puts -e before /mnt and TARGET last"
+            '("system" "init" "-e")
+            (take (cdr (member "--" init-argv)) 3))
+
+(test-assert "system init expression loads the absolute host entry"
+             (and (string-contains init-expression
+                                    "/repo/modules/guixcfg/hosts/lenovo-legion-y7000p.scm")
+                  (string-contains init-expression
+                                    "(load \"/repo/modules/guixcfg/hosts/lenovo-legion-y7000p.scm\")")))
+
+(test-assert "system init expression wraps a unique preseeded inferior cache"
+             (and (string-contains init-expression
+                                    "/var/guix/profiles/per-user/root/inferiors")
+                  (string-contains init-expression
+                                    "operating-system-with-gc-roots")
+                  (string-contains init-expression "(= 1 (length entries))")))
+
+(test-equal "system init argv keeps /mnt as the final operand"
+            "/mnt"
+            (car (last-pair init-argv)))
 
 (define privileged (install-privileged-argv "/repo"
                                              "lenovo-legion-y7000p" "/dev/nvme0n1"))

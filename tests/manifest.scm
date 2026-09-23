@@ -53,6 +53,7 @@
     "tests/test-certificates.scm"
     "tests/test-deploy.scm"
     "tests/test-reconfigure.scm"
+    "tests/test-image.scm"
     "tests/test-install-orchestration.scm"
     "tests/test-enroll-orchestration.scm"
     "tests/test-flatpak-actions.scm"

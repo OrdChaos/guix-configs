@@ -32,11 +32,13 @@
                          require-host-id
                          modules-load-path-env
                          guix-time-machine-argv
-                         system-build-argv
-                         system-reconfigure-argv
-                         system-reconfigure-dry-run-argv
-                         system-init-argv
-                         reconfigure-privileged-argv
+                          system-build-argv
+                          system-reconfigure-argv
+                          system-reconfigure-dry-run-argv
+                          %root-inferior-cache-directory
+                          system-init-expression
+                          system-init-argv
+                          reconfigure-privileged-argv
                           install-privileged-argv
                           enroll-privileged-argv
                           gc-privileged-argv
@@ -175,16 +177,42 @@ ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMM
                                                   (cons "--dry-run"
                                                         %reconfigure-options))))
 
+;;; 离线 ISO 的 root inferior cache。 installer payload 会把 pinned
+;;; channel profile 预置为 /var/guix/profiles/per-user/root/inferiors/
+;;; <key>；system init 表达式在恰好存在一个 cache entry 时把它包进
+;;; target OS 的 GC roots，使 channel profile 本身进入目标 store，
+;;; firstboot/enroll 的 time-machine 才能继续离线命中。
+(define %root-inferior-cache-directory
+  "/var/guix/profiles/per-user/root/inferiors")
+
+(define (system-init-expression root host)
+  "guix system init -e 的表达式：加载显式 host 配置文件；若 installer
+预置了唯一 root inferior cache，则把该 channel profile 作为额外 GC
+root 包进目标 OS。多 entry/无 cache 保持普通在线安装语义。"
+  (format #f "(let ((os (load ~s)))
+  (let ((cache ~s))
+    (let ((entries (false-if-exception
+                    ((@ (srfi srfi-1) filter)
+                     (lambda (name) (not (member name '(\".\" \"..\"))))
+                     ((@ (ice-9 ftw) scandir) cache)))))
+      (if (and entries (= 1 (length entries)))
+          ((@ (gnu system) operating-system-with-gc-roots)
+           os
+           (list (readlink (string-append cache \"/\" (car entries)))))
+          os))))"
+          (host-source-absolute-path root host)
+          %root-inferior-cache-directory))
+
 (define (system-init-argv root host)
   ;; blue install 的 guix system init argv：pinned channels.lock.scm、
-  ;; 显式 host 文件、目标 /mnt（库模块经 GUILE_LOAD_PATH 注入，不用
-  ;; -L，见 modules-load-path-env）。guix system init 的语法是
-  ;; FILE 在选项之后、TARGET 最后——/mnt 必须放末尾（放前面会被当
-  ;; 成 FILE：failed to load '/mnt': Is a directory，VM 实测）。
-  ;; 调用方负责已挂好 /mnt 并设置 GUIX_CONFIG_FACTS。
+  ;; host 配置经 -e 表达式显式加载（离线 ISO 可在该表达式外包裹
+  ;; channel-profile GC root）、目标 /mnt 最后（放前面会被当成 FILE，
+  ;; VM 实测）。库模块经 GUILE_LOAD_PATH 注入，不用 -L（见
+  ;; modules-load-path-env）。调用方负责已挂好 /mnt 并设置
+  ;; GUIX_CONFIG_FACTS。
   (guix-time-machine-argv root %channels-lock-file
                           `("system" "init"
-                                     ,(host-source-relative-path host)
+                                     "-e" ,(system-init-expression root host)
                                      "/mnt")))
 
 (define (reconfigure-privileged-argv root host home-user)
