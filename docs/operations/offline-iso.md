@@ -53,14 +53,9 @@ kernel/firmware 无第三方 substitute，首次构建会本地编译；受控�
 ```bash
 cd /path/to/guix-configs
 
-# fresh-install ISO 只需要一个合法占位 LUKS UUID 来预取 heavy closure；
-# 真正 install 时 blue install 会写入目标盘真实 UUID，并在 ISO 内已有
-# store 上离线重建小型 system derivation。
-mkdir -p /tmp/guixcfg-lenovo-iso
-printf '((luks-uuid . "00000000-0000-0000-0000-000000000000"))\n' \
-  > /tmp/guixcfg-lenovo-iso/host.scm
-
-GUIX_CONFIG_FACTS=/tmp/guixcfg-lenovo-iso/host.scm \
+# OS/initrd derivation 与机器 LUKS UUID 无关（UUID 是 initrd 运行时
+# 从 ESP /EFI/Guix/luks-uuid 读取的事实，见 docs/architecture/boot.md），
+# 因此构建 ISO 不需要 facts，安装时 guix system init 也零重建、零下载。
 GUILE_LOAD_PATH="$PWD/modules" \
 GUILE_LOAD_COMPILED_PATH="$PWD/modules" \
 guix time-machine -C channels.lock.scm -- system image \

@@ -337,10 +337,11 @@ introduction；不比较 revision）。文件缺失/不可读时报错。"
    (read-channel-declarations (string-append root "/" %channels-file))
    (read-channel-declarations (string-append root "/" %channels-lock-file))))
 
-;; boot-critical facts 的权威调用方是 file-systems.scm 的
-;; cryptroot-mapped-devices（require-machine-fact 'luks-uuid）——若该
-;; 调用方增长，本表必须同步。doctor 只做文件级 fail-closed 验证，
-;; 完整 lowering 验证是 build-os -n 的职责。
+;; boot-critical facts：luks-uuid 是运行时权威身份的来源（initrd 经
+;; ESP %esp-luks-uuid-file 读取；esp-uuid activation 从 facts 补写）。
+;; OS derivation 本身与 facts 无关（(guixcfg system file-systems)）——
+;; doctor 做文件级 fail-closed 验证，完整 lowering 验证是
+;; build-os -n 的职责。
 (define %boot-critical-facts '(luks-uuid))
 
 (define (facts-resolution-report)

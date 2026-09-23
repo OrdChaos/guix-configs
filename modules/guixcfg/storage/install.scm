@@ -9,6 +9,8 @@
                #:use-module (guixcfg storage partition)
                #:use-module (guixcfg storage filesystem)
                #:use-module (guixcfg storage subvolume)
+               #:use-module (guixcfg boot layout)      ; %esp-mount-point、%esp-luks-uuid-file
+               #:use-module (guixcfg boot device-resolver) ; normalize-luks-uuid
                #:use-module (guixcfg utils atomic-file) ; atomic-write-file!
                #:use-module (guix build utils)  ; mkdir-p
                #:use-module (ice-9 format)
@@ -249,12 +251,15 @@ ON-FAILURE 非 #f 时是 (lambda (key args) ...) 失败处理器：安装编排�
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 机器事实（docs/architecture/storage.md（固定命名事实））：安装时生成、可重新探测、不进 Git。
-;;; initrd 里没有 udev，mapped-device 的 source 只能用 LUKS UUID
-;;; （initrd 会扫描块设备匹配，无需 /dev/disk/by-* 符号链接）。
+;;; LUKS UUID 同时写两处：
+;;;   1. facts 文件（reconfigure/enroll 的校验与补写来源）；
+;;;   2. ESP 的 %esp-luks-uuid-file（initrd 运行时权威身份的载体——
+;;;      initrd derivation 不编入 UUID，解锁时由它读取，见
+;;;      (guixcfg boot device-resolver)）。
 
 (define (write-machine-facts target device)
-  "把安装时发现的机器事实写入 TARGET 下的 facts 文件（boot 期
-fail-closed 读取——原子写，不留半个文件）。"
+  "把安装时发现的机器事实写入 TARGET 下的 facts 文件与 ESP UUID 文件
+（原子写，不留半个文件）。调用时 ESP 已挂在 TARGET/%esp-mount-point。"
   (let ((luks-uuid (first-command-line
                     "cryptsetup" "luksUUID"
                     (target-partition-path device 2))))
@@ -268,7 +273,18 @@ fail-closed 读取——原子写，不留半个文件）。"
                           (lambda (port)
                             (write facts port)
                             (newline port)))
-      (format #t "  machine facts: ~s~%" facts))))
+      (format #t "  machine facts: ~s~%" facts))
+    (let ((esp-file (string-append target %esp-mount-point "/"
+                                   %esp-luks-uuid-file)))
+      (mkdir-p (dirname esp-file))
+      (atomic-write-file! esp-file
+                          (lambda (port)
+                            (display (or (normalize-luks-uuid luks-uuid)
+                                         (error "invalid LUKS UUID"
+                                                luks-uuid))
+                                     port)
+                            (newline port)))
+      (format #t "  ESP LUKS UUID file: ~a~%" esp-file))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 安装后提醒：LiveCD 的 /gnu/store 在内存盘（tmpfs）上。

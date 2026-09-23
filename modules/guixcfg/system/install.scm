@@ -55,7 +55,7 @@
                #:use-module (guixcfg system machine-facts) ; load-machine-facts（facts 内容校验）
                #:use-module (guixcfg system deploy)      ; system-init-argv / sb-keygen-tool-argv / sb-keystore-tool-argv / commit-root-tool-argv / channels-structure-ok? / %root-inferior-cache-directory
                #:use-module (guix build utils)           ; mkdir-p
-               #:use-module (guixcfg boot layout)        ; %esp-mount-point
+               #:use-module (guixcfg boot layout)        ; %esp-mount-point、%esp-luks-uuid-file
                #:use-module (guixcfg users facts)        ; %primary-user（账户事实唯一来源）
                #:use-module (guix records)
                #:use-module (ice-9 match)
@@ -1113,12 +1113,15 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
           "boot/deploy-uki missing (system init incomplete)")
     (cons (file-exists? (install-facts-path target))
           "machine facts file missing")
-    (cons (and (file-exists? (install-facts-path target))
-               (let ((facts (false-if-exception
-                             (load-machine-facts
-                              (install-facts-path target)))))
-                 (and facts (assq-ref facts 'luks-uuid))))
-          "machine facts lack the boot-critical luks-uuid")
+     (cons (and (file-exists? (install-facts-path target))
+                (let ((facts (false-if-exception
+                              (load-machine-facts
+                               (install-facts-path target)))))
+                  (and facts (assq-ref facts 'luks-uuid))))
+           "machine facts lack the boot-critical luks-uuid")
+     (cons (file-exists? (string-append target %esp-mount-point "/"
+                                        %esp-luks-uuid-file))
+           "ESP LUKS UUID file missing (initrd runtime unlock identity)")
     (cons (every (lambda (f)
                    (file-exists?
                     (string-append target %esp-mount-point f)))

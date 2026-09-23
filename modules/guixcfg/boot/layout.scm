@@ -12,10 +12,11 @@
 
 (define-module (guixcfg boot layout)
                #:export (%esp-mount-point
-                         %esp-uki-directory
-                         %esp-tpm2-directory
-                         %recovery-uki-esp-path
-                         %uki-deploy-script-path))
+                          %esp-uki-directory
+                          %esp-tpm2-directory
+                          %esp-luks-uuid-file
+                          %recovery-uki-esp-path
+                          %uki-deploy-script-path))
 
 ;; ESP（EFI system partition）在运行系统上的固定挂载点。
 (define %esp-mount-point "/efi")
@@ -29,6 +30,14 @@
 ;; TPM2 sealed artifact 的 ESP 目录（ESP 相对）：解锁 LUKS 前必须可读，
 ;; 不能只放 /persist（循环依赖）；非秘密（篡改只造成 DoS → 密码回退）。
 (define %esp-tpm2-directory "EFI/Guix/tpm2")
+
+;; 运行时 LUKS UUID 文件的 ESP 相对路径：install 与 esp-uuid activation
+;; 写，initrd 解锁时读（(guixcfg boot device-resolver)）。
+;; 它是 initrd derivation 与机器 UUID 解耦的载体——UUID 不再编入
+;; derivation（offline ISO 免重建 initrd），运行时身份仍由它权威承载；
+;; 非秘密（篡改只造成解锁失败，fail-closed；initrd 本身就在 ESP 上，
+;; 信任等级相同）。内容：32 位小写 hex（无连字符）+ 换行。
+(define %esp-luks-uuid-file "EFI/Guix/luks-uuid")
 
 ;; 正式 Recovery UKI 的 ESP 稳定路径（ESP 相对；promote 后菜单才出现）。
 (define %recovery-uki-esp-path "EFI/Guix/RECOVERY.EFI")

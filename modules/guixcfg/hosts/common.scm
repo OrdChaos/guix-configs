@@ -34,6 +34,7 @@
                #:use-module (gnu system shadow)            ; account-service-type（折叠 account 列表）
                #:use-module (gnu services guix)            ; guix-home-service-type
                #:use-module (guixcfg boot initrd)          ; ephemeral-root-initrd
+               #:use-module (guixcfg boot esp-uuid)        ; esp-luks-uuid-service（ESP UUID 文件补写）
                #:use-module (guixcfg boot layout)          ; %esp-mount-point
                #:use-module (guixcfg boot uki-bootloader)  ; uki-bootloader
                #:use-module (guixcfg system kernel-platform) ; %kernel、microcode-ephemeral-initrd（M1）
@@ -196,6 +197,9 @@ sentinel + mihomo + applications）；HOME-ENVIRONMENT 是挂入 system
                 (simple-service 'noctalia-greeter-backing-ownership
                                 activation-service-type
                                 (noctalia-greeter-backing-ownership-activation))
+                ;; ESP LUKS UUID 文件补写（initrd 运行时权威身份的载体；
+                ;; 覆盖存量机器的 reconfigure 迁移路径）。
+                esp-luks-uuid-service
                 ;; 声明式 runtime secrets（按 readiness domain 分区 →
                 ;; 两个 generic publisher 实例）。
                 (secrets-deploy-service

@@ -16,7 +16,11 @@ LUKS label        cryptroot
 mapper            /dev/mapper/cryptroot
 ```
 
-启动和挂载优先使用这些语义名称，而不是安装时生成的 UUID。
+启动和挂载优先使用这些语义名称，而不是安装时生成的设备路径。
+LUKS 解锁的权威身份仍是 LUKS UUID：它不编入 OS/initrd
+derivation，而是安装时写入 ESP `/EFI/Guix/luks-uuid`（写侧还有
+esp-uuid activation 的迁移补写），initrd 运行时读取后按 UUID
+扫盘匹配 LUKS 头（docs/architecture/boot.md）。
 
 ## 磁盘布局
 

@@ -263,7 +263,9 @@ guix shell -m manifests/installer.scm -- \
 
 成功标志：`Disk installation complete.`（GPT → ESP → LUKS2 → Btrfs
 → 持久子卷 → swapfile → @root-installing → /mnt 挂载 → facts 写入）。
-LUKS UUID 记入 `/mnt/persist/system/facts/host.scm`。
+LUKS UUID 记入 `/mnt/persist/system/facts/host.scm`，并同步写入
+ESP `/efi`（目标侧 `/mnt/efi`）的 `EFI/Guix/luks-uuid`——initrd
+运行时权威身份的载体（docs/architecture/boot.md）。
 
 ## 阶段 3：cow-store
 

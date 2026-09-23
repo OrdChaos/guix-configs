@@ -4,30 +4,27 @@
 
 (define-module (guixcfg system file-systems)
                #:use-module (guixcfg storage model)
-               #:use-module (guixcfg system machine-facts)  ; facts 机制（提取出的 channel-free 层）
                #:use-module (guixcfg boot layout)       ; %esp-mount-point（ESP 布局 authority）
                #:use-module (guixcfg boot tpm-unlock)      ; tpm-unlock-in-initrd
                #:use-module (virelith packages tpm2)        ; tpm2-tools-compat
                #:use-module (guixcfg boot device-resolver) ; resolve-system-device
-               #:use-module (guixcfg security tpm2 tpm2-tools) ; bytes->hex
                #:use-module (gnu system file-systems)    ; file-system、%base-file-systems
                #:use-module (gnu system mapped-devices)  ; mapped-device、mapped-device-kind
-               #:use-module (gnu system uuid)            ; uuid、uuid-bytevector
                #:use-module (guix gexp)                  ; file-append
                #:use-module (gnu packages cryptsetup)    ; cryptsetup-static
                #:use-module (srfi srfi-1)                ; every、first
                #:export (cryptroot-mapped-devices
-                         %ephemeral-root-file-system
-                         system-file-systems
-                         %swap-spaces))
+                          %ephemeral-root-file-system
+                          system-file-systems
+                          %swap-spaces))
 
-;; 机器事实（facts）路径解析与读取机制已提取到
-;; (guixcfg system machine-facts)（channel-free，供 doctor 等复用）。
-;; 本模块经 use-modules 引入；**不 re-export**——实测 guile 3.0.11 对
-;; #:export 非本地绑定会创建 #<undefined> 本地变量遮蔽 import（
-;; cryptroot-mapped-devices 内 require-machine-fact 变 unbound）。
-;; tests/test-machine-facts.scm 经 module-ref（遍历 uses）仍可访问；
-;; 语义与文件内注释不变——见 machine-facts.scm。
+;; LUKS UUID 不进 OS derivation：mapped-device source 是固定哨兵
+;; %cryptroot-source，真实 UUID 由 initrd 运行时从 ESP 的
+;; %esp-luks-uuid-file 读取（(guixcfg boot device-resolver)）——
+;; 这样不同机器/不同安装求值出的 initrd/system derivation 逐字节
+;; 相同，offline ISO 内预构建的产物可直接复用（零重建、零下载）。
+;; facts 机制（(guixcfg system machine-facts)）仍存在于 install/
+;; enroll/deploy 的校验路径，但不再参与 OS 构造。
 
 ;;; PCR7-aware mapped-device-kind：open 先试 TPM（tpm-unlock-in-initrd，
 ;;; 见 (guixcfg boot tpm-unlock)——initrd 运行时模块），失败走与
@@ -47,7 +44,7 @@
                 (use-modules (gnu build file-systems)   ; system*/tty
                              (guix build utils)         ; mkdir-p
                              (guix build syscalls)      ; mount、umount
-                             (guixcfg boot device-resolver) ; resolve-system-device
+                             (guixcfg boot device-resolver) ; resolve-system-device、read-luks-uuid-from-esp
                              (ice-9 rdelim)
                              (ice-9 ftw)
                              (ice-9 regex)
@@ -56,13 +53,15 @@
                              (rnrs bytevectors)
                              (rnrs io ports)
                              (srfi srfi-13))
-                ;; cryptroot 的权威身份：config 侧嵌入的 LUKS UUID hex
-                ;; 字符串（gexp 序列化边界可靠——T3 实测 bytevector 嵌入
-                ;; initrd 后可能全零；hex string 稳定）。
+                ;; cryptroot 的权威身份：ESP 上 %esp-luks-uuid-file 的
+                ;; 运行时内容（install/esp-uuid activation 写）。
+                ;; 不嵌 config 侧值——UUID 进 gexp 会让 initrd
+                ;; derivation 随机器变化，offline ISO 被迫重建 initrd
+                ;; 并下载整条构建闭包（实测约 290MB）。
                 ;; 用 let* 而非 define：guile 3.0.9（raw-initrd builder 的
                 ;; guile-final）的 psyntax 不允许 begin 内 use-modules 之后
                 ;; 出现 define（definition in expression context），实测。
-                (let* ((source-hex #$(bytes->hex (uuid-bytevector source))))
+                (let* ((source-hex (read-luks-uuid-from-esp)))
                   ;; cryptsetup 需要 /run/cryptsetup/（LUKS2 强制 locking）
                   (mkdir-p "/run/cryptsetup/")
                   ;; 先尝试 TPM 自动解锁；失败走标准交互密码路径。
@@ -104,15 +103,20 @@
               ((gnu build file-systems)
                #:select (find-partition-by-luks-uuid))))))
 
-;; LUKS 映射 source：必须用 facts 里的 LUKS UUID——initrd 扫描块设备
-;; 匹配 LUKS 头（find-partition-by-luks-uuid），无需 udev 符号链接。
-;; 缺少 luks-uuid 时 fail-closed，绝不回退 /dev/disk/by-partlabel/。
-;; 函数而非变量：构造时（首次调用）才触发 facts 校验，模块加载不失败。
+;; mapped-device source 的固定哨兵：占位即可（open/close 运行时从 ESP
+;; 文件取 UUID，不消费 source）。用常量字符串而非法 uuid——OS
+;; derivation 因此与机器 UUID 完全无关。
+(define %cryptroot-source "luks-uuid-from-esp")
+
+;; LUKS 映射：initrd 运行时从 ESP %esp-luks-uuid-file 读 UUID，
+;; 扫描块设备匹配 LUKS 头（find-partition-by-luks-uuid），无需 udev
+;; 符号链接；ESP 文件缺失/非法/多盘冲突时 fail-closed，绝不回退
+;; /dev/disk/by-partlabel/ 猜测。
 ;; 解锁类型：luks-tpm2-device-mapping——先尝试 TPM2 PCR7 自动解锁，
 ;; 失败回退标准交互密码（docs/architecture/boot.md（TPM2））。
 (define (cryptroot-mapped-devices)
   (list (mapped-device
-         (source (uuid (require-machine-fact 'luks-uuid)))
+         (source %cryptroot-source)
          (target %luks-mapper-name)
          (type luks-tpm2-device-mapping))))
 

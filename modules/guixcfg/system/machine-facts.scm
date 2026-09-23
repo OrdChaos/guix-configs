@@ -7,8 +7,9 @@
 ;;;      否则立即报错——显式指定不允许静默忽略；
 ;;;   2. 否则 /persist/system/facts/host.scm 存在 → 自动使用（已安装系统
 ;;;      reconfigure 无需环境变量）；
-;;;   3. 否则 → 无 machine facts（boot-critical fact 缺失时在构造
-;;;      mapped-device 处 fail-closed，不回退 by-partlabel）。
+;;;   3. 否则 → 无 machine facts（OS 构造不消费 facts——LUKS UUID 是
+;;;      initrd 运行时事实，经 ESP %esp-luks-uuid-file 读取；facts 的
+;;;      消费方是 install/enroll/doctor 等运行时校验路径）。
 ;;;
 ;;; 提取动机：file-systems 模块顶层 import virelith/nonguix 等 channel
 ;;; 模块，blue 的 shell 环境（development manifest）没有这些 channel 的

@@ -154,10 +154,21 @@ Artifact 布局：
 /persist/system/tpm2/state.scm      enrollment 元数据（原子写 + .prev）
 /persist/system/tpm2/objects/       sealed blobs 管理副本
 ESP /EFI/Guix/tpm2/                 【解锁前读取】seal.pub/priv/metadata.scm
+ESP /EFI/Guix/luks-uuid             【解锁前读取】LUKS UUID（规范化 hex）
 ```
 
 解锁 LUKS 前必须读取的数据不能只放 `/persist/system`（循环依赖）；
 sealed blob 非秘密（不含明文），放 ESP，篡改只造成 DoS → 密码回退。
+
+LUKS UUID 是 system volume 的权威身份，但**不编入 initrd/OS
+derivation**：`mapped-device` 的 source 是固定哨兵，initrd 运行时
+挂载 ESP 读 `/EFI/Guix/luks-uuid`（install 的 write-machine-facts 与
+esp-uuid activation 是写侧），再以 UUID 扫盘匹配 LUKS 头
+（`find-partition-by-luks-uuid`）——ESP 文件缺失/非法/多盘冲突一律
+fail-closed。这样不同机器求值出的 initrd/system derivation 逐字节
+相同（tests/test-machine-facts.scm 第 14 项断言），offline ISO 内
+预构建的 system 在任意机器上 `guix system init` 零重建、零下载；
+ESP 文件与 initrd 同盘同信任等级，威胁模型不变。
 
 Enrollment 时点：Secure Boot 已启用（SecureBoot==1 且非 SetupMode）
 并完成一次带最终 NVRAM policy 的正常启动后。enrollment 流程：
@@ -181,9 +192,12 @@ disk-install 的 `apply --luks-secret` 共享同一个 resolver，两个入口
 不允许出现第二份实现（second implementation 一律改为调用它）。
 
 initrd 解锁：cmdline 门控（recovery / guixcfg.tpm-unlock=0）→
-/dev/tpmrm0 → 分区发现 → 挂 ESP → 读 seal 材料 → 确定性 SRK →
-load sealed → policy session → unseal → 管道直连 cryptsetup
-`--key-file=-`（明文不落盘/argv/env）→ 失败打印一行原因 → 密码回退。
+挂 ESP 读 `/EFI/Guix/luks-uuid`（权威身份的运行时载体）→
+/dev/tpmrm0 → 按 UUID 做分区发现 → 挂 ESP → 读 seal 材料 →
+确定性 SRK → load sealed → policy session → unseal → 管道直连
+cryptsetup `--key-file=-`（明文不落盘/argv/env）→ 失败打印一行
+原因 → 密码回退（密码回退同样按 UUID 扫盘，不回退 by-partlabel
+猜测）。
 
 ## 内核模块签名
 
