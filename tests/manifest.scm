@@ -36,6 +36,7 @@
     "tests/test-root-generation.scm"
     "tests/test-system-generations.scm"
     "tests/test-machine-facts.scm"
+    "tests/test-esp-uuid.scm"
     "tests/test-luks-passphrase.scm"
     "tests/test-tpm2-state.scm"
     "tests/test-tpm-unlock.scm"

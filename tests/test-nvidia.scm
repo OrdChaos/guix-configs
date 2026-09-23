@@ -29,9 +29,9 @@
 ;;;       new-feature open 变体（防半迁移；版本从 package metadata
 ;;;       动态取得）
 ;;;
-;;; 由 tests/run-tests.scm 加载运行（GUIX_CONFIG_FACTS 已设、nonguix
-;;; channel 源已加入 load path）；单独运行需先设 GUIX_CONFIG_FACTS
-;;; （host 模块实例化 mapped-device 时对 luks-uuid fail-closed）。
+;;; 由 tests/run-tests.scm 加载运行（nonguix channel 源已加入 load
+;;; path）。host 模块实例化不再需要 GUIX_CONFIG_FACTS（LUKS UUID 是
+;;; initrd 运行时事实，不进 OS derivation）。
 ;;;
 ;;; derivation 级证明（NVIDIA module 针对 %kernel/linux-7.2 构建、
 ;;; VM closure 无 NVIDIA）由 system build + closure 检查完成，不在

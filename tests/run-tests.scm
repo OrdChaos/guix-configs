@@ -94,11 +94,10 @@
 ;; SRFI-64 的计数器都记录在“当前 runner”上。
 (test-runner-current (test-runner-simple))
 
-;; (guixcfg hosts vm) 会加载 (guixcfg system file-systems)，其 machine
-;; facts 是惰性读取（delay/force），但构造 mapped-device（%vm-os 实例化）
-;; 时对 luks-uuid fail-closed。因此全套测试在临时 facts 环境下运行（不碰
-;; 真实宿主 /persist）：显式提供测试 UUID，让 modules-compile、%vm-os 实例化
-;; 等测试可以正常加载 host 模块。
+;; 全套测试在临时 facts 环境下运行（不碰真实宿主 /persist）。OS 构造
+;; 本身已不消费 facts（LUKS UUID 是 initrd 运行时事实，见
+;; (guixcfg system file-systems)），但 deploy/enroll 等运行时校验路径
+;; 仍按 GUIX_CONFIG_FACTS 解析 facts——显式提供测试 UUID，语义稳定。
 (define %test-facts-file
   (string-append "/tmp/guixcfg-test-facts-"
                  (number->string (getpid)) ".scm"))

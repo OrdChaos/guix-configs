@@ -1,17 +1,17 @@
 ;;; machine facts 路径解析与 fail-closed 测试。
 ;;; 由 tests/run-tests.scm 加载运行（从仓库根目录）。
 ;;;
-;;; 注意：测试 facts 环境由 run-tests.scm 统一提供（GUIX_CONFIG_FACTS
-;;; 指向临时文件）；本文件直接加载 (guixcfg system file-systems)。该模块
-;;; 加载阶段不做任何 facts 校验（惰性），fail-closed 错误在构造
-;;; mapped-device 时抛出。
+;;; 语义边界（2026-09 ESP UUID 文件改造后）：
+;;;   - facts 的解析/校验机制（本文件 1-11）不变；
+;;;   - OS 构造（cryptroot-mapped-devices）不再消费 facts——LUKS UUID
+;;;     由 initrd 运行时从 ESP %esp-luks-uuid-file 读取，OS/initrd
+;;;     derivation 与机器 UUID 无关（本文件 12-14 断言这一点）。
 
 (use-modules (srfi srfi-64)
              (srfi srfi-1)                ; 字符串扁平化提取
              (srfi srfi-13)               ; string-contains
              (ice-9 textual-ports)        ; get-string-all
-             (gnu system mapped-devices)  ; mapped-device-source
-             (gnu system uuid))           ; uuid、uuid=?
+             (gnu system mapped-devices)) ; mapped-device-source
 
 ;; guile 3.0.11 的 error 异常参数形态是 (key format-string irritants ...)，
 ;; 消息可能嵌在 irritants 里；提取其中全部字符串做断言（对 misc-error
@@ -31,12 +31,15 @@
 
 (mkdir %tmp-dir)
 
-;; file-systems 模块的内部绑定（未导出，测试经 module-ref 取用）。
+;; machine-facts 机制模块（channel-free）；file-systems 只取
+;; cryptroot-mapped-devices 做集成断言。
+(define mf (resolve-module '(guixcfg system machine-facts)))
+(define (mf-ref name) (module-ref mf name))
 (define fs (resolve-module '(guixcfg system file-systems)))
 (define (fs-ref name) (module-ref fs name))
-(define resolve-facts-path (fs-ref 'resolve-facts-path))
-(define load-machine-facts (fs-ref 'load-machine-facts))
-(define require-fact (fs-ref 'require-fact))
+(define resolve-facts-path (mf-ref 'resolve-facts-path))
+(define load-machine-facts (mf-ref 'load-machine-facts))
+(define require-fact (mf-ref 'require-fact))
 
 (test-begin "machine-facts")
 
@@ -129,22 +132,21 @@
                            " ")))
                  (string-contains msg "missing required machine fact"))))
 
-;; 12. 集成：正式 root LUKS mapped-device source 是 facts 中的 UUID，
-;;     绝不是 /dev/disk/by-partlabel/ 字符串。
+;; 12. 集成：正式 root LUKS mapped-device source 是固定哨兵（LUKS UUID
+;;     不进 OS derivation——initrd 运行时从 ESP %esp-luks-uuid-file
+;;     读取），绝不是 facts 的 uuid 值或 /dev/disk/by-partlabel/ 路径。
 (let ((md (car ((fs-ref 'cryptroot-mapped-devices)))))
-  (test-assert "root LUKS mapped-device source is the facts <uuid>"
-               (uuid=? (uuid "00000000-0000-0000-0000-000000000000")
-                       (mapped-device-source md))))
+  (test-equal "root LUKS mapped-device source is the constant sentinel"
+              "luks-uuid-from-esp"
+              (mapped-device-source md)))
 
-;; 13. 负向集成（子进程）：显式 override 指向不存在文件 / facts 缺
-;;     luks-uuid 时，模块加载阶段不再吞错，构造 mapped-device 时抛出
-;;     清晰错误，而不是 Scheme unbound variable。复现
-;;     GUIX_CONFIG_FACTS=/mnt/persist/...（已安装系统上不存在）场景。
-(define (repro-failure env-value)
+;; 13. 无 facts 时 OS 构造必须成功（子进程）：GUIX_CONFIG_FACTS 指向不
+;;     存在文件会显式报错（override 语义），但不设 facts / facts 缺
+;;     luks-uuid 时构造 mapped-device 不再失败——UUID 是运行时事实。
+(define (repro-construct env-value)
   "在子进程（guix time-machine repl）中加载 file-systems 并构造 root
-mapped-device，返回 (rc . stderr)；预期 rc≠0。
-用 time-machine 保证子进程与主测试共享同一频道集（file-systems 依赖
-Virelith 频道提供的 tpm2-tools-compat，宿主 guix 的频道不可见）。"
+mapped-device，返回 (rc . stderr)。ENV-VALUE 为 #f 时不设置
+GUIX_CONFIG_FACTS。"
   (let* ((script (string-append %tmp-dir "/repro.scm"))
          (err-file (string-append %tmp-dir "/repro.err")))
     (call-with-output-file script
@@ -153,31 +155,73 @@ Virelith 频道提供的 tpm2-tools-compat，宿主 guix 的频道不可见）�
                              (display "(use-modules (guixcfg system file-systems))\n" p)
                              (display "(car ((@ (guixcfg system file-systems) cryptroot-mapped-devices)))\n" p)))
     (let ((rc (system* "sh" "-c"
-                       (string-append "GUIX_CONFIG_FACTS=" env-value
+                       (string-append (if env-value
+                                        (string-append "GUIX_CONFIG_FACTS=" env-value " ")
+                                        "")
                                       " guix time-machine -C channels.lock.scm"
                                       " -- repl -L modules -- " script
                                       " >/dev/null 2>" err-file))))
       (cons (status:exit-val rc)
             (call-with-input-file err-file get-string-all)))))
 
+;; 14. derivation 与 facts 无关（子进程，本改造的目标性质）：
+;;     两个不同 luks-uuid 求值出的 initrd 与整系统 derivation 路径
+;;     都逐字节相同——offline ISO 内预构建产物因此可被任意机器的
+;;     guix system init 直接复用（零重建、零下载）。
+(define (drv-under-facts facts-file)
+  "子进程计算 %lenovo-legion-y7000p-os 的 initrd 与 system derivation
+路径（两行 stdout）；返回 (rc initrd-drv system-drv)。"
+  (let* ((script (string-append %tmp-dir "/drv.scm"))
+         (out-file (string-append %tmp-dir "/drv.out")))
+    (call-with-output-file script
+                           (lambda (p)
+                             (display "(add-to-load-path (string-append (getcwd) \"/modules\"))\n" p)
+                             (display "(use-modules (guix store) (guix monads) (guix gexp) (guix derivations) (gnu system) (guixcfg hosts lenovo-legion-y7000p))\n" p)
+                             (display "(define store (open-connection))\n" p)
+                             (display "(display (derivation-file-name (run-with-store store (lower-object (operating-system-initrd-file %lenovo-legion-y7000p-os))))) (newline)\n" p)
+                             (display "(display (derivation-file-name (run-with-store store (operating-system-derivation %lenovo-legion-y7000p-os)))) (newline)\n" p)))
+    (let ((rc (system* "sh" "-c"
+                       (string-append "GUIX_CONFIG_FACTS=" facts-file
+                                      " guix time-machine -C channels.lock.scm"
+                                      " -- repl -L modules -- " script
+                                      " >" out-file " 2>/dev/null"))))
+      (let ((lines (string-split
+                    (string-trim-both
+                     (call-with-input-file out-file get-string-all))
+                    #\newline)))
+        (list rc (and (pair? lines) (car lines))
+              (and (pair? lines) (pair? (cdr lines)) (cadr lines)))))))
+
 (if (zero? (status:exit-val (system* "guix" "--version")))
-  (let ((missing (string-append %tmp-dir "/missing-facts.scm"))
-        (no-luks (string-append %tmp-dir "/no-luks.scm")))
+  (let ((no-luks (string-append %tmp-dir "/no-luks.scm"))
+        (facts-a (string-append %tmp-dir "/facts-a.scm"))
+        (facts-b (string-append %tmp-dir "/facts-b.scm")))
     (call-with-output-file no-luks
                            (lambda (p)
                              (write '((foo . 1)) p)
                              (newline p)))
-    (let ((r1 (repro-failure missing)))
-      (test-assert "override points at missing file: clear error, not unbound variable"
-                   (and (not (zero? (car r1)))
-                        (string-contains (cdr r1)
-                                         "GUIX_CONFIG_FACTS points to a missing file")
-                        (not (string-contains (cdr r1) "unbound variable")))))
-    (let ((r2 (repro-failure no-luks)))
-      (test-assert "facts lack luks-uuid: clear error, not unbound variable"
-                   (and (not (zero? (car r2)))
-                        (string-contains (cdr r2) "missing required machine fact")
-                        (not (string-contains (cdr r2) "unbound variable"))))))
+    (call-with-output-file facts-a
+                           (lambda (p)
+                             (write '((luks-uuid . "00000000-0000-0000-0000-000000000000")) p)
+                             (newline p)))
+    (call-with-output-file facts-b
+                           (lambda (p)
+                             (write '((luks-uuid . "11111111-1111-1111-1111-111111111111")) p)
+                             (newline p)))
+    (let ((r (repro-construct no-luks)))
+      (test-assert "facts lack luks-uuid: mapped-device constructs (UUID is runtime)"
+                   (and (zero? (car r))
+                        (not (string-contains (cdr r) "unbound variable")))))
+    (let ((a (drv-under-facts facts-a))
+          (b (drv-under-facts facts-b)))
+      (test-assert "derivations computed under both facts"
+                   (and (zero? (car a)) (zero? (car b))
+                        (cadr a) (caddr a)
+                        (string-suffix? ".drv" (cadr a))))
+      (test-equal "initrd derivation is identical for different luks-uuid"
+                  (cadr a) (cadr b))
+      (test-equal "system derivation is identical for different luks-uuid"
+                  (caddr a) (caddr b))))
   (format (current-error-port)
           "subprocess integration test skipped: no guix in PATH~%"))
 

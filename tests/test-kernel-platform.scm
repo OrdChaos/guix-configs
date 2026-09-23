@@ -22,7 +22,8 @@
 ;;;   K10 UI language：由 test-ui-language 覆盖（套件）
 ;;;
 ;;; 由 tests/run-tests.scm 加载运行（nonguix channel 源已加入 load
-;;; path）；单独运行需先设 GUIX_CONFIG_FACTS。
+;;; path；host 模块实例化不再需要 GUIX_CONFIG_FACTS——LUKS UUID 是
+;;; initrd 运行时事实，不进 OS derivation）。
 
 (use-modules (guixcfg hosts vm)
              (guixcfg boot uki)           ; <boot-plan>、make-uki-deploy-program

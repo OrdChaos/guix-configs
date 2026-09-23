@@ -159,6 +159,10 @@ echo "T7-INSTALL: facts written luks-uuid=$LUKS_UUID"
 $MKFS -F 32 -n ESP /dev/vdb1 || { echo "T7-INSTALL-FAIL: mkfs.vfat"; poweroff -f; }
 mount /dev/vdb1 /mnt/esp
 mkdir -p /mnt/esp/EFI/BOOT /mnt/esp/EFI/Guix/A
+# initrd 运行时权威身份：LUKS UUID 文件（规范化 32 位小写 hex；
+# 生产由 write-machine-facts / esp-uuid activation 写，见
+# (guixcfg boot layout) %esp-luks-uuid-file）
+printf '12345678123412341234123456789abc\n' > /mnt/esp/EFI/Guix/luks-uuid
 printf 'NAME="Guix System"\nID=guix\n' > /tmp/os-release
 KERNEL="$SYSTEM/kernel/bzImage"
 INITRD="$SYSTEM/initrd"
