@@ -34,28 +34,28 @@
                #:use-module (gnu)                          ; operating-system、user-account、service 等
                #:use-module (gnu home)                     ; home-environment（laptop home 组装）
                #:use-module (gnu services networking)      ; network-manager-service-type、wpa-supplicant-service-type
-                #:use-module (guixcfg storage model)          ; host-storage-policy-keep-root-generations
-                #:use-module ((guixcfg storage policies) #:prefix storage:)
-                #:use-module (guixcfg hosts common)         ; 共享 host composition algorithm
-                #:use-module (guixcfg inventory hosts)      ; Host ID → hostname 单一映射
-                #:use-module (guixcfg system graphics nvidia) ; nvidia-system-transformation（laptop 专属）
-                #:use-module (guixcfg system gaming)        ; gaming host infrastructure（controller udev + 游戏库目录）
+               #:use-module (guixcfg storage model)          ; host-storage-policy-keep-root-generations
+               #:use-module ((guixcfg storage policies) #:prefix storage:)
+               #:use-module (guixcfg hosts common)         ; 共享 host composition algorithm
+               #:use-module (guixcfg inventory hosts)      ; Host ID → hostname 单一映射
+               #:use-module (guixcfg system graphics nvidia) ; nvidia-system-transformation（laptop 专属）
+               #:use-module (guixcfg system gaming)        ; gaming host infrastructure（controller udev + 游戏库目录）
                #:use-module (guixcfg users user)           ; %primary-user（结构事实权威源）
                #:use-module (guixcfg home user)            ; guix-home（挂入 system）
                #:use-module (guixcfg security secrets)     ; secrets 部署机制
-                #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
-                #:use-module (guixcfg apps model)      ; applications-secrets
-                #:use-module (guixcfg apps selection)  ; application-configuration-selection
-                #:use-module (guixcfg system machine-state-persistence) ; machine-state binds
+               #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
+               #:use-module (guixcfg apps model)      ; applications-secrets
+               #:use-module (guixcfg apps selection)  ; application-configuration-selection
+               #:use-module (guixcfg system machine-state-persistence) ; machine-state binds
                #:use-module (guixcfg system network-manager-persistence) ; saved connection profiles
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind
                #:use-module (guixcfg system mihomo service) ; %mihomo-secrets、%mihomo-data-persistence-rule
-                #:export (%lenovo-legion-y7000p-storage-policy
-                          %lenovo-legion-y7000p-application-configuration-selections
-                          %lenovo-legion-y7000p-guix-home
-                          %lenovo-legion-y7000p-services
-                          %lenovo-legion-y7000p-user-services
-                          %lenovo-legion-y7000p-os))
+               #:export (%lenovo-legion-y7000p-storage-policy
+                         %lenovo-legion-y7000p-application-configuration-selections
+                         %lenovo-legion-y7000p-guix-home
+                         %lenovo-legion-y7000p-services
+                         %lenovo-legion-y7000p-user-services
+                         %lenovo-legion-y7000p-os))
 
 ;; 保留 host 模块原有导出名；实际 policy 放在纯存储模块中，避免早期
 ;; disk-install 为取 policy 而加载完整 OS/UKI/channel 依赖。

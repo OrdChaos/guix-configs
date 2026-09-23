@@ -58,8 +58,8 @@
              (let ((vm-s (lower-text
                           (operating-system-sudoers-file %vm-os)))
                    (lp-s (lower-text
-                           (operating-system-sudoers-file
-                            %lenovo-legion-y7000p-os))))
+                          (operating-system-sudoers-file
+                           %lenovo-legion-y7000p-os))))
                (and (string-contains vm-s "Defaults lecture = never")
                     (string-contains lp-s "Defaults lecture = never")
                     (string-contains vm-s "[sudo] %p 的密码：")

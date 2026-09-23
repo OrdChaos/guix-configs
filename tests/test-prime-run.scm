@@ -149,8 +149,8 @@
              (find (lambda (p)
                      (string=? (package-name (home-package-entry p))
                                "prime-run"))
-                    (home-environment-packages
-                     host:%lenovo-legion-y7000p-guix-home)))
+                   (home-environment-packages
+                    host:%lenovo-legion-y7000p-guix-home)))
 
 (test-assert "P5: default (VM) home does not provide prime-run"
              (not (find (lambda (p)
@@ -163,7 +163,7 @@
   (service-value
    (fold-services
     (home-environment-services host:%lenovo-legion-y7000p-guix-home)
-                  #:target-type home-environment-variables-service-type)))
+    #:target-type home-environment-variables-service-type)))
 
 (define %forbidden-global-nvidia-vars
   '("__NV_PRIME_RENDER_OFFLOAD"

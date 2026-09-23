@@ -61,11 +61,11 @@
                          flatpak-sync-plan
                          flatpak-update-plan
                          flatpak-update-runtimes-plan
-                          flatpak-remove-plan
-                          flatpak-replace-remote-plan
-                          flatpak-stale-extension-pins
-                          flatpak-gc-unpin-plan
-                          flatpak-gc-commands
+                         flatpak-remove-plan
+                         flatpak-replace-remote-plan
+                         flatpak-stale-extension-pins
+                         flatpak-gc-unpin-plan
+                         flatpak-gc-commands
                          ;; GL driver 一致性（离线 doctor）
                          flatpak-active-gl-drivers
                          flatpak-gl-driver-status-lines))
@@ -224,7 +224,7 @@ trust 边界仍在：命令本身是显式的 destructive acknowledgment，sync
 (define (flatpak-list-refs . category-arguments)
   (flatpak-output->refs
    (apply invoke-capture "flatpak" "list" "--user"
-          (append category-arguments '("--columns=application,branch")))))
+     (append category-arguments '("--columns=application,branch")))))
 
 (define (flatpak-list-installed-runtime-refs)
   "已安装 runtime 的 '<id>//<branch>' ref 列表（'flatpak list --user
@@ -381,49 +381,49 @@ sync 对 selected extension 执行 `flatpak pin --user <ref>`，即使它
 
 (define* (flatpak-gl-driver-status-lines active-drivers installed-refs
                                          #:key (require-gl32? #f))
-  "纯函数：ACTIVE-DRIVERS（nvidia-x-y-z 列表）× INSTALLED-REFS
+         "纯函数：ACTIVE-DRIVERS（nvidia-x-y-z 列表）× INSTALLED-REFS
 （全部已装 ref id）→ doctor 输出行（strings；无发散为空）。
 GL=org.freedesktop.Platform.GL.nvidia-*，GL32=...GL32.nvidia-*。"
-  (let* ((ids (map flatpak-ref-id installed-refs))
-         (gl-prefix "org.freedesktop.Platform.GL.nvidia-")
-         (gl32-prefix "org.freedesktop.Platform.GL32.nvidia-")
-         (gl32-ids (filter (lambda (id) (string-prefix? gl32-prefix id)) ids))
-         ;; 防御非 nvidia-* 条目（真实调用方
-         ;; flatpak-active-gl-drivers 已过滤；纯函数保持健壮）。
-         (nvidia-drivers (filter (lambda (driver)
-                                   (string-prefix? "nvidia-" driver))
-                                 active-drivers))
-         (expected (map (lambda (driver)
-                          (string-drop driver (string-length "nvidia-")))
-                        nvidia-drivers))
-         (families (append (list (cons "GL" gl-prefix))
-                           (if (or require-gl32? (pair? gl32-ids))
-                             (list (cons "GL32" gl32-prefix))
-                              '()))))
-    (append-map
-      (lambda (family)
-        (let* ((label (car family))
-               (prefix (cdr family))
-               (family-ids (filter (lambda (id) (string-prefix? prefix id)) ids))
-               (missing (filter (lambda (version)
-                                  (not (member (string-append prefix version)
-                                               family-ids)))
-                                expected))
-               (stale (filter (lambda (id)
-                                (not (member (string-drop id
-                                                          (string-length prefix))
-                                             expected)))
-                              family-ids)))
-          (append
-           (map (lambda (version)
-                  (format #f "~a driver mismatch: active nvidia-~a has no installed ~a extension.~%Fix: reboot (load the new kernel module), then run 'blue flatpak update-runtimes'."
-                          label version label))
-                missing)
-           (map (lambda (id)
-                  (format #f "stale ~a extension: ~a does not match the active driver.~%Fix: run 'blue flatpak gc' (autopruned refs)."
-                          label id))
-                stale))))
-     families)))
+         (let* ((ids (map flatpak-ref-id installed-refs))
+                (gl-prefix "org.freedesktop.Platform.GL.nvidia-")
+                (gl32-prefix "org.freedesktop.Platform.GL32.nvidia-")
+                (gl32-ids (filter (lambda (id) (string-prefix? gl32-prefix id)) ids))
+                ;; 防御非 nvidia-* 条目（真实调用方
+                ;; flatpak-active-gl-drivers 已过滤；纯函数保持健壮）。
+                (nvidia-drivers (filter (lambda (driver)
+                                          (string-prefix? "nvidia-" driver))
+                                        active-drivers))
+                (expected (map (lambda (driver)
+                                 (string-drop driver (string-length "nvidia-")))
+                               nvidia-drivers))
+                (families (append (list (cons "GL" gl-prefix))
+                                  (if (or require-gl32? (pair? gl32-ids))
+                                    (list (cons "GL32" gl32-prefix))
+                                    '()))))
+           (append-map
+            (lambda (family)
+              (let* ((label (car family))
+                     (prefix (cdr family))
+                     (family-ids (filter (lambda (id) (string-prefix? prefix id)) ids))
+                     (missing (filter (lambda (version)
+                                        (not (member (string-append prefix version)
+                                                     family-ids)))
+                                      expected))
+                     (stale (filter (lambda (id)
+                                      (not (member (string-drop id
+                                                                (string-length prefix))
+                                                   expected)))
+                                    family-ids)))
+                (append
+                 (map (lambda (version)
+                        (format #f "~a driver mismatch: active nvidia-~a has no installed ~a extension.~%Fix: reboot (load the new kernel module), then run 'blue flatpak update-runtimes'."
+                                label version label))
+                      missing)
+                 (map (lambda (id)
+                        (format #f "stale ~a extension: ~a does not match the active driver.~%Fix: run 'blue flatpak gc' (autopruned refs)."
+                                label id))
+                      stale))))
+            families)))
 
 (define* (flatpak-status #:key (refresh? #f)
                          (applications %flatpak-applications)
@@ -563,50 +563,50 @@ is preserved.~%"
                                        (extensions %flatpak-extensions)
                                        (extension-selection
                                         %flatpak-extension-selection))
-  "PINS 中属于 catalog extension、但不再是 selected id//branch 的项。"
-  (define (pin-id+branch pin)
-    (if (string-prefix? "runtime/" pin)
-      (let ((parts (string-split pin #\/)))
-        (and (= 4 (length parts))
-             (cons (cadr parts) (list-ref parts 3))))
-      (let ((separator (string-contains pin "//")))
-        (and separator
-             (cons (substring pin 0 separator)
-                   (substring pin (+ separator 2)))))))
-  (let ((desired (map (lambda (ext)
-                        (cons (flatpak-extension-id ext)
-                              (flatpak-extension-branch ext)))
-                      (flatpak-select-extensions extension-selection
-                                                 extensions)))
-        (managed-ids (map flatpak-extension-id extensions)))
-    (filter (lambda (pin)
-              (let ((identity (pin-id+branch pin)))
-                (and identity
-                     (member (car identity) managed-ids)
-                     (not (member identity desired equal?)))))
-            pins)))
+         "PINS 中属于 catalog extension、但不再是 selected id//branch 的项。"
+         (define (pin-id+branch pin)
+           (if (string-prefix? "runtime/" pin)
+             (let ((parts (string-split pin #\/)))
+               (and (= 4 (length parts))
+                    (cons (cadr parts) (list-ref parts 3))))
+             (let ((separator (string-contains pin "//")))
+               (and separator
+                    (cons (substring pin 0 separator)
+                          (substring pin (+ separator 2)))))))
+         (let ((desired (map (lambda (ext)
+                               (cons (flatpak-extension-id ext)
+                                     (flatpak-extension-branch ext)))
+                             (flatpak-select-extensions extension-selection
+                                                        extensions)))
+               (managed-ids (map flatpak-extension-id extensions)))
+           (filter (lambda (pin)
+                     (let ((identity (pin-id+branch pin)))
+                       (and identity
+                            (member (car identity) managed-ids)
+                            (not (member identity desired equal?)))))
+                   pins)))
 
 (define* (flatpak-gc #:key
                      (extensions %flatpak-extensions)
                      (extension-selection %flatpak-extension-selection))
-  "显式维护：orphan runtimes（uninstall --unused）+ installation
+         "显式维护：orphan runtimes（uninstall --unused）+ installation
 repair。不挂 boot/reconfigure/activation hook。先解除不再 selected
 或已换 branch 的 repository-managed extension pin。"
-  (for-each (lambda (pin)
-              (invoke "flatpak" "pin" "--user" "--remove" pin))
-            (flatpak-gc-unpin-plan
-             #:extensions extensions
-             #:extension-selection extension-selection))
-  (for-each (lambda (argv) (apply invoke argv)) (flatpak-gc-commands)))
+         (for-each (lambda (pin)
+                     (invoke "flatpak" "pin" "--user" "--remove" pin))
+                   (flatpak-gc-unpin-plan
+                    #:extensions extensions
+                    #:extension-selection extension-selection))
+         (for-each (lambda (argv) (apply invoke argv)) (flatpak-gc-commands)))
 
 (define* (flatpak-gc-unpin-plan
           #:key (extensions %flatpak-extensions)
           (extension-selection %flatpak-extension-selection))
-  "gc 前将解除的 repository-managed extension pin 列表（只读）。"
-  (flatpak-stale-extension-pins
-   (flatpak-list-pins)
-   #:extensions extensions
-   #:extension-selection extension-selection))
+         "gc 前将解除的 repository-managed extension pin 列表（只读）。"
+         (flatpak-stale-extension-pins
+          (flatpak-list-pins)
+          #:extensions extensions
+          #:extension-selection extension-selection))
 
 ;;; ── Blue flatpak 命令的 invocation 契约与 dry-run plan ────────
 ;;;
@@ -648,68 +648,68 @@ status 接受可选 --refresh；remove/remote-replace 恰好一个参数；其�
 (define* (flatpak-sync-plan remotes applications selection
                             #:key (extensions %flatpak-extensions)
                             (extension-selection '()))
-  "sync 的只读 plan：remote 缺失清单 + 待安装 app/extension 清单
+         "sync 的只读 plan：remote 缺失清单 + 待安装 app/extension 清单
 （每项一行）。不修改任何状态；remote drift 由
 flatpak-check-remote! 照常 fail-loud（dry-run 也报 drift）。"
-  (append
-   (map (lambda (r)
-          (if (flatpak-check-remote! r)
-            (format #f "remote ~a: already declared (no-op)"
-                    (flatpak-remote-name r))
-            (format #f "would add remote ~a (descriptor ~a; transport ~a)"
-                    (flatpak-remote-name r)
-                    (flatpak-remote-descriptor-url r)
-                    (flatpak-remote-repository-url r))))
-        remotes)
-   (map (lambda (app)
-          (format #f "would install ~a from ~a~a"
-                  (flatpak-application-ref app)
-                  (flatpak-application-remote app)
-                  (if (flatpak-application-commit app)
-                    (format #f " (pin ~a)" (flatpak-application-commit app))
-                    "")))
-        (flatpak-reconcile-plan
-         (flatpak-select-applications selection applications)
-         (flatpak-list-installed-apps)))
-   (let* ((installed-refs (flatpak-list-installed-refs))
-          (pins (flatpak-list-pins))
-          (selected-exts
-           (flatpak-select-extensions extension-selection extensions)))
-     (append
-      (map (lambda (ext)
-             (format #f "would install extension ~a from ~a"
-                     (flatpak-extension-ref ext)
-                     (flatpak-extension-remote ext)))
-           (filter (lambda (ext)
-                     (not (member (flatpak-extension-ref ext)
-                                  installed-refs)))
-                   selected-exts))
-      (map (lambda (ext)
-             (format #f "would pin extension ~a"
-                     (flatpak-extension-ref ext)))
-           (filter (lambda (ext)
-                     (not (member (flatpak-extension-ref ext) pins)))
-                   selected-exts))))))
+         (append
+          (map (lambda (r)
+                 (if (flatpak-check-remote! r)
+                   (format #f "remote ~a: already declared (no-op)"
+                           (flatpak-remote-name r))
+                   (format #f "would add remote ~a (descriptor ~a; transport ~a)"
+                           (flatpak-remote-name r)
+                           (flatpak-remote-descriptor-url r)
+                           (flatpak-remote-repository-url r))))
+               remotes)
+          (map (lambda (app)
+                 (format #f "would install ~a from ~a~a"
+                         (flatpak-application-ref app)
+                         (flatpak-application-remote app)
+                         (if (flatpak-application-commit app)
+                           (format #f " (pin ~a)" (flatpak-application-commit app))
+                           "")))
+               (flatpak-reconcile-plan
+                (flatpak-select-applications selection applications)
+                (flatpak-list-installed-apps)))
+          (let* ((installed-refs (flatpak-list-installed-refs))
+                 (pins (flatpak-list-pins))
+                 (selected-exts
+                  (flatpak-select-extensions extension-selection extensions)))
+            (append
+             (map (lambda (ext)
+                    (format #f "would install extension ~a from ~a"
+                            (flatpak-extension-ref ext)
+                            (flatpak-extension-remote ext)))
+                  (filter (lambda (ext)
+                            (not (member (flatpak-extension-ref ext)
+                                         installed-refs)))
+                          selected-exts))
+             (map (lambda (ext)
+                    (format #f "would pin extension ~a"
+                            (flatpak-extension-ref ext)))
+                  (filter (lambda (ext)
+                            (not (member (flatpak-extension-ref ext) pins)))
+                          selected-exts))))))
 
 (define* (flatpak-update-plan applications selection
                               #:key (extensions %flatpak-extensions)
                               (extension-selection
                                %flatpak-extension-selection))
-  "update 的只读 plan：selection ∩ installed ∩ unpinned 的 app ref +
+         "update 的只读 plan：selection ∩ installed ∩ unpinned 的 app ref +
 已装选中 extension 的 ref 列表。"
-  (let ((installed (flatpak-list-installed-apps))
-        (installed-refs (flatpak-list-installed-refs)))
-    (append
-     (map flatpak-application-ref
-          (filter (lambda (app)
-                    (and (member (flatpak-application-ref app) installed)
-                         (not (flatpak-application-commit app))))
-                  (flatpak-select-applications selection applications)))
-     (map flatpak-extension-ref
-          (filter (lambda (ext)
-                    (member (flatpak-extension-ref ext) installed-refs))
-                  (flatpak-select-extensions extension-selection
-                                             extensions))))))
+         (let ((installed (flatpak-list-installed-apps))
+               (installed-refs (flatpak-list-installed-refs)))
+           (append
+            (map flatpak-application-ref
+                 (filter (lambda (app)
+                           (and (member (flatpak-application-ref app) installed)
+                                (not (flatpak-application-commit app))))
+                         (flatpak-select-applications selection applications)))
+            (map flatpak-extension-ref
+                 (filter (lambda (ext)
+                           (member (flatpak-extension-ref ext) installed-refs))
+                         (flatpak-select-extensions extension-selection
+                                                    extensions))))))
 
 (define (flatpak-update-runtimes-plan)
   "update-runtimes 的只读 plan：已安装 runtime 的 ref 列表。"

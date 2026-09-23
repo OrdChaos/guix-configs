@@ -25,7 +25,7 @@
 (define %locked-channels
   (eval (call-with-input-file (string-append (repository-root)
                                              "/channels.lock.scm")
-                               read)
+                              read)
         (current-module)))
 
 (define %channel-profile-cache-key

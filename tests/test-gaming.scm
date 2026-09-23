@@ -167,39 +167,39 @@
 
 (test-assert "overlay on external app fails closed"
              (catch #t
-                    (lambda ()
-                      (flatpak-applications-with-environments
-                       '((qq . ("FOO=bar")))
-                       %flatpak-applications)
-                      #f)
-                    (lambda (key . args)
-                      (and (eq? key 'misc-error)
-                           (any (cut string-contains <> "non-managed")
-                                (map object->string args))))))
+               (lambda ()
+                 (flatpak-applications-with-environments
+                  '((qq . ("FOO=bar")))
+                  %flatpak-applications)
+                 #f)
+               (lambda (key . args)
+                 (and (eq? key 'misc-error)
+                      (any (cut string-contains <> "non-managed")
+                           (map object->string args))))))
 
 (test-assert "overlay with duplicate variables fails closed"
              (catch #t
-                    (lambda ()
-                      (flatpak-application-with-environment
-                       %prime-overlayed-steam
-                       '("__GLX_VENDOR_LIBRARY_NAME=mesa"))
-                      #f)
-                    (lambda (key . args)
-                      (and (eq? key 'misc-error)
-                           (any (cut string-contains <> "duplicate")
-                                (map object->string args))))))
+               (lambda ()
+                 (flatpak-application-with-environment
+                  %prime-overlayed-steam
+                  '("__GLX_VENDOR_LIBRARY_NAME=mesa"))
+                 #f)
+               (lambda (key . args)
+                 (and (eq? key 'misc-error)
+                      (any (cut string-contains <> "duplicate")
+                           (map object->string args))))))
 
 (test-assert "overlay with unknown target fails closed"
              (catch #t
-                    (lambda ()
-                      (flatpak-applications-with-environments
-                       '((typo . ("FOO=bar")))
-                       %flatpak-applications)
-                      #f)
-                    (lambda (key . args)
-                      (and (eq? key 'misc-error)
-                           (any (cut string-contains <> "unknown")
-                                (map object->string args))))))
+               (lambda ()
+                 (flatpak-applications-with-environments
+                  '((typo . ("FOO=bar")))
+                  %flatpak-applications)
+                 #f)
+               (lambda (key . args)
+                 (and (eq? key 'misc-error)
+                      (any (cut string-contains <> "unknown")
+                           (map object->string args))))))
 
 ;; ── registry：catalog 与缺省 selection ──────────────────────
 

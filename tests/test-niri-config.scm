@@ -141,13 +141,13 @@
                      (map (lambda (s)
                             (list (application-configuration-selection-application s)
                                   (application-configuration-selection-variant s)))
-                           %lenovo-legion-y7000p-application-configuration-selections)))
+                          %lenovo-legion-y7000p-application-configuration-selections)))
 (test-assert "laptop home includes the application-configuration-files extension"
              (any (lambda (s)
                     (eq? 'application-configuration-files
                          (service-type-name (service-kind s))))
-                   (home-environment-services
-                    %lenovo-legion-y7000p-guix-home)))
+                  (home-environment-services
+                   %lenovo-legion-y7000p-guix-home)))
 (test-assert "default home (VM) has no application-configuration-files extension"
              (not (any (lambda (s)
                          (eq? 'application-configuration-files

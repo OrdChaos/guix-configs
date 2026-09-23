@@ -123,13 +123,13 @@
      (define (add-esp! disk part uuid-content)
        (mkdir-p (string-append sysfs "/" disk "/" part))
        (call-with-output-file (string-append sysfs "/" disk "/" part "/uevent")
-         (lambda (p) (display "PARTNAME=esp\n" p)))
+                              (lambda (p) (display "PARTNAME=esp\n" p)))
        (let ((content (string-append dir "/esp-" part)))
          (mkdir-p content)
          (when uuid-content
            (mkdir-p (string-append content "/EFI/Guix"))
            (call-with-output-file (string-append content "/EFI/Guix/luks-uuid")
-             (lambda (p) (display uuid-content p) (newline p))))
+                                  (lambda (p) (display uuid-content p) (newline p))))
          (set! mapping (acons (string-append "/dev/" part) content mapping))))
      (define (fake-mount dev target type flags data)
        (let ((src (assoc-ref mapping dev)))
@@ -144,41 +144,41 @@
                                 #:mount-point mp
                                 #:mount-fn fake-mount
                                 #:umount-fn fake-umount))
-
+     
      ;; 无任何 ESP 分区 → fail-closed
      (test-assert "no ESP partition at all -> error"
                   (catch #t
                     (lambda () (read-uuid) #f)
                     (lambda (k . a) #t)))
-
+     
      ;; 一个 ESP 带合法 dashed UUID → 规范化读取
      (add-esp! "vda" "vda1" "12345678-1234-1234-1234-123456789abc")
      (test-equal "single ESP with valid UUID -> normalized hex"
                  "12345678123412341234123456789abc"
                  (read-uuid))
-
+     
      ;; 第二个 ESP（另一盘）内容一致 → 仍可读
      (add-esp! "vdb" "vdb1" "12345678123412341234123456789abc")
      (test-equal "two ESPs with identical UUID -> accepted"
                  "12345678123412341234123456789abc"
                  (read-uuid))
-
+     
      ;; 内容冲突 → fail-closed
      (call-with-output-file (string-append dir "/esp-vdb1/EFI/Guix/luks-uuid")
-       (lambda (p) (display "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" p) (newline p)))
+                            (lambda (p) (display "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" p) (newline p)))
      (test-assert "conflicting UUIDs across ESPs -> error"
                   (catch #t
                     (lambda () (read-uuid) #f)
                     (lambda (k . a) #t)))
-
+     
      ;; 内容非法 → fail-closed（不是静默跳过）
      (call-with-output-file (string-append dir "/esp-vdb1/EFI/Guix/luks-uuid")
-       (lambda (p) (display "not-a-uuid" p) (newline p)))
+                            (lambda (p) (display "not-a-uuid" p) (newline p)))
      (test-assert "invalid UUID content -> error"
                   (catch #t
                     (lambda () (read-uuid) #f)
                     (lambda (k . a) #t)))
-
+     
      ;; 全部 ESP 都没有文件 → fail-closed
      (delete-file-recursively (string-append dir "/esp-vda1/EFI"))
      (delete-file-recursively (string-append dir "/esp-vdb1/EFI"))

@@ -30,7 +30,7 @@
 
 (test-assert "blueprint lazy-loads the user-only Flatpak dependency graph"
              (let* ((imports-end (or (string-contains blueprint
-                                                     "(primitive-load")
+                                                      "(primitive-load")
                                      (error "blueprint import boundary not found")))
                     (eager-imports (substring blueprint 0 imports-end)))
                (and (not (string-contains eager-imports

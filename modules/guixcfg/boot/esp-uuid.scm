@@ -26,30 +26,30 @@
   ;; 同样跳过。reconfigure 时 /efi 已挂载、facts 存在 → 幂等补写。
   (with-imported-modules (source-module-closure
                           '((guixcfg boot device-resolver)))
-    #~(begin
-        (use-modules (guixcfg boot device-resolver)  ; normalize-luks-uuid
-                     (ice-9 rdelim))                  ; read-line
-        (let ((facts-path #$%default-machine-facts-path)
-              (esp-file (string-append #$%esp-mount-point "/"
-                                       #$%esp-luks-uuid-file)))
-          (when (and (file-exists? facts-path)
-                     (file-exists? (dirname esp-file)))
-            (let* ((facts (call-with-input-file facts-path read))
-                   (uuid (assq-ref facts 'luks-uuid)))
-              (when uuid
-                (let ((normalized
-                       (or (normalize-luks-uuid uuid)
-                           (error "esp-luks-uuid: invalid LUKS UUID \
+                         #~(begin
+                            (use-modules (guixcfg boot device-resolver)  ; normalize-luks-uuid
+                                         (ice-9 rdelim))                  ; read-line
+                            (let ((facts-path #$%default-machine-facts-path)
+                                  (esp-file (string-append #$%esp-mount-point "/"
+                                                           #$%esp-luks-uuid-file)))
+                              (when (and (file-exists? facts-path)
+                                         (file-exists? (dirname esp-file)))
+                                (let* ((facts (call-with-input-file facts-path read))
+                                       (uuid (assq-ref facts 'luks-uuid)))
+                                  (when uuid
+                                    (let ((normalized
+                                           (or (normalize-luks-uuid uuid)
+                                               (error "esp-luks-uuid: invalid LUKS UUID \
 in machine facts" uuid))))
-                  (unless (and (file-exists? esp-file)
-                               (equal? normalized
-                                       (call-with-input-file esp-file
-                                                             read-line)))
-                    (call-with-output-file esp-file
-                      (lambda (port)
-                        (display normalized port)
-                        (newline port)))
-                    (format #t "esp-luks-uuid: wrote ~a~%" esp-file))))))))))
+                                      (unless (and (file-exists? esp-file)
+                                                   (equal? normalized
+                                                           (call-with-input-file esp-file
+                                                                                 read-line)))
+                                        (call-with-output-file esp-file
+                                                               (lambda (port)
+                                                                 (display normalized port)
+                                                                 (newline port)))
+                                        (format #t "esp-luks-uuid: wrote ~a~%" esp-file))))))))))
 
 (define esp-luks-uuid-service
   (simple-service 'esp-luks-uuid

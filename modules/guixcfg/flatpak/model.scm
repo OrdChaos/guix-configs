@@ -96,23 +96,23 @@
                          valid-flatpak-branch?
                          valid-flatpak-commit?
                          valid-flatpak-update-policy?
-                          valid-flatpak-override-policy?
-                          valid-flatpak-application?
-                          valid-flatpak-extension?
-                          validate-flatpak-catalog!
-                          validate-flatpak-extension-catalog!
-                          validate-flatpak-selection!
-                          validate-flatpak-extension-selection!
-                          flatpak-select-applications
-                          flatpak-select-extensions
-                          flatpak-application-ref
-                          flatpak-extension-ref
-                          flatpak-application-commit
-                          flatpak-application-pinned?
-                          flatpak-application-managed-overrides
-                          flatpak-application-with-environment
-                          flatpak-applications-with-environments
-                          flatpak-reconcile-plan
+                         valid-flatpak-override-policy?
+                         valid-flatpak-application?
+                         valid-flatpak-extension?
+                         validate-flatpak-catalog!
+                         validate-flatpak-extension-catalog!
+                         validate-flatpak-selection!
+                         validate-flatpak-extension-selection!
+                         flatpak-select-applications
+                         flatpak-select-extensions
+                         flatpak-application-ref
+                         flatpak-extension-ref
+                         flatpak-application-commit
+                         flatpak-application-pinned?
+                         flatpak-application-managed-overrides
+                         flatpak-application-with-environment
+                         flatpak-applications-with-environments
+                         flatpak-reconcile-plan
                          flatpak-render-override-file))
 
 ;;; ── remote（identity / trust / transport）──────────────────
@@ -236,13 +236,13 @@
 (define (non-empty-string-list? f)
   (and (list? f)
        (every (lambda (e)
-                 (and (string? e) (> (string-length e) 0)
-                      (not (string-any (lambda (c)
-                                         (or (char=? c #\newline)
-                                             (char=? c #\return)
-                                             (char=? c #\nul)))
-                                       e))))
-               f)))
+                (and (string? e) (> (string-length e) 0)
+                     (not (string-any (lambda (c)
+                                        (or (char=? c #\newline)
+                                            (char=? c #\return)
+                                            (char=? c #\nul)))
+                                      e))))
+              f)))
 
 (define (valid-bus-policy? e)
   "Bus policy 条目形态 'org.name=talk|own|see|none'。"
@@ -256,20 +256,20 @@
   "environment 条目形态 'VAR=VALUE'；VAR 为 POSIX 风格变量名。"
   (and (string? e)
        (let ((i (string-index e #\=)))
-          (and i (> i 0)
-               (let ((name (substring e 0 i))
-                     (value (substring e (1+ i))))
-                 (and (or (ascii-alpha? (string-ref name 0))
-                          (char=? #\_ (string-ref name 0)))
-                      (string-every (lambda (c)
-                                      (or (ascii-alpha? c) (ascii-digit? c)
-                                          (char=? c #\_)))
-                                    name)
-                      (not (string-any (lambda (c)
-                                         (or (char=? c #\newline)
-                                             (char=? c #\return)
-                                             (char=? c #\nul)))
-                                       value))))))))
+         (and i (> i 0)
+              (let ((name (substring e 0 i))
+                    (value (substring e (1+ i))))
+                (and (or (ascii-alpha? (string-ref name 0))
+                         (char=? #\_ (string-ref name 0)))
+                     (string-every (lambda (c)
+                                     (or (ascii-alpha? c) (ascii-digit? c)
+                                         (char=? c #\_)))
+                                   name)
+                     (not (string-any (lambda (c)
+                                        (or (char=? c #\newline)
+                                            (char=? c #\return)
+                                            (char=? c #\nul)))
+                                      value))))))))
 
 (define (valid-flatpak-remote? remote)
   (and (flatpak-remote? remote)
@@ -541,11 +541,11 @@ APPS：键为 logical name，值为 'VAR=VALUE' 条目列表；重复或未知 t
                   (entry (assq name environment-overrides))
                   (env (and entry (cdr entry))))
              (cond ((not env) app)
-                   ((flatpak-application-managed-overrides app)
-                    (flatpak-application-with-environment app env))
-                   (else
-                    (error "environment override targets a non-managed flatpak application"
-                           name)))))
+               ((flatpak-application-managed-overrides app)
+                (flatpak-application-with-environment app env))
+               (else
+                (error "environment override targets a non-managed flatpak application"
+                       name)))))
          apps)))
 
 ;;; ── reconcile plan（纯函数，只增不删）─────────────────────
@@ -644,12 +644,12 @@ override 文件格式逐字节一致（GLib keyfile 解析两端等价；
            (negate string-null?)
            (list (if (null? context-lines)
                    ""
-                    (string-append "[Context]\n"
-                                   (string-join context-lines "\n")
-                                   "\n"))
-                  (render-environment-section
-                   (flatpak-override-environment overrides))
-                  (render-bus-section "Session Bus Policy"
+                   (string-append "[Context]\n"
+                                  (string-join context-lines "\n")
+                                  "\n"))
+                 (render-environment-section
+                  (flatpak-override-environment overrides))
+                 (render-bus-section "Session Bus Policy"
                                      (flatpak-override-session-bus
                                       overrides))
                  (render-bus-section "System Bus Policy"

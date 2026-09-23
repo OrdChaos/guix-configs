@@ -33,16 +33,16 @@
             (machine-state-persistence-rule-consumer
              %network-manager-connections-persistence-rule))
 (test-assert "laptop binds persistent connection profiles"
-              (and %lenovo-legion-y7000p-mount
-                   (string=? %backing
-                             (file-system-device %lenovo-legion-y7000p-mount))
-                   (memq 'bind-mount
-                         (file-system-flags %lenovo-legion-y7000p-mount))))
+             (and %lenovo-legion-y7000p-mount
+                  (string=? %backing
+                            (file-system-device %lenovo-legion-y7000p-mount))
+                  (memq 'bind-mount
+                        (file-system-flags %lenovo-legion-y7000p-mount))))
 (test-assert "VM does not persist NetworkManager profiles"
              (not (mount-at %vm-os %consumer)))
 (test-assert "volatile NetworkManager state is not persisted"
-              (not (mount-at %lenovo-legion-y7000p-os
-                             "/var/lib/NetworkManager")))
+             (not (mount-at %lenovo-legion-y7000p-os
+                            "/var/lib/NetworkManager")))
 
 (define %ownership-source
   (object->string

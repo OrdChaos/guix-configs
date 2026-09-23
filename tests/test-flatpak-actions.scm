@@ -163,7 +163,7 @@
                (any (lambda (l)
                       (and (string-contains l "would install")
                            (string-contains l " from ")))
-                     lines)))
+                    lines)))
 
 (define %wrong-branch-ext
   (flatpak-extension
@@ -200,17 +200,17 @@
 ;; update-plan：装两个（一个 unpinned selected，一个 pinned selected，
 ;; 一个 unselected）→ 只出 unpinned selected 的 ref。
 (fp-write-file %fp-list-app-out
-                (string-append
-                 (flatpak-application-id (car (flatpak-select-applications %flatpak-selection %flatpak-applications)))
-                 "\tstable\n"))
+               (string-append
+                (flatpak-application-id (car (flatpak-select-applications %flatpak-selection %flatpak-applications)))
+                "\tstable\n"))
 (test-assert "update-plan: yields refs for selected+installed+unpinned only"
              (let* ((selected (flatpak-select-applications %flatpak-selection %flatpak-applications))
-                     (installed-refs (flatpak-list-installed-apps))
+                    (installed-refs (flatpak-list-installed-apps))
                     (expected
                      (map flatpak-application-ref
                           (filter (lambda (a)
-                                     (and (member (flatpak-application-ref a)
-                                                  installed-refs)
+                                    (and (member (flatpak-application-ref a)
+                                                 installed-refs)
                                          (not (flatpak-application-commit a))))
                                   selected))))
                (equal? expected
@@ -260,7 +260,7 @@
                (and (every (lambda (argv) (member "--user" argv)) all)
                     (not (any (lambda (argv) (member "--system" argv)) all))
                     (not (any (lambda (argv) (member "sudo" argv)) all))
-                     (every list? all))))
+                    (every list? all))))
 
 (test-equal "gc: stale catalog extension pins exclude selected ref"
             '("org.freedesktop.Platform.VulkanLayer.example//24.08"
@@ -285,21 +285,21 @@
 ;; 全局 extension selection 的 refs 也计入"已装"集合：converged
 ;; 判定覆盖 apps + extensions（零 mutation 契约适用于全部 selection）。
 (fp-write-file %fp-list-app-out
-                (string-join
-                 (append
-                  (map (lambda (app)
-                         (string-append (flatpak-application-id app)
-                                        "\t"
-                                        (flatpak-application-branch app)))
-                       (flatpak-select-applications
-                        %flatpak-selection %flatpak-applications))
-                  (map (lambda (ext)
-                         (string-append (flatpak-extension-id ext)
-                                        "\t"
-                                        (flatpak-extension-branch ext)))
-                       (flatpak-select-extensions
-                        %flatpak-extension-selection %flatpak-extensions)))
-                 "\n"))
+               (string-join
+                (append
+                 (map (lambda (app)
+                        (string-append (flatpak-application-id app)
+                                       "\t"
+                                       (flatpak-application-branch app)))
+                      (flatpak-select-applications
+                       %flatpak-selection %flatpak-applications))
+                 (map (lambda (ext)
+                        (string-append (flatpak-extension-id ext)
+                                       "\t"
+                                       (flatpak-extension-branch ext)))
+                      (flatpak-select-extensions
+                       %flatpak-extension-selection %flatpak-extensions)))
+                "\n"))
 (fp-write-file %fp-pins-out
                (string-join
                 (map flatpak-extension-ref

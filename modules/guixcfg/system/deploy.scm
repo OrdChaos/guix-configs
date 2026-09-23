@@ -32,19 +32,19 @@
                          require-host-id
                          modules-load-path-env
                          guix-time-machine-argv
-                          system-build-argv
-                          system-reconfigure-argv
-                          system-reconfigure-dry-run-argv
-                          %root-inferior-cache-directory
-                          system-init-expression
-                          system-init-argv
-                          reconfigure-privileged-argv
-                          install-privileged-argv
-                          enroll-privileged-argv
-                          gc-privileged-argv
-                          install-cli-argv
-                          install-success-cleanup-commands
-                          enroll-cli-argv
+                         system-build-argv
+                         system-reconfigure-argv
+                         system-reconfigure-dry-run-argv
+                         %root-inferior-cache-directory
+                         system-init-expression
+                         system-init-argv
+                         reconfigure-privileged-argv
+                         install-privileged-argv
+                         enroll-privileged-argv
+                         gc-privileged-argv
+                         install-cli-argv
+                         install-success-cleanup-commands
+                         enroll-cli-argv
                          gc-cli-argv
                          sb-keygen-tool-argv
                          sb-keystore-tool-argv
@@ -247,8 +247,8 @@ root 包进目标 OS。多 entry/无 cache 保持普通在线安装语义。"
   ;; time-machine repl 自带全部频道模块 load path，工具自行加入
   ;; 仓库 modules/（从仓库根运行）。
   (guix-time-machine-argv root %channels-lock-file
-                           `("repl" "tools/install-cli.scm" "--"
-                                    ,mode ,host ,device)))
+                          `("repl" "tools/install-cli.scm" "--"
+                                   ,mode ,host ,device)))
 
 (define (install-success-cleanup-commands)
   "安装完整 validate 成功后、返回 installer shell 前的 root 清理 argv。

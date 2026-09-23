@@ -49,9 +49,9 @@
 ;; 组装层。检查范围排除这些 inventory 层，generic 模块仍必须无泄漏。
 (define %generic-modules
   (filter (lambda (p)
-             (and (not (string-prefix? "modules/guixcfg/users/" p))
-                  (not (string-prefix? "modules/guixcfg/inventory/" p))
-                  (not (string-prefix? "modules/guixcfg/hosts/" p))
+            (and (not (string-prefix? "modules/guixcfg/users/" p))
+                 (not (string-prefix? "modules/guixcfg/inventory/" p))
+                 (not (string-prefix? "modules/guixcfg/hosts/" p))
                  (not (string-prefix? "modules/guixcfg/apps/" p))))
           (scheme-files-under "modules")))
 

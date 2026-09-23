@@ -60,10 +60,10 @@
                #:use-module (guixcfg system machine-identity) ; /etc/machine-id 持久化（先于 D-Bus activation）
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind + 系统集成
                #:use-module (guixcfg system sudo policy) ; %sudoers-file（Defaults 声明：lecture/passprompt）
-                #:use-module (guixcfg system profile policy) ; %system-profile（/etc/profile ownership）
-                #:use-module (guixcfg flatpak service) ; flatpak-persistence-rules（installation + 全局 selected app）
-                #:use-module (guixcfg system gaming) ; %gaming-system-services（Steam 游戏库 + controller udev）
-                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
+               #:use-module (guixcfg system profile policy) ; %system-profile（/etc/profile ownership）
+               #:use-module (guixcfg flatpak service) ; flatpak-persistence-rules（installation + 全局 selected app）
+               #:use-module (guixcfg system gaming) ; %gaming-system-services（Steam 游戏库 + controller udev）
+               #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
                #:use-module (srfi srfi-1)              ; remove
                #:export (make-host-services
                          make-host-user-services

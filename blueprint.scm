@@ -148,10 +148,10 @@
       (set! %load-compiled-path (append %load-compiled-path cmp-dirs)))))
 
 (use-modules (guixcfg system deploy)        ; argv 构造 / 解析 / 只读检查素材 / host 枚举
-              (guixcfg inventory hosts)      ; 本机 hostname → Host ID
+             (guixcfg inventory hosts)      ; 本机 hostname → Host ID
              (guixcfg utils channels)       ; channel 结构比较（update 摘要）
-              (guixcfg utils atomic-file)    ; atomic-write-file!（锁重写）
-              (guixcfg users facts))         ; %primary-user（HOME_USER 默认权威源；channel-free）
+             (guixcfg utils atomic-file)    ; atomic-write-file!（锁重写）
+             (guixcfg users facts))         ; %primary-user（HOME_USER 默认权威源；channel-free）
 
 (primitive-load (string-append (%repo-root) "/tests/manifest.scm"))
 
@@ -199,9 +199,9 @@ primitive-exit 不做 Guile backtrace——非零退出是预期内失败。"
          (let ((status (if input
                          (popen (car command) (cdr command)
                                 #:input input
-                                 #:working-directory working-directory)
-                          (popen (car command) (cdr command)
-                                 #:working-directory working-directory))))
+                                #:working-directory working-directory)
+                         (popen (car command) (cdr command)
+                                #:working-directory working-directory))))
            (unless (zero? status)
              (%subprocess-fail! status command))
            #t))
@@ -265,7 +265,7 @@ preflight（git status / describe 等）——blue -n 下也真实执行，以�
                      host (string-join (known-host-ids (%repo-root)) ", ")))))
          (_ (%usage-error
              (format #f "expected exactly one HOST argument; known hosts: ~a"
-                      (string-join (known-host-ids (%repo-root)) ", "))))))
+                     (string-join (known-host-ids (%repo-root)) ", "))))))
 
 (define (%reconfigure-host-argument arguments)
   "reconfigure 接受零或一个 HOST。零参数时按当前 hostname 精确反查。"
@@ -275,15 +275,15 @@ preflight（git status / describe 等）——blue -n 下也真实执行，以�
                  (host (host-id-for-hostname hostname))
                  (known (known-host-ids (%repo-root))))
             (cond
-             ((not host)
-              (%usage-error
-               (format #f "cannot identify local host from hostname: ~a~%known hosts: ~a~%usage: blue reconfigure [HOST]"
-                       hostname (string-join known ", "))))
-             ((not (host-id? known host))
-              (%usage-error
-               (format #f "local hostname ~a maps to unavailable host: ~a~%known hosts: ~a"
-                       hostname host (string-join known ", "))))
-             (else host))))
+              ((not host)
+               (%usage-error
+                (format #f "cannot identify local host from hostname: ~a~%known hosts: ~a~%usage: blue reconfigure [HOST]"
+                        hostname (string-join known ", "))))
+              ((not (host-id? known host))
+               (%usage-error
+                (format #f "local hostname ~a maps to unavailable host: ~a~%known hosts: ~a"
+                        hostname host (string-join known ", "))))
+              (else host))))
          ((host) (%require-host-argument (list host)))
          (_ (%usage-error "usage: blue reconfigure [HOST]"))))
 
@@ -473,7 +473,7 @@ postflight 漂移检查。子进程非零退出经 %run 原样传播（0/1/2）�
            host
            (or (let ((hu (getenv "HOME_USER")))
                  (and hu (not (string-null? hu)) hu))
-                (user-profile-name %primary-user)))
+               (user-profile-name %primary-user)))
           #:working-directory root)
     (%postflight-drift root head-before)))
 
@@ -541,8 +541,8 @@ failed (gate reopened); 2 system switched but Home/readiness failed
 With blue -n: validates the Guix system derivation/build plan only; it
 does not enter the privileged transaction (no sudo, no gate, no
 Shepherd restart, no Home hot activation)."))
-                 (let* ((root (%repo-root))
-                        (host (%reconfigure-host-argument arguments)))
+                (let* ((root (%repo-root))
+                       (host (%reconfigure-host-argument arguments)))
                   (if (dry-build?)
                     (begin
                      (%doctor root host)        ; 只读前置（含 git clean）在 -n 下照常执行
@@ -570,11 +570,11 @@ With blue -n: read-only plan only (existing/current/last-good/
 to-delete); no mutation, no sudo."))
                 (call-with-values
                  (lambda () (%require-gc-arguments arguments))
-                  (lambda (host extra)
-                    (let ((root (%repo-root)))
-                      (if (dry-build?)
-                        (%exec (gc-cli-argv root "plan" host extra))
-                        (%run (gc-privileged-argv root host extra)))))))
+                 (lambda (host extra)
+                   (let ((root (%repo-root)))
+                     (if (dry-build?)
+                       (%exec (gc-cli-argv root "plan" host extra))
+                       (%run (gc-privileged-argv root host extra)))))))
 
 ;;; ---------- update ----------
 
@@ -818,14 +818,14 @@ mutation, no sudo, no confirmation."))
                       (begin
                        (%exec (install-cli-argv root "plan" host device))
                        (format #t "  [dry-run] no mutation; no sudo; no confirmation.~%"))
-                       (begin
-                        ;; 用户态只读前置（fail early），然后 privilege
-                        ;; handoff（sudo 直接进入 pinned CLI；root phase
-                        ;; 重新做环境类检查并执行事务与成功清理）。
-                        (%exec (install-cli-argv root "plan" host device))
-                        (%run (install-privileged-argv
-                               root host device)
-                              #:input (current-input-port)))))))
+                      (begin
+                       ;; 用户态只读前置（fail early），然后 privilege
+                       ;; handoff（sudo 直接进入 pinned CLI；root phase
+                       ;; 重新做环境类检查并执行事务与成功清理）。
+                       (%exec (install-cli-argv root "plan" host device))
+                       (%run (install-privileged-argv
+                              root host device)
+                             #:input (current-input-port)))))))
 
 (define-command (enroll-command arguments)
                 ((invoke "enroll")

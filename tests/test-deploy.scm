@@ -12,8 +12,8 @@
 ;;; （非 .scm）、#tmp.scm#（autosave）——只有前两者应进入 host ID。
 
 (use-modules (guixcfg system deploy)
-              (guixcfg inventory hosts)
-              (guixcfg utils channels)
+             (guixcfg inventory hosts)
+             (guixcfg utils channels)
              (guixcfg utils repository-source)
              (srfi srfi-64)
              (srfi srfi-1)
@@ -69,8 +69,8 @@
 ;; 真实 hosts 目录：枚举必须与当前仓库事实一致。任何辅助 .scm 落入
 ;; hosts/ 都会在此失败（host ID 事实源就是该目录的文件名）。
 (test-equal "real hosts directory yields exactly current hosts"
-             '("lenovo-legion-y7000p" "vm")
-             (host-ids-in-directory "modules/guixcfg/hosts"))
+            '("lenovo-legion-y7000p" "vm")
+            (host-ids-in-directory "modules/guixcfg/hosts"))
 
 (test-equal "host identity table covers exactly the current hosts"
             (host-ids-in-directory "modules/guixcfg/hosts")
@@ -117,30 +117,30 @@
             (host-name-for-id "unknown-host"))
 
 (test-assert "known host id"
-              (host-id? '("lenovo-legion-y7000p" "vm") "vm"))
+             (host-id? '("lenovo-legion-y7000p" "vm") "vm"))
 
 (test-assert "unknown host id"
-              (not (host-id? '("lenovo-legion-y7000p" "vm") "desktop")))
+             (not (host-id? '("lenovo-legion-y7000p" "vm") "desktop")))
 
 (test-assert "missing host (empty arg)"
-              (not (host-id? '("lenovo-legion-y7000p" "vm") "")))
+             (not (host-id? '("lenovo-legion-y7000p" "vm") "")))
 
 (test-assert "\"all\" is not a host id (command-level keyword)"
-              (not (host-id? '("lenovo-legion-y7000p" "vm") "all")))
+             (not (host-id? '("lenovo-legion-y7000p" "vm") "all")))
 
 (test-assert "require-host-id returns the id when known"
-              (equal? "vm" (require-host-id '("lenovo-legion-y7000p" "vm") "vm")))
+             (equal? "vm" (require-host-id '("lenovo-legion-y7000p" "vm") "vm")))
 
 ;; fail closed：unknown host 报错，绝不 fallback；错误信息列出可用 host。
 (test-assert "require-host-id fails closed on unknown host and lists known hosts"
              (let ((msg (string-join
                          (exception-strings
                           (catch #t
-                             (lambda () (require-host-id '("lenovo-legion-y7000p" "vm") "server") '())
+                            (lambda () (require-host-id '("lenovo-legion-y7000p" "vm") "server") '())
                             (lambda (key . args) args)))
                          " ")))
                (and (string-contains msg "known hosts:")
-                     (string-contains msg "lenovo-legion-y7000p")
+                    (string-contains msg "lenovo-legion-y7000p")
                     (string-contains msg "vm")
                     (string-contains msg "server"))))
 
@@ -183,8 +183,8 @@
 
 (test-assert "build-os dry-run maps to guix --dry-run"
              (and (member "--dry-run" build-dry-argv)
-                   (equal? "modules/guixcfg/hosts/lenovo-legion-y7000p.scm"
-                           (last build-dry-argv))))
+                  (equal? "modules/guixcfg/hosts/lenovo-legion-y7000p.scm"
+                          (last build-dry-argv))))
 
 ;; ---- reconfigure ----
 
@@ -243,9 +243,9 @@
 
 (test-assert "gc argv has no shell metacharacters"
              (and (no-shell-metacharacters?
-                    (gc-privileged-argv "/repo" "vm" '()))
-                   (no-shell-metacharacters?
-                    (gc-cli-argv %root "run" "vm" '("--keep" "3")))))
+                   (gc-privileged-argv "/repo" "vm" '()))
+                  (no-shell-metacharacters?
+                   (gc-cli-argv %root "run" "vm" '("--keep" "3")))))
 
 (test-equal "system-reconfigure-argv (transaction core) is pinned, env-injected modules"
             '("env" "GUILE_LOAD_PATH=/repo/modules"

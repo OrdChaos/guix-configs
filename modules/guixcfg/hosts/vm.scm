@@ -20,20 +20,20 @@
                #:use-module (gnu)                          ; operating-system、user-account、service 等
                #:use-module (gnu services networking)      ; network-manager-service-type
                #:use-module (guixcfg storage model)          ; host-storage-policy-keep-root-generations
-                #:use-module ((guixcfg storage policies) #:prefix storage:)
-                #:use-module (guixcfg hosts common)         ; 共享 host composition algorithm
-                #:use-module (guixcfg inventory hosts)      ; Host ID → hostname 单一映射
-                #:use-module (guixcfg users user)           ; %primary-user（结构事实权威源）
+               #:use-module ((guixcfg storage policies) #:prefix storage:)
+               #:use-module (guixcfg hosts common)         ; 共享 host composition algorithm
+               #:use-module (guixcfg inventory hosts)      ; Host ID → hostname 单一映射
+               #:use-module (guixcfg users user)           ; %primary-user（结构事实权威源）
                #:use-module (guixcfg home user)            ; %guix-home（挂入 system）
                #:use-module (guixcfg security secrets)     ; secret-decl
                #:use-module (guixcfg utils repository-source) ; repository-file（VM 测试 sentinel 密文）
-                #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
-                #:use-module (guixcfg apps model)      ; applications-secrets
-                #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
+               #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
+               #:use-module (guixcfg apps model)      ; applications-secrets
+               #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind
                #:use-module (guixcfg system mihomo service) ; %mihomo-secrets、%mihomo-data-persistence-rule
-                #:export (%vm-storage-policy %vm-services %vm-test-secrets
-                          %vm-os))
+               #:export (%vm-storage-policy %vm-services %vm-test-secrets
+                                            %vm-os))
 
 ;; 保留 host 模块原有导出名；实际 policy 放在纯存储模块中，避免早期
 ;; disk-install 为取 policy 而加载完整 OS/UKI/channel 依赖。
@@ -101,8 +101,8 @@
    #:application-persistence-rules
    (host-application-persistence-rules)
    #:secrets (append %vm-test-secrets
-                      %mihomo-secrets
-                      (applications-secrets %applications))
+                     %mihomo-secrets
+                     (applications-secrets %applications))
    #:home-environment (guix-home)))
 
 ;; 基础 OS：与最终 %vm-os 完全相同，只是不含 account-databases 投影。

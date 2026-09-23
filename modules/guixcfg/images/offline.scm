@@ -29,11 +29,11 @@
                #:use-module (rnrs bytevectors)   ; string->utf8
                #:use-module (srfi srfi-1)       ; member
                #:export (channel-profile-cache-key
-                          repository-snapshot
-                          offline-installer-payload-program
-                          offline-installer-skel-service
-                          offline-installer-payload-service
-                          offline-installation-os))
+                         repository-snapshot
+                         offline-installer-payload-program
+                         offline-installer-skel-service
+                         offline-installer-payload-service
+                         offline-installation-os))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; channel inferior cache key
@@ -92,125 +92,125 @@ inferior caches。幂等，可重复执行。"
   (program-file
    "offline-installer-payload"
    #~(begin
-        (define mkdir #$(file-append coreutils "/bin/mkdir"))
-        (define rm #$(file-append coreutils "/bin/rm"))
-        (define cp #$(file-append coreutils "/bin/cp"))
-        (define chown-bin #$(file-append coreutils "/bin/chown"))
-
-        (define (run . args)
-          (unless (zero? (apply system* args))
-            (error "offline installer command failed" args)))
-
-        (define (remove-path! path)
-          (let ((st (false-if-exception (lstat path))))
-            (when st
-              (if (eq? 'symlink (stat:type st))
-                (delete-file path)
-                (run rm "-rf" path)))))
-
-        (define (seed-inferior-cache! user)
-          (let ((pw (getpwnam user)))
-            (unless pw
-              (error "offline installer: unknown user" user))
-            (let* ((uid (passwd:uid pw))
-                   (gid (passwd:gid pw))
-                   (user-dir (string-append "/var/guix/profiles/per-user/"
-                                            user))
-                   (cache-dir (string-append user-dir "/inferiors"))
-                   (link (string-append cache-dir "/" #$cache-key))
-                   (owner (string-append (number->string uid)
-                                         ":"
-                                         (number->string gid))))
-              (run mkdir "-p" cache-dir)
-              (chown user-dir uid gid)
-              (chown cache-dir uid gid)
-              (remove-path! link)
-              (symlink #$channel-profile link)
-              (run chown-bin "-h" owner link))))
-
-        (let ((guest (getpwnam "guest")))
-          (unless guest
-            (error "offline installer: guest account missing"))
-          ;; /etc/skel 已由 activation 写入；账号创建通常已复制。若
-          ;; 该目录因 resume/manual activation 已存在而跳过 skeleton，
-          ;; 这里幂等补齐。
-          (unless (file-exists? #$%installer-repository-path)
-            (run cp "-a" #$repository #$%installer-repository-path))
-          (chmod #$%installer-repository-path #o755)
-          (run chown-bin
-               "-R"
-               (string-append (number->string (passwd:uid guest))
-                              ":"
-                              (number->string (passwd:gid guest)))
-               #$%installer-repository-path)
-          (remove-path! #$%installer-root-repository-link)
-          (symlink #$%installer-repository-path
-                   #$%installer-root-repository-link))
-
-        (seed-inferior-cache! "guest")
-        (seed-inferior-cache! "root")
-        0)))
+      (define mkdir #$(file-append coreutils "/bin/mkdir"))
+      (define rm #$(file-append coreutils "/bin/rm"))
+      (define cp #$(file-append coreutils "/bin/cp"))
+      (define chown-bin #$(file-append coreutils "/bin/chown"))
+      
+      (define (run . args)
+        (unless (zero? (apply system* args))
+          (error "offline installer command failed" args)))
+      
+      (define (remove-path! path)
+        (let ((st (false-if-exception (lstat path))))
+          (when st
+            (if (eq? 'symlink (stat:type st))
+              (delete-file path)
+              (run rm "-rf" path)))))
+      
+      (define (seed-inferior-cache! user)
+        (let ((pw (getpwnam user)))
+          (unless pw
+            (error "offline installer: unknown user" user))
+          (let* ((uid (passwd:uid pw))
+                 (gid (passwd:gid pw))
+                 (user-dir (string-append "/var/guix/profiles/per-user/"
+                                          user))
+                 (cache-dir (string-append user-dir "/inferiors"))
+                 (link (string-append cache-dir "/" #$cache-key))
+                 (owner (string-append (number->string uid)
+                                       ":"
+                                       (number->string gid))))
+            (run mkdir "-p" cache-dir)
+            (chown user-dir uid gid)
+            (chown cache-dir uid gid)
+            (remove-path! link)
+            (symlink #$channel-profile link)
+            (run chown-bin "-h" owner link))))
+      
+      (let ((guest (getpwnam "guest")))
+        (unless guest
+          (error "offline installer: guest account missing"))
+        ;; /etc/skel 已由 activation 写入；账号创建通常已复制。若
+        ;; 该目录因 resume/manual activation 已存在而跳过 skeleton，
+        ;; 这里幂等补齐。
+        (unless (file-exists? #$%installer-repository-path)
+          (run cp "-a" #$repository #$%installer-repository-path))
+        (chmod #$%installer-repository-path #o755)
+        (run chown-bin
+             "-R"
+             (string-append (number->string (passwd:uid guest))
+                            ":"
+                            (number->string (passwd:gid guest)))
+             #$%installer-repository-path)
+        (remove-path! #$%installer-root-repository-link)
+        (symlink #$%installer-repository-path
+                 #$%installer-root-repository-link))
+      
+      (seed-inferior-cache! "guest")
+      (seed-inferior-cache! "root")
+      0)))
 
 (define* (offline-installer-skel-service repository
                                          channel-profile
                                          cache-key)
-  "Activation service：把仓库复制到 /etc/skel（guest 账号随后由官方
+         "Activation service：把仓库复制到 /etc/skel（guest 账号随后由官方
 account activation 复制）并预置 root inferior cache。不依赖 guest 账号
 已存在。"
-  (simple-service 'offline-installer-skel
-                  activation-service-type
-                   #~(begin
-                       (define mkdir #$(file-append coreutils "/bin/mkdir"))
-                       (define rm #$(file-append coreutils "/bin/rm"))
-                       (define cp #$(file-append coreutils "/bin/cp"))
-                       (define chown-bin #$(file-append coreutils "/bin/chown"))
-
-                       (define (run . args)
-                         (unless (zero? (apply system* args))
-                           (error "offline installer command failed" args)))
-
-                       (define (remove-path! path)
-                         (let ((st (false-if-exception (lstat path))))
-                           (when st
-                             (if (eq? 'symlink (stat:type st))
-                               (delete-file path)
-                               (run rm "-rf" path)))))
-
-                       (define (seed-root-inferior-cache!)
-                         (let* ((link (string-append
-                                       "/var/guix/profiles/per-user/root/inferiors/"
-                                       #$cache-key)))
-                           (run mkdir "-p" (dirname link))
-                           (remove-path! link)
-                           (symlink #$channel-profile link)
-                           (run chown-bin "-h" "0:0" link)))
-
-                       (run mkdir "-p" "/etc/skel")
-                       (remove-path! #$%installer-skel-repository-path)
-                       (run cp "-a" #$repository
-                               #$%installer-skel-repository-path)
-                       (chmod #$%installer-skel-repository-path #o755)
-                       (seed-root-inferior-cache!))))
+         (simple-service 'offline-installer-skel
+                         activation-service-type
+                         #~(begin
+                            (define mkdir #$(file-append coreutils "/bin/mkdir"))
+                            (define rm #$(file-append coreutils "/bin/rm"))
+                            (define cp #$(file-append coreutils "/bin/cp"))
+                            (define chown-bin #$(file-append coreutils "/bin/chown"))
+                            
+                            (define (run . args)
+                              (unless (zero? (apply system* args))
+                                (error "offline installer command failed" args)))
+                            
+                            (define (remove-path! path)
+                              (let ((st (false-if-exception (lstat path))))
+                                (when st
+                                  (if (eq? 'symlink (stat:type st))
+                                    (delete-file path)
+                                    (run rm "-rf" path)))))
+                            
+                            (define (seed-root-inferior-cache!)
+                              (let* ((link (string-append
+                                            "/var/guix/profiles/per-user/root/inferiors/"
+                                            #$cache-key)))
+                                (run mkdir "-p" (dirname link))
+                                (remove-path! link)
+                                (symlink #$channel-profile link)
+                                (run chown-bin "-h" "0:0" link)))
+                            
+                            (run mkdir "-p" "/etc/skel")
+                            (remove-path! #$%installer-skel-repository-path)
+                            (run cp "-a" #$repository
+                                 #$%installer-skel-repository-path)
+                            (chmod #$%installer-skel-repository-path #o755)
+                            (seed-root-inferior-cache!))))
 
 (define* (offline-installer-payload-service repository
                                             channel-profile
                                             cache-key)
-  "Shepherd one-shot：账号/home 创建后补最终仓库路径与 guest/root
+         "Shepherd one-shot：账号/home 创建后补最终仓库路径与 guest/root
 inferior caches；mingetty 的 shepherd requirement 会等待本服务。"
-  (let ((program (offline-installer-payload-program repository
-                                                    channel-profile
-                                                    cache-key)))
-    (simple-service
-     %installer-payload-provision
-     shepherd-root-service-type
-     (list (shepherd-service
-            (provision (list %installer-payload-provision))
-            (requirement '(user-processes virtual-terminal))
-            (one-shot? #t)
-            (respawn? #f)
-            (documentation "Seed the offline installer repository and pinned channel caches.")
-            (start #~(lambda () (zero? (system* #$program))))
-            (stop #~(const #f)))))))
+         (let ((program (offline-installer-payload-program repository
+                                                           channel-profile
+                                                           cache-key)))
+           (simple-service
+            %installer-payload-provision
+            shepherd-root-service-type
+            (list (shepherd-service
+                   (provision (list %installer-payload-provision))
+                   (requirement '(user-processes virtual-terminal))
+                   (one-shot? #t)
+                   (respawn? #f)
+                   (documentation "Seed the offline installer repository and pinned channel caches.")
+                   (start #~(lambda () (zero? (system* #$program))))
+                   (stop #~(const #f)))))))
 
 (define (offline-installer-login-gating services)
   "让文本登录 mingetty 等待 offline-installer-payload one-shot，
@@ -238,27 +238,27 @@ inferior caches；mingetty 的 shepherd requirement 会等待本服务。"
                                   repository
                                   cache-key
                                   (extra-packages '()))
-  "TARGET-OS + CHANNEL-PROFILE + REPOSITORY 作为 official installation OS
+         "TARGET-OS + CHANNEL-PROFILE + REPOSITORY 作为 official installation OS
 的额外 GC roots；EXTRA-PACKAGES 进入 installer system profile。返回可
 直接作为 `guix system image -t iso9660 FILE` 最后表达式的 OS。"
-  (let* ((with-roots
-          (operating-system-with-gc-roots
-           installation-os
-           (list target-os channel-profile repository)))
-         (skel
-          (offline-installer-skel-service repository
-                                          channel-profile
-                                          cache-key))
-         (payload
-          (offline-installer-payload-service repository
-                                             channel-profile
-                                             cache-key)))
-    (operating-system
-     (inherit with-roots)
-     (packages (append extra-packages
-                       (operating-system-packages with-roots)))
-     (services
-      (offline-installer-login-gating
-       (cons* skel
-              payload
-              (operating-system-user-services with-roots)))))))
+         (let* ((with-roots
+                 (operating-system-with-gc-roots
+                  installation-os
+                  (list target-os channel-profile repository)))
+                (skel
+                 (offline-installer-skel-service repository
+                                                 channel-profile
+                                                 cache-key))
+                (payload
+                 (offline-installer-payload-service repository
+                                                    channel-profile
+                                                    cache-key)))
+           (operating-system
+            (inherit with-roots)
+            (packages (append extra-packages
+                              (operating-system-packages with-roots)))
+            (services
+             (offline-installer-login-gating
+              (cons* skel
+                     payload
+                     (operating-system-user-services with-roots)))))))

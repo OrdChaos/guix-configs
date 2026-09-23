@@ -308,9 +308,9 @@
 ;;; 只读检查形态（soft 语义：本机不是目标系统 → 硬性环境项 fail）
 
 (test-assert "enroll readonly checks are ((label . thunk)) with ok/info/fail results"
-              (let ((checks
-                     (enroll-readonly-checks
-                      "/repo" "lenovo-legion-y7000p")))
+             (let ((checks
+                    (enroll-readonly-checks
+                     "/repo" "lenovo-legion-y7000p")))
                (every (lambda (check)
                         (and (pair? check)
                              (string? (car check))
@@ -326,8 +326,8 @@
 ;; = 真缺失 → fail。
 (define* (enroll-check-status label #:key (soft? #t))
          (let ((check (find (lambda (c) (string=? (car c) label))
-                             (enroll-readonly-checks "/repo"
-                                                     "lenovo-legion-y7000p"
+                            (enroll-readonly-checks "/repo"
+                                                    "lenovo-legion-y7000p"
                                                     #:soft? soft?))))
            (car ((cdr check)))))
 
@@ -358,7 +358,7 @@
 
 (test-equal "enroll transaction refuses non-root with exit 1 (no exec)"
             1
-             (enroll-transaction! "/repo" "lenovo-legion-y7000p"
+            (enroll-transaction! "/repo" "lenovo-legion-y7000p"
                                  #:exec exploding-exec
                                  #:on-firmware-confirm exploding-confirm))
 

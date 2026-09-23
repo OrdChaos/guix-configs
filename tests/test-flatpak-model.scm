@@ -189,7 +189,7 @@
                      (list 'managed-overrides
                            (flatpak-override
                             (environment '("NOVAR"))))))
-                    '(flathub))))
+                   '(flathub))))
 (test-assert "invalid environment entry: malformed variable name"
              (not (valid-flatpak-application?
                    (flatpak-application
@@ -257,7 +257,7 @@
                    (flatpak-application (name 'x) (id "com.x.X")
                                         (remote 'flathub) (branch "stable")
                                         (update-policy 'magic))
-                    '(flathub))))
+                   '(flathub))))
 
 ;; ── desktop shadow 校验 ─────────────────────────────────────
 (define %desktop-fixture
@@ -371,28 +371,28 @@
              '()))
 (test-equal "plan: already installed -> no-op"
             '()
-             (flatpak-reconcile-plan
-              (flatpak-select-applications '(wechat pinned) %fp-apps)
-              '("com.tencent.WeChat//stable" "org.example.Pinned//stable")))
+            (flatpak-reconcile-plan
+             (flatpak-select-applications '(wechat pinned) %fp-apps)
+             '("com.tencent.WeChat//stable" "org.example.Pinned//stable")))
 (test-equal "plan: unmanaged installed app untouched"
             '("com.tencent.WeChat")
             (map flatpak-application-id
                  (flatpak-reconcile-plan
-                   (flatpak-select-applications '(wechat) %fp-apps)
-                   '("org.other.Unmanaged//stable"
-                     "org.freedesktop.Platform//25.08"))))
+                  (flatpak-select-applications '(wechat) %fp-apps)
+                  '("org.other.Unmanaged//stable"
+                    "org.freedesktop.Platform//25.08"))))
 (test-equal "plan: runtime refs never enter comparison"
             '()
             (flatpak-reconcile-plan
-              (flatpak-select-applications '() %fp-apps)
-              '("org.freedesktop.Platform//25.08"
-                "org.freedesktop.Platform.GL.default//25.08")))
+             (flatpak-select-applications '() %fp-apps)
+             '("org.freedesktop.Platform//25.08"
+               "org.freedesktop.Platform.GL.default//25.08")))
 (test-equal "plan: unselected catalog app never planned"
             '()
             (map flatpak-application-id
                  (flatpak-reconcile-plan
-                   (flatpak-select-applications '(wechat) %fp-apps)
-                   '("com.tencent.WeChat//stable"))))
+                  (flatpak-select-applications '(wechat) %fp-apps)
+                  '("com.tencent.WeChat//stable"))))
 
 ;; ── override renderer（确定性 fixture）─────────────────────
 (test-equal "renderer deterministic complete-file"
@@ -417,7 +417,7 @@
 (test-equal "renderer escapes backslash and semicolon"
             "[Context]\nfilesystems=a\\\\b;a\\;b;\n"
             (flatpak-render-override-file
-              (flatpak-override (filesystems '("a\\b" "a;b")))))
+             (flatpak-override (filesystems '("a\\b" "a;b")))))
 (test-equal "renderer escapes GKeyFile environment scalar values"
             "[Environment]\nPATH=C:\\\\tools;bin\nLEADING=\\svalue\n"
             (flatpak-render-override-file

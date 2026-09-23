@@ -114,8 +114,8 @@ tools/gc-cli.scm -- ACTION HOST [--keep N | --delete LIST]~%actions: plan | run~
               (unless (member mode '("plan" "run"))
                 (usage))
               (call-with-values (lambda () (parse-options rest))
-                                 (lambda (keep delete)
-                                   (let ((plan (system-generation-plan
+                                (lambda (keep delete)
+                                  (let ((plan (system-generation-plan
                                                #:host host #:keep keep #:delete delete)))
                                     (print-plan plan)
                                     (when (string=? mode "run")

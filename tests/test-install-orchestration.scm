@@ -6,17 +6,17 @@
 ;;; guix system init。
 
 (use-modules (guixcfg system install)
-              (guixcfg system deploy)
-              (guixcfg storage install)    ; %required-commands（cleanup preflight）
-              (guixcfg security enroll)
+             (guixcfg system deploy)
+             (guixcfg storage install)    ; %required-commands（cleanup preflight）
+             (guixcfg security enroll)
              (guixcfg storage model)      ; persist-mount-point（repo 目标路径断言）
              (guixcfg users facts)        ; %primary-user / user-profile-name（fixture 免硬编码）
              (guix build utils)           ; mkdir-p / delete-file-recursively（repo fixture）
              (srfi srfi-64)
-              (srfi srfi-1)
-              (srfi srfi-13)
-              (ice-9 rdelim)
-              (ice-9 regex))
+             (srfi srfi-1)
+             (srfi srfi-13)
+             (ice-9 rdelim)
+             (ice-9 regex))
 
 (test-runner-current (test-runner-simple))
 
@@ -274,15 +274,15 @@
 
 (test-assert "system init expression loads the absolute host entry"
              (and (string-contains init-expression
-                                    "/repo/modules/guixcfg/hosts/lenovo-legion-y7000p.scm")
+                                   "/repo/modules/guixcfg/hosts/lenovo-legion-y7000p.scm")
                   (string-contains init-expression
-                                    "(load \"/repo/modules/guixcfg/hosts/lenovo-legion-y7000p.scm\")")))
+                                   "(load \"/repo/modules/guixcfg/hosts/lenovo-legion-y7000p.scm\")")))
 
 (test-assert "system init expression wraps a unique preseeded inferior cache"
              (and (string-contains init-expression
-                                    "/var/guix/profiles/per-user/root/inferiors")
+                                   "/var/guix/profiles/per-user/root/inferiors")
                   (string-contains init-expression
-                                    "operating-system-with-gc-roots")
+                                   "operating-system-with-gc-roots")
                   (string-contains init-expression "(= 1 (length entries))")))
 
 (test-equal "system init argv keeps /mnt as the final operand"
@@ -290,7 +290,7 @@
             (car (last-pair init-argv)))
 
 (define privileged (install-privileged-argv "/repo"
-                                             "lenovo-legion-y7000p" "/dev/nvme0n1"))
+                                            "lenovo-legion-y7000p" "/dev/nvme0n1"))
 
 (test-assert "install handoff runs the pinned CLI via sudo"
              (and (equal? (car privileged) "sudo")
@@ -305,23 +305,23 @@
 
 (test-assert "install handoff argv separates HOST and DEVICE (no shell string)"
              (let ((tail (cdr (member "run" privileged))))
-                 (and (equal? tail '("lenovo-legion-y7000p" "/dev/nvme0n1"))
-                     (not (any (lambda (x)
-                                 (or (string-contains x "&&")
-                                     (string-contains x ";")
+               (and (equal? tail '("lenovo-legion-y7000p" "/dev/nvme0n1"))
+                    (not (any (lambda (x)
+                                (or (string-contains x "&&")
+                                    (string-contains x ";")
                                     (string-contains x "|")))
                               privileged)))))
 
 (define enroll-privileged (enroll-privileged-argv "/repo"
-                                                   "lenovo-legion-y7000p"))
+                                                  "lenovo-legion-y7000p"))
 
 (test-assert "enroll handoff runs the pinned CLI directly via sudo"
              (let ((tail (cdr (member "run" enroll-privileged))))
                (and (equal? (car enroll-privileged) "sudo")
-                     (member "/repo/channels.lock.scm" enroll-privileged)
-                     (member "tools/enroll-cli.scm" enroll-privileged)
-                     (not (member ".enroll-root" enroll-privileged))
-                     (equal? tail '("lenovo-legion-y7000p")))))
+                    (member "/repo/channels.lock.scm" enroll-privileged)
+                    (member "tools/enroll-cli.scm" enroll-privileged)
+                    (not (member ".enroll-root" enroll-privileged))
+                    (equal? tail '("lenovo-legion-y7000p")))))
 
 (test-equal "sb-keygen tool argv pins the lockfile and passes the keydir"
             "/mnt/persist/system/keys/secure-boot"
@@ -353,7 +353,7 @@
 
 (test-equal "install CLI argv separates mode, HOST and DEVICE"
             '("run" "lenovo-legion-y7000p" "/dev/nvme0n1")
-             (cddr (member "tools/install-cli.scm" install-cli)))
+            (cddr (member "tools/install-cli.scm" install-cli)))
 
 (test-equal "successful install cleanup stops cow-store and syncs only"
             '(("herd" "stop" "cow-store")
@@ -364,7 +364,7 @@
              (not (any (lambda (argv)
                          (any (lambda (arg)
                                 (member arg '("power-off" "poweroff"
-                                              "reboot" "umount")))
+                                                          "reboot" "umount")))
                               argv))
                        (install-success-cleanup-commands))))
 
@@ -374,18 +374,18 @@
 
 (test-assert "pinned install CLI wires cleanup after the success-gated transaction in /root"
              (let* ((source (call-with-input-file "tools/install-cli.scm" read-string))
-                     (transaction (string-contains
-                                   source
-                                   "(install-transaction!"))
-                     (cleanup (string-contains
+                    (transaction (string-contains
+                                  source
+                                  "(install-transaction!"))
+                    (cleanup (string-contains
+                              source
+                              "(install-success-cleanup-commands)"))
+                    (root-cwd (string-contains
                                source
-                               "(install-success-cleanup-commands)"))
-                     (root-cwd (string-contains
-                                source
-                                "(chdir \"/root\")")))
+                               "(chdir \"/root\")")))
                (and transaction cleanup root-cwd
-                     (< transaction root-cwd)
-                     (< root-cwd cleanup))))
+                    (< transaction root-cwd)
+                    (< root-cwd cleanup))))
 
 (define enroll-cli
   (enroll-cli-argv %root "plan" "lenovo-legion-y7000p"))
@@ -405,8 +405,8 @@
             (string-append "/mnt"
                            (persist-mount-point "@persist-data-home")
                            "/" (user-profile-name %primary-user)
-                            "/Projects/guix-configs")
-             (install-repo-path "/mnt"))
+                           "/Projects/guix-configs")
+            (install-repo-path "/mnt"))
 
 (test-equal "post-install instructions enter the installed checkout"
             '("  cd ~/Projects/guix-configs"
@@ -537,13 +537,13 @@
 
 (test-equal "install transaction refuses non-root with exit 1 (no exec)"
             1
-             (install-transaction! "/repo" "lenovo-legion-y7000p" "/dev/nvme0n1"
+            (install-transaction! "/repo" "lenovo-legion-y7000p" "/dev/nvme0n1"
                                   #:exec exploding-exec
                                   #:on-confirm exploding-confirm))
 
 (test-equal "enroll transaction refuses non-root with exit 1 (no exec)"
             1
-             (enroll-transaction! "/repo" "lenovo-legion-y7000p"
+            (enroll-transaction! "/repo" "lenovo-legion-y7000p"
                                  #:exec exploding-exec
                                  #:on-firmware-confirm exploding-confirm))
 
@@ -581,7 +581,7 @@
             (car (install-secure-boot-preflight "vm" 'unclear)))
 
 (test-assert "install preflight checks are ((label . thunk)) with (status . detail) results"
-              (let ((checks (install-preflight-checks "/repo" "lenovo-legion-y7000p"
+             (let ((checks (install-preflight-checks "/repo" "lenovo-legion-y7000p"
                                                      "/dev/nvme0n1")))
                (every (lambda (check)
                         (and (pair? check)

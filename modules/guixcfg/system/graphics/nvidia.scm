@@ -109,9 +109,9 @@
                          %nvidia-driver
                          nvidia-kernel-arguments
                          %prime-offload-environment
-                          %prime-offload-environment-strings
-                          %flatpak-prime-environment-overrides
-                          %prime-run-wrapper
+                         %prime-offload-environment-strings
+                         %flatpak-prime-environment-overrides
+                         %prime-run-wrapper
                          nvidia-system-transformation))
 
 ;; 是否启用 NVIDIA（当前 #t：laptop host policy；VM/Intel-only 机器

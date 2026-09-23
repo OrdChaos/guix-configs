@@ -178,7 +178,7 @@ LiveCD resume paths do not expose it at the current-system paths."
   (string-append target
                  (persist-mount-point "@persist-data-home")
                  "/" (user-profile-name %primary-user)
-                  "/Projects/guix-configs"))
+                 "/Projects/guix-configs"))
 
 (define (repo-copy-present? target)
   "复制标记是否全部在位（resume 检测 + validate 共用）。"
@@ -1041,19 +1041,19 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
                                              (setenv "GUIX_CONFIG_FACTS"
                                                      (install-facts-path target))
                                              (set! mutated? #t)
-                                              (run-checked-exec!
-                                               exec 'system-init
-                                               (system-init-argv root host))
-                                              ;; 离线 ISO：把 pinned channel
-                                              ;; profile 的 cache 也落到目标
-                                              ;; /var/guix（firstboot/enroll
-                                              ;; 的 time-machine 继续离线）。
-                                              (install-time-machine-cache!
-                                               exec target
-                                               (user-profile-name %primary-user)
-                                               (user-profile-uid %primary-user)
-                                               (resolve-primary-user-gid))))
-                                 ;; 8. commit-root（CLI 子进程隔离硬 exit；
+                                             (run-checked-exec!
+                                              exec 'system-init
+                                              (system-init-argv root host))
+                                             ;; 离线 ISO：把 pinned channel
+                                             ;; profile 的 cache 也落到目标
+                                             ;; /var/guix（firstboot/enroll
+                                             ;; 的 time-machine 继续离线）。
+                                             (install-time-machine-cache!
+                                              exec target
+                                              (user-profile-name %primary-user)
+                                              (user-profile-uid %primary-user)
+                                              (resolve-primary-user-gid))))
+                                ;; 8. commit-root（CLI 子进程隔离硬 exit；
                                 ;;    幂等 + 中断恢复）
                                 (run-stage 'commit-root
                                            (lambda ()
@@ -1113,15 +1113,15 @@ ownership：boot 期 user-persistence activation 只 chown 顶层目录、
           "boot/deploy-uki missing (system init incomplete)")
     (cons (file-exists? (install-facts-path target))
           "machine facts file missing")
-     (cons (and (file-exists? (install-facts-path target))
-                (let ((facts (false-if-exception
-                              (load-machine-facts
-                               (install-facts-path target)))))
-                  (and facts (assq-ref facts 'luks-uuid))))
-           "machine facts lack the boot-critical luks-uuid")
-     (cons (file-exists? (string-append target %esp-mount-point "/"
-                                        %esp-luks-uuid-file))
-           "ESP LUKS UUID file missing (initrd runtime unlock identity)")
+    (cons (and (file-exists? (install-facts-path target))
+               (let ((facts (false-if-exception
+                             (load-machine-facts
+                              (install-facts-path target)))))
+                 (and facts (assq-ref facts 'luks-uuid))))
+          "machine facts lack the boot-critical luks-uuid")
+    (cons (file-exists? (string-append target %esp-mount-point "/"
+                                       %esp-luks-uuid-file))
+          "ESP LUKS UUID file missing (initrd runtime unlock identity)")
     (cons (every (lambda (f)
                    (file-exists?
                     (string-append target %esp-mount-point f)))

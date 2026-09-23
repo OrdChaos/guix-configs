@@ -87,22 +87,22 @@
 
 ;; ── N2：kernel authority 保留 ───────────────────────────────
 (test-assert "N2: laptop %vm-os still selects %kernel (NVIDIA never replaces the kernel)"
-              (eq? (operating-system-kernel host:%lenovo-legion-y7000p-os)
-                   %kernel))
+             (eq? (operating-system-kernel host:%lenovo-legion-y7000p-os)
+                  %kernel))
 
 (test-assert "N2: transformed probe OS still selects %kernel"
              (let ((t (nvidia-system-transformation probe-os)))
                (eq? (operating-system-kernel t) %kernel)))
 
 (test-assert "N2: laptop initrd composition unchanged"
-              (eq? (operating-system-initrd host:%lenovo-legion-y7000p-os)
+             (eq? (operating-system-initrd host:%lenovo-legion-y7000p-os)
                   microcode-ephemeral-initrd))
 
 (test-assert "N2: laptop OS firmware field stays generic linux-firmware (NVIDIA firmware comes via nvidia-service-type)"
              (every (lambda (f)
                       (not (string-contains (package-name f) "nvidia")))
-                     (operating-system-firmware
-                      host:%lenovo-legion-y7000p-os)))
+                    (operating-system-firmware
+                     host:%lenovo-legion-y7000p-os)))
 
 ;; ── N3：kernel arguments ────────────────────────────────────
 (test-assert "N3: transformation blacklists nouveau and nova, and enables DRM KMS"
@@ -122,8 +122,8 @@
                                    args)))))
 
 (test-assert "N3: laptop %vm-os carries the nvidia kernel arguments"
-              (let ((args (operating-system-user-kernel-arguments
-                           host:%lenovo-legion-y7000p-os)))
+             (let ((args (operating-system-user-kernel-arguments
+                          host:%lenovo-legion-y7000p-os)))
                (member "nvidia_drm.modeset=1" args)))
 
 ;; ── N4：open kernel module wiring ───────────────────────────
@@ -144,7 +144,7 @@
 (define laptop-nvidia-service
   (find (lambda (s)
           (eq? (service-kind s) nvidia-service-type))
-         (operating-system-user-services host:%lenovo-legion-y7000p-os)))
+        (operating-system-user-services host:%lenovo-legion-y7000p-os)))
 
 (test-assert "N4: laptop %vm-os includes nvidia-service-type"
              laptop-nvidia-service)
@@ -219,8 +219,8 @@
 
 ;; ── N7：laptop %vm-os 实例化 ───────────────────────────────────
 (test-assert "N7: laptop %vm-os instantiates (valid services field)"
-              (list? (operating-system-services
-                      host:%lenovo-legion-y7000p-os)))
+             (list? (operating-system-services
+                     host:%lenovo-legion-y7000p-os)))
 
 ;; ── N8-N10：driver policy（rolling new-feature）────────────
 ;; 不变式（docs/architecture/graphics.md（NVIDIA driver policy））：

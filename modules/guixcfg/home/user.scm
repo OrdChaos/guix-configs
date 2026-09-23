@@ -32,7 +32,7 @@
                #:use-module (guixcfg home fonts)    ; %fonts、%fontconfig-service、%home-fonts-xdg-link-service
                #:use-module (guixcfg home environment) ; %session-environment-service
                #:use-module (guixcfg home assets)   ; %user-assets-service
-                #:use-module (guixcfg flatpak service) ; flatpak-home-services（override 文件 + XDG_DATA_DIRS）
+               #:use-module (guixcfg flatpak service) ; flatpak-home-services（override 文件 + XDG_DATA_DIRS）
                #:use-module (guixcfg gsettings home-service) ; %gsettings-packages、gsettings-reconcile-service
                #:use-module (guixcfg gsettings model) ; gsettings-desired-state（desired state 聚合）
                #:use-module (guixcfg users user) ; %primary-user、user-profile-home-directory

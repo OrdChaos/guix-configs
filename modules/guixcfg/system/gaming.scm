@@ -44,32 +44,32 @@
 (define (steam-games-library-activation)
   (with-imported-modules (source-module-closure
                           '((gnu build accounts)   ; read-passwd、password-entry-*
-                            (guix build utils)
-                            (srfi srfi-1)))        ; find
-    #~(begin
-        (use-modules (gnu build accounts)
-                     (guix build utils)
-                     (srfi srfi-1))
-        (let* ((dir #$%steam-games-library-path)
-               (user-name #$(user-profile-name %primary-user))
-               (user (find (lambda (entry)
-                             (string=? (password-entry-name entry)
-                                       user-name))
-                           (read-passwd "/etc/passwd"))))
-          (unless user
-            (error "steam: games library owner account missing \
+                                                   (guix build utils)
+                                                   (srfi srfi-1)))        ; find
+                         #~(begin
+                            (use-modules (gnu build accounts)
+                                         (guix build utils)
+                                         (srfi srfi-1))
+                            (let* ((dir #$%steam-games-library-path)
+                                   (user-name #$(user-profile-name %primary-user))
+                                   (user (find (lambda (entry)
+                                                 (string=? (password-entry-name entry)
+                                                           user-name))
+                                               (read-passwd "/etc/passwd"))))
+                              (unless user
+                                (error "steam: games library owner account missing \
 from /etc/passwd" user-name))
-           (let ((existing (false-if-exception (lstat dir))))
-             (when (and existing
-                        (not (eq? 'directory (stat:type existing))))
-               (error "steam: games library path exists but is not a directory"
-                      dir))
-             (unless existing
-               (mkdir-p dir)))
-           (chown dir (password-entry-uid user) (password-entry-gid user))
-           ;; 收敛旧版本创建的 0755；游戏库仅 primary user 可遍历。
-           (chmod dir #o700)
-           #t))))
+                              (let ((existing (false-if-exception (lstat dir))))
+                                (when (and existing
+                                           (not (eq? 'directory (stat:type existing))))
+                                  (error "steam: games library path exists but is not a directory"
+                                         dir))
+                                (unless existing
+                                  (mkdir-p dir)))
+                              (chown dir (password-entry-uid user) (password-entry-gid user))
+                              ;; 收敛旧版本创建的 0755；游戏库仅 primary user 可遍历。
+                              (chmod dir #o700)
+                              #t))))
 
 ;; gaming system services：controller udev rules + 游戏库目录
 ;; activation（所有 host 共享——Steam 属全局用户软件）。

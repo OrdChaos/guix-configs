@@ -14,9 +14,9 @@
                #:use-module (gnu packages cryptsetup)    ; cryptsetup-static
                #:use-module (srfi srfi-1)                ; every、first
                #:export (cryptroot-mapped-devices
-                          %ephemeral-root-file-system
-                          system-file-systems
-                          %swap-spaces))
+                         %ephemeral-root-file-system
+                         system-file-systems
+                         %swap-spaces))
 
 ;; LUKS UUID 不进 OS derivation：mapped-device source 是固定哨兵
 ;; %cryptroot-source，真实 UUID 由 initrd 运行时从 ESP 的

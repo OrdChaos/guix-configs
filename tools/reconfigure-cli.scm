@@ -35,6 +35,6 @@
       (exit code))))
 
 (match (cdr (command-line))
-  (("--" host home-user) (run host home-user))
-  ((host home-user) (run host home-user))
-  (_ (usage)))
+       (("--" host home-user) (run host home-user))
+       ((host home-user) (run host home-user))
+       (_ (usage)))

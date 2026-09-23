@@ -168,12 +168,12 @@
     (mkdir (string-append dir "/var/guix/profiles"))
     (mkdir (string-append dir "/var/guix/profiles/per-user"))
     (call-with-output-file (string-append dir "/etc/passwd")
-      (lambda (port)
-        (display "root:x:0:0:root:/root:/bin/sh\n\
+                           (lambda (port)
+                             (display "root:x:0:0:root:/root:/bin/sh\n\
 guest:x:1000:1000:guest:/home/guest:/bin/sh\n" port)))
     (call-with-output-file (string-append dir "/etc/nsswitch.conf")
-      (lambda (port)
-        (display "passwd: files\ngroup: files\n" port)))
+                           (lambda (port)
+                             (display "passwd: files\ngroup: files\n" port)))
     dir))
 
 (define (run-offline-payload program fake-root)

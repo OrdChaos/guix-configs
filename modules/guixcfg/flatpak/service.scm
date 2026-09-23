@@ -105,13 +105,13 @@ selection 参数（docs/architecture/flatpak.md）。"
                                %flatpak-applications))
 
 (define* (flatpak-persistence-rules)
-  "平台全部 persistence rules：installation + 每个 **selected** app
+         "平台全部 persistence rules：installation + 每个 **selected** app
 的 persistence intent。host 组装点把它与 applications-persistence
 一起交给 generic engine（file-systems bind + activation backing/
 owner）。未选中的 catalog app 不产生 mount（selection 投影）。"
-  (cons %flatpak-installation-persistence-rule
-        (append-map flatpak-application-persistence-rules
-                    (flatpak-selected-applications))))
+         (cons %flatpak-installation-persistence-rule
+               (append-map flatpak-application-persistence-rules
+                           (flatpak-selected-applications))))
 
 ;;; ── override 完整文件（complete-file ownership）────────────
 
@@ -135,14 +135,14 @@ home-files 的 (target source) 条目：.local/share/flatpak/overrides/
    apps))
 
 (define* (flatpak-override-files* #:key (environment-overrides '()))
-  "overlay-aware override 投影：先按全局 selection 解析 definitions，
+         "overlay-aware override 投影：先按全局 selection 解析 definitions，
 再应用硬件 adapter 声明的 ENVIRONMENT-OVERRIDES（logical name →
 'VAR=VALUE' 列表；仅 managed-overrides app 接受环境 overlay，
 external app 与未知 target fail closed）。"
-  (flatpak-override-files
-   (flatpak-applications-with-environments
-    environment-overrides
-    (flatpak-selected-applications))))
+         (flatpak-override-files
+          (flatpak-applications-with-environments
+           environment-overrides
+           (flatpak-selected-applications))))
 
 (define (flatpak-desktop-files apps)
   "APPS 的 desktop-files contribution → home-files 条目。definition 只
@@ -156,9 +156,9 @@ external app 与未知 target fail closed）。"
    apps))
 
 (define* (flatpak-home-files #:key (environment-overrides '()))
-  (append (flatpak-override-files*
-           #:environment-overrides environment-overrides)
-          (flatpak-desktop-files (flatpak-selected-applications))))
+         (append (flatpak-override-files*
+                  #:environment-overrides environment-overrides)
+                 (flatpak-desktop-files (flatpak-selected-applications))))
 
 (define %flatpak-files-service
   (simple-service 'flatpak-files
@@ -166,15 +166,15 @@ external app 与未知 target fail closed）。"
                   (flatpak-home-files)))
 
 (define* (flatpak-home-services #:key (environment-overrides '()))
-  "Flatpak 平台 Home services（override / desktop 完整文件生成 +
+         "Flatpak 平台 Home services（override / desktop 完整文件生成 +
 XDG_DATA_DIRS exports 追加）。SELECTION 是全局用户软件 policy；
 ENVIRONMENT-OVERRIDES 是 host adapter 的硬件驱动差异（如 NVIDIA
 PRIME），只作用于 managed override。"
-  (list (simple-service 'flatpak-files
-                        home-files-service-type
-                        (flatpak-home-files #:environment-overrides
-                                            environment-overrides))
-        %flatpak-session-environment-service))
+         (list (simple-service 'flatpak-files
+                               home-files-service-type
+                               (flatpak-home-files #:environment-overrides
+                                                   environment-overrides))
+               %flatpak-session-environment-service))
 
 ;;; ── session env（XDG_DATA_DIRS）────────────────────────────
 

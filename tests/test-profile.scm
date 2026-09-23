@@ -66,7 +66,7 @@ guix-profile/current loop, privileged PATH, profile.d, bashrc)"
                                   (string=?
                                    (object->string (cadar profiles))
                                    (object->string %system-profile)))))
-                          (list %vm-os %lenovo-legion-y7000p-os))))
+                         (list %vm-os %lenovo-legion-y7000p-os))))
                (and (= 2 (length results))
                     (every identity results))))
 

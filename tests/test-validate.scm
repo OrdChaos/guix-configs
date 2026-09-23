@@ -85,8 +85,8 @@
             (test-assert "built-in VM policy valid"
                          (null? (validate-policy %vm-storage-policy)))
             (test-assert "built-in Laptop policy valid"
-                          (null? (validate-policy
-                                  %lenovo-legion-y7000p-storage-policy)))
+                         (null? (validate-policy
+                                 %lenovo-legion-y7000p-storage-policy)))
             
             (test-equal "ESP outside 2-4 GiB range"
                         '(esp-size-in-range)

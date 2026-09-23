@@ -61,8 +61,8 @@
                       (member d (map persistent-user-dir-consumer
                                      %persistent-user-dirs)))
                     '("Desktop" "Documents" "Downloads" "Music"
-                                 "Pictures" "Projects" "Public" "Templates"
-                                 "Videos")))
+                                "Pictures" "Projects" "Public" "Templates"
+                                "Videos")))
 
 (test-assert "repository has no dedicated persistence entry"
              (not (any (lambda (d)

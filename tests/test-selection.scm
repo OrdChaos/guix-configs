@@ -90,7 +90,7 @@
                      (map (lambda (s)
                             (list (application-configuration-selection-application s)
                                   (application-configuration-selection-variant s)))
-                           %lenovo-legion-y7000p-application-configuration-selections)))
+                          %lenovo-legion-y7000p-application-configuration-selections)))
 (test-assert "Lenovo host contains no target path"
              (let ((s (call-with-input-file "modules/guixcfg/hosts/lenovo-legion-y7000p.scm"
                                             (lambda (p) (read-string p)))))

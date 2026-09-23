@@ -12,11 +12,11 @@
 
 (define-module (guixcfg boot layout)
                #:export (%esp-mount-point
-                          %esp-uki-directory
-                          %esp-tpm2-directory
-                          %esp-luks-uuid-file
-                          %recovery-uki-esp-path
-                          %uki-deploy-script-path))
+                         %esp-uki-directory
+                         %esp-tpm2-directory
+                         %esp-luks-uuid-file
+                         %recovery-uki-esp-path
+                         %uki-deploy-script-path))
 
 ;; ESP（EFI system partition）在运行系统上的固定挂载点。
 (define %esp-mount-point "/efi")
