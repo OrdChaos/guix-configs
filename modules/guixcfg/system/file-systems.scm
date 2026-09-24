@@ -22,7 +22,7 @@
 ;; %cryptroot-source，真实 UUID 由 initrd 运行时从 ESP 的
 ;; %esp-luks-uuid-file 读取（(guixcfg boot device-resolver)）——
 ;; 这样不同机器/不同安装求值出的 initrd/system derivation 逐字节
-;; 相同，offline ISO 内预构建的产物可直接复用（零重建、零下载）。
+;; 相同。
 ;; facts 机制（(guixcfg system machine-facts)）仍存在于 install/
 ;; enroll/deploy 的校验路径，但不再参与 OS 构造。
 
@@ -56,8 +56,7 @@
                 ;; cryptroot 的权威身份：ESP 上 %esp-luks-uuid-file 的
                 ;; 运行时内容（install/esp-uuid activation 写）。
                 ;; 不嵌 config 侧值——UUID 进 gexp 会让 initrd
-                ;; derivation 随机器变化，offline ISO 被迫重建 initrd
-                ;; 并下载整条构建闭包（实测约 290MB）。
+                 ;; derivation 随机器变化。
                 ;; 用 let* 而非 define：guile 3.0.9（raw-initrd builder 的
                 ;; guile-final）的 psyntax 不允许 begin 内 use-modules 之后
                 ;; 出现 define（definition in expression context），实测。

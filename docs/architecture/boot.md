@@ -166,9 +166,8 @@ derivation**：`mapped-device` 的 source 是固定哨兵，initrd 运行时
 esp-uuid activation 是写侧），再以 UUID 扫盘匹配 LUKS 头
 （`find-partition-by-luks-uuid`）——ESP 文件缺失/非法/多盘冲突一律
 fail-closed。这样不同机器求值出的 initrd/system derivation 逐字节
-相同（tests/test-machine-facts.scm 第 14 项断言），offline ISO 内
-预构建的 system 在任意机器上 `guix system init` 零重建、零下载；
-ESP 文件与 initrd 同盘同信任等级，威胁模型不变。
+相同（tests/test-machine-facts.scm 第 14 项断言）；ESP 文件与 initrd
+同盘同信任等级，威胁模型不变。
 
 Enrollment 时点：Secure Boot 已启用（SecureBoot==1 且非 SetupMode）
 并完成一次带最终 NVRAM policy 的正常启动后。enrollment 流程：

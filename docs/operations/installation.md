@@ -79,8 +79,6 @@ secure-boot-keygen / secure-boot-enroll / tpm2-enroll）。
 - 仓库位于 installer 环境可读位置（如 LiveCD 的 `/root/guix-configs`，
   VM 9p 共享或 clone）。Blue 经 development manifest 提供：
   `guix time-machine -C channels.lock.scm -- shell -m manifests/development.scm -- blue …`。
-  若使用项目自建的 Lenovo 离线 ISO（含仓库、锁定频道 profile 与目标
-  闭包），按 `docs/operations/offline-iso.md` 执行。
 - 阶段 5（安装 stable identity 与 persistent password hash）必须先于 system init（
   `blue install` 的 secrets 阶段自动保证此顺序；AGENT.md §5）。
 - `@persist-var-guix` 在 init 期间刻意不挂载（`mount-at-install? #f`）

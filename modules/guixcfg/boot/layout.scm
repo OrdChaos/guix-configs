@@ -34,7 +34,7 @@
 ;; 运行时 LUKS UUID 文件的 ESP 相对路径：install 与 esp-uuid activation
 ;; 写，initrd 解锁时读（(guixcfg boot device-resolver)）。
 ;; 它是 initrd derivation 与机器 UUID 解耦的载体——UUID 不再编入
-;; derivation（offline ISO 免重建 initrd），运行时身份仍由它权威承载；
+;; derivation，运行时身份仍由它权威承载；
 ;; 非秘密（篡改只造成解锁失败，fail-closed；initrd 本身就在 ESP 上，
 ;; 信任等级相同）。内容：32 位小写 hex（无连字符）+ 换行。
 (define %esp-luks-uuid-file "EFI/Guix/luks-uuid")

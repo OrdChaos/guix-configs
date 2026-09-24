@@ -1,8 +1,8 @@
 ;;; ESP LUKS UUID 文件的 activation：从 machine facts 幂等补写
 ;;; %esp-luks-uuid-file（(guixcfg boot layout)）。
 ;;;
-;;; 背景：initrd derivation 不编入 LUKS UUID（offline ISO 零重建、
-;;; 零下载），运行时权威身份由 ESP 上的该文件承载，initrd 解锁时经
+;;; 背景：initrd derivation 不编入 LUKS UUID；运行时权威身份由 ESP
+;;; 上的该文件承载，initrd 解锁时经
 ;;; (guixcfg boot device-resolver) 的 read-luks-uuid-from-esp 读取。
 ;;; 写入有两个 owner 场景，本 activation 覆盖其中存量迁移：
 ;;;   - install：write-machine-facts（(guixcfg storage install)）直接写；

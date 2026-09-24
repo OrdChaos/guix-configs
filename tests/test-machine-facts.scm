@@ -166,8 +166,7 @@ GUIX_CONFIG_FACTS。"
 
 ;; 14. derivation 与 facts 无关（子进程，本改造的目标性质）：
 ;;     两个不同 luks-uuid 求值出的 initrd 与整系统 derivation 路径
-;;     都逐字节相同——offline ISO 内预构建产物因此可被任意机器的
-;;     guix system init 直接复用（零重建、零下载）。
+;;     都逐字节相同。
 (define (drv-under-facts facts-file)
   "子进程计算 %lenovo-legion-y7000p-os 的 initrd 与 system derivation
 路径（两行 stdout）；返回 (rc initrd-drv system-drv)。"

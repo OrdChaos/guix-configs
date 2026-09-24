@@ -3,7 +3,7 @@
 ;;; 规定：
 ;;;   LUKS UUID   = system volume authoritative identity（运行时从 ESP
 ;;;                 %esp-luks-uuid-file 读取——initrd derivation 不编入
-;;;                 UUID，offline ISO 免重建；见 (guixcfg boot layout)）
+;;;                 UUID；见 (guixcfg boot layout)）
 ;;;   PARTLABEL   = semantic role（ESP 候选发现；UUID 仍是最终校验）
 ;;;
 ;;; 只依赖低层 guile、(gnu build file-systems)（find-partition-by-luks-uuid
