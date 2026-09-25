@@ -887,7 +887,7 @@ no sudo, no confirmation."))
                     (begin
                       (%reconfigure-host root host)
                       (format #t "~%Firstboot convergence complete.~%")
-                      (format #t "Reboot, then run: blue enroll ~a~%" host))))
+                      (format #t "Reboot, then run: blue enroll ~a~%" host)))))
 
 ;;; ============================================================
 ;;; §4 repository-tests testable（builtin blue check 的薄 adapter）
