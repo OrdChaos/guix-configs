@@ -50,6 +50,9 @@
 ;;;        自行升级（改变运行边界）；
 ;;;     "update.mode": "none"           —— VS Code 二进制由 Guix
 ;;;        channel 更新，不由 VS Code 自更新（enum 含 none，核实）。
+;;;     "security.workspace.trust.enabled": false
+;;;       —— 声明式关闭 workspace trust gate，等价于信任所有路径（含 /）；
+;;;        不向 application-owned globalStorage SQLite 写 trustedFolders。
 ;;;   应用自有持久化（application-owned persistent，application
 ;;;   persistence；canonical backing 是 data-app root 下的
 ;;;   vscode/...，consumer 是 HOME 相对 bind projection）：

@@ -12,5 +12,6 @@
     },
     "terminal.integrated.defaultProfile.linux": "nushell",
     "git.confirmSync": false,
-    "workbench.colorTheme": "Nord Light Brighter"
+    "workbench.colorTheme": "Nord Light Brighter",
+    "security.workspace.trust.enabled": false
 }
