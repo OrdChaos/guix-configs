@@ -122,15 +122,17 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
 
 (define* (make-host-services #:key
                              (network-services '())
-                             keep-root-generations
-                             persistent-mount-file-systems
-                             (additional-system-services '()))
+                              keep-root-generations
+                              persistent-mount-file-systems
+                              (desktop-greeter-environment '())
+                              (additional-system-services '()))
          "共享 system services 列表。NETWORK-SERVICES 是 host 的网络服务
  头（NetworkManager 配置 + 可选 wpa-supplicant，排在 DNS ownership
  之前）；KEEP-ROOT-GENERATIONS 是 storage policy 的 keep 数；
  PERSISTENT-MOUNT-FILE-SYSTEMS 是 HOME persistence bind 列表
  （gvfs-mount-metadata 与 file-systems 字段共用）；
-  ADDITIONAL-SYSTEM-SERVICES 是 host-only system services；
+   DESKTOP-GREETER-ENVIRONMENT 是 greeter compositor 的 host-specific
+   environment；ADDITIONAL-SYSTEM-SERVICES 是 host-only system services；
   gaming 基础设施（steam-devices udev + 游戏库目录 activation）
   已提升为全局共享（Steam 属全局用户软件）。"
          (append
@@ -157,9 +159,10 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
           ;; host-only system services。
           additional-system-services
           ;; TTY 强语义（mingetty gated + 无 tty1）。
-          (host-tty-services)
-          ;; M2 Wayland desktop：greetd（tty1，gated）+ niri session。
-          desktop-services))
+           (host-tty-services)
+           ;; M2 Wayland desktop：greetd（tty1，gated）+ niri session。
+           (desktop-services
+            #:greeter-environment desktop-greeter-environment)))
 
 (define* (make-host-user-services #:key
                                   system-services
