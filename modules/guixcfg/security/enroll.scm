@@ -8,7 +8,7 @@
 ;;;     （本模块经其 argv 执行，绝不重写 PCR policy / keyslot /
 ;;;     sealed object / TPM2 state）；
 ;;;   - Secure Boot 材料构建（keygen / keystore）归 blue install；
-;;;     本模块只编排【固件 NVRAM 写入】（sbkeysync db/KEK 先、PK 后，
+;;;     本模块只编排【固件 NVRAM 写入】（efi-updatevar db/KEK 先、PK 后，
 ;;;     写 PK 才退出 Setup Mode）与 TPM enrollment，且固件写入前
 ;;;     必须显式人工确认（§22/§23）；
 ;;;   - idempotency（§25）：TPM 已 compatible → 报告 OK 零 mutation；
@@ -67,7 +67,8 @@
                          firmware-confirm-lines
                          firmware-confirmed?
                          ;; argv（纯）
-                         sbkeysync-binary
+                         efi-updatevar-binary
+                         setup-mode-update-argv
                          tpm2-tool-argv
                          tpm2-enroll-argv
                          ;; 事务（root 阶段执行；dry-run 绝不调用）
@@ -87,7 +88,9 @@
 
 (define %sb-key-file-names %secure-boot-key-file-names)
 
-(define %keystore-auth-paths %secure-boot-keystore-auth-paths)
+(define %keystore-required-paths
+  (append %secure-boot-keystore-auth-paths
+           %secure-boot-keystore-setup-esl-paths))
 
 (define %firmware-confirm-token "ENROLL-FIRMWARE")
 
@@ -299,7 +302,7 @@ artifacts 齐全）/ 'incomplete（state 存在但 artifacts 缺失——
 
 (define (keystore-complete?)
   (every (lambda (f) (file-exists? (string-append %sb-keystore "/" f)))
-         %keystore-auth-paths))
+         %keystore-required-paths))
 
 (define (sb-keydir-readable?)
   "keydir 内容可读（scandir 成功）。root 恒成功；普通用户对 0700
@@ -327,7 +330,8 @@ ENOENT 都被 scandir 折叠为 #f，存在性由 file-exists? 单独判定
     (sb-keys . ,(sb-keys-complete?))
     (keystore . ,(keystore-complete?))
     (facts . ,(facts-ok?))
-    (sbkeysync . ,(false-if-exception (file-exists? (sbkeysync-binary))))
+    (efi-updatevar . ,(false-if-exception
+                        (file-exists? (efi-updatevar-binary))))
     (tpm-device . ,(file-exists? "/dev/tpmrm0"))
     (tpm-artifacts . ,(esp-tpm2-artifacts-present?))
     (current-system . ,(file-exists? "/run/current-system"))
@@ -343,7 +347,7 @@ ENOENT 都被 scandir 折叠为 #f，存在性由 file-exists? 单独判定
                      (keys     enrollment-status-keys)     ; #t/#f
                      (keystore enrollment-status-keystore) ; #t/#f
                      (facts    enrollment-status-facts)    ; #t/#f
-                     (sbkeysync enrollment-status-sbkeysync (default #f))
+                     (efi-updatevar enrollment-status-efi-updatevar (default #f))
                      (tpm-device enrollment-status-tpm-device (default #f))
                      (tpm-artifacts enrollment-status-tpm-artifacts
                                     (default #f))
@@ -360,7 +364,7 @@ ENOENT 都被 scandir 折叠为 #f，存在性由 file-exists? 单独判定
    (keys (assq-ref probes 'sb-keys))
    (keystore (assq-ref probes 'keystore))
    (facts (assq-ref probes 'facts))
-   (sbkeysync (assq-ref probes 'sbkeysync))
+   (efi-updatevar (assq-ref probes 'efi-updatevar))
    (tpm-device (assq-ref probes 'tpm-device))
    (tpm-artifacts (assq-ref probes 'tpm-artifacts))
    (current-system (assq-ref probes 'current-system))
@@ -490,11 +494,11 @@ info；#f（root 事务）全部硬性。"
                        (cons 'fail
                              (format #f "SB keystore missing under ~a (run blue install or tools/secure-boot-enroll.scm)"
                                      %sb-keystore))))))
-            (cons "sbkeysync available"
+            (cons "efi-updatevar available"
                   (lambda ()
-                    (if (enrollment-status-sbkeysync status)
+                    (if (enrollment-status-efi-updatevar status)
                       '(ok . #f)
-                      (cons 'fail "sbkeysync not found (system profile sbsigntools)"))))
+                      (cons 'fail "efi-updatevar not found (system profile efitools)"))))
             (cons "TPM device"
                   (lambda ()
                     (if (enrollment-status-tpm-device status)
@@ -534,7 +538,7 @@ info；#f（root 事务）全部硬性。"
 (define (firmware-action status)
   (case (enrollment-status-firmware status)
     ((enrolled) "already enrolled (skip)")
-    ((setup-mode) "enroll PK/KEK/db (sbkeysync; PK last — exits Setup Mode)")
+    ((setup-mode) "enroll PK/KEK/db (efi-updatevar; PK last — exits Setup Mode)")
     ((pending-reboot) "already written this boot (reboot to activate Secure Boot)")
     ((foreign-enrolled) "BLOCKED (firmware PK is not ours)")
     ((enrolled-unverified) "requires root to verify firmware PK ownership")
@@ -597,7 +601,7 @@ info；#f（root 事务）全部硬性。"
              ((setup-mode) "Setup Mode (SecureBoot=0, SetupMode=1)")
              ((enrolled) "already enrolled")
              (else "unclear")))
-   "Planned operation: write db, KEK, PK via sbkeysync (db/KEK first,"
+   "Planned operation: write db, KEK, PK via efi-updatevar (db/KEK first,"
    "PK last). Writing PK enables Secure Boot and exits Setup Mode."
    ""
    "Rollback/recovery implication: after PK is written the firmware"
@@ -615,12 +619,26 @@ info；#f（root 事务）全部硬性。"
 ;;; ────────────────────────────────────────────────────────────
 ;;; argv（纯）
 
-(define (sbkeysync-binary)
-  "sbkeysync 的确定性来源：system profile（GUIXCFG_SBKEYSYNC 仅供
+(define (efi-updatevar-binary)
+  "efi-updatevar 的确定性来源：system profile（GUIXCFG_EFI_UPDATEVAR 仅供
 测试/调试覆盖）。"
-  (or (let ((v (getenv "GUIXCFG_SBKEYSYNC")))
+  (or (let ((v (getenv "GUIXCFG_EFI_UPDATEVAR")))
         (and v (not (string-null? v)) v))
-      "/run/current-system/profile/bin/sbkeysync"))
+      "/run/current-system/profile/bin/efi-updatevar"))
+
+(define (setup-mode-update-argv variable)
+  "Return the exact efi-updatevar invocation for initial Setup Mode enrollment.
+db/KEK are replaced from raw ESLs, avoiding sbkeysync's unconditional
+EFI_VARIABLE_APPEND_WRITE flag that this firmware rejects.  PK is written last
+from its authenticated update, which lets firmware leave Setup Mode."
+  (let ((tool (efi-updatevar-binary))
+        (work (string-append %sb-keystore "/.work/")))
+    (cond ((member variable '("db" "KEK"))
+           `(,tool "-e" "-f" ,(string-append work variable ".esl")
+                   ,variable))
+          ((string=? variable "PK")
+           `(,tool "-f" ,(string-append %sb-keystore "/PK/PK.auth") "PK"))
+          (else (error "unsupported Setup Mode Secure Boot variable" variable)))))
 
 (define (tpm2-tool-argv root guile site action flags)
   "tools/tpm2-enroll.scm 的 argv：直接跑 guix 自带的 guile（T3 实测：
@@ -730,20 +748,17 @@ guix 模块——VM 实测 'no code for module (guix records)/(json)'。"
                               "~%Firmware enrollment declined; nothing was written.~%")
                       (throw 'enroll-exit 3))
                     (set! mutated? #t)
-                    (let ((sbkeysync (sbkeysync-binary))
-                          (keystore %sb-keystore))
-                      (format #t "  writing db/KEK...~%")
-                      (let ((s1 (exec `(,sbkeysync "--keystore"
-                                                   ,keystore
-                                                   "--verbose"))))
-                        (unless (zero? s1)
-                          (error "sbkeysync (db/KEK) failed" s1)))
-                      (format #t "  writing PK (exits Setup Mode)...~%")
-                      (let ((s2 (exec `(,sbkeysync "--keystore"
-                                                   ,keystore
-                                                   "--verbose" "--pk"))))
-                        (unless (zero? s2)
-                          (error "sbkeysync (PK) failed" s2)))))
+                    (format #t "  writing db/KEK...~%")
+                    (let ((s1 (exec (setup-mode-update-argv "db"))))
+                      (unless (zero? s1)
+                        (error "efi-updatevar (db) failed" s1)))
+                    (let ((s2 (exec (setup-mode-update-argv "KEK"))))
+                      (unless (zero? s2)
+                        (error "efi-updatevar (KEK) failed" s2)))
+                    (format #t "  writing PK (exits Setup Mode)...~%")
+                    (let ((s3 (exec (setup-mode-update-argv "PK"))))
+                      (unless (zero? s3)
+                        (error "efi-updatevar (PK) failed" s3))))
                    ((pending-reboot)
                     (format #t "~%firmware was enrolled in a previous run; Secure Boot activates at the next boot.~%"))
                    (else

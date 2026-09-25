@@ -7,7 +7,7 @@
                #:use-module (gnu packages cryptsetup)        ; cryptsetup
                #:use-module (gnu packages golang-crypto)     ; age
                #:use-module (gnu packages package-management) ; flatpak
-               #:use-module (gnu packages efi)               ; sbsigntools（blue enroll 固件注册）
+               #:use-module (gnu packages efi)               ; efitools/sbsigntools（blue enroll 固件注册）
                #:use-module (guixcfg fonts model)           ; %fonts（shared fact；Flatpak sandbox 字体投影）
                #:export (%system-packages))
 
@@ -21,8 +21,9 @@
                 ; 分类：system 提供 executable，一切
                 ; installation 走 --user scope；
                 ; docs/architecture/flatpak.md）
-                sbsigntools)      ; sbkeysync/sbsign：blue enroll 的固件
-          ; 注册执行器（目标系统离线可用——不依赖
+                 sbsigntools        ; sbsign：UKI signing runtime
+                 efitools)          ; efi-updatevar：Setup Mode enrollment
+           ; 固件注册执行器（目标系统离线可用——不依赖
           ; LiveCD manifest / channel fetch；
           ; docs/architecture/boot.md（Secure Boot））
           ;; 字体投影：pinned Guix flatpak 的 flatpak-fix-fonts-icons.patch

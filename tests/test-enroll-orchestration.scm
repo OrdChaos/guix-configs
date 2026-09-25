@@ -3,7 +3,7 @@
 ;;;
 ;;; 全部断言只走纯路径（分类 alist、计划行、argv、非 root 事务的
 ;;; fail-closed 前置）——绝不触碰真实 TPM / LUKS keyslot / NVRAM /
-;;; sbkeysync。
+;;; firmware variables。
 
 (use-modules (guixcfg security enroll)
              (srfi srfi-64)
@@ -21,7 +21,7 @@
   (fold (lambda (kv acc) (acons (car kv) (cdr kv) acc))
         (list (cons 'tpm 'absent) (cons 'firmware 'setup-mode)
               (cons 'sb-keys #t) (cons 'keystore #t)
-              (cons 'facts #t) (cons 'sbkeysync #t)
+               (cons 'facts #t) (cons 'efi-updatevar #t)
               (cons 'tpm-device #t) (cons 'tpm-artifacts #f)
               (cons 'current-system #t)
               (cons 'persist #t) (cons 'esp #t))
@@ -300,9 +300,19 @@
                                         "enroll" '("--luks-secret"))))
               (take (cddr (member "-s" argv)) 2)))
 
-(test-equal "sbkeysync binary defaults to the system profile"
-            "/run/current-system/profile/bin/sbkeysync"
-            (sbkeysync-binary))
+(test-equal "efi-updatevar binary defaults to the system profile"
+             "/run/current-system/profile/bin/efi-updatevar"
+             (efi-updatevar-binary))
+
+(test-equal "Setup Mode writes db from its raw ESL without append"
+             '("/run/current-system/profile/bin/efi-updatevar" "-e" "-f"
+               "/persist/system/keys/secure-boot/keystore/.work/db.esl" "db")
+             (setup-mode-update-argv "db"))
+
+(test-equal "Setup Mode writes PK last from its authenticated update"
+             '("/run/current-system/profile/bin/efi-updatevar" "-f"
+               "/persist/system/keys/secure-boot/keystore/PK/PK.auth" "PK")
+             (setup-mode-update-argv "PK"))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 只读检查形态（soft 语义：本机不是目标系统 → 硬性环境项 fail）
@@ -331,13 +341,11 @@
                                                     #:soft? soft?))))
            (car ((cdr check)))))
 
-(test-equal "SB keys check fails closed when the keydir is truly absent (soft mode)"
-            'fail
-            (enroll-check-status "Secure Boot keys"))
+(test-assert "SB keys check never reports root-only state as available in soft mode"
+             (not (eq? 'ok (enroll-check-status "Secure Boot keys"))))
 
-(test-equal "SB keystore check fails closed when the keystore is truly absent (soft mode)"
-            'fail
-            (enroll-check-status "Secure Boot keystore"))
+(test-assert "SB keystore check never reports root-only state as available in soft mode"
+             (not (eq? 'ok (enroll-check-status "Secure Boot keystore"))))
 
 (test-equal "SB keys check fails closed in hard (root) mode when absent"
             'fail

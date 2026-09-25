@@ -108,7 +108,7 @@ db    我们的 db + Microsoft db CAs（含 Option ROM UEFI CA 2023）+ 固件 d
 - 微软证书：`(guixcfg security certificates)`（source 为 virelith 频道
   `microsoft-secure-boot-certificates` 包内文件，7 张 DER 的固定 sha256
   在包内）；固件默认值经 `efi-readvar` 现读。
-- 注册材料：`tools/secure-boot-enroll.scm` 合并生成 sbkeysync
+- 注册材料：`tools/secure-boot-enroll.scm` 合并生成 authenticated update
   keystore（`{PK,KEK,db}/*.auth`）；PK 最后写入。
 - 签名在部署期：探测到 `db.key`/`db.crt` 即让 ukify 签 UKI、
   sbsign 签 Limine；密钥不存在则全部不签（开发期）。

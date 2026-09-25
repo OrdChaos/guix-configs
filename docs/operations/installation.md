@@ -35,7 +35,7 @@ normal operation
   （把 system + Home 收敛到本 checkout）。它不写固件变量或 TPM；成功后
   必须重启，再显式执行 `blue enroll HOST`。
 - `blue enroll HOST` = 机器绑定 enrollment，**两个相位、中间隔一次
-  reboot**：相位 1（Setup Mode）写固件 db/KEK/PK（写 PK 退出 Setup
+  reboot**：相位 1（Setup Mode）由 `efi-updatevar` 写固件 db/KEK/PK（写 PK 退出 Setup
   Mode），exit 0 并要求 reboot——**TPM 在同一轮被跳过**（TPM policy
   必须对「以最终 Secure Boot 状态启动」的那次 boot 密封，SecureBoot
   恒在下次 boot 才置 1）；reboot 后（SecureBoot=1，LUKS 密码人工输入
@@ -125,7 +125,7 @@ blue enroll lenovo-legion-y7000p     # enroll 相位 2：固件 skip → TPM enr
   facts            /mnt/persist/system/facts/host.scm（幂等重写）
   sb-keys          Secure Boot keygen（db.key/db.crt 供 init 期 UKI 签名）
   secrets          stable identity + 用户密码 hash 安装到 /mnt/persist
-  sb-keystore      sbkeysync keystore 构建（不写固件）
+   sb-keystore      authenticated-update keystore 构建（不写固件）
   system-init      GUIX_CONFIG_FACTS + guix system init → /mnt
   commit-root      @root-template 只读发布 + @root-0（幂等 + 中断恢复）
   repo             仓库 checkout 复制到 /mnt/persist/data-home/<user>/
@@ -156,9 +156,9 @@ identity 已就位时走 `luks-recovery.age`（age 解密，不提示密码）�
 
 ```text
   preflight        目标系统环境（/run/current-system、/persist、ESP、
-                   TPM 设备、SB keys/keystore、sbkeysync、facts）
-  firmware         Setup Mode 时：显式确认 → sbkeysync db/KEK →
-                   sbkeysync --pk（写 PK 退出 Setup Mode）
+                    TPM 设备、SB keys/keystore、efi-updatevar、facts）
+   firmware         Setup Mode 时：显式确认 → efi-updatevar db/KEK →
+                    efi-updatevar PK.auth（写 PK 退出 Setup Mode）
                    （SecureBoot=1 && SetupMode=0 时 skip；
                    PK 已写入但 SecureBoot 待 boot 激活时 skip）
   tpm              SecureBoot 已激活（本 boot）时：absent →
@@ -472,4 +472,4 @@ guix repl tools/tpm2-enroll.scm -- enroll --noninteractive      # stdin 直读
 - 网络失败（channel fetch / substitute）：直接重跑该步。
 - apply 在破坏磁盘后失败：按工具 fail/restart contract，测试 VM 可
   重建；绝不续跑中间态。
-- commit-root 重复执行安全 no-op；sbkeysync 不重复写 PK。
+- commit-root 重复执行安全 no-op；enrollment 不重复写 PK。
