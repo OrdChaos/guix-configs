@@ -170,11 +170,18 @@ CHAIN 替换为 VARIANT 置首的版本（mode=assign_replace——实测
   (append (list (alias-sxml "sans-serif" %sans-serif-families)
                 (alias-sxml "serif" %serif-families)
                 (alias-sxml "monospace" %monospace-families))
-          ;; system-ui：与 sans-serif 一致的系统 UI 策略
-          (list '(alias (@ (binding "strong"))
-                        (family "system-ui")
-                        (prefer (family "sans-serif"))))
-          ;; emoji：显式别名（fc-match emoji 可用）
+           ;; system-ui：与 sans-serif 一致的系统 UI 策略
+           (list '(alias (@ (binding "strong"))
+                         (family "system-ui")
+                         (prefer (family "sans-serif"))))
+           ;; CSS UI monospace names bypass the generic monospace alias unless
+           ;; explicitly normalized.  Chromium code blocks commonly use them.
+           (map (lambda (family)
+                  `(alias (@ (binding "strong"))
+                          (family ,family)
+                          (prefer (family "monospace"))))
+                '("ui-monospace" "SFMono-Regular" "Menlo" "Monaco"))
+           ;; emoji：显式别名（fc-match emoji 可用）
           (list '(alias (@ (binding "strong"))
                         (family "emoji")
                         (prefer (family "Noto Color Emoji"))))))
