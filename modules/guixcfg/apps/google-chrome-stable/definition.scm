@@ -65,8 +65,9 @@
   (package/inherit
    google-chrome-stable
    (inputs
-    (modify-inputs (package-inputs google-chrome-stable)
-      (append qtwayland qtwayland-5)))
+    `(("qtwayland-6" ,qtwayland)
+      ("qtwayland-5" ,qtwayland-5)
+      ,@(package-inputs google-chrome-stable)))
    (arguments
     (substitute-keyword-arguments (package-arguments google-chrome-stable)
       ((#:phases phases)
@@ -77,7 +78,7 @@
              (lambda _
                (wrap-program (string-append #$output "/bin/google-chrome")
                  `("QT_PLUGIN_PATH" ":" prefix
-                   (,(string-append #$(this-package-input "qtwayland")
+                   (,(string-append #$(this-package-input "qtwayland-6")
                                     "/lib/qt6/plugins")
                     ,(string-append #$(this-package-input "qtwayland-5")
                                      "/lib/qt5/plugins"))))))))))))
