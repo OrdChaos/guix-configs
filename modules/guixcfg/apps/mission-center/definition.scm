@@ -28,9 +28,11 @@
 ;;; FHS）；设默认应用；为无状态应用造 persistence rule。
 
 (define-module (guixcfg apps mission-center definition)
-               #:use-module (guix records)
-               #:use-module (guix packages)           ; package、package-source、origin
-               #:use-module (guix gexp)                ; local-file
+                #:use-module (guix records)
+                #:use-module (guix packages)           ; package、package-source、origin
+                #:use-module (guix gexp)                ; local-file、#~ / #$
+                #:use-module (guix utils)               ; substitute-keyword-arguments
+                #:use-module (nongnu packages nvidia)   ; nvda-new-feature
                #:use-module (guixcfg apps model)          ; application
                #:use-module (guixcfg gsettings model)     ; gsettings-setting
                #:use-module ((virelith packages mission-center)
@@ -53,8 +55,31 @@
     (origin
      (inherit (package-source virelith:mission-center))
      (patches
-      (list (local-file "mission-center-dataset-count.patch"
-                        "mission-center-dataset-count.patch")))))))
+       (list (local-file "mission-center-dataset-count.patch"
+                         "mission-center-dataset-count.patch")))))))
+
+;; Magpie's NVIDIA collector dlopens libnvidia-ml.so at runtime.  The upstream
+;; wrapper contains Mesa/Vulkan but not NVML, so declare the driver input and
+;; expose only its library directory to this monitoring process.
+(define %mission-center-package/with-nvml
+  (package/inherit
+   %mission-center-package
+   (inputs
+    `(("nvda" ,nvda-new-feature)
+      ,@(package-inputs %mission-center-package)))
+   (arguments
+    (substitute-keyword-arguments (package-arguments %mission-center-package)
+      ((#:phases phases)
+       #~(modify-phases #$phases
+           (add-after 'wrap-runtime-paths 'add-nvidia-nvml-runtime
+             (lambda _
+               (for-each
+                (lambda (program)
+                  (wrap-program (string-append #$output "/bin/" program)
+                    `("LD_LIBRARY_PATH" ":" prefix
+                      (,(string-append #$(this-package-input "nvda")
+                                       "/lib"))))
+                 '("missioncenter" "missioncenter-magpie")))))))))))
 
 ;; 静态偏好（io.missioncenter.MissionCenter，pinned 1.2.0 schema 实测）：
 ;;   first-time-running  bool  false
@@ -76,5 +101,5 @@
    ;; 单一包：GUI 与 Magpie 后端、desktop entry、GSettings schema 与
    ;; hw.db 均在其中；依赖经包闭包随 profile 进入（GTK4/libadwaita/
    ;; Mesa/Vulkan loader/nvtop 等）。
-   (home-packages (list %mission-center-package))
+    (home-packages (list %mission-center-package/with-nvml))
    (gsettings %mission-center-gsettings)))
