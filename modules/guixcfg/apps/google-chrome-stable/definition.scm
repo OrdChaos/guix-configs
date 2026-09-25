@@ -45,6 +45,7 @@
 
 (define-module (guixcfg apps google-chrome-stable definition)
                 #:use-module (nongnu packages chrome)   ; google-chrome-stable
+                #:use-module (guix gexp)                 ; #~ / #$
                 #:use-module (guix records)
                 #:use-module (guix packages)
                 #:use-module (guix utils)                ; substitute-keyword-arguments
