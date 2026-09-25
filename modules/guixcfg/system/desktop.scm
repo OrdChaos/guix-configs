@@ -130,9 +130,16 @@
                ;; helper wrapper，非裸 upstream script；greeter 以
                ;; greetd 的 greeter 用户无认证运行——start_greeter
                ;; authenticate=false，HOME=/var/empty）。
-               ;; 使用 channel 提供的 unpatched upstream greeter。
-               (default-session-command
-                (greetd-noctalia-session))))))))
+                ;; 使用 channel 提供的 unpatched upstream greeter。
+                (default-session-command
+                 (greetd-noctalia-session
+                  ;; Upstream parks compositor stderr by default, leaving
+                  ;; greetd with only an unhelpful exit notice.  Keep a
+                  ;; temporary, world-readable failure log on the ephemeral
+                  ;; root until the physical greeter failure is resolved.
+                  #:extra-environment
+                  '(("NOCTALIA_GREETER_LOG" . "/tmp/noctalia-greeter.log")
+                    ("WLR_LOG" . "info"))))))))))
 
 (define desktop-services
   ;; M2 Wayland desktop 系统层服务。Noctalia Greeter 的通用系统
