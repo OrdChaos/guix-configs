@@ -104,7 +104,6 @@
                 #:use-module (nongnu packages nvidia)  ; nvda-new-feature（rolling selector）
                 #:use-module (gnu system)              ; operating-system、
                 ; operating-system-user-kernel-arguments
-                #:use-module (gnu services base)        ; udev-hardware-service
                #:use-module (guix build-system trivial) ; trivial-build-system（%prime-run-wrapper）
                #:use-module (guix gexp)               ; plain-file
                #:use-module ((guix licenses) #:prefix license:) ; license:gpl3+
@@ -140,16 +139,6 @@
 ;; mem_sleep_default=s2idle、nvidia.NVreg_EnableS0ixPowerManagement=1）
 ;; 未来按需加入，禁止 speculative workaround。
 (define nvidia-kernel-arguments '())
-
-;; Magpie's embedded nvtop collector names Intel GPUs from the PCI udev hwdb.
-;; Raptor Lake-P's PCI record lacks that name in the pinned hwdb, so provide
-;; the one machine-specific fact it needs without changing graphics drivers.
-(define %intel-rpl-p-gpu-hwdb-service
-  (udev-hardware-service
-   'intel-rpl-p-gpu
-   (udev-hardware
-    "60-intel-rpl-p-gpu.hwdb"
-    "pci:v00008086d0000A7A8*\n ID_MODEL_FROM_DATABASE=Raptor Lake-P [UHD Graphics]\n")))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; PRIME Render Offload policy（中性数据，单一 authority）
@@ -345,6 +334,5 @@ built against it via linux-module-build-system's #:linux keyword."
                   (operating-system-user-kernel-arguments nvidia-only))
                  (services
                   (append (operating-system-user-services nvidia-only)
-                          (list %intel-rpl-p-gpu-hwdb-service)
                           (operating-system-user-services os)))))
               os))

@@ -9,9 +9,9 @@
 ;;; google-chrome-stable + CHROME_WRAPPER + .desktop 安装），
 ;;; #:substitutable? #f（Google 服务器直下 deb，不经 substitutes）；
 ;;; supported-systems 仅 x86_64-linux。Chrome bundles Qt 5/6 shims but the
-;;; pinned package does not include qtwayland.  Force only those shims to use
-;;; their available XCB platform plugin; Chromium's Ozone backend remains
-;;; independent and may still select native Wayland.
+;;; pinned package does not include their Wayland platform plugins.  Add both
+;;; plugin sets to Chrome's own wrapper; Chromium's Ozone backend remains
+;;; independent.
 ;;;
 ;;; 持久化边界（决策已定，不做 profile 内部细分）：
 ;;;   - 持久化：~/.config/google-chrome/ 整体（Chromium 官方 User
@@ -49,6 +49,7 @@
                 #:use-module (guix records)
                 #:use-module (guix packages)
                 #:use-module (guix utils)                ; substitute-keyword-arguments
+                #:use-module (gnu packages qt)           ; qtwayland / qtwayland-5
                #:use-module (guixcfg apps model)       ; application
                #:use-module (guixcfg system application-persistence) ; rule
                #:export (%google-chrome-stable
@@ -63,16 +64,23 @@
 (define google-chrome-stable/fixed
   (package/inherit
    google-chrome-stable
+   (inputs
+    (modify-inputs (package-inputs google-chrome-stable)
+      (append qtwayland qtwayland-5)))
    (arguments
     (substitute-keyword-arguments (package-arguments google-chrome-stable)
       ((#:phases phases)
        #~(modify-phases #$phases
            ;; This applies only to Chrome's optional Qt integration shims, not
            ;; to Chromium's Ozone Wayland backend.
-           (add-after 'install-wrapper 'force-xcb-qt-platform
+           (add-after 'install-wrapper 'add-qt-wayland-plugins
              (lambda _
                (wrap-program (string-append #$output "/bin/google-chrome")
-                  '("QT_QPA_PLATFORM" = ("xcb")))))))))))
+                 `("QT_PLUGIN_PATH" ":" prefix
+                   (,(string-append #$(this-package-input "qtwayland")
+                                    "/lib/qt6/plugins")
+                    ,(string-append #$(this-package-input "qtwayland-5")
+                                     "/lib/qt5/plugins"))))))))))))
 
 (define %google-chrome-stable
   (application
