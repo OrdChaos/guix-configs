@@ -458,8 +458,7 @@ tools/gc-cli.scm（域校验在子进程；blueprint 只校验 host）。"
                "WARNING: worktree became dirty during reconfigure~%")))))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; §2.5 部署相位（reconfigure / enroll / firstboot 共用的非 dry 主体；
-;;; 单一实现——firstboot 编排复用，不复制逻辑）
+;;; §2.5 部署相位（reconfigure / enroll 的非 dry 主体）
 
 (define (%reconfigure-host root host)
   "reconfigure 的部署相位（非 dry）：doctor → privilege handoff →
@@ -803,8 +802,8 @@ stages are detected and skipped; ambiguous/incompatible partial
 states fail closed (the disk is never re-formatted automatically).
 Destructive confirmation: the full device path must be typed before
 the disk is touched. Not included: TPM enrollment and firmware
-PK enrollment (run 'blue firstboot HOST' after the first boot:
-reconfigure then machine enrollment).
+PK enrollment (after the first boot, run 'blue firstboot HOST', reboot,
+then run 'blue enroll HOST').
 Exit codes: 0 success; 1 preflight failure (including execution from an
 already-installed target boot; no mutation); 2 partial mutation,
 cannot continue safely; 3 user abort.
@@ -858,47 +857,37 @@ mutation, no sudo, no confirmation."))
                     (%enroll-host root host))))
 
 ;;; ============================================================
-;;; §3.9 firstboot（首次启动收敛：reconfigure → enroll 的一键入口）
+;;; §3.9 firstboot（首次启动收敛）
 ;;; ============================================================
-;;; 纯编排：两个相位都是既有命令的非 dry 主体（%reconfigure-host /
-;;; %enroll-host，单一实现——不复制逻辑）。顺序固定：先把系统收敛到
-;;; 本 checkout（system + Home），再绑定机器（固件 PK + TPM）——
-;;; 固件/TPM enrollment 针对已收敛的系统执行。任一相位失败即整体
-;;; 失败（该相位的退出码原样传播），绝不跳过失败继续。
+;;; firstboot 只收敛 system + Home 到当前 checkout。它绝不写固件变量
+;;; 或 TPM：reconfigure 后必须先重启到新 UKI，再由显式的 blue enroll
+;;; 执行机器绑定流程。
 
 (define-command (firstboot-command arguments)
                 ((invoke "firstboot")
                  (category 'deployment)
-                 (synopsis "First-boot convergence for a freshly installed system: reconfigure then machine enrollment")
-                 (help "HOST
-One-click first-boot entry for a freshly installed system:
-  1. reconfigure phase  -- converge system + Home onto this checkout
-     (doctor incl. the git clean gate, then the gate transaction)
-  2. enroll phase       -- bind this machine: Secure Boot firmware
-     enrollment (explicit confirmation). Secure Boot activates at
-     the next boot; the run then asks for a reboot. After rebooting,
-     run 'blue enroll HOST' once more to complete TPM enrollment
-     (its policy must seal against a boot with the final Secure
-      Boot state).
-Runs only once: after this system has written its firmware PK,
-firstboot is blocked before reconfigure. Use ordinary 'blue
-reconfigure' (or explicit HOST) for later updates.
-Stops at the first failing phase; that phase's exit code is
-propagated (reconfigure: 0/1/2; enroll: 0/1/2/3).
-With blue -n: system reconfigure derivation dry-run + enrollment
-plan only; zero mutation, no sudo, no confirmation."))
+                  (synopsis "First-boot convergence for a freshly installed system")
+                  (help "HOST
+Converge system + Home onto this checkout (doctor including the git clean
+gate, then the gate transaction).  This command never enrolls Secure Boot
+firmware keys or TPM state.  Reboot after it succeeds, then run 'blue enroll
+HOST' to begin the separate machine enrollment flow.
+After firmware PK has been written, firstboot is blocked before reconfigure.
+Use ordinary 'blue reconfigure' (or explicit HOST) for later updates.
+With blue -n: system reconfigure derivation dry-run only; zero mutation,
+no sudo, no confirmation."))
                 (let* ((root (%repo-root))
                        (host (%require-host-argument arguments)))
                   (%firstboot-guard root host)
                   (if (dry-build?)
                     (begin
-                     (%doctor root host)
-                     (%exec (system-reconfigure-dry-run-argv root host))
-                     (%exec (enroll-cli-argv root "plan" host))
-                     (format #t "  [dry-run] no mutation; no sudo; no confirmation.~%"))
+                      (%doctor root host)
+                      (%exec (system-reconfigure-dry-run-argv root host))
+                      (format #t "  [dry-run] no mutation; no sudo; no confirmation.~%"))
                     (begin
-                     (%reconfigure-host root host)
-                     (%enroll-host root host)))))
+                      (%reconfigure-host root host)
+                      (format #t "~%Firstboot convergence complete.~%")
+                      (format #t "Reboot, then run: blue enroll ~a~%" host))))
 
 ;;; ============================================================
 ;;; §4 repository-tests testable（builtin blue check 的薄 adapter）

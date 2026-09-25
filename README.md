@@ -40,8 +40,10 @@ guix time-machine -C channels.lock.scm -- \
   shell -m manifests/development.scm -- blue install lenovo-legion-y7000p /dev/nvme0n1
 # validate 成功后自动 stop cow-store + sync；不自动关机/重启
 # → reboot into the installed system
-blue -n firstboot lenovo-legion-y7000p   # 只读：reconfigure 推导 plan + enrollment 计划
-blue firstboot lenovo-legion-y7000p      # 首次启动收敛：reconfigure + 固件 enrollment
+blue -n firstboot lenovo-legion-y7000p   # 只读：reconfigure 推导 plan
+blue firstboot lenovo-legion-y7000p      # 首次启动收敛：仅 reconfigure
+reboot                                   # 启动新的 UKI
+blue enroll lenovo-legion-y7000p         # 独立的固件/TPM enrollment
 # reboot once so Secure Boot becomes active, then enroll TPM:
 blue enroll lenovo-legion-y7000p
 # install / firstboot / enroll 完成后各自 fail closed，不作为日常重跑入口。

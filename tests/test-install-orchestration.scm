@@ -395,7 +395,17 @@
             '("  cd ~/Projects/guix-configs"
               "  blue firstboot lenovo-legion-y7000p")
             (take (drop (install-next-step-lines "lenovo-legion-y7000p") 4)
-                  2))
+                   2))
+
+(test-assert "firstboot converges only and never invokes enrollment"
+             (let* ((source (call-with-input-file "blueprint.scm"
+                                                   (lambda (port)
+                                                     (read-string port))))
+                    (start (string-contains source "(define-command (firstboot-command"))
+                    (end (string-contains source ";;; §4 repository-tests")))
+               (and start end
+                    (not (string-contains (substring source start end)
+                                          "(%enroll-host root host)")))))
 
 (define %repo-fixture-target
   (string-append "/tmp/guixcfg-test-repo-copy-"

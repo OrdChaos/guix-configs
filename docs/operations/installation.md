@@ -12,12 +12,15 @@ reboot（绝不自动 reboot）
   ↓
 installed system（首次正常启动）
   ↓
-blue -n firstboot HOST          # 只读：reconfigure 推导 plan + enrollment 计划
+blue -n firstboot HOST          # 只读：reconfigure 推导 plan
 blue firstboot HOST             # 首次启动收敛：reconfigure（system + Home）
-                                #   → enroll 相位 1（固件 PK/KEK/db）
-  ↓
+   ↓
+reboot（启动 firstboot 收敛后的 UKI）
+   ↓
+blue enroll HOST                # enroll 相位 1：固件 PK/KEK/db
+   ↓
 reboot（Secure Boot 在此 boot 激活；LUKS 密码人工输入一次）
-  ↓
+   ↓
 blue enroll HOST                # enroll 相位 2：固件已注册（skip）→ TPM
   ↓
 normal operation
@@ -28,10 +31,9 @@ normal operation
   `/persist/data-home/<user>/Projects/guix-configs`，首次启动后经现有
   `Projects` bind 显示为 `~/Projects/guix-configs`）；**不包含** TPM final
   enrollment 与固件 PK enrollment（归 `blue enroll`）。
-- `blue firstboot HOST` = 首次正常启动后的一键收敛：先
-  `reconfigure`（把 system + Home 收敛到本 checkout），再 `enroll`
-  相位 1（固件 PK/KEK/db 注册，显式确认）。任一相位失败即整体失败
-  （该相位退出码）。
+- `blue firstboot HOST` = 首次正常启动后的收敛：只执行 `reconfigure`
+  （把 system + Home 收敛到本 checkout）。它不写固件变量或 TPM；成功后
+  必须重启，再显式执行 `blue enroll HOST`。
 - `blue enroll HOST` = 机器绑定 enrollment，**两个相位、中间隔一次
   reboot**：相位 1（Setup Mode）写固件 db/KEK/PK（写 PK 退出 Setup
   Mode），exit 0 并要求 reboot——**TPM 在同一轮被跳过**（TPM policy
@@ -71,7 +73,7 @@ secure-boot-keygen / secure-boot-enroll / tpm2-enroll）。
 - **实机首次安装前必须在固件 UI 清除 Secure Boot keys、进入 Setup
   Mode**（`SecureBoot=0`, `SetupMode=1`），再启动 LiveCD。install 会生成
   新 key 并用新 `db` 签首次 UKI；若固件仍在 User Mode 且不信任该 key，
-  安装结果将无法启动，也就无法执行 firstboot enrollment。preflight
+   安装结果将无法启动，也就无法执行后续 enrollment。preflight
   因此在任何磁盘 mutation 前 fail closed。仅当 resume 目标已有完整 key
   material，且固件 `PK` 被证明与目标的 `PK.crt` 完全一致时，已 enrolled
   或 pending-reboot 状态才可继续。`vm` host 的固件状态由测试 harness
@@ -103,7 +105,7 @@ guix time-machine -C channels.lock.scm -- \
 
 cd ~/Projects/guix-configs
 blue -n firstboot lenovo-legion-y7000p
-blue firstboot lenovo-legion-y7000p  # = reconfigure + enroll 相位 1（固件 PK/KEK/db）
+blue firstboot lenovo-legion-y7000p  # = reconfigure only
 
 # reboot（Secure Boot 激活；LUKS 密码人工输入一次）
 
@@ -196,7 +198,7 @@ identity 已就位时走 `luks-recovery.age`（age 解密，不提示密码）�
 
 ```bash
 cd ~/Projects/guix-configs
-blue -n firstboot lenovo-legion-y7000p   # 只读：reconfigure 推导 plan + enrollment 计划
+blue -n firstboot lenovo-legion-y7000p   # 只读：reconfigure 推导 plan
 blue firstboot lenovo-legion-y7000p
 ```
 
@@ -205,20 +207,16 @@ blue firstboot lenovo-legion-y7000p
 `blue -n firstboot` 都会在 reconfigure 之前失败；日常更新必须使用
 `blue reconfigure HOST`。
 
-两个相位顺序固定：
+`firstboot` 只有一个相位：
 
 1. **reconfigure 相位** = `blue reconfigure HOST` 的完整机制（doctor
    含 git clean gate → gate transaction：system reconfigure → Home
    热激活 → readiness 复查 → gate 重开）。作用：把系统收敛到当前
    checkout（安装后仓库如有新提交——如 `git pull` 之后——在这一步
    部署）。失败（exit 1/2）即整体失败，enroll 不执行。
-2. **enroll 相位** = `blue enroll HOST` 的完整机制（固件状态
-   preflight → Setup Mode 时显式确认写 db/KEK/PK → Secure Boot
-   待 boot 激活 → exit 0 提示 reboot）。失败（exit 1/2/3）整体失败。
-   **reboot 之后再跑一次 `blue enroll HOST`** 完成 TPM enrollment
-   （TPM policy 必须对以最终 Secure Boot 状态启动的那次 boot 密封，
-   且该次 boot 的 LUKS 密码需人工输入一次——TPM 自动解锁从下下个
-   boot 起生效）。
+   成功后重启到新的 UKI。随后显式运行 `blue enroll HOST`：Setup Mode
+   时写 db/KEK/PK，重启使 Secure Boot 激活，再运行一次 `blue enroll`
+   完成 TPM enrollment。
 
 之后日常更新只用 `blue reconfigure`（也可显式指定 HOST）；机器绑定修复/重做使用下方
 显式恢复工具，不能重跑已完成的 `blue enroll HOST`。
