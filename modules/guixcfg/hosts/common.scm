@@ -61,6 +61,7 @@
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind + 系统集成
                #:use-module (guixcfg system sudo policy) ; %sudoers-file（Defaults 声明：lecture/passprompt）
                #:use-module (guixcfg system profile policy) ; %system-profile（/etc/profile ownership）
+               #:use-module (guixcfg system subids)   ; %subids-services（rootless userns 声明式前提）
                #:use-module (guixcfg flatpak service) ; flatpak-persistence-rules（installation + 全局 selected app）
                #:use-module (guixcfg system gaming) ; %gaming-system-services（Steam 游戏库 + controller udev）
                #:use-module (virelith packages tpm2)   ; tpm2-tools-compat（enroll 工具依赖）
@@ -145,6 +146,10 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
                         (mihomo-service)))
           ;; 无状态根的用户态服务：登录确认 + 旧 generation 清理。
           (ephemeral-root-services keep-root-generations)
+          ;; rootless user namespace 前提：subuid/subgid 段 + setuid
+          ;; newuidmap/newgidmap（tests Level 3 隔离 root 依赖；
+          ;; guixcfg system subids）。
+          %subids-services
           ;; 基础 session infrastructure（elogind——system/common 拥有）。
           %common-services
           ;; applications 的 system services（composition root 契约保留）。

@@ -202,11 +202,13 @@ usage 帮助文本。"
   "以 pinned time-machine repl 运行（工具 import (virelith packages
   secure-boot)——time-machine repl 的 load path 自带全部频道模块；
   裸 guix repl 只有宿主 guix current，加载失败会以带非 ASCII 注释
-  的 backtrace 误报）。"
+  的 backtrace 误报）。LC_ALL=C 固定 subprocess locale——否则宿主
+  zh locale 的 channel 警告（如「缺少介绍」）混入捕获输出，触发
+  非 ASCII 误报（2026-09 实测）。"
   (let* ((tmp (string-append "/tmp/guixcfg-ui-scan-"
                              (number->string (getpid))))
          (cmd (string-append
-               "guix time-machine -C channels.lock.scm -- "
+               "LC_ALL=C guix time-machine -C channels.lock.scm -- "
                (string-join
                 (map (lambda (a) (string-append "'" a "'"))
                      (cons "repl" args))
@@ -283,7 +285,11 @@ usage 帮助文本。"
 
 (test-assert "secure-boot-enroll error path is printable ASCII"
              (call-with-values
-              (lambda () (run-captured-pinned "tools/secure-boot-enroll.scm"))
+              ;; 显式不存在的 keydir：错误路径必须不依赖宿主机的
+              ;; /persist keydir 状态（已安装机器上该目录为 root-only
+              ;; 存在，2026-09 实测 false-fail）。
+              (lambda () (run-captured-pinned "tools/secure-boot-enroll.scm"
+                                              "/tmp/guixcfg-test-no-such-keydir"))
               (lambda (out code)
                 (format #t "exit=~a~%" code)
                 (and (not (zero? code))
