@@ -8,7 +8,10 @@
 ;;; chromium-binary-build-system（nonguix 官方 wrapper：/bin/
 ;;; google-chrome-stable + CHROME_WRAPPER + .desktop 安装），
 ;;; #:substitutable? #f（Google 服务器直下 deb，不经 substitutes）；
-;;; supported-systems 仅 x86_64-linux。不复制定义、不自建 wrapper。
+;;; supported-systems 仅 x86_64-linux。Chrome bundles Qt 5/6 shims but the
+;;; pinned package does not include qtwayland.  Force only those shims to use
+;;; their available XCB platform plugin; Chromium's Ozone backend remains
+;;; independent and may still select native Wayland.
 ;;;
 ;;; 持久化边界（决策已定，不做 profile 内部细分）：
 ;;;   - 持久化：~/.config/google-chrome/ 整体（Chromium 官方 User
@@ -41,8 +44,10 @@
 ;;; 本模块不反向依赖 xdg。
 
 (define-module (guixcfg apps google-chrome-stable definition)
-               #:use-module (nongnu packages chrome)   ; google-chrome-stable
-               #:use-module (guix records)
+                #:use-module (nongnu packages chrome)   ; google-chrome-stable
+                #:use-module (guix records)
+                #:use-module (guix packages)
+                #:use-module (guix utils)                ; substitute-keyword-arguments
                #:use-module (guixcfg apps model)       ; application
                #:use-module (guixcfg system application-persistence) ; rule
                #:export (%google-chrome-stable
@@ -54,10 +59,24 @@
 ;; 默认应用。
 (define %chrome-desktop-entry "google-chrome.desktop")
 
+(define google-chrome-stable/fixed
+  (package/inherit
+   google-chrome-stable
+   (arguments
+    (substitute-keyword-arguments (package-arguments google-chrome-stable)
+      ((#:phases phases)
+       #~(modify-phases #$phases
+           ;; This applies only to Chrome's optional Qt integration shims, not
+           ;; to Chromium's Ozone Wayland backend.
+           (add-after 'install-wrapper 'force-xcb-qt-platform
+             (lambda _
+               (wrap-program (string-append #$output "/bin/google-chrome")
+                  '("QT_QPA_PLATFORM" = ("xcb")))))))))))
+
 (define %google-chrome-stable
   (application
    (name 'google-chrome-stable)
-   (home-packages (list google-chrome-stable))
+   (home-packages (list google-chrome-stable/fixed))
    (persistence
     (list (application-persistence-rule
            (name 'user-data)
