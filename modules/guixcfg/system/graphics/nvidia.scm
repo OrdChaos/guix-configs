@@ -13,7 +13,7 @@
 ;;;      语义一致）+ host projection（%prime-run-wrapper，作用域内
 ;;;      注入 NVIDIA userspace；未来 Flatpak projection 复用同一
 ;;;      policy 数据，只投影环境语义、不投影 Guix 路径）
-;;;   7. Mesa -> NVIDIA package transformation（replace-mesa）
+;;;   7. NVIDIA service and kernel arguments without replacing Intel Mesa
 ;;;   8. hybrid Intel + NVIDIA composition
 ;;;   9. NVIDIA 特定 power management
 ;;;  10. Secure Boot module-signing 边界（当前不实现，见下方 TODO）
@@ -29,10 +29,15 @@
 ;;;     packages/services，kernel/initrd/firmware 原样 inherit）；
 ;;;   - nouveau/nova 黑名单、nvidia_drm.modeset、nvidia-service-type
 ;;;     （firmware/udev/nvidia-modprobe/linux-loadable-module/nvidia-
-;;;     prime/nvidia-powerd）、replace-mesa 全部由 transformation 提供；
+;;;     prime/nvidia-powerd）由 transformation 提供；
 ;;;   - NVIDIA module 经 linux-module-build-system 的 #:linux 关键字
 ;;;     自动针对 %kernel 构建（Guix package-for-kernel）。
-;;; 本模块只做 machine policy → 明确参数 → transformation 的薄映射。
+;;; The upstream transformation also grafts Mesa to NVIDIA throughout the
+;;; complete OS closure.  That is unsuitable for this hybrid laptop: greeter
+;;; and the default desktop render on Intel, while NVIDIA is opt-in through
+;;; prime-run.  We therefore use the upstream transformation on an empty OS
+;;; only to obtain its kernel arguments and NVIDIA service, then retain the
+;;; original OS packages and services unchanged.
 ;;;
 ;;; driver 唯一 authority：%nvidia-driver。
 ;;;
@@ -306,16 +311,28 @@ The kernel is never chosen or replaced here: the transformation inherits
 OS's kernel field untouched, so %kernel from (guixcfg system
 kernel-platform) remains the single kernel authority; the NVIDIA module is
 built against it via linux-module-build-system's #:linux keyword."
-         (if enabled?
-           ((nonguix-transformation-nvidia
-             #:driver driver
-             #:open-source-kernel-module? open-source-kernel-module?
-             #:kernel-mode-setting? kernel-mode-setting?
-             #:configure-xorg? configure-xorg?
-             #:dynamic-boost? dynamic-boost?)
-            (operating-system
-             (inherit os)
-             (kernel-arguments
-              (append nvidia-kernel-arguments
-                      (operating-system-user-kernel-arguments os)))))
-           os))
+          (if enabled?
+              (let* ((transform
+                      (nonguix-transformation-nvidia
+                       #:driver driver
+                       #:open-source-kernel-module? open-source-kernel-module?
+                       #:kernel-mode-setting? kernel-mode-setting?
+                       #:configure-xorg? configure-xorg?
+                       #:dynamic-boost? dynamic-boost?))
+                     (nvidia-only
+                      (transform
+                       (operating-system
+                        (inherit os)
+                        (packages '())
+                        (services '())
+                        (kernel-arguments
+                         (append nvidia-kernel-arguments
+                                 (operating-system-user-kernel-arguments os)))))))
+                (operating-system
+                 (inherit os)
+                 (kernel-arguments
+                  (operating-system-user-kernel-arguments nvidia-only))
+                 (services
+                  (append (operating-system-user-services nvidia-only)
+                          (operating-system-user-services os)))))
+              os))

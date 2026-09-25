@@ -13,10 +13,10 @@
 ;;;   N4  open kernel module wiring：Lenovo host OS 的 nvidia-service-type
 ;;;       配置为 open 模块（package name "nvidia-module-open"，Ada
 ;;;       policy）+ nvidia-firmware + powerd #t（dynamic boost）+
-;;;       settings #f（无 Xorg display manager）。注意 replace-mesa
-;;;       会重建 config 内 package 字段（拷贝），断言按 name 而非 eq?
-;;;   N5  replace-mesa：transformation 对 packages 做 mesa → nvda
-;;;       grafting（依赖 mesa 的包其 input 的 replacement 是 nvda）
+;;;       settings #f（无 Xorg display manager）。
+;;;   N5  hybrid graphics: Intel Mesa package closure remains unchanged;
+;;;       NVIDIA is available only through the added NVIDIA service and
+;;;       scoped PRIME launcher.
 ;;;   N6  VM isolation：vm %vm-os 无 nvidia kernel-arguments、无
 ;;;       nvidia-service-type 实例（packages/firmware 无 nvidia 已由
 ;;;       test-kernel-platform K8 覆盖）
@@ -58,7 +58,7 @@
 
 (test-runner-current (test-runner-simple))
 
-;; probe app：依赖 mesa 的应用，验证 replace-mesa grafting（N5）。
+;; probe app：依赖 Mesa 的应用，验证 adapter 不污染 Intel closure（N5）。
 (define nvidia-probe-app
   (package
    (inherit hello)
@@ -185,15 +185,11 @@
                   (not (nvidia-configuration-settings
                         (service-value laptop-nvidia-service)))))
 
-;; ── N5：replace-mesa grafting ───────────────────────────────
-(test-assert "N5: mesa dependency of a package is grafted to nvda"
-             ;; package-input-grafting 的 graft-package 保留原包名、
-             ;; 通过 replacement 指向 nvda（mesa/nvda 名字长度相同，
-             ;; replacement 直接继承 rolling %nvidia-driver（nvda-new-feature），
-             ;; package-name = "nvda"）。
-             (let* ((t (nvidia-system-transformation probe-os))
-                    (app (find (lambda (p)
-                                 (string=? (package-name p)
+;; ── N5：hybrid Intel + NVIDIA closure ───────────────────────
+(test-assert "N5: Mesa dependency of an Intel desktop package remains unchanged"
+              (let* ((t (nvidia-system-transformation probe-os))
+                     (app (find (lambda (p)
+                                  (string=? (package-name p)
                                            "nvidia-probe-app"))
                                (operating-system-packages t)))
                     (inputs (and app (package-inputs app)))
@@ -201,9 +197,11 @@
                     (input (and (pair? inputs)
                                 (let ((f (car inputs)))
                                   (if (package? f) f (cadr f)))))
-                    (repl (and input (package-replacement input))))
-               (and input repl
-                    (string=? (package-name repl) "nvda"))))
+                     (repl (and input (package-replacement input))))
+                (and (eq? app nvidia-probe-app)
+                     input
+                     (eq? input mesa)
+                     (not repl))))
 
 ;; ── N6：VM isolation ────────────────────────────────────────
 (test-assert "N6: vm %vm-os has no nvidia kernel arguments"
