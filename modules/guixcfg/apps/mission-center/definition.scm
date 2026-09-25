@@ -1,8 +1,8 @@
 ;;; mission-center application unit：系统资源监视器（GTK4 +
 ;;; libadwaita；CPU/内存/磁盘/网络/GPU 与进程/服务管理）。
 ;;;
-;;; 来源（pinned virelith 087c78c 审计）：mission-center 定义于
-;;; (virelith packages mission-center)，1.2.0，源码构建（Meson 驱动
+;;; 来源（pinned virelith 087c78c 审计）：mission-center 以 Virelith 的
+;;; 1.2.0 定义为基底，并应用一个上游崩溃修复，源码构建（Meson 驱动
 ;;; GUI 与 Magpie 两个 Cargo workspace，crate 离线 vendored）。Magpie
 ;;; 从 (virelith packages monitoring) 的 nvtop `source` output 编译，
 ;;; 不再构建期下载。pinned Guix 只有 libadwaita 1.8.x，包内自带
@@ -29,9 +29,12 @@
 
 (define-module (guixcfg apps mission-center definition)
                #:use-module (guix records)
+               #:use-module (guix packages)           ; package、package-source、origin
+               #:use-module (guix gexp)                ; local-file
                #:use-module (guixcfg apps model)          ; application
                #:use-module (guixcfg gsettings model)     ; gsettings-setting
-               #:use-module (virelith packages mission-center) ; mission-center
+               #:use-module ((virelith packages mission-center)
+                             #:prefix virelith:)
                #:export (%mission-center
                          %mission-center-desktop-entry))
 
@@ -39,6 +42,19 @@
 ;; share/applications/ 核实）。纯数据常量：供统一 XDG 策略模块引用，
 ;; 不在此决定默认应用。
 (define %mission-center-desktop-entry "io.missioncenter.MissionCenter.desktop")
+
+;; v1.2.0 receives a variable number of GPU metric series.  It only allocated
+;; one Dataset initially, then indexed the additional readings and aborted.
+;; Keep this small source fix local until the pinned channel includes it.
+(define %mission-center-package
+  (package
+   (inherit virelith:mission-center)
+   (source
+    (origin
+     (inherit (package-source virelith:mission-center))
+     (patches
+      (list (local-file "mission-center-dataset-count.patch"
+                        "mission-center-dataset-count.patch")))))))
 
 ;; 静态偏好（io.missioncenter.MissionCenter，pinned 1.2.0 schema 实测）：
 ;;   first-time-running  bool  false
@@ -60,5 +76,5 @@
    ;; 单一包：GUI 与 Magpie 后端、desktop entry、GSettings schema 与
    ;; hw.db 均在其中；依赖经包闭包随 profile 进入（GTK4/libadwaita/
    ;; Mesa/Vulkan loader/nvtop 等）。
-   (home-packages (list mission-center))
+   (home-packages (list %mission-center-package))
    (gsettings %mission-center-gsettings)))

@@ -107,6 +107,10 @@
   (service greetd-service-type
            (greetd-configuration
             (allow-empty-passwords? #f)
+            ;; The greeter compositor opens DRM and libinput devices before a
+            ;; user session exists.  Its dedicated account needs the same
+            ;; device access as a graphical login manager.
+            (greeter-supplementary-groups '("video" "input"))
             (terminals
              (list
               (greetd-terminal-configuration

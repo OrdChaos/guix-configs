@@ -1,0 +1,10 @@
+--- a/src/performance_page/widgets/graph_widget_utils.rs
++++ b/src/performance_page/widgets/graph_widget_utils.rs
+@@ -328,6 +328,7 @@ impl DatasetGroup {
+     }
+ 
+     pub fn add_data(&mut self, points: &Vec<f32>) {
++        self.set_datasets(points.len());
+         for (idx, set) in points.iter().enumerate() {
+             self.update_single_scaling(idx, *set);
+         }

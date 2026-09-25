@@ -23,15 +23,15 @@
 (test-begin "mission-center")
 
 ;; ── MC1：package 来源 ────────────────────────────────────────
-(test-assert "MC1: home-packages is exactly the virelith mission-center"
-             (let ((pkgs (application-home-packages %mission-center)))
-               (and (= 1 (length pkgs))
-                    (let* ((p (car pkgs))
-                           (loc (package-location p)))
-                      (and (string=? "mission-center" (package-name p))
-                           (string=? "1.2.0" (package-version p))
-                           (string-contains (location->string loc)
-                                            "virelith"))))))
+(test-assert "MC1: home-packages is the locally patched mission-center"
+              (let ((pkgs (application-home-packages %mission-center)))
+                (and (= 1 (length pkgs))
+                     (let* ((p (car pkgs))
+                            (loc (package-location p)))
+                       (and (string=? "mission-center" (package-name p))
+                            (string=? "1.2.0" (package-version p))
+                            (string-contains (location->string loc)
+                                             "guixcfg"))))))
 
 ;; ── MC2：registry 启用 ───────────────────────────────────────
 (test-assert "MC2: registry enables mission-center exactly once"
