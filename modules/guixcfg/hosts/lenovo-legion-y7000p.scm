@@ -132,10 +132,6 @@
     #:keep-root-generations
     (host-storage-policy-keep-root-generations
      %lenovo-legion-y7000p-storage-policy)
-    ;; The greeter has its own wlroots compositor, separate from niri.  Force
-    ;; it onto the Intel display GPU; the NVIDIA dGPU remains offload-only.
-    #:desktop-greeter-environment
-    '(("WLR_DRM_DEVICES" . "/dev/dri/by-path/pci-0000:00:02.0-card"))
     #:persistent-mount-file-systems %persistent-mount-file-systems
     ;; 无 host-only system services（gaming 基础设施已全局共享；
     ;; NVIDIA/PRIME capability 在 final transformation 与 Guix Home）。

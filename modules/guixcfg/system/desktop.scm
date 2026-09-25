@@ -103,7 +103,7 @@
 ;;; 用户认证后的会话不再经 agreety wrapper：greeter 自己经 greetd
 ;;; IPC 发送 .desktop Exec + XDG env（见文件头登录链与
 ;;; (guixcfg system noctalia-greeter) 的会话发现数据）。
-(define* (greetd-login-service #:key (greeter-environment '()))
+(define (greetd-login-service)
   (service greetd-service-type
            (greetd-configuration
             (allow-empty-passwords? #f)
@@ -130,12 +130,11 @@
                ;; helper wrapper，非裸 upstream script；greeter 以
                ;; greetd 的 greeter 用户无认证运行——start_greeter
                ;; authenticate=false，HOME=/var/empty）。
-                ;; 使用 channel 提供的 unpatched upstream greeter。
-                (default-session-command
-                 (greetd-noctalia-session
-                  #:extra-environment greeter-environment))))))))
+               ;; 使用 channel 提供的 unpatched upstream greeter。
+               (default-session-command
+                (greetd-noctalia-session))))))))
 
-(define* (desktop-services #:key (greeter-environment '()))
+(define desktop-services
   ;; M2 Wayland desktop 系统层服务。Noctalia Greeter 的通用系统
   ;; 集成（polkit policy / system profile / state directory）由
   ;; virelith channel 的 noctalia-greeter-service-type 提供——
@@ -145,7 +144,7 @@
   ;; spawn-at-startup 以用户身份启动（单一 owner = niri session，
   ;; 见 modules/guixcfg/apps/niri/config.kdl 与
   ;; docs/architecture/graphics.md）。
-  (list (greetd-login-service #:greeter-environment greeter-environment)
+  (list (greetd-login-service)
         (service noctalia-greeter-service-type
                  (noctalia-greeter-configuration
                   (state-directory %noctalia-greeter-state-dir)))
