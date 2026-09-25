@@ -78,8 +78,8 @@
                   (wrap-program (string-append #$output "/bin/" program)
                     `("LD_LIBRARY_PATH" ":" prefix
                       (,(string-append #$(this-package-input "nvda")
-                                       "/lib"))))
-                 '("missioncenter" "missioncenter-magpie")))))))))))
+                                        "/lib")))))
+                  '("missioncenter" "missioncenter-magpie"))))))))))
 
 ;; 静态偏好（io.missioncenter.MissionCenter，pinned 1.2.0 schema 实测）：
 ;;   first-time-running  bool  false
