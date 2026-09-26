@@ -656,13 +656,13 @@ capability 豁免——CAP_LINUX_IMMUTABLE 只允许清除标志本身）。2026
 chattr -i。"
   `(,(chattr-binary) "-i" ,(efivars-variable-path variable)))
 
-(define (ensure-efivars-placeholder! variable)
-  "变量文件不存在时先以 O_RDONLY|O_CREAT 建立零长度占位文件（只读打开
-不触发 immutable 写拒绝），否则后续 chattr -i 无对象可清。"
+(define (open-efivars-placeholder variable)
+  "变量文件不存在时以 O_RDONLY|O_CREAT 建立零长度占位并返回其 fd；已有
+变量返回 #f。调用者必须在 chattr -i 和 efi-updatevar 完成后才关闭该
+fd：efivarfs 会在关闭最后一个仍为零长度的文件描述符时删除占位 dentry。"
   (let ((path (efivars-variable-path variable)))
-    (unless (file-exists? path)
-      (let ((fd (open-fdes path (logior O_RDONLY O_CREAT) #o644)))
-        (close-fdes fd)))))
+    (and (not (file-exists? path))
+         (open-fdes path (logior O_RDONLY O_CREAT) #o644))))
 
 (define (setup-mode-update-argv variable)
   "Return the exact efi-updatevar invocation for initial Setup Mode enrollment.
@@ -787,15 +787,22 @@ guix 模块——VM 实测 'no code for module (guix records)/(json)'。"
                       (throw 'enroll-exit 3))
                     (define (write-setup-mode-variable! variable)
                       ;; efivars 的 immutable 标志连 root 写打开都拒
-                      ;; （inode_permission 无 capability 豁免）；先
-                      ;; 建占位再 chattr -i，efi-updatevar 才能打开。
-                      (ensure-efivars-placeholder! variable)
-                      (let ((s (exec (efivars-unlock-argv variable))))
-                        (unless (zero? s)
-                          (error "chattr -i failed" variable s)))
-                      (let ((s (exec (setup-mode-update-argv variable))))
-                        (unless (zero? s)
-                          (error "efi-updatevar failed" variable s))))
+                      ;; （inode_permission 无 capability 豁免）；先建
+                      ;; 占位、chattr -i，再让 efi-updatevar 写入。新
+                      ;; 占位的 fd 必须持续打开，否则 efivarfs 会删除它。
+                      (let ((placeholder (open-efivars-placeholder variable)))
+                        (dynamic-wind
+                          (const #t)
+                          (lambda ()
+                            (let ((s (exec (efivars-unlock-argv variable))))
+                              (unless (zero? s)
+                                (error "chattr -i failed" variable s)))
+                            (let ((s (exec (setup-mode-update-argv variable))))
+                              (unless (zero? s)
+                                (error "efi-updatevar failed" variable s))))
+                          (lambda ()
+                            (when placeholder
+                              (close-fdes placeholder))))))
                     (set! mutated? #t)
                     (format #t "  writing db/KEK...~%")
                     (write-setup-mode-variable! "db")
