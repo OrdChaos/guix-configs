@@ -32,6 +32,7 @@
                 #:use-module (gnu services)      ; simple-service、activation-service-type
                 #:use-module (guix gexp)         ; plain-file、file-append、mixed-text-file
                 #:use-module (guix modules)      ; source-module-closure
+                #:use-module (guix packages)     ; package-name
                 #:use-module (gnu packages fontutils) ; fontconfig
                 #:use-module (srfi srfi-1)       ; filter-map、append-map
                 #:use-module (sxml simple)       ; sxml->xml
@@ -135,7 +136,15 @@ owner）。未选中的 catalog app 不产生 mount（selection 投影）。"
      (sxml->xml sxml port))))
 
 (define %flatpak-font-packages
-  (delete fontconfig %fonts))
+  ;; WeChat's Chromium renderer selects the projected msyh.ttc by path and
+  ;; clears FONTCONFIG_FILE in its renderer subprocess.  Keep Office fonts in
+  ;; host profiles for document compatibility, but do not expose that YaHei
+  ;; payload to Flatpaks: MiSans is the intended CJK UI fallback there.
+  (filter (lambda (pkg)
+            (not (member (package-name pkg)
+                         '("fontconfig" "fontconfig-minimal"
+                           "font-microsoft-win11-office-core"))))
+          %fonts))
 
 ;; Flatpak's Fontconfig applies strong <alias> preferences after the runtime
 ;; defaults, unlike the host configuration.  Replace the generic chain at the
@@ -155,6 +164,9 @@ owner）。未选中的 catalog app 不产生 mount（selection 投影）。"
          (flatpak-family-chain-edit "ui-sans-serif" %sans-serif-families)
          (flatpak-family-chain-edit "system" %sans-serif-families)
          (flatpak-family-chain-edit "system-ui" %sans-serif-families)
+         (flatpak-family-chain-edit "Microsoft YaHei" %sans-serif-families)
+         (flatpak-family-chain-edit "Microsoft YaHei UI" %sans-serif-families)
+         (flatpak-family-chain-edit "微软雅黑" %sans-serif-families)
          (flatpak-family-chain-edit "serif" %serif-families)
          (flatpak-family-chain-edit "mono" %monospace-families)
          (flatpak-family-chain-edit "monospace" %monospace-families)

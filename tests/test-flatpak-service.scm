@@ -49,6 +49,12 @@
 (test-assert "global font projection maps canonical sans to MiSans"
              (string-contains %flatpak-service-source
                               "(flatpak-family-chain-edit \"sans\" %sans-serif-families)"))
+(test-assert "global font projection maps WeChat's YaHei request to MiSans"
+             (string-contains %flatpak-service-source
+                              "(flatpak-family-chain-edit \"Microsoft YaHei\" %sans-serif-families)"))
+(test-assert "global font projection excludes the path-selected YaHei payload"
+             (string-contains %flatpak-service-source
+                              "\"font-microsoft-win11-office-core\""))
 (test-assert "global font projection never grants the whole Guix store"
              (not (string-contains %flatpak-service-source
                                    "\"/gnu/store:ro\"")))
