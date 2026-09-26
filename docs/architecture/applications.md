@@ -334,7 +334,8 @@ resolver `(guixcfg utils repository-source)`。
 - **不进入 app persistence bind registry**（不产生
   `/persist/data-nobackup/... → bind → HOME` 映射）；
 - app 被**显式配置**去使用该路径（如 Steam Library path
-  `/persist/data-nobackup/steam`）；
+  `/persist/data-nobackup/steam`、AAGL 游戏目录
+  `/persist/data-nobackup/aagl`）；
 - 当前**没有 backup subsystem**；`nobackup` 只表示 storage intent。
 
 ## Runtime dependency invariant

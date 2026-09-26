@@ -312,7 +312,7 @@ Guix/Nonguix 均无 gamescope，Flatpak gamescope 是上游官方支持
   `(flatpak-applications-with-environments)`，对 managed override
   追加 `%prime-offload-environment-strings`（变量语义归
   `(guixcfg system graphics nvidia)`）。游戏库
-  `/persist/data-nobackup/steam`（路径 authority 在
+  `/persist/data-nobackup/{steam,aagl}`（路径 authority 在
   `(guixcfg system gaming)`，目录由其 activation 创建）与手柄
   udev rules 是全局共享的 gaming host infrastructure。
 - **AAGL config 不从仓库派生**：Flatpak 内 `$XDG_DATA_HOME` 对应宿主

@@ -16,7 +16,9 @@
 ;;; override policy：(managed-overrides <flatpak-override>)——文件本身
 ;;; 硬件中性。Guix 会话导出的 GIT_EXEC_PATH 指向宿主 profile，Flatpak
 ;;; sandbox 无法访问；AAGL 又调用包内 git 同步组件索引，因此固定为
-;;; Flathub 包内 helper 目录 /app/libexec/git-core。
+;;; Flathub 包内 helper 目录 /app/libexec/git-core。游戏内容经
+;;; /persist/data-nobackup/aagl 直接访问（路径 authority 在
+;;; (guixcfg system gaming)）。
 ;;; 硬件差异（如 NVIDIA PRIME offload）由 hardware adapter 在
 ;;; Lenovo Guix Home 经 (flatpak-applications-with-environments)
 ;;; 追加 environment（变量语义归 (guixcfg system graphics nvidia)
@@ -33,8 +35,9 @@
 ;;; Home file 或 seed 从仓库派生（详见 flatpak.md（AAGL config））。
 
 (define-module (guixcfg flatpak applications aagl definition)
-               #:use-module (guixcfg flatpak model)
-               #:export (%flatpak-aagl))
+                #:use-module (guixcfg flatpak model)
+                #:use-module (guixcfg system gaming)
+                #:export (%flatpak-aagl))
 
 (define %flatpak-aagl
   (flatpak-application
@@ -45,6 +48,7 @@
    (update-policy 'track-branch)
    (override-policy
     (list 'managed-overrides
-          (flatpak-override
-           (environment
-            '("GIT_EXEC_PATH=/app/libexec/git-core")))))))
+           (flatpak-override
+            (filesystems (list %aagl-games-library-path))
+            (environment
+             '("GIT_EXEC_PATH=/app/libexec/git-core")))))))

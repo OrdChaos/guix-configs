@@ -2,7 +2,7 @@
 ;;; Flatpak selection 2026-09 全局化——硬件差异只经 environment
 ;;; adapter 表达）：
 ;;;   - (guixcfg system gaming)：游戏库路径 authority
-;;;     （persist-mount-point 派生 /persist/data-nobackup/steam）、
+;;;     （persist-mount-point 派生 /persist/data-nobackup/{steam,aagl}）、
 ;;;     system services（steam-devices udev rules + 目录
 ;;;     activation）——所有 host 共享；
 ;;;   - Flatpak steam definition：id / managed filesystem override =
@@ -50,9 +50,14 @@
 ;; ── gaming system module ────────────────────────────────────
 
 (test-equal "steam games library derived from persist-mount-point"
-            (string-append (persist-mount-point "@persist-data-nobackup")
-                           "/steam")
-            %steam-games-library-path)
+             (string-append (persist-mount-point "@persist-data-nobackup")
+                            "/steam")
+             %steam-games-library-path)
+
+(test-equal "aagl games library derived from persist-mount-point"
+             (string-append (persist-mount-point "@persist-data-nobackup")
+                            "/aagl")
+             %aagl-games-library-path)
 
 (test-assert "gaming contributes steam-devices udev rules"
              (find (lambda (svc)
@@ -124,10 +129,10 @@
             (flatpak-override-environment
              (flatpak-application-managed-overrides %flatpak-aagl)))
 
-(test-equal "aagl base override exposes no host filesystem"
-            '()
-            (flatpak-override-filesystems
-             (flatpak-application-managed-overrides %flatpak-aagl)))
+(test-equal "aagl base override exposes its games library"
+             (list %aagl-games-library-path)
+             (flatpak-override-filesystems
+              (flatpak-application-managed-overrides %flatpak-aagl)))
 
 ;; ── NVIDIA adapter → managed override overlay ───────────────
 
@@ -157,6 +162,12 @@
                      (flatpak-override-filesystems
                       (flatpak-application-managed-overrides
                        %prime-overlayed-steam))))
+
+(test-assert "NVIDIA adapter leaves aagl games library intact"
+             (equal? (list %aagl-games-library-path)
+                     (flatpak-override-filesystems
+                      (flatpak-application-managed-overrides
+                       %prime-overlayed-aagl))))
 
 (test-assert "PRIME variables render in Flatpak Environment section"
              (let ((text (flatpak-render-override-file
