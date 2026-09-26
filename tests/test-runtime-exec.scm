@@ -34,6 +34,12 @@
 ;;;   成功路径（合成内容 + 0600/0700 权限）、坏 secret fail closed、
 ;;;   secret 缺失 fail closed。秘密 URL 不进 argv/environment（程序
 ;;;   只读文件）；成功日志只报输出路径。
+;;; FO1 覆盖 flatpak managed overrides activation：gexp 用了
+;;;   get-string-all 却只在 runtime use-modules 里声明 (ice-9 rdelim)
+;;;   （它属于 (ice-9 textual-ports)）——boot/reconfigure 每次都在第一
+;;;   个 managed override（aagl）写入时 Unbound variable 崩溃，留下
+;;;   0 字节 .new，steam override 与 .guixcfg-managed manifest 永不
+;;;   落盘。结构检查（gexp->script 编译）发现不了，必须真实执行。
 
 (add-to-load-path (string-append (getcwd) "/modules"))
 
@@ -49,8 +55,9 @@
              (guixcfg system accounts)    ; account-databases-activation/verify
              (guixcfg system mihomo service) ; MC: mihomo-config-program
              (guixcfg system application-persistence) ; AP1 activation ownership
-             (guixcfg services ephemeral-root) ; EP: ephemeral-root-confirm-program
-             (guixcfg apps niri definition)  ; NI1: %niri-session-wrapper
+              (guixcfg services ephemeral-root) ; EP: ephemeral-root-confirm-program
+              (guixcfg flatpak service)   ; FO1: flatpak-overrides-activation
+              (guixcfg apps niri definition)  ; NI1: %niri-session-wrapper
              (guixcfg storage root-generation) ; EP: root-state、state->alist、read-state
              (gnu system accounts)     ; user-account、user-group
              (guixcfg system readiness)
@@ -1081,5 +1088,49 @@ secrets ordinary deploy 的产物形态）。"
                    (not (file-exists? (session-gate-path #:directory dir2))))
       (false-if-exception (delete-file-recursively dir2)))
     (false-if-exception (delete-file-recursively root))))
+
+;; ── FO1：flatpak managed overrides activation 真实执行 ──────
+;; production activation gexp（全局 selection 的 managed override：
+;; aagl + steam）在隔离 root 里真实执行，断言：
+;;   - 无 unbound-variable（get-string-all 回归）；
+;;   - 两个 override 完整文件 + .guixcfg-managed manifest 落盘；
+;;   - 无 .new 残留（atomic write 全部提交）。
+(define %flatpak-overrides-program
+  (build-thing
+   (program-file
+    "flatpak-overrides-activation-exec"
+    #~(begin
+       #$(service-value (flatpak-overrides-activation '()))
+       (exit 0)))))
+
+(let* ((root (make-fake-root "" #f))
+       (code (run-in-root %flatpak-overrides-program root))
+       (dir (string-append root
+                           "/persist/data-app/flatpak/installation/overrides")))
+  (test-equal "FO1: overrides activation executes (exit 0)" 0 code)
+  (test-assert "FO1: aagl override content projected"
+               (string-contains
+                (call-with-input-file
+                    (string-append dir "/moe.launcher.an-anime-game-launcher")
+                  get-string-all)
+                "GIT_EXEC_PATH=/app/libexec/git-core"))
+  (test-assert "FO1: steam override exposes the games library"
+               (string-contains
+                (call-with-input-file
+                    (string-append dir "/com.valvesoftware.Steam")
+                  get-string-all)
+                "/persist/data-nobackup/steam"))
+  (test-assert "FO1: manifest records both managed ids"
+               (let ((manifest (call-with-input-file
+                                   (string-append dir "/.guixcfg-managed")
+                                 get-string-all)))
+                 (and (string-contains manifest
+                                       "moe.launcher.an-anime-game-launcher")
+                      (string-contains manifest "com.valvesoftware.Steam"))))
+  (test-assert "FO1: no .new residue"
+               (not (find (lambda (name)
+                            (string-suffix? ".new" name))
+                          (scandir dir))))
+  (false-if-exception (delete-file-recursively root)))
 
 (test-end "runtime-exec")

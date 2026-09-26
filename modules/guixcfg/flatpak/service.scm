@@ -161,15 +161,17 @@ Flatpak overrides into the canonical persistent installation backing."
     (simple-service
      'flatpak-managed-overrides
      activation-service-type
-     (with-imported-modules
-      (source-module-closure '((guix build utils)
-                               (guixcfg utils atomic-file)
-                               (ice-9 rdelim))
-                             #:select? guixcfg-module-select?)
-      #~(begin
-          (use-modules (guix build utils)
-                       (guixcfg utils atomic-file)
-                       (ice-9 rdelim))
+      (with-imported-modules
+       (source-module-closure '((guix build utils)
+                                (guixcfg utils atomic-file)
+                                (ice-9 rdelim)
+                                (ice-9 textual-ports))
+                              #:select? guixcfg-module-select?)
+       #~(begin
+           (use-modules (guix build utils)
+                        (guixcfg utils atomic-file)
+                        (ice-9 rdelim)
+                        (ice-9 textual-ports))
           (let* ((directory "/persist/data-app/flatpak/installation/overrides")
                  (manifest (string-append directory "/.guixcfg-managed"))
                  (current (map car '#$entries)))
