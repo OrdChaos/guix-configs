@@ -40,6 +40,19 @@
 (test-assert "system profile projects every shared %fonts package"
              (every (lambda (p) (member p %system-packages)) %fonts))
 
+;; The global projection grants only individual font outputs to Flatpak and
+;; maps the runtime's canonical "sans" generic to the shared MiSans chain.
+;; Never grant the host store as a whole.
+(define %flatpak-service-source
+  (call-with-input-file "modules/guixcfg/flatpak/service.scm"
+                        (lambda (port) (read-string port))))
+(test-assert "global font projection maps canonical sans to MiSans"
+             (string-contains %flatpak-service-source
+                              "(flatpak-family-chain-edit \"sans\" %sans-serif-families)"))
+(test-assert "global font projection never grants the whole Guix store"
+             (not (string-contains %flatpak-service-source
+                                   "\"/gnu/store:ro\"")))
+
 ;; ── Home services 结构 ─────────────────────────────────────
 ;; simple-service 返回的是包装 service-type（名字 = simple-service
 ;; name），kind 不等于目标类型——必须检查 extension targets。

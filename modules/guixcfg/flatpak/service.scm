@@ -8,7 +8,8 @@
 ;;;     native extension；追加不覆盖——pinned setup-environment 的
 ;;;     preamble 先置 Home profile share，本值经 shell-double-quote
 ;;;     发射（$ 保留）在 source 时展开 $XDG_DATA_DIRS）；
-;;;   - override 完整文件：definition 的 override-policy 为
+;;;   - override 完整文件：installation-wide font projection 写入 global；
+;;;     definition 的 override-policy 为
 ;;;     (managed-overrides ...) 的 app 在 system activation 写入 Flatpak
 ;;;     installation backing 的 overrides/<id>（complete-file ownership，
 ;;;     repo 与 Flatseal 永不 merge）；'external → 不生成（user/Flatseal owns）。
@@ -29,20 +30,26 @@
 (define-module (guixcfg flatpak service)
                #:use-module (gnu home services) ; home-environment-variables-service-type、home-files-service-type
                 #:use-module (gnu services)      ; simple-service、activation-service-type
-                #:use-module (guix gexp)         ; plain-file
+                #:use-module (guix gexp)         ; plain-file、file-append、mixed-text-file
                 #:use-module (guix modules)      ; source-module-closure
-               #:use-module (srfi srfi-1)       ; filter-map、append-map
-               #:use-module (guixcfg flatpak model)
-               #:use-module (guixcfg flatpak registry)
+                #:use-module (gnu packages fontutils) ; fontconfig
+                #:use-module (srfi srfi-1)       ; filter-map、append-map
+                #:use-module (sxml simple)       ; sxml->xml
+                #:use-module (guixcfg flatpak model)
+                #:use-module (guixcfg flatpak registry)
+                #:use-module (guixcfg fonts model) ; %fonts
+                #:use-module (guixcfg fonts fontconfig-policy)
                 #:use-module (guixcfg system application-persistence) ; application-persistence-rule
                 #:use-module (guixcfg utils module-closure) ; guixcfg-module-select?
                #:export (%flatpak-installation-persistence-rule
                          flatpak-application-persistence-rules
                          flatpak-selected-applications
                          flatpak-persistence-rules
-                          flatpak-override-files
-                          flatpak-override-files* ; overlay-aware
-                          flatpak-overrides-activation
+                           flatpak-override-files
+                           flatpak-override-files* ; overlay-aware
+                           flatpak-overrides-activation
+                          %flatpak-fontconfig-file
+                          %flatpak-global-override-file
                          flatpak-desktop-files
                          flatpak-home-services
                          %flatpak-session-environment-service
@@ -118,6 +125,67 @@ owner）。未选中的 catalog app 不产生 mount（selection 投影）。"
 
 ;;; ── override 完整文件（complete-file ownership）────────────
 
+;; Guix profiles expose fonts through symlinks into /gnu/store.  Flatpak's
+;; built-in /run/host/fonts projection cannot resolve those targets, so it
+;; falls back to the runtime's smaller font set.  The global override grants
+;; only the exact font outputs and this generated config to each sandbox.
+(define (fontconfig-sxml->string sxml)
+  (call-with-output-string
+   (lambda (port)
+     (sxml->xml sxml port))))
+
+(define %flatpak-font-packages
+  (delete fontconfig %fonts))
+
+;; Flatpak's Fontconfig applies strong <alias> preferences after the runtime
+;; defaults, unlike the host configuration.  Replace the generic chain at the
+;; pattern stage so every sandbox gets the same family order deterministically.
+(define (flatpak-family-chain-edit family chain)
+  `(match (@ (target "pattern"))
+          (test (@ (qual "any") (name "family") (compare "eq"))
+                (string ,family))
+          (edit (@ (name "family") (mode "assign_replace") (binding "strong"))
+                ,@(map (lambda (entry) (list 'string entry)) chain))))
+
+(define %flatpak-fontconfig-snippets
+  ;; This runtime canonicalizes CSS generic names before applying configuration
+  ;; rules: "sans-serif" becomes "sans" and "system-ui" becomes "system".
+  (list (flatpak-family-chain-edit "sans" %sans-serif-families)
+         (flatpak-family-chain-edit "sans-serif" %sans-serif-families)
+         (flatpak-family-chain-edit "ui-sans-serif" %sans-serif-families)
+         (flatpak-family-chain-edit "system" %sans-serif-families)
+         (flatpak-family-chain-edit "system-ui" %sans-serif-families)
+         (flatpak-family-chain-edit "serif" %serif-families)
+         (flatpak-family-chain-edit "mono" %monospace-families)
+         (flatpak-family-chain-edit "monospace" %monospace-families)
+         (flatpak-family-chain-edit "ui-monospace" %monospace-families)
+         (flatpak-family-chain-edit "emoji" '("Noto Color Emoji"))))
+
+(define %flatpak-fontconfig-file
+  (apply mixed-text-file
+         "guixcfg-flatpak-fonts.conf"
+         (append
+          (list "<?xml version=\"1.0\"?>\n"
+                "<!DOCTYPE fontconfig SYSTEM \"fonts.dtd\">\n"
+                "<fontconfig>\n")
+          (append-map (lambda (pkg)
+                        (list "<dir>" (file-append pkg "/share/fonts")
+                              "</dir>\n"))
+                      %flatpak-font-packages)
+          (list (fontconfig-sxml->string %flatpak-fontconfig-snippets)
+                "</fontconfig>\n"))))
+
+(define %flatpak-global-override-file
+  (apply mixed-text-file
+         "guixcfg-flatpak-global-override"
+         (append
+          (list "[Context]\nfilesystems=")
+          (append-map (lambda (pkg)
+                        (list (file-append pkg "/share/fonts") ":ro;"))
+                      %flatpak-font-packages)
+          (list %flatpak-fontconfig-file ":ro;\n\n[Environment]\n"
+                "FONTCONFIG_FILE=" %flatpak-fontconfig-file "\n"))))
+
 (define (flatpak-override-files apps)
   "APPS 中每个 override-policy = (managed-overrides ...) 的应用 →
 home-files 的 (target source) 条目：.local/share/flatpak/overrides/
@@ -156,8 +224,10 @@ Flatpak overrides into the canonical persistent installation backing."
                                    (string-length
                                     ".local/share/flatpak/overrides/"))
                       (cadr entry)))
-              (flatpak-override-files*
-               #:environment-overrides environment-overrides))))
+               (cons (list ".local/share/flatpak/overrides/global"
+                           %flatpak-global-override-file)
+                     (flatpak-override-files*
+                      #:environment-overrides environment-overrides)))))
     (simple-service
      'flatpak-managed-overrides
      activation-service-type

@@ -21,7 +21,7 @@
 (test-equal "primary user uid" 1000 (user-profile-uid %primary-user))
 (test-equal "primary user group" "users" (user-profile-group %primary-user))
 (test-equal "primary user supplementary groups"
-            '("wheel" "netdev")
+            '("wheel" "netdev" "kvm")
             (user-profile-supplementary-groups %primary-user))
 (test-assert "primary user home derives from the user name"
              (string=? (string-append "/home/"
