@@ -80,7 +80,8 @@
                    (string-contains %oo-content "<string>mono</string>")
                    (string-contains %oo-content "<string>system ui</string>")))
 
-(test-assert "ONLYOFFICE wrapper requests the upstream GTK file chooser"
-             (string-contains %oo-wrapper "--native-file-dialog"))
+(test-assert "ONLYOFFICE wrapper requests the GNOME/Nautilus portal chooser"
+             (and (string-contains %oo-wrapper "--xdg-desktop-portal=default")
+                  (not (string-contains %oo-wrapper "--native-file-dialog"))))
 
 (test-end "fonts-policy")
