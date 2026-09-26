@@ -41,6 +41,19 @@
 
 (define %oo-content (call-with-input-file %oo-fonts-conf read-string))
 
+(define %oo-adapter
+  (let ((drv (run-with-store %store
+                             (lower-object
+                              (@@ (guixcfg apps onlyoffice definition)
+                                  onlyoffice-adapter)))))
+    (build-derivations %store (list drv))
+    (derivation->output-path drv)))
+
+(define %oo-wrapper
+  (call-with-input-file
+      (string-append %oo-adapter "/bin/onlyoffice-desktopeditors")
+    read-string))
+
 (test-assert "onlyoffice config inlines the shared sans-serif policy"
              (and (string-contains %oo-content "<family>sans-serif</family>")
                   (string-contains %oo-content "<family>MiSans</family>")))
@@ -63,8 +76,11 @@
 ;; family 是带空格写法，缺了这些规则会退化 fallback（2026-08-31 实证
 ;; 弹窗落 Maple Mono）。兼容层私有，不进共享策略。
 (test-assert "onlyoffice config carries the family-name normalization matches"
-             (and (string-contains %oo-content "<string>sans serif</string>")
-                  (string-contains %oo-content "<string>mono</string>")
-                  (string-contains %oo-content "<string>system ui</string>")))
+              (and (string-contains %oo-content "<string>sans serif</string>")
+                   (string-contains %oo-content "<string>mono</string>")
+                   (string-contains %oo-content "<string>system ui</string>")))
+
+(test-assert "ONLYOFFICE wrapper requests the upstream GTK file chooser"
+             (string-contains %oo-wrapper "--native-file-dialog"))
 
 (test-end "fonts-policy")

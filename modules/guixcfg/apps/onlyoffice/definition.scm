@@ -160,6 +160,8 @@
 ;;   每包 --ro-bind         真实字体目录（零复制）
 ;;   --setenv              CUSTOM_FONTS_PATH（scanner）与
 ;;                         FONTCONFIG_FILE（UI 兼容层）只进该进程树
+;;   --native-file-dialog  ONLYOFFICE upstream flag：使用 GTK file chooser
+;;                         而非 Qt dialog（不走 portal/Nautilus 选择器）
 (define %onlyoffice-bwrap-argv
   (append
    (list "--bind" "/" "/"
@@ -222,7 +224,8 @@
                                            #$(file-append bubblewrap "/bin/bwrap"))
                                    (for-each (lambda (arg) (format port "  ~a \\\n" arg))
                                              (list #$@%onlyoffice-bwrap-argv))
-                                   (format port "  -- ~a \"$@\"~%" base-launcher)))
+                                    (format port "  -- ~a --native-file-dialog \"$@\"~%"
+                                            base-launcher)))
           (chmod wrapper #o755)
           ;; desktop entry：复制 base 后把 base launcher 路径换成
           ;; wrapper（主 Exec / TryExec / 4 个 new-document action
