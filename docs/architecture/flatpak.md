@@ -355,7 +355,7 @@ import `(guixcfg flatpak reconcile)`、不含 CLI 调用面
 | flatpak executable | Guix System（`system/packages.scm`） | 一切安装走 `--user`；入口经 `flatpak-binary` 显式解析（PATH 优先覆盖，随后回退 `/run/current-system/profile/bin/flatpak` 与 `~/.guix-profile/bin/flatpak`，并把其目录前置进 PATH 供全部子调用）——**不依赖 login shell 的 `/etc/profile`**（ssh 非 login shell 不 source profile）。Flatpak 子系统对所有 host 提供（2026-09：persistence 平台规则提升到 common 层）；`blue flatpak …` 在目标机本地运行、绝不 sudo（本机缺 flatpak 二进制时 fail fast） |
 | XDG_DATA_DIRS | Flatpak 平台 Home service | `$XDG_DATA_DIRS:$HOME/.local/share/flatpak/exports/share`（追加不覆盖；launcher 经此发现 desktop entries） |
 | desktop shadows | selected Flatpak definition → Home files | optional 完整文件投影到 `~/.local/share/applications/<id>.desktop`，经 XDG precedence 覆盖 Flatpak export；只用于已审计为低变更率的 metadata 修正，完整文件 single-owner、不做字段 merge；当前 Steam 基线为 launcher 1.0.0.87，仅把多 main category 收敛为 `Game;` |
-| fonts | `(guixcfg fonts model)` 单一事实源 | `%fonts` 同时进 Home/System profile；profile 内 symlink 在 sandbox 不可解析，平台因而拥有 installation-wide `overrides/global`：只读暴露每个精确 `share/fonts` store output 与同样位于 store 的 Fontconfig policy。无 host bind mount、persistent copy 或整个 `/gnu/store` grant；路径只在 Flatpak sandbox mount namespace 可见。global override 与 app-specific override 叠加，后者继续拥有自身权限 |
+| fonts | `(guixcfg fonts model)` 单一事实源 | `%fonts` 同时进 Home/System profile |
 | portal | 现有 niri 栈（零新增） | niri home profile 三件套 + repo-owned `niri-portals.conf`；Flatpak 只是 portal client |
 | Secret Service | 现有 gnome-keyring 栈 | Flatpak 应用默认无 secrets 权限；portal Secret 或 per-app override `session-bus` |
 
