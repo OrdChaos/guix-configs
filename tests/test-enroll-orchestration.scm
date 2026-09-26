@@ -314,6 +314,27 @@
                "/persist/system/keys/secure-boot/keystore/PK/PK.auth" "PK")
              (setup-mode-update-argv "PK"))
 
+;; efivars immutable 解锁（2026-09 实机教训：内核把非白名单 efivars
+;; 变量标记 S_IMMUTABLE，inode_permission 对 immutable 写打开一律
+;; -EPERM、无 capability 豁免；efi-updatevar open(O_RDWR|O_CREAT)
+;; 因此失败。必须先 chattr -i）。
+(test-equal "chattr binary defaults to the system profile"
+             "/run/current-system/profile/bin/chattr"
+             (chattr-binary))
+
+(test-equal "db path uses the image-security GUID"
+             "/sys/firmware/efi/efivars/db-d719b2cb-3d3a-4596-a3bc-dad00e67656f"
+             (efivars-variable-path "db"))
+
+(test-equal "PK and KEK paths use the global GUID"
+             "/sys/firmware/efi/efivars/PK-8be4df61-93ca-11d2-aa0d-00e098032b8c"
+             (efivars-variable-path "PK"))
+
+(test-equal "unlock clears the immutable flag before efi-updatevar"
+             '("/run/current-system/profile/bin/chattr" "-i"
+               "/sys/firmware/efi/efivars/db-d719b2cb-3d3a-4596-a3bc-dad00e67656f")
+             (efivars-unlock-argv "db"))
+
 ;;; ────────────────────────────────────────────────────────────
 ;;; 只读检查形态（soft 语义：本机不是目标系统 → 硬性环境项 fail）
 

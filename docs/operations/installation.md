@@ -36,7 +36,9 @@ normal operation
   必须重启，再显式执行 `blue enroll HOST`。
 - `blue enroll HOST` = 机器绑定 enrollment，**两个相位、中间隔一次
   reboot**：相位 1（Setup Mode）由 `efi-updatevar` 写固件 db/KEK/PK（写 PK 退出 Setup
-  Mode），exit 0 并要求 reboot——**TPM 在同一轮被跳过**（TPM policy
+  Mode；写前对每个变量先 `chattr -i` 清 efivars immutable 标志——内核
+  把非白名单变量一律标记 S_IMMUTABLE，immutable 文件的写打开连 root
+  都被拒），exit 0 并要求 reboot——**TPM 在同一轮被跳过**（TPM policy
   必须对「以最终 Secure Boot 状态启动」的那次 boot 密封，SecureBoot
   恒在下次 boot 才置 1）；reboot 后（SecureBoot=1，LUKS 密码人工输入
   一次）再跑一次，固件 detected as enrolled → skip，TPM enrollment
@@ -157,8 +159,10 @@ identity 已就位时走 `luks-recovery.age`（age 解密，不提示密码）�
 ```text
   preflight        目标系统环境（/run/current-system、/persist、ESP、
                     TPM 设备、SB keys/keystore、efi-updatevar、facts）
-   firmware         Setup Mode 时：显式确认 → efi-updatevar db/KEK →
-                    efi-updatevar PK.auth（写 PK 退出 Setup Mode）
+   firmware         Setup Mode 时：显式确认 → 每变量先 chattr -i
+                    （清 efivars immutable，否则 open 即 EPERM）→
+                    efi-updatevar db/KEK → efi-updatevar PK.auth
+                    （写 PK 退出 Setup Mode）
                    （SecureBoot=1 && SetupMode=0 时 skip；
                    PK 已写入但 SecureBoot 待 boot 激活时 skip）
   tpm              SecureBoot 已激活（本 boot）时：absent →

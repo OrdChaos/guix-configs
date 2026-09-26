@@ -68,6 +68,9 @@
                          firmware-confirmed?
                          ;; argv（纯）
                          efi-updatevar-binary
+                         chattr-binary
+                         efivars-variable-path
+                         efivars-unlock-argv
                          setup-mode-update-argv
                          tpm2-tool-argv
                          tpm2-enroll-argv
@@ -626,6 +629,41 @@ info；#f（root 事务）全部硬性。"
         (and v (not (string-null? v)) v))
       "/run/current-system/profile/bin/efi-updatevar"))
 
+(define (chattr-binary)
+  "chattr 的确定性来源：system profile 的 e2fsprogs（%base-packages 含；
+  GUIXCFG_CHATTR 仅供测试/调试覆盖）。"
+  (or (let ((v (getenv "GUIXCFG_CHATTR")))
+        (and v (not (string-null? v)) v))
+      "/run/current-system/profile/bin/chattr"))
+
+(define (efivars-variable-path variable)
+  "efivars 中 Secure Boot 密钥变量的路径。PK/KEK 属 global GUID，
+db/dbx 属 image-security GUID。"
+  (string-append
+   "/sys/firmware/efi/efivars/" variable "-"
+   (cond ((member variable '("PK" "KEK"))
+          "8be4df61-93ca-11d2-aa0d-00e098032b8c")
+         ((member variable '("db" "dbx"))
+          "d719b2cb-3d3a-4596-a3bc-dad00e67656f")
+         (else (error "unsupported Secure Boot variable" variable)))))
+
+(define (efivars-unlock-argv variable)
+  "清除 efivars 文件的 immutable 标志。内核把非白名单 efivars 变量
+（含 db/KEK/PK，无论已存在还是新建）一律标记 S_IMMUTABLE，而
+inode_permission 对 immutable 文件的写打开一律 -EPERM（连 root 也无
+capability 豁免——CAP_LINUX_IMMUTABLE 只允许清除标志本身）。2026-09
+实测：efi-updatevar 的 open(O_RDWR|O_CREAT) 因此 EPERM；必须先
+chattr -i。"
+  `(,(chattr-binary) "-i" ,(efivars-variable-path variable)))
+
+(define (ensure-efivars-placeholder! variable)
+  "变量文件不存在时先以 O_RDONLY|O_CREAT 建立零长度占位文件（只读打开
+不触发 immutable 写拒绝），否则后续 chattr -i 无对象可清。"
+  (let ((path (efivars-variable-path variable)))
+    (unless (file-exists? path)
+      (let ((fd (open-fdes path (logior O_RDONLY O_CREAT) #o644)))
+        (close-fdes fd)))))
+
 (define (setup-mode-update-argv variable)
   "Return the exact efi-updatevar invocation for initial Setup Mode enrollment.
 db/KEK are replaced from raw ESLs, avoiding sbkeysync's unconditional
@@ -747,18 +785,23 @@ guix 模块——VM 实测 'no code for module (guix records)/(json)'。"
                       (format (current-error-port)
                               "~%Firmware enrollment declined; nothing was written.~%")
                       (throw 'enroll-exit 3))
+                    (define (write-setup-mode-variable! variable)
+                      ;; efivars 的 immutable 标志连 root 写打开都拒
+                      ;; （inode_permission 无 capability 豁免）；先
+                      ;; 建占位再 chattr -i，efi-updatevar 才能打开。
+                      (ensure-efivars-placeholder! variable)
+                      (let ((s (exec (efivars-unlock-argv variable))))
+                        (unless (zero? s)
+                          (error "chattr -i failed" variable s)))
+                      (let ((s (exec (setup-mode-update-argv variable))))
+                        (unless (zero? s)
+                          (error "efi-updatevar failed" variable s))))
                     (set! mutated? #t)
                     (format #t "  writing db/KEK...~%")
-                    (let ((s1 (exec (setup-mode-update-argv "db"))))
-                      (unless (zero? s1)
-                        (error "efi-updatevar (db) failed" s1)))
-                    (let ((s2 (exec (setup-mode-update-argv "KEK"))))
-                      (unless (zero? s2)
-                        (error "efi-updatevar (KEK) failed" s2)))
+                    (write-setup-mode-variable! "db")
+                    (write-setup-mode-variable! "KEK")
                     (format #t "  writing PK (exits Setup Mode)...~%")
-                    (let ((s3 (exec (setup-mode-update-argv "PK"))))
-                      (unless (zero? s3)
-                        (error "efi-updatevar (PK) failed" s3))))
+                    (write-setup-mode-variable! "PK"))
                    ((pending-reboot)
                     (format #t "~%firmware was enrolled in a previous run; Secure Boot activates at the next boot.~%"))
                    (else
