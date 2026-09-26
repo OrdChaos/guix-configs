@@ -1,6 +1,6 @@
 ;;; 字体包集合事实（single source；docs/reference/repository-layout.md）。
 ;;;
-;;; %fonts：通用桌面 profile 安装哪些字体（"有哪些字体"）——中立事实，由
+;;; %fonts：profile 安装哪些字体（"有哪些字体"）——中立事实，由
 ;;; Home profile（(guixcfg home fonts) 消费）、System profile
 ;;; （(guixcfg system packages) 的 Flatpak sandbox 字体投影）、
 ;;; apps 层 adapter（onlyoffice 的 bwrap 字体投影）共同消费。
@@ -15,14 +15,7 @@
                #:use-module (gnu packages fontutils) ; fontconfig、font-gnu-unifont
                #:use-module (virelith packages fonts) ; mi-sans-global、maple-mono-*
                #:use-module (virelith packages fonts-windows) ; font-microsoft-win11-fod-hans、font-microsoft-win11-office-core
-                #:export (%fonts
-                          %office-compatibility-fonts))
-
-;; Windows Office compatibility fonts stay private to ONLYOFFICE: their
-;; Arial/YaHei/SimSun names must not win browser CSS fallback over MiSans.
-(define %office-compatibility-fonts
-  (list font-microsoft-win11-fod-hans
-        font-microsoft-win11-office-core))
+               #:export (%fonts))
 
 ;; 字体集合（profile 层：决定"有哪些字体"）。
 ;; 自有 channel：MiSans Global（简体主字体 + script 变体）、
@@ -41,5 +34,7 @@
         font-google-noto-emoji
         font-google-noto-sans-cjk
         font-google-noto-serif-cjk
-         font-gnu-unifont
-         fontconfig))
+        font-gnu-unifont
+        font-microsoft-win11-fod-hans
+        font-microsoft-win11-office-core
+        fontconfig))

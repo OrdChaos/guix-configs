@@ -45,6 +45,7 @@
                          %serif-families
                          %monospace-families
                          alias-sxml
+                         family-chain-edit
                          family-lang-edit
                          %generic-alias-snippets
                          %mi-sans-l3-lang-edit
@@ -84,6 +85,16 @@
   `(alias (@ (binding "strong"))
           (family ,generic)
           (prefer ,@(map (lambda (f) (list 'family f)) families))))
+
+(define (family-chain-edit family chain)
+  "SXML：将 FAMILY 的整个候选链替换为 CHAIN。CSS UI generic names
+（ui-sans-serif/system-ui/ui-monospace）已被上游 30-metric-aliases
+预先展开为具体字体；alias/prefer 只能追加，无法让项目首选字体胜出。"
+  `(match (@ (target "pattern"))
+          (test (@ (qual "any") (name "family") (compare "eq"))
+                (string ,family))
+          (edit (@ (name "family") (mode "assign_replace") (binding "strong"))
+                ,@(map (lambda (f) (list 'string f)) chain))))
 
 (define (family-lang-edit generic lang variant chain)
   "SXML：pattern 的 family=GENERIC 且 lang 包含 LANG 时，把整条
@@ -170,17 +181,14 @@ CHAIN 替换为 VARIANT 置首的版本（mode=assign_replace——实测
   (append (list (alias-sxml "sans-serif" %sans-serif-families)
                 (alias-sxml "serif" %serif-families)
                 (alias-sxml "monospace" %monospace-families))
-           ;; system-ui：与 sans-serif 一致的系统 UI 策略
-           (list '(alias (@ (binding "strong"))
-                         (family "system-ui")
-                         (prefer (family "sans-serif"))))
-           ;; CSS UI monospace names bypass the generic monospace alias unless
-           ;; explicitly normalized.  Chromium code blocks commonly use them.
-           (map (lambda (family)
-                  `(alias (@ (binding "strong"))
-                          (family ,family)
-                          (prefer (family "monospace"))))
-                '("ui-monospace" "SFMono-Regular" "Menlo" "Monaco"))
+            ;; Chromium's OpenCode Web UI requests these CSS UI generic stacks.
+            ;; Replace rather than alias/prefer: upstream has already expanded
+            ;; them into concrete fonts by the time this user config is read.
+            (map (lambda (family) (family-chain-edit family %sans-serif-families))
+                 '("ui-sans-serif" "system-ui"))
+            (map (lambda (family) (family-chain-edit family %monospace-families))
+                 '("ui-monospace" "SFMono-Regular" "Menlo" "Monaco"
+                   "Consolas" "Liberation Mono" "Courier New"))
            ;; emoji：显式别名（fc-match emoji 可用）
           (list '(alias (@ (binding "strong"))
                         (family "emoji")
