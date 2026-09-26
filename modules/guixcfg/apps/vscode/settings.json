@@ -13,6 +13,6 @@
     "terminal.integrated.defaultProfile.linux": "nushell",
     "git.confirmSync": false,
     "workbench.colorTheme": "Nord Light Brighter",
-    "window.zoomLevel": 1,
+    "window.zoomLevel": 0.6,
     "security.workspace.trust.enabled": false
 }
