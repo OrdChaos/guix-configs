@@ -32,6 +32,7 @@
 
 (define-module (guixcfg hosts lenovo-legion-y7000p)
                #:use-module (gnu)                          ; operating-system、user-account、service 等
+               #:use-module (gnu services desktop)         ; upower-service-type
                #:use-module (gnu home)                     ; home-environment（laptop home 组装）
                #:use-module (gnu services networking)      ; network-manager-service-type、wpa-supplicant-service-type
                #:use-module (guixcfg storage model)          ; host-storage-policy-keep-root-generations
@@ -133,9 +134,10 @@
     (host-storage-policy-keep-root-generations
      %lenovo-legion-y7000p-storage-policy)
     #:persistent-mount-file-systems %persistent-mount-file-systems
-    ;; 无 host-only system services（gaming 基础设施已全局共享；
-    ;; NVIDIA/PRIME capability 在 final transformation 与 Guix Home）。
-    #:additional-system-services '())
+    ;; UPower publishes battery and charging state on the system bus for
+    ;; Noctalia.  It is a physical-laptop capability, not a VM service.
+    #:additional-system-services
+    (list (service upower-service-type)))
    ;; Activation precedes Shepherd's mounts and NetworkManager startup.
    (list (network-manager-connections-persistence-service))))
 
@@ -145,6 +147,7 @@
    #:system-services %lenovo-legion-y7000p-services
    #:application-persistence-rules
    (host-application-persistence-rules)
+   #:flatpak-environment-overrides %flatpak-prime-environment-overrides
    #:additional-machine-state-persistence-rules
    (list %network-manager-connections-persistence-rule)
    #:secrets %lenovo-legion-y7000p-secrets

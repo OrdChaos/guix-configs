@@ -9,7 +9,7 @@
 ;;; 为什么是 pinned 子进程而不是 blueprint 直接执行（决策记录）：
 ;;;   1. desired state 事实源是 apps registry——39 个 application
 ;;;      definition 中 8 个依赖 channel 模块（nonguix/virelith/
-;;;      rosenthal/saayix），且 definition 引用的 guix 包必须来自
+;;;      rosenthal），且 definition 引用的 guix 包必须来自
 ;;;      pinned channels（`guix time-machine shell` 的 GUILE_LOAD_PATH
 ;;;      只带宿主机 guix current——宿主机 guix 新版本已把 fastfetch
 ;;;      改名 fastfetch-minimal，直接解析会 Unbound variable）；

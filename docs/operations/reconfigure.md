@@ -286,7 +286,7 @@ channels.scm 与 channels.lock.scm 结构兼容
 
 ```text
 channels.scm        频道集合与上游来源（Guix、Nonguix、Rosenthal、
-                    virelith、saayix、bluebox 按需）
+                     virelith、bluebox 按需）
 channels.lock.scm   固定实际使用的 commit / introduction / branch
 ```
 

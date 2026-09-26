@@ -36,17 +36,17 @@
 ;;;     只在导入其中 C 模块时才报版本不匹配，正常不用 gi 的
 ;;;     工具不受影响（2026-09 取舍记录）。
 ;;;
-;;;     重复菜单项（2026-09 VM 实测）：saayix ghostty 包随包分发
+;;;     重复菜单项（2026-09 VM 实测）：Ghostty 包随包分发
 ;;;     自己的 nautilus-python 扩展 ghostty.py（wezterm 移植，
 ;;;     硬编码 --gtk-single-instance=false 且不可配置）——与本
 ;;;     app 的 open-any-terminal 各出一个"在 Ghostty 中打开"。
 ;;;     本 app 用 stub 遮蔽：nautilus-python 扫描顺序（loader
 ;;;     nautilus-python.c nautilus_python_check_all_directories）
 ;;;     是 ~/.local/share 最先，且按 basename 走 Python 模块名
-;;;     缓存——仓库 stub 先导入，saayix 同名模块不再加载。
+;;;     缓存——仓库 stub 先导入，包内同名模块不再加载。
 ;;;     不采用 patch ghostty 包删除文件的方式：加 build phase
 ;;;     会改变 derivation，触发 VM 上整个 ghostty zig 重建
-;;;     （saayix 无公共 substitute）。
+;;;     （构建成本高）。
 ;;;
 ;;; 无 persistence 规则（nautilus 状态属用户数据层）。
 
@@ -81,10 +81,10 @@
                  %nautilus-python-major-minor
                  "/site-packages"))
 
-;; stub（遮蔽 saayix ghostty 的 bundled 扩展）：必须是一个可干净
+;; stub（遮蔽 Ghostty bundled 扩展）：必须是一个可干净
 ;; 导入的 Python 模块——nautilus-python 先扫 ~/.local/share，按
 ;; basename 导入（模块名缓存），本 stub 先于 profile 里的
-;; ghostty.py 成为模块 "ghostty"，saayix 那份不再加载。内容静态
+;; ghostty.py 成为模块 "ghostty"，包内那份不再加载。内容静态
 ;; → 独立文件 colocate（同目录 ghostty.py）。
 (define %ghostty-nautilus-extension-stub
   (local-file "ghostty.py"))

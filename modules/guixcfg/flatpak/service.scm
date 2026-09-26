@@ -9,11 +9,11 @@
 ;;;     preamble 先置 Home profile share，本值经 shell-double-quote
 ;;;     发射（$ 保留）在 source 时展开 $XDG_DATA_DIRS）；
 ;;;   - override 完整文件：definition 的 override-policy 为
-;;;     (managed-overrides ...) 的 app 由 home-files 生成
-;;;     .local/share/flatpak/overrides/<id>（store symlink =
-;;;     derived state，随 generation/rollback；complete-file
-;;;     ownership，repo 与 Flatseal 永不 merge）；'external →
-;;;     不生成（user/Flatseal owns）；
+;;;     (managed-overrides ...) 的 app 在 system activation 写入 Flatpak
+;;;     installation backing 的 overrides/<id>（complete-file ownership，
+;;;     repo 与 Flatseal 永不 merge）；'external → 不生成（user/Flatseal owns）。
+;;;     不能由 Home 写入：installation 是持久化 bind，ephemeral HOME 会丢失
+;;;     ~/.guix-home 的上代索引，导致 pinned symlink-manager 重复备份旧链接；
 ;;;   - desktop shadow：selected definition 的 desktop-files 投影到
 ;;;     ~/.local/share/applications/，经 XDG precedence 覆盖 Flatpak
 ;;;     export；完整文件 single-owner，不做字段级 merge；
@@ -28,18 +28,21 @@
 
 (define-module (guixcfg flatpak service)
                #:use-module (gnu home services) ; home-environment-variables-service-type、home-files-service-type
-               #:use-module (gnu services)      ; simple-service
-               #:use-module (guix gexp)         ; plain-file
+                #:use-module (gnu services)      ; simple-service、activation-service-type
+                #:use-module (guix gexp)         ; plain-file
+                #:use-module (guix modules)      ; source-module-closure
                #:use-module (srfi srfi-1)       ; filter-map、append-map
                #:use-module (guixcfg flatpak model)
                #:use-module (guixcfg flatpak registry)
-               #:use-module (guixcfg system application-persistence) ; application-persistence-rule
+                #:use-module (guixcfg system application-persistence) ; application-persistence-rule
+                #:use-module (guixcfg utils module-closure) ; guixcfg-module-select?
                #:export (%flatpak-installation-persistence-rule
                          flatpak-application-persistence-rules
                          flatpak-selected-applications
                          flatpak-persistence-rules
-                         flatpak-override-files
-                         flatpak-override-files* ; overlay-aware
+                          flatpak-override-files
+                          flatpak-override-files* ; overlay-aware
+                          flatpak-overrides-activation
                          flatpak-desktop-files
                          flatpak-home-services
                          %flatpak-session-environment-service
@@ -144,6 +147,76 @@ external app 与未知 target fail closed）。"
            environment-overrides
            (flatpak-selected-applications))))
 
+(define (flatpak-overrides-activation environment-overrides)
+  "Return a system activation service that atomically projects managed
+Flatpak overrides into the canonical persistent installation backing."
+  (let ((entries
+         (map (lambda (entry)
+                (list (string-drop (car entry)
+                                   (string-length
+                                    ".local/share/flatpak/overrides/"))
+                      (cadr entry)))
+              (flatpak-override-files*
+               #:environment-overrides environment-overrides))))
+    (simple-service
+     'flatpak-managed-overrides
+     activation-service-type
+     (with-imported-modules
+      (source-module-closure '((guix build utils)
+                               (guixcfg utils atomic-file)
+                               (ice-9 rdelim))
+                             #:select? guixcfg-module-select?)
+      #~(begin
+          (use-modules (guix build utils)
+                       (guixcfg utils atomic-file)
+                       (ice-9 rdelim))
+          (let* ((directory "/persist/data-app/flatpak/installation/overrides")
+                 (manifest (string-append directory "/.guixcfg-managed"))
+                 (current (map car '#$entries)))
+            (define (read-managed)
+              (if (file-exists? manifest)
+                  (call-with-input-file
+                      manifest
+                    (lambda (port)
+                      (let loop ((result '()))
+                        (let ((line (read-line port)))
+                          (if (eof-object? line)
+                              (reverse result)
+                              (loop (cons line result)))))))
+                  '()))
+            (define (safe-id? id)
+              (and (string? id)
+                   (> (string-length id) 0)
+                   (not (string=? id "."))
+                   (not (string=? id ".."))
+                   (let loop ((index 0))
+                     (or (= index (string-length id))
+                         (and (not (char=? (string-ref id index) #\/))
+                              (loop (1+ index)))))))
+            (mkdir-p directory)
+            ;; Only entries recorded by the previous activation are ours to
+            ;; remove; Flatseal-owned override files are never in this list.
+            (for-each
+             (lambda (id)
+               (unless (safe-id? id)
+                 (error "unsafe managed Flatpak override ID in manifest" id))
+               (unless (member id current)
+                 (false-if-exception
+                  (delete-file (string-append directory "/" id)))))
+             (read-managed))
+            (for-each
+             (lambda (entry)
+               (atomic-write-file!
+                (string-append directory "/" (car entry))
+                (lambda (port)
+                  (display (call-with-input-file (cadr entry) get-string-all)
+                           port))))
+             '#$entries)
+            (atomic-write-file!
+              manifest
+              (lambda (port)
+                (for-each (lambda (id) (format port "~a~%" id)) current)))))))))
+
 (define (flatpak-desktop-files apps)
   "APPS 的 desktop-files contribution → home-files 条目。definition 只
 声明 basename；projection 统一拥有 XDG applications target。"
@@ -156,9 +229,7 @@ external app 与未知 target fail closed）。"
    apps))
 
 (define* (flatpak-home-files #:key (environment-overrides '()))
-         (append (flatpak-override-files*
-                  #:environment-overrides environment-overrides)
-                 (flatpak-desktop-files (flatpak-selected-applications))))
+          (flatpak-desktop-files (flatpak-selected-applications)))
 
 (define %flatpak-files-service
   (simple-service 'flatpak-files
@@ -166,10 +237,8 @@ external app 与未知 target fail closed）。"
                   (flatpak-home-files)))
 
 (define* (flatpak-home-services #:key (environment-overrides '()))
-         "Flatpak 平台 Home services（override / desktop 完整文件生成 +
-XDG_DATA_DIRS exports 追加）。SELECTION 是全局用户软件 policy；
-ENVIRONMENT-OVERRIDES 是 host adapter 的硬件驱动差异（如 NVIDIA
-PRIME），只作用于 managed override。"
+          "Flatpak 平台 Home services（desktop 完整文件生成 + XDG_DATA_DIRS
+exports 追加）。Managed overrides are projected by system activation."
          (list (simple-service 'flatpak-files
                                home-files-service-type
                                (flatpak-home-files #:environment-overrides

@@ -93,11 +93,11 @@ of the pinned python major.minor"
                               (gsettings-setting-value (car gs))))))
 
 ;; ── NA4：ghostty bundled 扩展遮蔽（防重复菜单项）────────────
-;; saayix ghostty 包随包分发自己的 nautilus-python 扩展
+;; Ghostty 包随包分发自己的 nautilus-python 扩展
 ;; （"Open in Ghostty"，不可配置、总是新进程）——与 open-any-terminal
 ;; 重复。nautilus-python 先扫 ~/.local/share 且按 basename 走模块
 ;; 缓存，仓库 stub 遮蔽之；不采用 patch ghostty 包（zig 重建代价）。
-(test-assert "NA4: repo stub shadows the saayix ghostty nautilus extension"
+(test-assert "NA4: repo stub shadows the Ghostty nautilus extension"
              (let* ((files
                      (append-map service-value
                                  (filter

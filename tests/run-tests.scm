@@ -40,14 +40,12 @@
 
 (define %nonguix-store-dir (channel-store-dir 'nonguix))
 (define %virelith-store-dir (channel-store-dir 'virelith))
-(define %saayix-store-dir (channel-store-dir 'saayix))
 (define %rosenthal-store-dir (channel-store-dir 'rosenthal))
 (define %bluebox-store-dir (channel-store-dir 'bluebox))
 (define %rust-toolchain-store-dir (channel-store-dir 'guix-rust-toolchain))
 
 (add-to-load-path %nonguix-store-dir)
 (add-to-load-path %virelith-store-dir)
-(add-to-load-path %saayix-store-dir)
 (add-to-load-path %rosenthal-store-dir)
 (add-to-load-path %bluebox-store-dir)
 (add-to-load-path %rust-toolchain-store-dir)

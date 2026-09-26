@@ -32,7 +32,7 @@
        (name 'virelith)
        (url "https://github.com/ordchaos/virelith.git")
        (branch "master")
-       (commit "1fc0f237ca9798923a5e84b2043338d2834407fe")
+        (commit "9998747fa61ebcf32943b0b64a9584b1ab9a104f")
        (introduction
         (make-channel-introduction
          "cae11b77a64f281cc9ab45e20567e59efc37e96b"
@@ -48,16 +48,6 @@
          "7eb3c7727b341ac671f1b7a06054a8aacc28cb52"
          (openpgp-fingerprint
           "FF0F 1FE0 A176 071F 0E39  A94D FF93 E1DA E089 7EDE"))))
-      (channel
-       (name 'saayix)
-       (url "https://codeberg.org/look/saayix")
-       (branch "main")
-       (commit "9d22922ef477f82b442d533c376baac4fe666268")
-       (introduction
-        (make-channel-introduction
-         "12540f593092e9a177eb8a974a57bb4892327752"
-         (openpgp-fingerprint
-          "3FFA 7335 973E 0A49 47FC  0A8C 38D5 96BE 07D3 34AB"))))
       (channel
        (name 'bluebox)
        (url "https://codeberg.org/lapislazuli/bluebox")

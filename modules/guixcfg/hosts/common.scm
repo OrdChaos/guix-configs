@@ -168,8 +168,9 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
 
 (define* (make-host-user-services #:key
                                   system-services
-                                  (application-persistence-rules
-                                   (host-application-persistence-rules))
+                                   (application-persistence-rules
+                                    (host-application-persistence-rules))
+                                   (flatpak-environment-overrides '())
                                   (additional-machine-state-persistence-rules
                                    '())
                                   secrets
@@ -188,9 +189,10 @@ sentinel + mihomo + applications）；HOME-ENVIRONMENT 是挂入 system
                 (user-persistence-service
                  (user-profile-name %primary-user))
                 ;; application persistence（generic executor）。
-                (application-persistence-service
-                 application-persistence-rules
-                 (user-profile-name %primary-user))
+                 (application-persistence-service
+                  application-persistence-rules
+                  (user-profile-name %primary-user))
+                 (flatpak-overrides-activation flatpak-environment-overrides)
                 ;; machine-state persistence（root-owned system state）。
                 (machine-state-persistence-service
                  (append (list %mihomo-data-persistence-rule

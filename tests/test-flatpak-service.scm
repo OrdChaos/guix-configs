@@ -1,7 +1,7 @@
 ;;; Flatpak composition 测试（docs/architecture/flatpak.md）：
 ;;;   - system profile 含 flatpak executable 与共享 %fonts 投影；
-;;;   - Home 含 XDG_DATA_DIRS exports 贡献（追加不覆盖）与 declarative
-;;;     Flatpak files（override + desktop shadow）home-files service；
+;;;   - Home 含 XDG_DATA_DIRS exports 贡献（追加不覆盖）与 desktop shadow；
+;;;     managed overrides 由 system activation 写入 persistent backing；
 ;;;   - %vm-os 的 file-systems 含 installation bind；
 ;;;   - 静态回归：platform service/model/registry 模块不 import
 ;;;     reconcile、不含任何 flatpak CLI 调用面（reconfigure/boot/
@@ -50,7 +50,7 @@
 
 (test-equal "flatpak home services: exactly two services"
             2 (length %flatpak-home-services))
-(test-assert "one service extends home-files (override and desktop complete-files)"
+(test-assert "one service extends home-files (desktop complete-files)"
              (any (lambda (svc)
                     (service-extends? svc home-files-service-type))
                   %flatpak-home-services))
@@ -84,8 +84,8 @@
                        (eq? 'external
                             (flatpak-application-override-policy app)))
                      %flatpak-applications)))
-;; fixture：managed-overrides 的 app 生成完整文件（home-files
-;; 条目 target = .local/share/flatpak/overrides/<id>）。
+;; fixture：managed-overrides 的 app 生成完整文件；system activation 将它
+;; 投影到 persistent installation 的 overrides/<id>。
 (define %managed-override-files
   (flatpak-override-files
    (list (flatpak-application
@@ -94,9 +94,14 @@
           (override-policy
            (list 'managed-overrides
                  (flatpak-override (sockets '("wayland")))))))))
-(test-equal "managed override policy produces one home-files entry"
-            '(".local/share/flatpak/overrides/org.example.Managed")
-            (map car %managed-override-files))
+(test-equal "managed override policy produces one override entry"
+             '(".local/share/flatpak/overrides/org.example.Managed")
+             (map car %managed-override-files))
+(test-assert "managed override activation compiles"
+             (and (gexp->script
+                   "flatpak-overrides-activation-check"
+                   (service-value (flatpak-overrides-activation '())))
+                  #t))
 
 ;; ── override 随 selection 投影（与 persistence 同一事实）────
 ;; fixture：catalog 三个 app（selected-external / selected-managed /

@@ -233,19 +233,18 @@ trust。
 
 ## Overrides：complete-file ownership
 
-有 repo declaration 的 app：`(guixcfg flatpak service)` 经
-home-files 生成**完整** `~/.local/share/flatpak/overrides/<app-id>`
-（deterministic GKeyFile renderer——store symlink = derived state，
-随 generation/rollback）。无 declaration：仓库不产生文件，user /
-Flatseal owns。**repo 与 Flatseal 永不 merge-write。**
+有 repo declaration 的 app：`(guixcfg flatpak service)` 在 system
+activation 将 deterministic GKeyFile 原子写入 canonical backing 的
+`overrides/<app-id>`，再由 installation bind 投影为
+`~/.local/share/flatpak/overrides/<app-id>`。它记录仅 repo-owned app ID
+的 manifest，以便 selection 移除时只删除原先由 repo 管理的文件。无
+declaration：仓库不产生文件，user / Flatseal owns。**repo 与 Flatseal
+永不 merge-write。**
 普通权限写入 `[Context]`；环境变量按 Flatpak keyfile 规范逐项写入
 `[Environment]`（不是 `[Context] environment=...` 列表）。
 
 repo-owned override 是 **read-only declarative state**，不建议直接
-用 Flatseal 修改（pinned Guix Home symlink-manager 的真实行为：
-declaration 恢复时 existing user file 会被移入
-`~/<timestamp>-guix-home-legacy-configs-backup/` 再重建 symlink——
-该目录位于 ephemeral HOME，本机跨 boot 不保留）。实验流程：
+用 Flatseal 修改（下一次 system activation 会原子恢复声明内容）。实验流程：
 
 ```text
 1. overrides declaration → #f
