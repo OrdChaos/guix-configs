@@ -7,9 +7,12 @@
 
 (use-modules (guix store)
              (guix monads)
-             (guix derivations)
-             (guix gexp)
-             (guixcfg fonts fontconfig-policy) ; %fontconfig-snippets（接口）
+              (guix derivations)
+              (guix gexp)
+              (guix packages)
+              (gnu packages fontutils)
+              (guixcfg fonts model)
+              (guixcfg fonts fontconfig-policy) ; %fontconfig-snippets（接口）
              (guixcfg home fonts)         ; %fontconfig-service（消费方 1）
              (gnu services)               ; service-value
              (ice-9 rdelim)               ; read-string
@@ -26,8 +29,21 @@
                   (every list? %fontconfig-snippets)))
 
 (test-assert "home fontconfig service consumes the shared snippets verbatim"
-             (equal? %fontconfig-snippets
-                     (service-value %fontconfig-service)))
+              (equal? %fontconfig-snippets
+                      (service-value %fontconfig-service)))
+
+(test-assert "Office compatibility fonts do not enter the global browser set"
+             (every (lambda (font)
+                      (not (member font %fonts)))
+                    %office-compatibility-fonts))
+
+(test-equal "ONLYOFFICE projects global and Office compatibility fonts"
+            (map package-name
+                 (delete fontconfig
+                         (append %fonts %office-compatibility-fonts)))
+            (map car
+                 (@@ (guixcfg apps onlyoffice definition)
+                     %onlyoffice-font-bind-specs)))
 
 ;; ONLYOFFICE 专属 fontconfig 文件（消费方 2）：内联策略 + 无 include。
 (define %store (open-connection))

@@ -54,7 +54,7 @@
                #:use-module (guix packages)          ; package、package-name、package-version
                #:use-module (guix build-system trivial)
                #:use-module (guix gexp)              ; gexp、file-append、computed-file
-               #:use-module (guixcfg fonts model)   ; %fonts（包事实）
+                #:use-module (guixcfg fonts model)   ; 通用与 Office 私有字体事实
                #:use-module (guixcfg fonts fontconfig-policy) ; %fontconfig-snippets（策略接口）
                #:use-module (guixcfg apps model)     ; application
                #:use-module (guixcfg system application-persistence) ; rule
@@ -63,18 +63,19 @@
                #:export (%onlyoffice
                          %onlyoffice-desktop-entry))
 
-;; ── 字体 bind 规格（从 %fonts 派生，不复制清单）────────────────
-;; %fonts 是唯一事实源；下列 bind 规格基于已完成的结构审计生成：
-;; fontconfig 是当前唯一不提供 share/fonts 的包（工具包），作
-;; 结构性排除；未来 %fonts 若加入新的非字体树工具包，需同步审计
-;; 此处（代码不做运行时/求值期目录存在性检查）。
+;; ── 字体 bind 规格（从通用 + Office 私有集合派生，不复制清单）────
+;; %fonts 不含 Windows Office 兼容字体（不能污染浏览器的网页 fallback）；
+;; ONLYOFFICE 额外投影 %office-compatibility-fonts。fontconfig 是当前
+;; 唯一不提供 share/fonts 的包（工具包），作结构性排除；未来任一集合
+;; 加入新的非字体树工具包，需同步审计此处。
 (define %onlyoffice-font-bind-specs
   (map (lambda (pkg)
          (list (package-name pkg)
                (file-append pkg "/share/fonts")
                (string-append "/usr/local/share/fonts/"
                               (package-name pkg))))
-       (delete fontconfig %fonts)))
+        (delete fontconfig
+                (append %fonts %office-compatibility-fonts))))
 
 ;; ── ONLYOFFICE 专属 fontconfig（UI 字体兼容层）────────────────
 ;; 2026-08-31 审计链（全部 VM 实测）：ONLYOFFICE 进程解析
