@@ -50,7 +50,7 @@
    (name "ordchaos")
    (uid 1000)
    (group "users")
-   (supplementary-groups '("wheel" "netdev"))
+   (supplementary-groups '("wheel" "netdev" "kvm"))
    (home-directory "/home/ordchaos")
    (comment "序炁")
    ;; 密码 hash 是 install secret（colocate users/secrets/，

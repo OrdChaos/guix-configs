@@ -30,8 +30,15 @@
                #:use-module (guixcfg apps zip definition)
                #:use-module (guixcfg apps less definition)
                #:use-module (guixcfg apps file definition)
-               #:use-module (guixcfg apps mesa-utils definition)
-               #:use-module (guixcfg apps nodejs definition)
+                #:use-module (guixcfg apps mesa-utils definition)
+                #:use-module (guixcfg apps gnu-build-tools definition)
+                #:use-module (guixcfg apps clang definition)
+                #:use-module (guixcfg apps qemu definition)
+                #:use-module (guixcfg apps cmake definition)
+                #:use-module (guixcfg apps ninja definition)
+                #:use-module (guixcfg apps gdb definition)
+                #:use-module (guixcfg apps strace definition)
+                #:use-module (guixcfg apps nodejs definition)
                #:use-module (guixcfg apps java definition)
                #:use-module (guixcfg apps rust definition)
                #:use-module (guixcfg apps gnome-keyring definition)
@@ -79,9 +86,16 @@
         %wget
         %zip
         %less
-        %file
-        %mesa-utils
-        %nodejs
+         %file
+         %mesa-utils
+         %gnu-build-tools
+         %clang
+         %qemu
+         %cmake
+         %ninja
+         %gdb
+         %strace
+         %nodejs
         %java
         %rust
         %fastfetch
