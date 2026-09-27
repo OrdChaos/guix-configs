@@ -31,8 +31,8 @@ Mihomo 只负责 TUN / traffic routing / proxy policy——不做 DNS
 |---|---|---|
 | `/etc/resolv.conf` | `(guixcfg system dns ownership)`（静态，唯一 writer） | ephemeral 普通文件（etc-service 声明式，每 boot 重建）；NM/openresolv 均不再触碰 |
 | `/etc/resolvconf.conf` | `(guixcfg system dns ownership)` | 把 openresolv libc subscriber 的输出重定向到 `/run/resolvconf/resolv.conf`；其余 subscriber（named/dnsmasq/unbound/systemd-resolved/…）显式关闭 |
-| DHCP DNS | NetworkManager（经 resolvconf -a） | **不丢弃**：以 `/run/resolvconf/resolv.conf` 的形式保留为 upstream metadata——v1 只产出、SmartDNS 暂不消费；未来"DHCP DNS 作为上游"的 seam |
-| SmartDNS 进程 | `(guixcfg system dns smartdns)`（thin service，Guix smartdns 47 包） | Shepherd 管理；loopback-only 监听；固定 upstream；cache 仅内存 |
+| DHCP DNS | NetworkManager（经 resolvconf -a） | **不丢弃**：以 `/run/resolvconf/resolv.conf` 的形式保留；`dns-change` dispatcher 严格解析 IPv4 `nameserver` 行并原子投影到 `/run/smartdns/dhcp-upstreams.conf` |
+| SmartDNS 进程 | `(guixcfg system dns smartdns)`（thin service，Guix smartdns 47 包） | Shepherd 管理；loopback-only 监听；固定 upstream 为默认，DHCP DNS 仅 `-fallback`；cache 仅内存 |
 | upstream 出口 | `(guixcfg system mihomo config)` 模板 rules | `IP-CIDR,<upstream>/32,DIRECT,no-resolve`——上游直连（自举必需：节点服务器是域名，上游走节点 = 解析死锁；附带 DNS 不随节点存亡） |
 
 ## 数据流（当前真实）
@@ -42,7 +42,9 @@ DHCP（SLIRP 10.0.2.3 / 现实网络）
   ↓ NetworkManager（rc-manager=resolvconf，编译期默认）
   ↓ resolvconf -a（openresolv 3.17.4）
 /run/resolvconf/keys + /run/resolvconf/resolv.conf（libc subscriber 重定向输出）
-  （v1：metadata，无消费者）
+  ↓ NetworkManager dns-change dispatcher
+/run/smartdns/dhcp-upstreams.conf（严格 IPv4、原子写入、`server <ip> -fallback`）
+  ↓ herd reload smartdns（仅服务已运行时；首次启动直接读 include）
 ```
 
 ```
@@ -52,7 +54,9 @@ Applications
   ↓
 SmartDNS @127.0.0.1:53（cache → prefetch → serve-expired）
   ↓ DIRECT（mihomo 规则按上游 IP 直连）
-223.5.5.5 / 119.29.29.29（固定 upstream）
+223.5.5.5 / 119.29.29.29（固定默认 upstream）
+  ↓ 默认上游不可达时
+DHCP DNS（动态 fallback；认证前 captive portal 可用）
 ```
 
 ## 决策记录
@@ -60,17 +64,17 @@ SmartDNS @127.0.0.1:53（cache → prefetch → serve-expired）
 - **resolvconf-bootstrap 退役**：其存在理由是接管 Guix nscd
   placeholder 的 `/etc/resolv.conf` ownership；静态 ownership 后该
   问题消失（libc subscriber 输出已重定向 /run，NM 不再写 /etc）。
-- **openresolv 保留**：不再写 `/etc/resolv.conf`，改为产出 DHCP
-  DNS 的 `/run` metadata——为未来"DHCP DNS 作为 SmartDNS 附加
-  upstream"保留机制（届时 hook 产出 + SmartDNS config 再生成 +
-  SIGHUP 重载），v1 不实现。
+- **openresolv 保留**：不再写 `/etc/resolv.conf`，改为产出 DHCP DNS 的
+  `/run` metadata；NetworkManager 官方 `dns-change` dispatcher 严格提取 IPv4
+  nameserver，原子生成 SmartDNS 的 `-fallback` include 并 SIGHUP 重载。这样
+  captive portal 认证前能使用本地 DHCP DNS，正常网络仍优先固定上游。
 - **固定 upstream 用 IP literal**：无 hostname bootstrap 路径，也
   不经过 SLIRP 的 10.0.2.3——宿主 Fake-IP 污染被彻底隔离（此前
   guest 收到的 198.18.0.x 来自宿主 resolver，本链不再经过它）。
 - **failure semantics**：SmartDNS crash → `/etc/resolv.conf` 仍指
-  localhost → DNS unavailable（fail-closed，不做自动回退 DHCP
-  DNS）；respawn 默认开；upstream 不可达时 daemon 正常运行、查询
-  SERVFAIL、恢复后自动可用（VM 实测 smartdns 47）。
+  localhost → DNS unavailable（fail-closed；不绕过 resolver）；respawn 默认开。
+  固定上游不可达时 SmartDNS 会使用当前 DHCP fallback；无 DHCP DNS 时查询
+  SERVFAIL，恢复后自动可用（VM 实测 smartdns 47）。
 - **cache persistence**：v1 不持久化（cache-persist no；丢失代价 =
   首查稍慢）。未来若需要：`cache-file /var/lib/smartdns/cache.db`
   + machine-state bind `/var/lib/smartdns`（目录级，绕开 single-file

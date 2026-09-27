@@ -11,9 +11,9 @@
 ;;;   2. /etc/resolvconf.conf（openresolv 重定向，repo authority）：
 ;;;      resolv_conf=/run/resolvconf/resolv.conf——NM 的 DHCP DNS
 ;;;      仍然经 resolvconf -a 记录，但 libc subscriber 只写 /run 的
-;;;      upstream metadata（本模块导出的 %dhcp-dns-metadata-path，
-;;;      v1 只产出、SmartDNS 暂不消费——未来 DHCP-DNS-as-upstream
-;;;      的 seam）。其余 subscriber（named/dnsmasq/unbound 等）显式
+;;;      upstream metadata（本模块导出的 %dhcp-dns-metadata-path）；
+;;;      SmartDNS 的 NetworkManager dispatcher 将其安全投影为仅 fallback
+;;;      upstream。其余 subscriber（named/dnsmasq/unbound 等）显式
 ;;;      关闭：openresolv 3.17.4 的 -u 会运行 LIBEXECDIR 下全部
 ;;;      subscriber（store 实测 sbin/resolvconf:1488 的 for 循环），
 ;;;      无对应 daemon 的 subscriber 会留下杂项行为——按
@@ -22,7 +22,8 @@
 ;;; 不变量（docs/architecture/dns.md）：
 ;;;   - /etc/resolv.conf 只有一个 owner（本模块；NM/openresolv 均不
 ;;;     触碰——libc subscriber 的输出路径已重定向）；
-;;;   - DHCP DNS 不丢弃：作为 /run metadata 保留（v1 不消费）；
+;;;   - DHCP DNS 不丢弃：作为 /run metadata 保留，且只作为 SmartDNS
+;;;     fallback，不替代固定上游；
 ;;;   - 不依赖 systemd-resolved、不引入 firewall。
 
 (define-module (guixcfg system dns ownership)

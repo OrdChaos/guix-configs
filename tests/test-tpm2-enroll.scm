@@ -44,6 +44,25 @@
                          (string-split s #\newline))
                  "\n")))
 
+(define (misc-error-message a)
+  "从 catch 的 misc-error args A 提取用户消息。Guile `error` 抛出的
+形态随模块执行方式（解释 load vs compile-file 编译 thunk，实测
+2026-08）有两种：(#f \"~A\" (MSG) #f) 与 (#f MSG () #f)——断言
+必须两者兼容，不能只认 (car (caddr a))。"
+  (let ((irritants (caddr a)))
+    (if (and (pair? irritants) (string? (car irritants)))
+      (car irritants)
+      (cadr a))))
+
+(define (with-no-tpm2-enrollment thunk)
+  "Run THUNK with the tool state reader replaced by an explicit empty state."
+  (let* ((module (current-module))
+         (original (module-ref module 'read-tpm2-state)))
+    (dynamic-wind
+     (lambda () (module-set! module 'read-tpm2-state (lambda () #f)))
+     thunk
+     (lambda () (module-set! module 'read-tpm2-state original)))))
+
 (test-begin "tpm2-enroll")
 
 ;; ── Test A/B 共享的 mock 环境（%tpm2-bin 在加载时解析）────────
@@ -74,30 +93,19 @@
      
      ;; Test C：error binding——replace 在未 enrollment 时正常业务错误
      (test-assert "C: replace without enrollment throws proper business error (not arity)"
-                  (let ((caught
-                         (catch #t
-                           (lambda () (do-replace #f) #f)
-                           (lambda (k . a)
-                             (if (eq? k 'misc-error)
-                               ;; error 单参数时：a = (#f "~A" (MESSAGE) #f)
-                               (string-contains (car (caddr a)) "No existing TPM enrollment")
-                               #f)))))
-                    caught)))
+                  (with-no-tpm2-enrollment
+                   (lambda ()
+                     (catch #t
+                       (lambda () (do-replace #f) #f)
+                       (lambda (k . a)
+                         (and (eq? k 'misc-error)
+                              (string-contains (misc-error-message a)
+                                               "No existing TPM enrollment"))))))))
    (lambda ()
      (unsetenv "GUIXCFG_TPM2_BIN")
      (unsetenv "GUIXCFG_CRYPTSETUP")
      (false-if-exception (delete-file "/tmp/guixcfg-enroll-nomain.scm"))
      (delete-file-recursively mock))))
-
-(define (misc-error-message a)
-  "从 catch 的 misc-error args A 提取用户消息。Guile `error` 抛出的
-形态随模块执行方式（解释 load vs compile-file 编译 thunk，实测
-2026-08）有两种：(#f \"~A\" (MSG) #f) 与 (#f MSG () #f)——断言
-必须两者兼容，不能只认 (car (caddr a))。"
-  (let ((irritants (caddr a)))
-    (if (and (pair? irritants) (string? (car irritants)))
-      (car irritants)
-      (cadr a))))
 
 ;; ── E-G：rollback/publication 的可注入边界 ─────────────────
 (let ((tmp (mkdtemp "/tmp/guixcfg-enroll-rollback-XXXXXX")))

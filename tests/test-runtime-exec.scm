@@ -53,7 +53,8 @@
              (gnu services shepherd)
              (guixcfg security secrets)
              (guixcfg system accounts)    ; account-databases-activation/verify
-             (guixcfg system mihomo service) ; MC: mihomo-config-program
+              (guixcfg system mihomo service) ; MC: mihomo-config-program
+              (guixcfg system dns smartdns) ; SD: DHCP fallback materializer
              (guixcfg system application-persistence) ; AP1 activation ownership
               (guixcfg services ephemeral-root) ; EP: ephemeral-root-confirm-program
               (guixcfg flatpak service)   ; FO1: flatpak-overrides-activation
@@ -67,7 +68,8 @@
              (ice-9 textual-ports)
              (ice-9 ftw)                ; scandir
              (ice-9 regex)              ; string-match
-             (srfi srfi-1)
+              (srfi srfi-1)
+              (srfi srfi-13)
              ((rnrs base) #:select (let-values))  ; 只取 let-values（R6RS error 会覆盖 Guile 原生 error）
              (srfi srfi-64))
 
@@ -102,7 +104,26 @@
           "--mount --pid --fork sh -c '"
           "mount --bind /gnu/store " fake-root "/gnu/store; "
           "chroot " fake-root " " %guile
-          " --no-auto-compile " program
+           " --no-auto-compile " program
+          " >/dev/null 2>&1; "
+          "echo $?'")))
+    (let* ((pipe (open-input-pipe script))
+           (out (get-string-all pipe)))
+       (close-pipe pipe)
+       (string->number (string-trim-both out)))))
+
+;; Run an executable artifact through its shebang.  This preserves the
+;; command-line contract used by NetworkManager dispatcher scripts.
+(define (run-executable-in-root program fake-root arguments)
+  (let ((script
+         (string-append
+          "unshare --user --map-root-user --map-users=auto --map-groups=auto "
+          "--mount --pid --fork sh -c '"
+          "mount --bind /gnu/store " fake-root "/gnu/store; "
+          "chroot " fake-root " " program
+          (if (null? arguments)
+              ""
+              (string-append " " (string-join arguments " ")))
           " >/dev/null 2>&1; "
           "echo $?'")))
     (let* ((pipe (open-input-pipe script))
@@ -139,7 +160,44 @@ user:x:1000:1000:u:/home/user:/bin/bash\n" p)))
        (lambda (p) (display hash-or-#f p)))
       (chmod (string-append dir "/persist/system/accounts/user/password.hash")
              #o600))
-    dir))
+     dir))
+
+;; ── SmartDNS DHCP fallback materializer：真实执行 ─────────────
+;; DHCP metadata is untrusted network input.  The generated program must only
+;; emit strict IPv4 `server <ip> -fallback` lines and must accept an empty
+;; source when NetworkManager removes the final DNS provider.
+(define %smartdns-dhcp-fallback-executable
+  (build-thing %smartdns-dhcp-fallback-program))
+
+(define (run-smartdns-dhcp-fallback metadata)
+  (let ((root (make-fake-root "" #f)))
+    (call-with-output-file (string-append root "/input.resolvconf")
+      (lambda (port) (display metadata port)))
+    (let ((exit (run-executable-in-root
+                 %smartdns-dhcp-fallback-executable root
+                 '("/input.resolvconf" "/run/smartdns/dhcp-upstreams.conf"))))
+      (cons exit
+            (let ((output (string-append root "/run/smartdns/dhcp-upstreams.conf")))
+              (and (file-exists? output)
+                   (call-with-input-file output get-string-all)))))))
+
+(let ((result
+       (run-smartdns-dhcp-fallback
+        "search campus.example\n\
+nameserver 10.42.0.53\n\
+nameserver 10.42.0.53\n\
+nameserver 192.168.8.1\n\
+nameserver 999.1.1.1\n\
+nameserver 1.2.3.4;server 8.8.8.8\n\
+nameserver 2001:db8::53\n")))
+  (test-equal "SD1 DHCP fallback materializer exits successfully" 0 (car result))
+  (test-equal "SD1 DHCP fallback materializer accepts only unique IPv4 servers"
+              "server 10.42.0.53 -fallback\nserver 192.168.8.1 -fallback\n"
+              (cdr result)))
+
+(let ((result (run-smartdns-dhcp-fallback "")))
+  (test-equal "SD2 empty DHCP metadata clears fallback include" 0 (car result))
+  (test-equal "SD2 empty DHCP metadata emits an empty include" "" (cdr result)))
 
 ;; ── account databases projection：真实执行 ──────────────────
 ;; 测试 /etc/{passwd,group,shadow} 的单一 authoritative writer：

@@ -1,15 +1,15 @@
-;;; SmartDNS / system DNS ownership 单元测试（S1-S7，Phase 2 v1）。
+;;; SmartDNS / system DNS ownership 单元测试（S1-S8）。
 ;;;
 ;;; 覆盖：
 ;;;   S1 smartdns 配置静态契约（loopback-only、无 cache-persist、
 ;;;      固定 upstream、无测速/分流）
 ;;;   S2 /etc/resolv.conf 静态 ownership（恰好 nameserver 127.0.0.1）
-;;;   S3 resolvconf.conf 重定向 /run + 非 libc subscriber 全关
-;;;   S4 service graph：smartdns provision/requirement
+;;;   S3 resolvconf.conf 重定向 /run + DHCP fallback dispatcher 输入
+;;;   S4 service graph：smartdns provision/requirement/reload
 ;;;   S5 resolvconf-bootstrap 退役（服务与 NM requirement 均不存在）
-;;;   S6 mihomo rules 不含 SmartDNS upstream DIRECT（上游查询走代理，
-;;;      宿主侧 fake-ip DNS 劫持明文 53）
+;;;   S6 mihomo rules 包含 SmartDNS fixed upstream DIRECT（自举必需）
 ;;;   S7 store 无 secret/无网络依赖（配置纯公开文本）
+;;;   S8 DHCP metadata parser/dispatcher 的安全投影契约
 
 (use-modules (guix store)
              (guix monads)
@@ -47,6 +47,10 @@
 (define %resolvconf-conf-text (file-text %resolvconf-config))
 (define %mihomo-template-text
   (file-text %mihomo-template-file))
+(define %dhcp-fallback-program-text
+  (file-text %smartdns-dhcp-fallback-program))
+(define %dhcp-dispatcher-text
+  (file-text %smartdns-dhcp-dispatcher))
 
 (define (shepherd-service-with-provision name)
   (find (lambda (s)
@@ -72,8 +76,11 @@
 (test-assert "S1: no cache-persist (memory cache only)"
              (not (string-contains %smartdns-text "cache-persist")))
 (test-assert "S1: fixed upstreams declared"
-             (and (string-contains %smartdns-text "server 223.5.5.5")
-                  (string-contains %smartdns-text "server 119.29.29.29")))
+              (and (string-contains %smartdns-text "server 223.5.5.5")
+                   (string-contains %smartdns-text "server 119.29.29.29")))
+(test-assert "S1: DHCP fallback is a runtime include, never a default upstream"
+             (string-contains %smartdns-text
+                              "conf-file /run/smartdns/dhcp-upstreams.conf"))
 (test-assert "S1: no speed-check / no domain routing in v1"
              (and (not (string-contains %smartdns-text "speed-check-mode"))
                   (not (string-contains %smartdns-text "nameserver /"))))
@@ -109,9 +116,9 @@
              (let ((sexp (object->string
                           (gexp->approximate-sexp
                            (shepherd-service-start %smartdns-svc)))))
-               (and (string-contains sexp "-f")
-                    (string-contains sexp "-c")
-                    (string-contains sexp "/var/log/smartdns.log"))))
+                (and (string-contains sexp "-f")
+                     (string-contains sexp "-c")
+                     (string-contains sexp "/var/log/smartdns.log"))))
 
 ;; ── S5：resolvconf-bootstrap 退役 ──────────────────────────
 (test-assert "S5: resolvconf-bootstrap service gone"
@@ -140,6 +147,18 @@
              (let ((all (string-append %smartdns-text
                                        %resolv-conf-text
                                        %resolvconf-conf-text)))
-               (not (string-contains all "://"))))
+                (not (string-contains all "://"))))
+
+;; ── S8：DHCP fallback runtime projection ─────────────────────
+(test-assert "S8: generated fallback accepts only strict IPv4 nameservers"
+             (and (string-contains %dhcp-fallback-program-text "valid-ipv4?")
+                  (string-contains %dhcp-fallback-program-text
+                                   "server ~a -fallback")
+                  (string-contains %dhcp-fallback-program-text
+                                   "/run/resolvconf/resolv.conf")))
+(test-assert "S8: dispatcher reacts only to NetworkManager dns-change"
+             (and (string-contains %dhcp-dispatcher-text "dns-change")
+                  (string-contains %dhcp-dispatcher-text "reload")
+                  (string-contains %dhcp-dispatcher-text "smartdns")))
 
 (test-end "smartdns")

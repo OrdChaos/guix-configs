@@ -19,7 +19,7 @@ Guix / Shepherd
 
 系统 DNS（Phase 2：docs/architecture/dns.md）
   └── /etc/resolv.conf（静态 127.0.0.1）→ SmartDNS → 固定 upstream
-      DHCP DNS 由 openresolv 产出为 /run metadata（v1 不消费）
+      DHCP DNS 由 openresolv 产出为 /run metadata，仅作 SmartDNS fallback
 
 Noctalia Mihomo Control
   └── 仅经 Clash REST API 控制运行中的 Mihomo

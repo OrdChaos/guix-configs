@@ -12,29 +12,39 @@
 ;;;   - 固定 IP literal upstream（无 hostname bootstrap；mihomo 侧
 ;;;     加对应 DIRECT 规则保证不绕经节点——见 mihomo-template.yaml）；
 ;;;   - cache 仅内存（cache-persist no；丢失代价=首查稍慢）；
-;;;   - DHCP DNS 不消费：openresolv 已把 NM 的 DHCP nameserver 产出
-;;;     为 /run/resolvconf/resolv.conf metadata（(guixcfg system dns)
-;;;     的 %dhcp-dns-metadata-path）——未来 seam，v1 不读。
+;;;   - DHCP DNS 只作 fallback：NetworkManager 的 dns-change dispatcher
+;;;     从 openresolv metadata 生成 runtime include；固定上游仍是默认。
 ;;;
 ;;; failure semantics（VM 实测 smartdns 47）：
-;;;   - upstream 不可达：daemon 正常运行、查询 SERVFAIL（~2s 超时）、
-;;;     网络恢复后自动恢复（per-query 重试，无 failure latch）；
+;;;   - 固定 upstream 不可达：若 DHCP fallback 存在则降级查询它，否则
+;;;     daemon 正常运行、查询 SERVFAIL（~2s 超时）；网络恢复后自动恢复；
 ;;;   - crash：/etc/resolv.conf 仍指 127.0.0.1 → DNS unavailable =
-;;;     fail-closed（不做自动回退 DHCP DNS）；respawn 默认开；
+;;;     fail-closed（不绕过本地 resolver）；respawn 默认开；
 ;;;   - SIGHUP = monitor 重启 child 重读 config（官方语义）。
 
 (define-module (guixcfg system dns smartdns)
-               #:use-module (gnu services)          ; service、service-type、service-extension
-               #:use-module (gnu services shepherd) ; shepherd-service
-               #:use-module (gnu packages dns)      ; smartdns
-               #:use-module (guix gexp)
-               #:export (%smartdns-config-file
-                         %smartdns-log-file
-                         smartdns-shepherd-service
-                         smartdns-service-type
-                         smartdns-service))
+                #:use-module (gnu services)          ; service、service-type、service-extension
+                #:use-module (gnu services base)     ; activation-service-type
+                #:use-module (gnu services shepherd) ; shepherd-service、shepherd-signal-action
+                #:use-module (gnu packages dns)      ; smartdns
+                #:use-module (gnu packages admin)    ; shepherd（herd）
+                #:use-module (guix gexp)
+                #:use-module (guix modules)          ; source-module-closure
+                #:use-module (guixcfg system dns ownership) ; %dhcp-dns-metadata-path
+                #:export (%smartdns-config-file
+                          %smartdns-log-file
+                          %smartdns-runtime-directory
+                          %smartdns-dhcp-fallback-file
+                          %smartdns-dhcp-fallback-program
+                          %smartdns-dhcp-dispatcher
+                          smartdns-shepherd-service
+                          smartdns-service-type
+                          smartdns-service))
 
 (define %smartdns-log-file "/var/log/smartdns.log")
+(define %smartdns-runtime-directory "/run/smartdns")
+(define %smartdns-dhcp-fallback-file
+  (string-append %smartdns-runtime-directory "/dhcp-upstreams.conf"))
 
 ;; v1 最小配置（公开、无 secret）。上游为固定 IP literal；不启用
 ;; cache-persist（无持久化需求）；不做测速/分流。
@@ -42,15 +52,129 @@
   ;; colocate 独立文件（dns/smartdns.conf；注释见该文件头）。
   (local-file "smartdns.conf" "smartdns.conf"))
 
+(define %smartdns-dhcp-fallback-program
+  ;; The dispatcher runs this as root after NetworkManager reports a DNS
+  ;; change.  Only strict IPv4 nameserver entries become SmartDNS syntax:
+  ;; DHCP input never gets to inject arbitrary configuration directives.
+  (program-file
+   "smartdns-dhcp-fallback"
+   (with-imported-modules
+        (source-module-closure
+        '((guix build utils)
+          (ice-9 rdelim)
+          (srfi srfi-1)
+          (srfi srfi-13)))
+     #~(begin
+         (use-modules (guix build utils)
+                      (ice-9 rdelim)
+                      (srfi srfi-1)
+                      (srfi srfi-13))
+
+         (define (valid-octet? text)
+           (and (positive? (string-length text))
+                (every char-numeric? (string->list text))
+                (let ((number (string->number text)))
+                  (and number (<= 0 number 255)))))
+
+         (define (valid-ipv4? text)
+           (let ((parts (string-split text #\.)))
+             (and (= (length parts) 4)
+                  (every valid-octet? parts))))
+
+         (define (dhcp-nameservers path)
+           (if (file-exists? path)
+               (call-with-input-file
+                path
+                (lambda (port)
+                  (let loop ((servers '()))
+                    (let ((line (read-line port)))
+                      (if (eof-object? line)
+                          (reverse servers)
+                          (let ((words (string-tokenize line)))
+                            (if (and (= (length words) 2)
+                                     (string=? (car words) "nameserver")
+                                     (valid-ipv4? (cadr words))
+                                     (not (member (cadr words) servers)))
+                                (loop (cons (cadr words) servers))
+                                (loop servers))))))))
+               '()))
+
+         (define (atomic-write-fallback! target servers)
+           ;; /run is ephemeral, so visibility atomicity is the only required
+           ;; property: SmartDNS sees either the old complete file or the new
+           ;; complete file, never a partially written config.
+           (let ((new (string-append target ".new")))
+             (call-with-output-file
+              new
+              (lambda (port)
+                (for-each (lambda (server)
+                            (format port "server ~a -fallback~%" server))
+                          servers)))
+             (chmod new #o644)
+             (rename-file new target)))
+
+         (let ((arguments (cdr (command-line))))
+           (unless (or (null? arguments) (= (length arguments) 2))
+             (error "usage: smartdns-dhcp-fallback [SOURCE TARGET]"))
+           (let ((source (if (null? arguments)
+                             #$%dhcp-dns-metadata-path
+                             (car arguments)))
+                 (target (if (null? arguments)
+                             #$%smartdns-dhcp-fallback-file
+                             (cadr arguments))))
+             (mkdir-p (dirname target))
+             (atomic-write-fallback! target (dhcp-nameservers source))))))))
+
+(define %smartdns-dhcp-dispatcher
+  (program-file
+   "smartdns-dhcp-dispatcher"
+   #~(begin
+       ;; NetworkManager invokes dispatcher scripts with IFACE ACTION.  The
+       ;; dedicated dns-change event is emitted for additions and removals.
+       (when (and (= (length (command-line)) 3)
+                  (string=? (caddr (command-line)) "dns-change"))
+         (unless (zero? (system* #$%smartdns-dhcp-fallback-program))
+           (error "failed to materialize DHCP DNS fallback"))
+         ;; During NetworkManager's first start SmartDNS may not be running
+         ;; yet; its later start reads the already materialized include.  A
+         ;; running service must reload successfully so stale DNS never lingers.
+         (when (zero? (system* #$(file-append shepherd "/bin/herd")
+                               "status" "smartdns"))
+           (unless (zero? (system* #$(file-append shepherd "/bin/herd")
+                                   "reload" "smartdns"))
+             (error "failed to reload smartdns")))))))
+
+(define (smartdns-activation)
+  "Create the runtime include before the resolver starts.  Existing DHCP
+state remains valid across a live reconfigure until NetworkManager sends its
+next dns-change event."
+  #~(begin
+      (use-modules (guix build utils))
+      (mkdir-p #$%smartdns-runtime-directory)
+      (chmod #$%smartdns-runtime-directory #o755)
+      (unless (file-exists? #$%smartdns-dhcp-fallback-file)
+        (call-with-output-file #$%smartdns-dhcp-fallback-file
+          (lambda (port) #t))
+        (chmod #$%smartdns-dhcp-fallback-file #o644))))
+
+(define (smartdns-etc-service config)
+  "Install the official NetworkManager dispatcher hook declaratively."
+  `(("NetworkManager/dispatcher.d/50-smartdns-dhcp-fallback"
+     ,%smartdns-dhcp-dispatcher)))
+
 (define (smartdns-shepherd-service)
   (list (shepherd-service
          (provision '(smartdns))
          (requirement '(loopback networking))
-         (documentation
-          "Run SmartDNS as the system resolver (loopback only; fixed \
-upstreams; DHCP DNS is recorded as /run metadata by openresolv, not \
-consumed in Phase 2 v1).")
-         (start #~(make-forkexec-constructor
+          (documentation
+           "Run SmartDNS as the system resolver (loopback only; fixed \
+upstreams; DHCP DNS is a runtime fallback after fixed upstream failure).")
+          (actions
+           (list (shepherd-signal-action
+                  'reload SIGHUP
+                  #:documentation
+                  "Reload SmartDNS after NetworkManager changes DHCP DNS.")))
+          (start #~(make-forkexec-constructor
                    (list #$(file-append smartdns "/sbin/smartdns")
                          "-f" "-c" #$%smartdns-config-file)
                    #:log-file #$%smartdns-log-file))
@@ -59,13 +183,16 @@ consumed in Phase 2 v1).")
 (define smartdns-service-type
   (service-type
    (name 'smartdns)
-   (extensions
-    (list (service-extension shepherd-root-service-type
-                             (lambda (config) (smartdns-shepherd-service)))))
+     (extensions
+     (list (service-extension shepherd-root-service-type
+                              (lambda (config) (smartdns-shepherd-service)))
+           (service-extension activation-service-type
+                              (lambda (config) (smartdns-activation)))
+           (service-extension etc-service-type smartdns-etc-service)))
    (default-value #t)
-   (description
+    (description
     "Run SmartDNS as the sole system resolver: loopback-only listener \
-with fixed explicit upstreams.")))
+with fixed explicit upstreams and DHCP fallback.")))
 
 (define (smartdns-service)
   (service smartdns-service-type #t))
