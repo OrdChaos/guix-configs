@@ -66,7 +66,7 @@
 |---|---|---|
 | 静态 resolv.conf | `modules/guixcfg/system/dns/ownership.scm` | `%system-resolv-conf`（plain-file `"nameserver 127.0.0.1\n"`）、`%dhcp-dns-metadata-path`（`/run/resolvconf/resolv.conf`）、`system-dns-etc-service` |
 | resolvconf 重定向 | `modules/guixcfg/system/dns/resolvconf.conf` | `resolv_conf=/run/resolvconf/resolv.conf` + 全部非 libc subscriber 显式 `*_enabled=NO`；该 metadata 是 DHCP fallback 输入 |
-| SmartDNS 服务 | `modules/guixcfg/system/dns/smartdns.scm` | thin service-type：provision `'(smartdns)`、requirement `'(loopback networking)`（**不依赖 mihomo**）、`smartdns -f -c <store conf>`、log-file `/var/log/smartdns.log`；activation 以 regular wrapper 安装 NM `dns-change` dispatcher（NM 不执行 symlink），其物化并重载 DHCP fallback |
+| SmartDNS 服务 | `modules/guixcfg/system/dns/smartdns.scm` | thin service-type：provision `'(smartdns)`、requirement `'(loopback networking)`（**不依赖 mihomo**）、`smartdns -f -c <store conf>`、log-file `/var/log/smartdns.log`；Shepherd start（及 activation）以 regular wrapper 安装 NM `dns-change` dispatcher（NM 不执行 symlink），其物化并重载 DHCP fallback |
 | SmartDNS 配置 | `modules/guixcfg/system/dns/smartdns.conf` | bind/bind-tcp 仅 127.0.0.1:53；默认上游 223.5.5.5、119.29.29.29；DHCP IPv4 `-fallback` include；cache-size 8192；无 cache-persist、无测速/分流 |
 | Host 装配 | `modules/guixcfg/hosts/vm.scm` | `(system-dns-etc-service)`、`(smartdns-service)`；NM `(shepherd-requirement '())` |
 
@@ -91,7 +91,7 @@
 
 ### 3.4 测试锁定（tests/）
 
-- `test-smartdns.scm` S1-S9：绑定面（无 ::1、无通配）、静态 resolv.conf、resolvconf 重定向、service graph、bootstrap 退役、**上游 DIRECT 规则存在（自举必需）**、公开配置无 secret 面、DHCP fallback parser/dispatcher、regular dispatcher wrapper；`test-runtime-exec.scm` SD1-SD2 实际执行 parser，锁定严格 IPv4、去重和空 DHCP metadata 清空行为；
+- `test-smartdns.scm` S1-S10：绑定面（无 ::1、无通配）、静态 resolv.conf、resolvconf 重定向、service graph、bootstrap 退役、**上游 DIRECT 规则存在（自举必需）**、公开配置无 secret 面、DHCP fallback parser/dispatcher、regular dispatcher wrapper（setup 程序）、start 安装 dispatcher；`test-runtime-exec.scm` SD1-SD2 实际执行 parser，锁定严格 IPv4、去重和空 DHCP metadata 清空行为；
 - `test-mihomo.scm` M1-M13：合成 fail-closed 矩阵、转义、占位符唯一性、无 fake-ip/dns 段、controller loopback、**provider `proxy: DIRECT`**、TUN 参数、`ipv6: false`、daemon 参数与 requirement、machine-state rule、secret decl。
 
 ---

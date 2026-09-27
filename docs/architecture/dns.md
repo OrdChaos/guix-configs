@@ -67,8 +67,11 @@ DHCP DNS（动态 fallback；认证前 captive portal 可用）
 - **openresolv 保留**：不再写 `/etc/resolv.conf`，改为产出 DHCP DNS 的
   `/run` metadata；NetworkManager 官方 `dns-change` dispatcher 严格提取 IPv4
   nameserver，原子生成 SmartDNS 的 `-fallback` include 并 SIGHUP 重载。其 hook
-  必须是 root-owned regular file（NM 拒绝符号链接），因此 activation 以原子替换
-  创建一个调用 store program 的最小 wrapper。openresolv 会合并当前所有非 private
+  必须是 root-owned regular file（NM 拒绝符号链接），因此由 `smartdns` 的
+  Shepherd start 在真实 root 上原子写入调用 store program 的最小 wrapper；
+  activation 也调用同一 setup（覆盖 live reconfigure）。boot 早期 activation
+  在本仓库的 ephemeral-root 流程里写 `/etc` 不落盘，故不能只依赖 activation
+  （2026-09-28 重启后 wrapper 缺失、手动执行同一段代码才成功）。openresolv 会合并当前所有非 private
   条目并按 metric 排序，故 Wi-Fi、有线和多个有线连接的全局有效 DNS 都进入 fallback。
   这样 captive portal 认证前能使用本地 DHCP DNS，正常网络仍优先固定上游。
 - **固定 upstream 用 IP literal**：无 hostname bootstrap 路径，也

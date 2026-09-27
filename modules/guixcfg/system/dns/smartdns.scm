@@ -38,6 +38,7 @@
                           %smartdns-dhcp-fallback-file
                           %smartdns-dhcp-fallback-program
                           %smartdns-dhcp-dispatcher
+                          %smartdns-runtime-setup
                           smartdns-shepherd-service
                           smartdns-service-type
                           smartdns-service))
@@ -147,31 +148,47 @@
                                    "reload" "smartdns"))
              (error "failed to reload smartdns")))))))
 
+(define %smartdns-runtime-setup
+  ;; Install the NetworkManager dispatcher wrapper and materialize the DHCP
+  ;; fallback include.  NetworkManager 1.54 rejects dispatcher symlinks, and
+  ;; Guix's etc-service can only project store objects as symlinks, so a
+  ;; root-owned regular wrapper must be written directly.
+  ;;
+  ;; This runs from the SmartDNS shepherd start, which executes on the real
+  ;; root after file-systems; boot-time activation runs too early in the
+  ;; custom ephemeral-root flow for /etc writes to survive (2026-09-28:
+  ;; wrapper absent after reboot but created by the same code run manually
+  ;; post-boot).  Activation still invokes it to cover live reconfigure.
+  (program-file
+   "smartdns-runtime-setup"
+   (with-imported-modules
+    (source-module-closure '((guix build utils)))
+    #~(begin
+        (use-modules (guix build utils))
+        (let* ((target #$%smartdns-dhcp-dispatcher-path)
+               (new (string-append target ".new")))
+          (mkdir-p (dirname target))
+          (call-with-output-file
+           new
+           (lambda (port)
+             (format port "#!~a~%exec ~a \"$@\"~%"
+                     #$(file-append bash-minimal "/bin/sh")
+                     #$%smartdns-dhcp-dispatcher)))
+          (chmod new #o555)
+          (rename-file new target))
+        (mkdir-p #$%smartdns-runtime-directory)
+        (chmod #$%smartdns-runtime-directory #o755)
+        (unless (zero? (system* #$%smartdns-dhcp-fallback-program))
+          (error "failed to materialize DHCP DNS fallback"))))))
+
 (define (smartdns-activation)
-  "Install NetworkManager's required regular dispatcher file and materialize
-the runtime include before the resolver starts.  This covers a live
-reconfigure while NetworkManager already has an active DHCP lease; otherwise
-no new dns-change event is emitted to populate the include."
+  "Install the dispatcher wrapper and materialize the runtime include.  On a
+live reconfigure NetworkManager may already hold an active DHCP lease, so no
+new dns-change event would populate the include otherwise."
   #~(begin
        (use-modules (guix build utils))
-       ;; NetworkManager 1.54 rejects dispatcher symlinks.  Guix's etc-service
-       ;; projects store objects as symlinks, so a root-owned regular wrapper
-       ;; must be installed by activation instead.
-       (let* ((target #$%smartdns-dhcp-dispatcher-path)
-              (new (string-append target ".new")))
-         (mkdir-p (dirname target))
-         (call-with-output-file
-          new
-          (lambda (port)
-            (format port "#!~a~%exec ~a \"$@\"~%"
-                    #$(file-append bash-minimal "/bin/sh")
-                    #$%smartdns-dhcp-dispatcher)))
-         (chmod new #o555)
-         (rename-file new target))
-       (mkdir-p #$%smartdns-runtime-directory)
-       (chmod #$%smartdns-runtime-directory #o755)
-       (unless (zero? (system* #$%smartdns-dhcp-fallback-program))
-         (error "failed to materialize DHCP DNS fallback"))))
+       (unless (zero? (system* #$%smartdns-runtime-setup))
+         (error "failed to set up SmartDNS runtime"))))
 
 (define (smartdns-shepherd-service)
   (list (shepherd-service
@@ -185,10 +202,15 @@ upstreams; DHCP DNS is a runtime fallback after fixed upstream failure).")
                   'reload SIGHUP
                   #:documentation
                   "Reload SmartDNS after NetworkManager changes DHCP DNS.")))
-          (start #~(make-forkexec-constructor
-                   (list #$(file-append smartdns "/sbin/smartdns")
-                         "-f" "-c" #$%smartdns-config-file)
-                   #:log-file #$%smartdns-log-file))
+          (start #~(begin
+                     ;; Install the dispatcher wrapper and materialize the
+                     ;; include on the real root before the resolver starts.
+                     (unless (zero? (system* #$%smartdns-runtime-setup))
+                       (error "failed to set up SmartDNS runtime"))
+                     (make-forkexec-constructor
+                      (list #$(file-append smartdns "/sbin/smartdns")
+                            "-f" "-c" #$%smartdns-config-file)
+                      #:log-file #$%smartdns-log-file)))
          (stop #~(make-kill-destructor)))))
 
 (define smartdns-service-type

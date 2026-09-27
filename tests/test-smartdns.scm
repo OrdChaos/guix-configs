@@ -164,11 +164,12 @@
                    (string-contains %dhcp-dispatcher-text "smartdns")))
 
 ;; ── S9：dispatcher 文件类型与已连接网络上的 live reconfigure ──
-(test-assert "S9: activation creates a regular dispatcher wrapper and materializes metadata"
+(test-assert "S9: runtime setup creates a regular dispatcher wrapper and materializes metadata"
              (let ((source (call-with-input-file
                             "modules/guixcfg/system/dns/smartdns.scm"
                             get-string-all)))
                (and (not (string-contains source "smartdns-etc-service"))
+                    (string-contains source "(define %smartdns-runtime-setup")
                     (string-contains source "(define (smartdns-activation)")
                     (string-contains source "rename-file new target")
                     (string-contains source "exec ~a")
@@ -177,5 +178,16 @@
                                      "failed to materialize DHCP DNS fallback")
                     (string-contains source
                                      "system* #$%smartdns-dhcp-fallback-program"))))
+
+(test-assert "S10: smartdns start installs the dispatcher before exec'ing the daemon"
+             ;; Boot-time activation runs before the real root is fully ready
+             ;; in the ephemeral-root flow, so the wrapper install must also
+             ;; run from the shepherd start (2026-09-28 reboot regression).
+             (let ((source (call-with-input-file
+                            "modules/guixcfg/system/dns/smartdns.scm"
+                            get-string-all)))
+               (and (string-contains source
+                                     "system* #$%smartdns-runtime-setup")
+                    (string-contains source "failed to set up SmartDNS runtime"))))
 
 (test-end "smartdns")
