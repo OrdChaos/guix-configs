@@ -42,7 +42,6 @@
                #:use-module (guixcfg hosts common)         ; 共享 host composition algorithm
                #:use-module (guixcfg inventory hosts)      ; Host ID → hostname 单一映射
                #:use-module (guixcfg system graphics nvidia) ; nvidia-system-transformation（laptop 专属）
-               #:use-module (guixcfg system gaming)        ; gaming host infrastructure（controller udev + 游戏库目录）
                #:use-module (guixcfg users user)           ; %primary-user（结构事实权威源）
                #:use-module (guixcfg home user)            ; guix-home（挂入 system）
                #:use-module (guixcfg security secrets)     ; secrets 部署机制
@@ -51,7 +50,6 @@
                #:use-module (guixcfg apps selection)  ; application-configuration-selection
                #:use-module (guixcfg system machine-state-persistence) ; machine-state binds
                #:use-module (guixcfg system network-manager-persistence) ; saved connection profiles
-               #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind
                #:use-module (guixcfg system mihomo service) ; %mihomo-secrets、%mihomo-data-persistence-rule
                #:export (%lenovo-legion-y7000p-storage-policy
                          %lenovo-legion-y7000p-application-configuration-selections
@@ -102,21 +100,6 @@
 ;; 共用）。Flatpak 部分使用 common 的共享事实（全局 selection 投影）。
 (define %persistent-mount-file-systems
   (host-persistent-mount-file-systems))
-
-;; Mihomo 数据目录（providers cache + 选中节点/组状态）的 machine-state
-;; bind（root-owned system state；backing/consumer 0700 由 mihomo
-;; activation 强制——modules/guixcfg/system/mihomo/service.scm）。
-(define %mihomo-machine-state-file-systems
-  (machine-state-persistence-file-systems
-   (list %mihomo-data-persistence-rule)))
-
-;; Noctalia Greeter state dir（sync.toml / 同步 wallpaper / output
-;; 状态）的 machine-state bind（greeter-owned system state；backing
-;; 两侧 0750 + greeter:greeter 由 noctalia-greeter activation 强制——
-;; modules/guixcfg/system/noctalia-greeter.scm）。
-(define %noctalia-greeter-machine-state-file-systems
-  (machine-state-persistence-file-systems
-   (list %noctalia-greeter-persistence-rule)))
 
 ;; GUI-created NetworkManager keyfile profiles only.  Derived/volatile state
 ;; under /var/lib/NetworkManager remains on the ephemeral root.
@@ -171,9 +154,6 @@
   (make-base-host-operating-system
    #:host-name (host-name-for-id "lenovo-legion-y7000p")
    #:persistent-mount-file-systems %persistent-mount-file-systems
-   #:mihomo-machine-state-file-systems %mihomo-machine-state-file-systems
-   #:noctalia-greeter-machine-state-file-systems
-   %noctalia-greeter-machine-state-file-systems
    #:additional-machine-state-file-systems
    %network-manager-machine-state-file-systems
    #:user-services %lenovo-legion-y7000p-user-services))

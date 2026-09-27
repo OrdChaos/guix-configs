@@ -29,8 +29,6 @@
                #:use-module (guixcfg utils repository-source) ; repository-file（VM 测试 sentinel 密文）
                #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
                #:use-module (guixcfg apps model)      ; applications-secrets
-               #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
-               #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind
                #:use-module (guixcfg system mihomo service) ; %mihomo-secrets、%mihomo-data-persistence-rule
                #:export (%vm-storage-policy %vm-services %vm-test-secrets
                                             %vm-os))
@@ -66,21 +64,6 @@
 (define %persistent-mount-file-systems
   (host-persistent-mount-file-systems))
 
-;; Mihomo 数据目录（providers cache + 选中节点/组状态）的 machine-state
-;; bind（root-owned system state；backing/consumer 0700 由 mihomo
-;; activation 强制——modules/guixcfg/system/mihomo/service.scm）。
-(define %mihomo-machine-state-file-systems
-  (machine-state-persistence-file-systems
-   (list %mihomo-data-persistence-rule)))
-
-;; Noctalia Greeter state dir（sync.toml / 同步 wallpaper / output
-;; 状态）的 machine-state bind（greeter-owned system state；
-;; backing/consumer 0750 + greeter:greeter 由 noctalia-greeter
-;; activation 强制——modules/guixcfg/system/noctalia-greeter.scm）。
-(define %noctalia-greeter-machine-state-file-systems
-  (machine-state-persistence-file-systems
-   (list %noctalia-greeter-persistence-rule)))
-
 (define %vm-services
   (make-host-services
    ;; QEMU user-mode 网络（SLIRP：DHCP 10.0.2.15 / DNS 10.0.2.3）。
@@ -111,9 +94,6 @@
   (make-base-host-operating-system
    #:host-name (host-name-for-id "vm")
    #:persistent-mount-file-systems %persistent-mount-file-systems
-   #:mihomo-machine-state-file-systems %mihomo-machine-state-file-systems
-   #:noctalia-greeter-machine-state-file-systems
-   %noctalia-greeter-machine-state-file-systems
    #:user-services %vm-user-services))
 
 ;; 最终 OS：account fold + machine-identity + account-databases 投影

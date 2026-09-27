@@ -30,6 +30,7 @@
 (define-module (guixcfg hosts common)
                #:use-module (gnu)                          ; operating-system、user-account、service 等
                #:use-module (gnu services base)            ; mingetty-service-type、guix-service-type、modify-services
+               #:use-module (gnu services linux)           ; kernel-module-loader-service-type
                #:use-module (gnu services networking)      ; network-manager-service-type
                #:use-module (gnu system shadow)            ; account-service-type（折叠 account 列表）
                #:use-module (gnu services guix)            ; guix-home-service-type
@@ -96,6 +97,13 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
            (host-application-persistence-rules)
            (user-profile-name %primary-user))))
 
+;; Mihomo and Noctalia are common system services, so their machine-owned
+;; state binds belong to the shared base OS rather than each host assembly.
+(define %common-machine-state-file-systems
+  (machine-state-persistence-file-systems
+   (list %mihomo-data-persistence-rule
+         %noctalia-greeter-persistence-rule)))
+
 ;;; ── TTY login prompt 的强语义（docs/architecture/accounts-sessions.md）
 ;;; login: 出现 = interactive-session-ready 已过——mingetty 延迟到
 ;;; barrier 之后；PAM gate 是 correctness fallback。tty1 归 greetd
@@ -159,6 +167,9 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
           ;; 基础设施不再按设备差异组装（NVIDIA PRIME 差异只留在
           ;; Home/environment adapter 与 OS transformation）。
           %gaming-system-services
+          ;; Wine's NTSync backend needs /dev/ntsync.  Every host shares
+          ;; the same kernel platform, so module loading is common policy.
+          (list (service kernel-module-loader-service-type '("ntsync")))
           ;; host-only system services。
           additional-system-services
           ;; TTY 强语义（mingetty gated + 无 tty1）。
@@ -236,8 +247,6 @@ sentinel + mihomo + applications）；HOME-ENVIRONMENT 是挂入 system
 (define* (make-base-host-operating-system #:key
                                           host-name
                                           persistent-mount-file-systems
-                                          mihomo-machine-state-file-systems
-                                          noctalia-greeter-machine-state-file-systems
                                           (additional-machine-state-file-systems
                                            '())
                                           user-services)
@@ -267,12 +276,11 @@ make-host-operating-system 的产物。"
           ;; 无状态根（docs/architecture/storage.md）。
           (initrd microcode-ephemeral-initrd)
           (file-systems (append (system-file-systems %ephemeral-root-file-system)
-                                ;; selected user persistence（bind mounts，登录前就位）
-                                persistent-mount-file-systems
-                                ;; machine-state binds（root-owned / greeter-owned）
-                                mihomo-machine-state-file-systems
-                                noctalia-greeter-machine-state-file-systems
-                                additional-machine-state-file-systems
+                                 ;; selected user persistence（bind mounts，登录前就位）
+                                 persistent-mount-file-systems
+                                 ;; machine-state binds（root-owned / greeter-owned）
+                                 %common-machine-state-file-systems
+                                 additional-machine-state-file-systems
                                 %base-file-systems))
           
           (swap-devices %swap-spaces)
