@@ -71,12 +71,12 @@
 (define %gate-directory %session-gate-directory)
 (define %gate-file-name %session-gate-file-name)
 
-;; 当前 authoritative capability 集合（原 tools/reconfigure.sh 列表；
-;; guixcfg-password-project 是已删除的旧 provision，见
-;; docs/architecture/upstream-boundaries.md）。
+;; 当前 authoritative readiness capability 集合（capability 名，不是实现
+;; 服务名；`interactive-secrets-ready` 由 guixcfg-secrets-deploy 这个 one-shot
+;; 服务同时 provision，见 (guixcfg security secrets)）。
 (define %readiness-capabilities
-  '(guixcfg-secrets-deploy account-state-ready persistent-state-ready
-                           home-ready session-infra-ready interactive-session-ready))
+  '(interactive-secrets-ready account-state-ready persistent-state-ready
+                              home-ready session-infra-ready interactive-session-ready))
 
 ;; 需要 `guix system reconfigure` 热重启的长期运行 Shepherd daemon。
 ;; pinned Guix 不重启运行中服务（见头部注释），因此这里显式 restart。

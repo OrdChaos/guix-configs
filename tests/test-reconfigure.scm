@@ -400,8 +400,8 @@
               "A reconfigure is in progress.\n" captured-gate))
 
 (test-equal "readiness capability set unchanged"
-            '(guixcfg-secrets-deploy account-state-ready persistent-state-ready
-                                     home-ready session-infra-ready interactive-session-ready)
+            '(interactive-secrets-ready account-state-ready persistent-state-ready
+                                        home-ready session-infra-ready interactive-session-ready)
             %readiness-capabilities)
 
 (test-equal "hot restart services include mihomo"
