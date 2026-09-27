@@ -24,7 +24,6 @@
 
 (define-module (guixcfg system dns smartdns)
                 #:use-module (gnu services)          ; service、service-type、service-extension
-                #:use-module (gnu services base)     ; activation-service-type
                 #:use-module (gnu services shepherd) ; shepherd-service、shepherd-signal-action
                 #:use-module (gnu packages bash)     ; bash-minimal（NM dispatcher wrapper）
                 #:use-module (gnu packages dns)      ; smartdns
@@ -39,6 +38,7 @@
                           %smartdns-dhcp-fallback-program
                           %smartdns-dhcp-dispatcher
                           %smartdns-runtime-setup
+                          smartdns-dhcp-setup-shepherd-service
                           smartdns-shepherd-service
                           smartdns-service-type
                           smartdns-service))
@@ -181,19 +181,33 @@
         (unless (zero? (system* #$%smartdns-dhcp-fallback-program))
           (error "failed to materialize DHCP DNS fallback"))))))
 
-(define (smartdns-activation)
-  "Install the dispatcher wrapper and materialize the runtime include.  On a
-live reconfigure NetworkManager may already hold an active DHCP lease, so no
-new dns-change event would populate the include otherwise."
-  #~(begin
-       (use-modules (guix build utils))
-       (unless (zero? (system* #$%smartdns-runtime-setup))
-         (error "failed to set up SmartDNS runtime"))))
+(define (smartdns-dhcp-setup-shepherd-service)
+  "one-shot: install the NetworkManager dispatcher wrapper and materialize
+the DHCP fallback include on the real root, before smartdns starts.
+
+Must run as a service start, not from the service definition or from boot
+activation: calling the setup program while shepherd loads the service file
+(or from the boot PID1 activation via a nested `system*') deadlocks on child
+reaping (2026-09-28: the deployed generation hung before shepherd started).
+The start thunk below runs on the real root after file-systems, matching the
+proven mihomo-config-ready / gvfs-mount-metadata pattern."
+  (list (shepherd-service
+         (provision '(smartdns-dhcp-setup))
+         (requirement '(loopback))
+         (one-shot? #t)
+         (respawn? #f)
+         (documentation
+          "Write the regular NetworkManager dns-change dispatcher wrapper and
+materialize /run/smartdns/dhcp-upstreams.conf.")
+         (start #~(lambda ()
+                    (unless (zero? (system* #$%smartdns-runtime-setup))
+                      (error "failed to set up SmartDNS runtime"))))
+         (stop #~(const #f)))))
 
 (define (smartdns-shepherd-service)
   (list (shepherd-service
          (provision '(smartdns))
-         (requirement '(loopback networking))
+         (requirement '(loopback networking smartdns-dhcp-setup))
           (documentation
            "Run SmartDNS as the system resolver (loopback only; fixed \
 upstreams; DHCP DNS is a runtime fallback after fixed upstream failure).")
@@ -202,15 +216,10 @@ upstreams; DHCP DNS is a runtime fallback after fixed upstream failure).")
                   'reload SIGHUP
                   #:documentation
                   "Reload SmartDNS after NetworkManager changes DHCP DNS.")))
-          (start #~(begin
-                     ;; Install the dispatcher wrapper and materialize the
-                     ;; include on the real root before the resolver starts.
-                     (unless (zero? (system* #$%smartdns-runtime-setup))
-                       (error "failed to set up SmartDNS runtime"))
-                     (make-forkexec-constructor
-                      (list #$(file-append smartdns "/sbin/smartdns")
-                            "-f" "-c" #$%smartdns-config-file)
-                      #:log-file #$%smartdns-log-file)))
+          (start #~(make-forkexec-constructor
+                   (list #$(file-append smartdns "/sbin/smartdns")
+                         "-f" "-c" #$%smartdns-config-file)
+                   #:log-file #$%smartdns-log-file))
          (stop #~(make-kill-destructor)))))
 
 (define smartdns-service-type
@@ -218,9 +227,9 @@ upstreams; DHCP DNS is a runtime fallback after fixed upstream failure).")
    (name 'smartdns)
      (extensions
       (list (service-extension shepherd-root-service-type
-                               (lambda (config) (smartdns-shepherd-service)))
-            (service-extension activation-service-type
-                               (lambda (config) (smartdns-activation)))))
+                               (lambda (config)
+                                 (append (smartdns-dhcp-setup-shepherd-service)
+                                         (smartdns-shepherd-service))))))
    (default-value #t)
     (description
     "Run SmartDNS as the sole system resolver: loopback-only listener \

@@ -111,7 +111,9 @@
 (test-assert "S4: smartdns service present with loopback+networking"
              (and %smartdns-svc
                   (memq 'loopback (shepherd-service-requirement %smartdns-svc))
-                  (memq 'networking (shepherd-service-requirement %smartdns-svc))))
+                  (memq 'networking (shepherd-service-requirement %smartdns-svc))
+                  (memq 'smartdns-dhcp-setup
+                        (shepherd-service-requirement %smartdns-svc))))
 (test-assert "S4: smartdns start runs foreground with config and log-file"
              ;; file-like ungexp 在 approximate-sexp 里是 (*approximate*)
              ;; 占位（store 路径要 lower 才有）——只断言字面量与 log-file。
@@ -164,30 +166,43 @@
                    (string-contains %dhcp-dispatcher-text "smartdns")))
 
 ;; ── S9：dispatcher 文件类型与已连接网络上的 live reconfigure ──
-(test-assert "S9: runtime setup creates a regular dispatcher wrapper and materializes metadata"
+(define %smartdns-setup-svc
+  (shepherd-service-with-provision 'smartdns-dhcp-setup))
+
+(test-assert "S9: setup is a one-shot shepherd service that installs the wrapper"
              (let ((source (call-with-input-file
                             "modules/guixcfg/system/dns/smartdns.scm"
                             get-string-all)))
                (and (not (string-contains source "smartdns-etc-service"))
+                    (not (string-contains source "smartdns-activation"))
+                    (string-contains source
+                                     "(define (smartdns-dhcp-setup-shepherd-service)")
+                    (and %smartdns-setup-svc
+                         (shepherd-service-one-shot? %smartdns-setup-svc)
+                         (memq 'smartdns-dhcp-setup
+                               (shepherd-service-provision %smartdns-setup-svc)))
                     (string-contains source "(define %smartdns-runtime-setup")
-                    (string-contains source "(define (smartdns-activation)")
                     (string-contains source "rename-file new target")
                     (string-contains source "exec ~a")
                     (string-contains source "$@")
                     (string-contains source
-                                     "failed to materialize DHCP DNS fallback")
-                    (string-contains source
-                                     "system* #$%smartdns-dhcp-fallback-program"))))
+                                     "failed to materialize DHCP DNS fallback"))))
 
-(test-assert "S10: smartdns start installs the dispatcher before exec'ing the daemon"
-             ;; Boot-time activation runs before the real root is fully ready
-             ;; in the ephemeral-root flow, so the wrapper install must also
-             ;; run from the shepherd start (2026-09-28 reboot regression).
+(test-assert "S10: runtime setup runs from a service start, never at load time"
+             ;; Running the setup program while shepherd loads the service file
+             ;; deadlocks child reaping (2026-09-28 boot hang); it must be
+             ;; invoked from a start thunk instead.
              (let ((source (call-with-input-file
                             "modules/guixcfg/system/dns/smartdns.scm"
                             get-string-all)))
                (and (string-contains source
                                      "system* #$%smartdns-runtime-setup")
-                    (string-contains source "failed to set up SmartDNS runtime"))))
+                    (string-contains source "failed to set up SmartDNS runtime")
+                    ;; the smartdns daemon itself must not carry the setup call
+                    (not (string-contains
+                          (object->string
+                           (gexp->approximate-sexp
+                            (shepherd-service-start %smartdns-svc)))
+                          "smartdns-runtime-setup")))))
 
 (test-end "smartdns")

@@ -66,7 +66,7 @@
 |---|---|---|
 | 静态 resolv.conf | `modules/guixcfg/system/dns/ownership.scm` | `%system-resolv-conf`（plain-file `"nameserver 127.0.0.1\n"`）、`%dhcp-dns-metadata-path`（`/run/resolvconf/resolv.conf`）、`system-dns-etc-service` |
 | resolvconf 重定向 | `modules/guixcfg/system/dns/resolvconf.conf` | `resolv_conf=/run/resolvconf/resolv.conf` + 全部非 libc subscriber 显式 `*_enabled=NO`；该 metadata 是 DHCP fallback 输入 |
-| SmartDNS 服务 | `modules/guixcfg/system/dns/smartdns.scm` | thin service-type：provision `'(smartdns)`、requirement `'(loopback networking)`（**不依赖 mihomo**）、`smartdns -f -c <store conf>`、log-file `/var/log/smartdns.log`；Shepherd start（及 activation）以 regular wrapper 安装 NM `dns-change` dispatcher（NM 不执行 symlink），其物化并重载 DHCP fallback |
+| SmartDNS 服务 | `modules/guixcfg/system/dns/smartdns.scm` | thin service-type：one-shot `smartdns-dhcp-setup`（安装 NM `dns-change` dispatcher regular wrapper 并物化 DHCP fallback include）+ `smartdns`（provision `'(smartdns)`、requirement `'(loopback networking smartdns-dhcp-setup)`、`smartdns -f -c <store conf>`、log-file `/var/log/smartdns.log`）；setup 必须在 service start 执行（见 dns.md 决策） |
 | SmartDNS 配置 | `modules/guixcfg/system/dns/smartdns.conf` | bind/bind-tcp 仅 127.0.0.1:53；默认上游 223.5.5.5、119.29.29.29；DHCP IPv4 `-fallback` include；cache-size 8192；无 cache-persist、无测速/分流 |
 | Host 装配 | `modules/guixcfg/hosts/vm.scm` | `(system-dns-etc-service)`、`(smartdns-service)`；NM `(shepherd-requirement '())` |
 
