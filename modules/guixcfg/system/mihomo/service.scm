@@ -22,9 +22,10 @@
 ;;;   immutable:  /gnu/store/...-mihomo-template.yaml（公开模板）
 ;;;   runtime:    /run/mihomo/config.yaml（materializer 合成，0600 root）
 ;;;   secret:     /run/guixcfg-secrets-ordinary/system/mihomo-subscription.url
-;;;   persistent: /var/lib/clash/providers（machine-state bind，0700）
+;;;   persistent: /var/lib/clash（整个 -d：providers cache + cache.db，
+;;;               machine-state bind，0700）
 ;;;   log:        /var/log/mihomo.log（ephemeral，root 0640）
-;;; 不整体 persist /var/lib/clash；config.yaml 不在 -d 下（-f 指定）。
+;;; config.yaml 不在 -d 下（-f 指定）。
 ;;;
 ;;; secret 边界（诚实声明，见 docs/architecture/mihomo.md）：
 ;;;   - ciphertext colocate 本模块（secrets/mihomo-subscription.url.age，
@@ -206,24 +207,26 @@ auto-route/auto-redirect; external controller on loopback only).")
 ;; ────────────────────────────────────────────────────────────
 
 (define (mihomo-activation)
-  "系统 activation：数据目录、providers 及其 machine-state backing
-的 mkdir + 0700（backing 由 generic machine-state activation 以 0755
-创建，本 activation 无论先后都最终强制 0700——隔离 0644 的 provider
-cache 文件）。"
+  "系统 activation：数据目录与其 machine-state backing 的 mkdir + 0700。
+路径从 %mihomo-data-persistence-rule 派生（backing 相对 %machine-state-root、
+consumer 绝对），避免与规则漂移。generic machine-state activation 只 mkdir
+0755；本 activation 无论先后都最终强制 0700——Mihomo 以 0644 写 provider
+cache 文件，隔离靠不可遍历的 0700 parent。"
   (with-imported-modules (source-module-closure '((guix build utils)))
                          #~(begin
                             (use-modules (guix build utils))
-                            (let ((providers
-                                   (string-append #$%mihomo-data-directory
-                                                  "/providers"))
-                                  (backing
-                                   (string-append #$%machine-state-root
-                                                  "/mihomo/providers")))
-                              (mkdir-p #$%mihomo-data-directory)
-                              (mkdir-p providers)
+                            (let ((backing
+                                   (string-append
+                                    #$%machine-state-root "/"
+                                    #$(machine-state-persistence-rule-backing
+                                       %mihomo-data-persistence-rule)))
+                                  (consumer
+                                   #$(machine-state-persistence-rule-consumer
+                                      %mihomo-data-persistence-rule)))
                               (mkdir-p backing)
-                              (chmod providers #o700)
-                              (chmod backing #o700)))))
+                              (chmod backing #o700)
+                              (mkdir-p consumer)
+                              (chmod consumer #o700)))))
 
 (define (mihomo-account)
   "clash 系统组（daemon 以 root 运行 + clash 组；TUN 需要 root，

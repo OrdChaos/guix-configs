@@ -240,6 +240,16 @@
                   (string=? (machine-state-persistence-rule-consumer
                              %mihomo-data-persistence-rule)
                             "/var/lib/clash")))
+(test-assert "M12: activation chmods the rule backing (no providers-only drift)"
+             ;; Regression: activation used to chmod a stale
+             ;; /persist/.../mihomo/providers path, leaving the real
+             ;; mihomo/clash backing at generic 0755.
+             (let ((source (call-with-input-file
+                            "modules/guixcfg/system/mihomo/service.scm"
+                            get-string-all)))
+               (and (string-contains source
+                                     "machine-state-persistence-rule-backing")
+                    (not (string-contains source "\"/mihomo/providers\"")))))
 
 ;; ── M13：subscription secret 归 mihomo 模块（无 host 层）─────
 (test-assert "M13: subscription secret declared by the mihomo module"
