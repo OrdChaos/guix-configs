@@ -136,30 +136,31 @@ exposure)"
 (define (run-update-symlinks root old-gen new-gen)
   "在 fake root 里执行 update-symlinks（HOME=/home/user；
 GUIX_OLD_HOME/GUIX_NEW_HOME 指向 fake generations）。"
-  ;; fake root 无 env/sh 二进制：环境变量在 chroot 外层设置
-  ;; （chroot 继承环境，不重置）。
+  ;; Guix's immutable /gnu/store cannot be bind-cloned by an unprivileged user
+  ;; namespace.  Keep it visible and overlay only the fake mutable HOME.
   (let* ((cmd (string-append
-               "unshare --user --map-root-user --map-users=auto "
-               "--map-groups=auto --mount --pid --fork sh -c '"
-               "mount --bind /gnu/store " root "/gnu/store; "
-               "unset XDG_CONFIG_HOME XDG_DATA_HOME; "
-               "HOME=/home/user"
-               (if old-gen (string-append " GUIX_OLD_HOME=" old-gen) "")
-               " GUIX_NEW_HOME=" new-gen " "
-               "chroot " root " " %guile
-               " --no-auto-compile " %update-symlinks
+                "unshare --user --map-root-user --map-users=auto "
+                "--map-groups=auto --mount --pid --fork sh -c '"
+                "mount --bind " root "/home /home && "
+                "unset XDG_CONFIG_HOME XDG_DATA_HOME; "
+                "HOME=/home/user"
+                (if old-gen
+                    (string-append " GUIX_OLD_HOME=" root old-gen)
+                    "")
+                " GUIX_NEW_HOME=" root new-gen " "
+                %guile
+                " --no-auto-compile " %update-symlinks
                " >/dev/null 2>&1'"))
          (pipe (open-input-pipe cmd))
          (_ (get-string-all pipe)))
     (close-pipe pipe)))
 
 (define (make-fake-root)
-  "带 /home/user、/gnu/store 与 genA/genB fake generations 的 root。"
+  "带 /home/user 与 genA/genB fake generations 的 root。"
   (let* ((root (string-append (or (getenv "TMPDIR") "/tmp")
                               "/guixcfg-mixed-" (number->string (getpid))
                               "-" (number->string (random 100000))))
          (home (string-append root "/home/user")))
-    (mkdir-p (string-append root "/gnu/store"))
     (mkdir-p (string-append home "/.config/fish"))
     ;; genA：声明 config.fish + conf.d/foo.fish（store symlink）
     (let ((gen-a (string-append root "/genA/files/.config/fish")))

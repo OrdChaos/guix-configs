@@ -1,4 +1,4 @@
-;;; SmartDNS / system DNS ownership 单元测试（S1-S8）。
+;;; SmartDNS / system DNS ownership 单元测试（S1-S9）。
 ;;;
 ;;; 覆盖：
 ;;;   S1 smartdns 配置静态契约（loopback-only、无 cache-persist、
@@ -10,6 +10,8 @@
 ;;;   S6 mihomo rules 包含 SmartDNS fixed upstream DIRECT（自举必需）
 ;;;   S7 store 无 secret/无网络依赖（配置纯公开文本）
 ;;;   S8 DHCP metadata parser/dispatcher 的安全投影契约
+;;;   S9 activation creates the regular NM dispatcher wrapper and materializes
+;;;      existing DHCP metadata (live reconfigure)
 
 (use-modules (guix store)
              (guix monads)
@@ -157,8 +159,23 @@
                   (string-contains %dhcp-fallback-program-text
                                    "/run/resolvconf/resolv.conf")))
 (test-assert "S8: dispatcher reacts only to NetworkManager dns-change"
-             (and (string-contains %dhcp-dispatcher-text "dns-change")
-                  (string-contains %dhcp-dispatcher-text "reload")
-                  (string-contains %dhcp-dispatcher-text "smartdns")))
+              (and (string-contains %dhcp-dispatcher-text "dns-change")
+                   (string-contains %dhcp-dispatcher-text "reload")
+                   (string-contains %dhcp-dispatcher-text "smartdns")))
+
+;; ── S9：dispatcher 文件类型与已连接网络上的 live reconfigure ──
+(test-assert "S9: activation creates a regular dispatcher wrapper and materializes metadata"
+             (let ((source (call-with-input-file
+                            "modules/guixcfg/system/dns/smartdns.scm"
+                            get-string-all)))
+               (and (not (string-contains source "smartdns-etc-service"))
+                    (string-contains source "(define (smartdns-activation)")
+                    (string-contains source "rename-file new target")
+                    (string-contains source "exec ~a")
+                    (string-contains source "$@")
+                    (string-contains source
+                                     "failed to materialize DHCP DNS fallback")
+                    (string-contains source
+                                     "system* #$%smartdns-dhcp-fallback-program"))))
 
 (test-end "smartdns")

@@ -26,6 +26,7 @@
                 #:use-module (gnu services)          ; service、service-type、service-extension
                 #:use-module (gnu services base)     ; activation-service-type
                 #:use-module (gnu services shepherd) ; shepherd-service、shepherd-signal-action
+                #:use-module (gnu packages bash)     ; bash-minimal（NM dispatcher wrapper）
                 #:use-module (gnu packages dns)      ; smartdns
                 #:use-module (gnu packages admin)    ; shepherd（herd）
                 #:use-module (guix gexp)
@@ -45,6 +46,8 @@
 (define %smartdns-runtime-directory "/run/smartdns")
 (define %smartdns-dhcp-fallback-file
   (string-append %smartdns-runtime-directory "/dhcp-upstreams.conf"))
+(define %smartdns-dhcp-dispatcher-path
+  "/etc/NetworkManager/dispatcher.d/50-smartdns-dhcp-fallback")
 
 ;; v1 最小配置（公开、无 secret）。上游为固定 IP literal；不启用
 ;; cache-persist（无持久化需求）；不做测速/分流。
@@ -145,22 +148,30 @@
              (error "failed to reload smartdns")))))))
 
 (define (smartdns-activation)
-  "Create the runtime include before the resolver starts.  Existing DHCP
-state remains valid across a live reconfigure until NetworkManager sends its
-next dns-change event."
+  "Install NetworkManager's required regular dispatcher file and materialize
+the runtime include before the resolver starts.  This covers a live
+reconfigure while NetworkManager already has an active DHCP lease; otherwise
+no new dns-change event is emitted to populate the include."
   #~(begin
-      (use-modules (guix build utils))
-      (mkdir-p #$%smartdns-runtime-directory)
-      (chmod #$%smartdns-runtime-directory #o755)
-      (unless (file-exists? #$%smartdns-dhcp-fallback-file)
-        (call-with-output-file #$%smartdns-dhcp-fallback-file
-          (lambda (port) #t))
-        (chmod #$%smartdns-dhcp-fallback-file #o644))))
-
-(define (smartdns-etc-service config)
-  "Install the official NetworkManager dispatcher hook declaratively."
-  `(("NetworkManager/dispatcher.d/50-smartdns-dhcp-fallback"
-     ,%smartdns-dhcp-dispatcher)))
+       (use-modules (guix build utils))
+       ;; NetworkManager 1.54 rejects dispatcher symlinks.  Guix's etc-service
+       ;; projects store objects as symlinks, so a root-owned regular wrapper
+       ;; must be installed by activation instead.
+       (let* ((target #$%smartdns-dhcp-dispatcher-path)
+              (new (string-append target ".new")))
+         (mkdir-p (dirname target))
+         (call-with-output-file
+          new
+          (lambda (port)
+            (format port "#!~a~%exec ~a \"$@\"~%"
+                    #$(file-append bash-minimal "/bin/sh")
+                    #$%smartdns-dhcp-dispatcher)))
+         (chmod new #o555)
+         (rename-file new target))
+       (mkdir-p #$%smartdns-runtime-directory)
+       (chmod #$%smartdns-runtime-directory #o755)
+       (unless (zero? (system* #$%smartdns-dhcp-fallback-program))
+         (error "failed to materialize DHCP DNS fallback"))))
 
 (define (smartdns-shepherd-service)
   (list (shepherd-service
@@ -184,11 +195,10 @@ upstreams; DHCP DNS is a runtime fallback after fixed upstream failure).")
   (service-type
    (name 'smartdns)
      (extensions
-     (list (service-extension shepherd-root-service-type
-                              (lambda (config) (smartdns-shepherd-service)))
-           (service-extension activation-service-type
-                              (lambda (config) (smartdns-activation)))
-           (service-extension etc-service-type smartdns-etc-service)))
+      (list (service-extension shepherd-root-service-type
+                               (lambda (config) (smartdns-shepherd-service)))
+            (service-extension activation-service-type
+                               (lambda (config) (smartdns-activation)))))
    (default-value #t)
     (description
     "Run SmartDNS as the sole system resolver: loopback-only listener \

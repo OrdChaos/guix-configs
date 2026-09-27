@@ -31,7 +31,7 @@ Mihomo 只负责 TUN / traffic routing / proxy policy——不做 DNS
 |---|---|---|
 | `/etc/resolv.conf` | `(guixcfg system dns ownership)`（静态，唯一 writer） | ephemeral 普通文件（etc-service 声明式，每 boot 重建）；NM/openresolv 均不再触碰 |
 | `/etc/resolvconf.conf` | `(guixcfg system dns ownership)` | 把 openresolv libc subscriber 的输出重定向到 `/run/resolvconf/resolv.conf`；其余 subscriber（named/dnsmasq/unbound/systemd-resolved/…）显式关闭 |
-| DHCP DNS | NetworkManager（经 resolvconf -a） | **不丢弃**：以 `/run/resolvconf/resolv.conf` 的形式保留；`dns-change` dispatcher 严格解析 IPv4 `nameserver` 行并原子投影到 `/run/smartdns/dhcp-upstreams.conf` |
+| DHCP DNS | NetworkManager（经 resolvconf -a） | **不丢弃**：以 `/run/resolvconf/resolv.conf` 的形式保留；root-owned regular `dns-change` dispatcher 严格解析 IPv4 `nameserver` 行并原子投影到 `/run/smartdns/dhcp-upstreams.conf`；openresolv 合并当前所有非 private 条目并按 metric 排序 |
 | SmartDNS 进程 | `(guixcfg system dns smartdns)`（thin service，Guix smartdns 47 包） | Shepherd 管理；loopback-only 监听；固定 upstream 为默认，DHCP DNS 仅 `-fallback`；cache 仅内存 |
 | upstream 出口 | `(guixcfg system mihomo config)` 模板 rules | `IP-CIDR,<upstream>/32,DIRECT,no-resolve`——上游直连（自举必需：节点服务器是域名，上游走节点 = 解析死锁；附带 DNS 不随节点存亡） |
 
@@ -66,8 +66,11 @@ DHCP DNS（动态 fallback；认证前 captive portal 可用）
   问题消失（libc subscriber 输出已重定向 /run，NM 不再写 /etc）。
 - **openresolv 保留**：不再写 `/etc/resolv.conf`，改为产出 DHCP DNS 的
   `/run` metadata；NetworkManager 官方 `dns-change` dispatcher 严格提取 IPv4
-  nameserver，原子生成 SmartDNS 的 `-fallback` include 并 SIGHUP 重载。这样
-  captive portal 认证前能使用本地 DHCP DNS，正常网络仍优先固定上游。
+  nameserver，原子生成 SmartDNS 的 `-fallback` include 并 SIGHUP 重载。其 hook
+  必须是 root-owned regular file（NM 拒绝符号链接），因此 activation 以原子替换
+  创建一个调用 store program 的最小 wrapper。openresolv 会合并当前所有非 private
+  条目并按 metric 排序，故 Wi-Fi、有线和多个有线连接的全局有效 DNS 都进入 fallback。
+  这样 captive portal 认证前能使用本地 DHCP DNS，正常网络仍优先固定上游。
 - **固定 upstream 用 IP literal**：无 hostname bootstrap 路径，也
   不经过 SLIRP 的 10.0.2.3——宿主 Fake-IP 污染被彻底隔离（此前
   guest 收到的 198.18.0.x 来自宿主 resolver，本链不再经过它）。

@@ -10,12 +10,13 @@
 ;;; projection 唯一 writer，见 A1-A8 的 shadow 行格式断言。）
 ;;;
 ;;; 本测试真正 build generated executable artifact 并在隔离 root
-;;; （user namespace + chroot + bind /gnu/store）里执行它，验证：
+;;; （user + mount namespace；fake system directories overlaid onto the
+;;; namespace while the host's immutable /gnu/store remains visible）里执行它，验证：
 ;;;   - 模块 closure 完整、无 unbound-variable（可执行性）；
 ;;;   - 成功/失败路径的真实行为（fail-closed：不产空密码用户、
 ;;;     不破坏 shadow）。
 ;;;
-;;; 需要 unshare（util-linux）与 chroot 权限（user namespace 提供）。
+;;; 需要 unshare（util-linux）权限（user namespace 提供）。
 ;;; 隔离 root 是临时目录；不触碰真实 /etc、/persist。
 ;;;
 ;;; A1-A8 覆盖 account databases projection（唯一 /etc/shadow writer）：
@@ -93,18 +94,37 @@
          (line (call-with-input-file prog
                                      (lambda (p) (read-line p)))))
     (and (string-prefix? "#!" line)
-         (car (string-split (substring line 2) #\space)))))
+          (car (string-split (substring line 2) #\space)))))
+
+(define %sandbox-directories '("etc" "persist" "home" "var" "proc" "run"))
+
+(define (sandbox-mounts root)
+  "Return mounts that overlay all mutable absolute paths with ROOT's fake
+directories.  The host's immutable /gnu/store stays in place: Guix locks its
+read-only bind mount against bind-cloning from an unprivileged user namespace."
+  (for-each (lambda (directory)
+              (mkdir-p (string-append root "/" directory)))
+            %sandbox-directories)
+  ;; /run is last because it contains the host PATH used by `mount`.
+  (string-append
+   (string-join
+    (map (lambda (directory)
+           (string-append "mount --bind " root "/" directory
+                          " /" directory))
+         %sandbox-directories)
+    " && ")
+   " && "))
 
 ;; 在隔离 root 里执行 PROGRAM（store 路径），返回 exit code。
 ;; FAKE-ROOT 含 etc/shadow 与 persist/... 的 fake 数据。
 (define (run-in-root program fake-root)
   (let ((script
-         (string-append
-          "unshare --user --map-root-user --map-users=auto --map-groups=auto "
-          "--mount --pid --fork sh -c '"
-          "mount --bind /gnu/store " fake-root "/gnu/store; "
-          "chroot " fake-root " " %guile
-           " --no-auto-compile " program
+          (string-append
+           "unshare --user --map-root-user --map-users=auto --map-groups=auto "
+           "--mount --pid --fork sh -c '"
+           (sandbox-mounts fake-root)
+           %guile
+            " --no-auto-compile " program
           " >/dev/null 2>&1; "
           "echo $?'")))
     (let* ((pipe (open-input-pipe script))
@@ -116,11 +136,11 @@
 ;; command-line contract used by NetworkManager dispatcher scripts.
 (define (run-executable-in-root program fake-root arguments)
   (let ((script
-         (string-append
-          "unshare --user --map-root-user --map-users=auto --map-groups=auto "
-          "--mount --pid --fork sh -c '"
-          "mount --bind /gnu/store " fake-root "/gnu/store; "
-          "chroot " fake-root " " program
+          (string-append
+           "unshare --user --map-root-user --map-users=auto --map-groups=auto "
+           "--mount --pid --fork sh -c '"
+           (sandbox-mounts fake-root)
+           program
           (if (null? arguments)
               ""
               (string-append " " (string-join arguments " ")))
@@ -143,7 +163,6 @@
     (mkdir (string-append dir "/persist/system/accounts"))
     (mkdir (string-append dir "/persist/system/accounts/user"))
     (mkdir (string-append dir "/gnu"))
-    (mkdir (string-append dir "/gnu/store"))
     (call-with-output-file (string-append dir "/etc/shadow")
                            (lambda (p) (display shadow-content p)))
     (chmod (string-append dir "/etc/shadow") #o600)
@@ -171,11 +190,12 @@ user:x:1000:1000:u:/home/user:/bin/bash\n" p)))
 
 (define (run-smartdns-dhcp-fallback metadata)
   (let ((root (make-fake-root "" #f)))
-    (call-with-output-file (string-append root "/input.resolvconf")
+    (mkdir-p (string-append root "/run"))
+    (call-with-output-file (string-append root "/run/input.resolvconf")
       (lambda (port) (display metadata port)))
     (let ((exit (run-executable-in-root
-                 %smartdns-dhcp-fallback-executable root
-                 '("/input.resolvconf" "/run/smartdns/dhcp-upstreams.conf"))))
+                  %smartdns-dhcp-fallback-executable root
+                  '("/run/input.resolvconf" "/run/smartdns/dhcp-upstreams.conf"))))
       (cons exit
             (let ((output (string-append root "/run/smartdns/dhcp-upstreams.conf")))
               (and (file-exists? output)
@@ -372,10 +392,10 @@ $6$salt$faketesthash:!:20682::::::\n"
                             (cdr parts))))
               paths)
     (let* ((script (string-append
-                    "unshare --user --map-root-user --map-users=auto "
-                    "--map-groups=auto --mount --pid --fork sh -c '"
-                    "mount --bind /gnu/store " dir "/gnu/store; "
-                    "chroot " dir " " %guile " --no-auto-compile " %psr-program
+                     "unshare --user --map-root-user --map-users=auto "
+                     "--map-groups=auto --mount --pid --fork sh -c '"
+                     (sandbox-mounts dir)
+                     %guile " --no-auto-compile " %psr-program
                     " 2>&1; echo $?'"))
            (pipe (open-input-pipe script))
            (all (get-string-all pipe)))
@@ -487,12 +507,10 @@ $6$salt$faketesthash:!:20682::::::\n"
     (mkdir run-dir)
     (chmod run-dir #o755))
   (let* ((script (string-append
-                  "unshare --user --map-root-user --map-users=auto "
-                  "--map-groups=auto --mount --pid --fork sh -c '"
-                  "mount --bind /gnu/store " root "/gnu/store; "
-                  ;; chroot 内 guile 的 nss 从 store glibc 的默认位置加载
-                  ;; libnss_files；/gnu/store 已 bind，这里确保加载路径就位。
-                  "chroot " root " " %guile " --no-auto-compile " %deploy-with-secret
+                   "unshare --user --map-root-user --map-users=auto "
+                   "--map-groups=auto --mount --pid --fork sh -c '"
+                   (sandbox-mounts root)
+                   %guile " --no-auto-compile " %deploy-with-secret
                   " 2>&1'"))
          (pipe (open-input-pipe script))
          (all (get-string-all pipe)))
@@ -541,10 +559,10 @@ $6$salt$faketesthash:!:20682::::::\n"
   (mkdir run-dir)
   (chmod run-dir #o755)
   (let* ((script (string-append
-                  "unshare --user --map-root-user --map-users=auto "
-                  "--map-groups=auto --mount --pid --fork sh -c '"
-                  "mount --bind /gnu/store " root "/gnu/store; "
-                  "chroot " root " " %guile " --no-auto-compile " %deploy-with-secret
+                   "unshare --user --map-root-user --map-users=auto "
+                   "--map-groups=auto --mount --pid --fork sh -c '"
+                   (sandbox-mounts root)
+                   %guile " --no-auto-compile " %deploy-with-secret
                   " 2>&1'"))
          (pipe (open-input-pipe script))
          (all (get-string-all pipe)))
@@ -579,13 +597,13 @@ $6$salt$faketesthash:!:20682::::::\n"
 
 (define (run-deploy-script root script)
   "在 fake root 里执行 deploy SCRIPT；返回 (values output exit-status)。
-exit-status 来自 chroot 内 guile 的退出码（deploy 失败 = throw →
+exit-status 来自隔离 namespace 内 guile 的退出码（deploy 失败 = throw →
 非零；成功 = 0），经 echo 捕获。"
   (let* ((cmd (string-append
-               "unshare --user --map-root-user --map-users=auto "
-               "--map-groups=auto --mount --pid --fork sh -c '"
-               "mount --bind /gnu/store " root "/gnu/store; "
-               "chroot " root " " %guile " --no-auto-compile " script
+                "unshare --user --map-root-user --map-users=auto "
+                "--map-groups=auto --mount --pid --fork sh -c '"
+                (sandbox-mounts root)
+                %guile " --no-auto-compile " script
                "; echo EXIT=$? 2>&1'"))
          (pipe (open-input-pipe cmd))
          (all (get-string-all pipe)))
@@ -594,7 +612,7 @@ exit-status 来自 chroot 内 guile 的退出码（deploy 失败 = throw →
       (values all (if m (string->number (match:substring m 1)) #f)))))
 
 (define (current-link-valid? root link-path)
-  "fake root 内 LINK-PATH symlink 存在且解析目标（chroot 内绝对路径）
+  "fake root 内 LINK-PATH symlink 存在且解析目标（隔离 namespace 内绝对路径）
 真实存在。注意不能用 file-exists? 直接检查链接本身（它跟随目标；
 host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析。"
   (let ((p (string-append root link-path)))
@@ -751,10 +769,10 @@ host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析�
 
 (let* ((root (make-fake-root "" #f))
        (script (string-append
-                "unshare --user --map-root-user --map-users=auto "
-                "--map-groups=auto --mount --pid --fork sh -c '"
-                "mount --bind /gnu/store " root "/gnu/store; "
-                "chroot " root " " %guile " --no-auto-compile "
+                 "unshare --user --map-root-user --map-users=auto "
+                 "--map-groups=auto --mount --pid --fork sh -c '"
+                 (sandbox-mounts root)
+                 %guile " --no-auto-compile "
                 %app-persist-program " 2>&1'"))
        (pipe (open-input-pipe script))
        (all (get-string-all pipe)))
@@ -851,10 +869,10 @@ host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析�
 
 (let* ((root (make-fake-root "" #f))
        (script (string-append
-                "unshare --user --map-root-user --map-users=auto "
-                "--map-groups=auto --mount --pid --fork sh -c '"
-                "mount --bind /gnu/store " root "/gnu/store; "
-                "chroot " root " " %guile " --no-auto-compile "
+                 "unshare --user --map-root-user --map-users=auto "
+                 "--map-groups=auto --mount --pid --fork sh -c '"
+                 (sandbox-mounts root)
+                 %guile " --no-auto-compile "
                 %bf-program " 2>&1'"))
        (pipe (open-input-pipe script))
        (all (get-string-all pipe)))
@@ -1000,12 +1018,12 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
          (string-append
           "timeout 60 unshare --user --map-root-user --map-users=auto "
           "--map-groups=auto --mount --pid --fork sh -c '"
-          ;; env 必须包住整条链（只作用于 mount 会让宿主环境泄漏）；
+           ;; env 必须包住整条链（只作用于 mount 会让宿主环境泄漏）；
           ;; 内层用双引号，且 $? 必须转义（\\$?）——双引号内的字面
-          ;; $? 会在解析时被提前展开为 0（shell 语义，实测）。
-          "env -u XDG_SESSION_ID -u XDG_RUNTIME_DIR -u HOME sh -c \""
-          "mount --bind /gnu/store " fake-root "/gnu/store; "
-          "chroot " fake-root " " %guile
+           ;; $? 会在解析时被提前展开为 0（shell 语义，实测）。
+           "env -u XDG_SESSION_ID -u XDG_RUNTIME_DIR -u HOME sh -c \""
+           (sandbox-mounts fake-root)
+           %guile
           " --no-auto-compile " %niri-wrapper-program
           " 2>&1; echo EXIT:\\$?\"'")))
     (let* ((pipe (open-input-pipe script))
@@ -1017,8 +1035,7 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
 
 (let* ((root (string-append (or (getenv "TMPDIR") "/tmp")
                             "/guixcfg-niri-" (number->string (getpid))))
-       (res (begin (mkdir-p (string-append root "/gnu/store"))
-                   (run-niri-wrapper root)))
+       (res (run-niri-wrapper root))
        (code (car res))
        (out (cdr res)))
   (test-assert "NI1: wrapper runs without unbound-variable"
@@ -1044,8 +1061,6 @@ secrets ordinary deploy 的产物形态）。"
                             "/guixcfg-mihomo-" (number->string (getpid))
                             "-" (number->string (random 100000)))))
     (mkdir dir)
-    (mkdir (string-append dir "/gnu"))
-    (mkdir (string-append dir "/gnu/store"))
     (let ((secret-dir (string-append dir
                                      "/run/guixcfg-secrets-ordinary/system")))
       (mkdir-p secret-dir)

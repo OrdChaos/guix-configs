@@ -49,7 +49,7 @@
 | D7 | 订阅刷新直连（`proxy: DIRECT`） | 刷新不依赖代理组/节点可用性——节点全挂时订阅照常更新。可行性：节点域名解析经 SmartDNS 直连上游（D4 自举）+ 宿主直连出站可信（2026-08-28 实测直连拉取成功；早前 EOF 是宿主残留 clash 所致） | 宿主直连出站不稳时刷新失败（cache-first 兜底，换节点/修宿主后经 refresh API 恢复） |
 | D8 | **TUN 是唯一流量入口**：无 mixed-port、无 HTTP_PROXY 系统代理语义 | 单入口 = 可审计、无静默旁路；透明代理下应用零配置 | TUN off = 无显式回退口（干净宿主下自动退化为直连机器，见 §7；不提供"半代理"中间态） |
 | D9 | 节点选择是**运行时偏好**，repo 只声明 select 组 | 节点健康随机场变化，不是 declarative 事实 | 重启/换节点后选择持久化于 `/var/lib/clash` 缓存；repo 不 pin 节点 |
-| D10 | DHCP DNS 不丢弃：openresolv 输出重定向到 `/run/resolvconf/resolv.conf`，经 NM `dns-change` dispatcher 投影为 SmartDNS `-fallback` upstream | captive portal 认证前通常只允许 DHCP DNS；固定上游仍优先，不把正常查询交给不可信 DHCP resolver | 固定上游不可达时查询会交给当前网络 DHCP DNS；它可观察并伪造该降级期间的答案 |
+| D10 | DHCP DNS 不丢弃：openresolv 输出重定向到 `/run/resolvconf/resolv.conf`，经 root-owned regular NM `dns-change` dispatcher 投影为 SmartDNS `-fallback` upstream；多连接的非 private 条目按 metric 合并 | captive portal 认证前通常只允许 DHCP DNS；固定上游仍优先，不把正常查询交给不可信 DHCP resolver | 固定上游不可达时查询会交给当前网络 DHCP DNS；它可观察并伪造该降级期间的答案 |
 | D11 | resolvconf-bootstrap 退役 | 静态 resolv.conf 由 etc-service 每 boot 重建，无需 openresolv -u 接管 | — |
 | D12 | 订阅密文与引用者同置（mihomo/secrets/），domain ordinary | secret taxonomy（secrets.md）；订阅不可用只影响刷新，节点仍可从本地 cache 工作 | 解密失败不阻塞登录、只降级订阅刷新 |
 | D13 | 配置合成 fail-closed：placeholder 恰好一次、严格 YAML 转义、残留 CR/LF/NUL 拒绝 | 订阅 URL 是唯一 secret 注入点，坏输入必须失败而非产出可运行错配置 | 物化失败 → mihomo 起不来（显式失败优于静默错） |
@@ -66,7 +66,7 @@
 |---|---|---|
 | 静态 resolv.conf | `modules/guixcfg/system/dns/ownership.scm` | `%system-resolv-conf`（plain-file `"nameserver 127.0.0.1\n"`）、`%dhcp-dns-metadata-path`（`/run/resolvconf/resolv.conf`）、`system-dns-etc-service` |
 | resolvconf 重定向 | `modules/guixcfg/system/dns/resolvconf.conf` | `resolv_conf=/run/resolvconf/resolv.conf` + 全部非 libc subscriber 显式 `*_enabled=NO`；该 metadata 是 DHCP fallback 输入 |
-| SmartDNS 服务 | `modules/guixcfg/system/dns/smartdns.scm` | thin service-type：provision `'(smartdns)`、requirement `'(loopback networking)`（**不依赖 mihomo**）、`smartdns -f -c <store conf>`、log-file `/var/log/smartdns.log`；官方 NM `dns-change` dispatcher 物化并重载 DHCP fallback |
+| SmartDNS 服务 | `modules/guixcfg/system/dns/smartdns.scm` | thin service-type：provision `'(smartdns)`、requirement `'(loopback networking)`（**不依赖 mihomo**）、`smartdns -f -c <store conf>`、log-file `/var/log/smartdns.log`；activation 以 regular wrapper 安装 NM `dns-change` dispatcher（NM 不执行 symlink），其物化并重载 DHCP fallback |
 | SmartDNS 配置 | `modules/guixcfg/system/dns/smartdns.conf` | bind/bind-tcp 仅 127.0.0.1:53；默认上游 223.5.5.5、119.29.29.29；DHCP IPv4 `-fallback` include；cache-size 8192；无 cache-persist、无测速/分流 |
 | Host 装配 | `modules/guixcfg/hosts/vm.scm` | `(system-dns-etc-service)`、`(smartdns-service)`；NM `(shepherd-requirement '())` |
 
@@ -91,7 +91,7 @@
 
 ### 3.4 测试锁定（tests/）
 
-- `test-smartdns.scm` S1-S8：绑定面（无 ::1、无通配）、静态 resolv.conf、resolvconf 重定向、service graph、bootstrap 退役、**上游 DIRECT 规则存在（自举必需）**、公开配置无 secret 面、DHCP fallback parser/dispatcher；`test-runtime-exec.scm` SD1-SD2 实际执行 parser，锁定严格 IPv4、去重和空 DHCP metadata 清空行为；
+- `test-smartdns.scm` S1-S9：绑定面（无 ::1、无通配）、静态 resolv.conf、resolvconf 重定向、service graph、bootstrap 退役、**上游 DIRECT 规则存在（自举必需）**、公开配置无 secret 面、DHCP fallback parser/dispatcher、regular dispatcher wrapper；`test-runtime-exec.scm` SD1-SD2 实际执行 parser，锁定严格 IPv4、去重和空 DHCP metadata 清空行为；
 - `test-mihomo.scm` M1-M13：合成 fail-closed 矩阵、转义、占位符唯一性、无 fake-ip/dns 段、controller loopback、**provider `proxy: DIRECT`**、TUN 参数、`ipv6: false`、daemon 参数与 requirement、machine-state rule、secret decl。
 
 ---
