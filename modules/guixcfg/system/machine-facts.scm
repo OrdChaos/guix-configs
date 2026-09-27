@@ -28,9 +28,7 @@
                          load-machine-facts
                          facts-alist?
                          machine-facts
-                         machine-fact
-                         require-fact
-                         require-machine-fact))
+                         require-fact))
 
 (define %default-machine-facts-path
   (string-append (persist-mount-point "@persist-system") "/facts/host.scm"))
@@ -85,15 +83,9 @@
 (define (machine-facts)
   (force %machine-facts))
 
-(define (machine-fact key)
-  (assq-ref (machine-facts) key))
-
 (define (require-fact facts key)
   "FACTS 中必须存在 KEY；缺失立即报错（fail-closed）——宁可
 reconfigure 失败，也不生成已知 initrd 无法解锁的配置。"
   (or (assq-ref facts key)
       (error "missing required machine fact:" key
              "refusing to build a bootable system")))
-
-(define (require-machine-fact key)
-  (require-fact (machine-facts) key))
