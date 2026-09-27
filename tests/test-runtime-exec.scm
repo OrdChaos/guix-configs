@@ -57,6 +57,9 @@
               (guixcfg system mihomo service) ; MC: mihomo-config-program
               (guixcfg system dns smartdns) ; SD: DHCP fallback materializer
              (guixcfg system application-persistence) ; AP1 activation ownership
+              (guixcfg system user-persistence) ; UP1 activation ownership
+              (guixcfg system machine-identity) ; MI1 machine-id projection
+              (guixcfg system ssh)         ; SSHK1 host-key generation
               (guixcfg services ephemeral-root) ; EP: ephemeral-root-confirm-program
               (guixcfg flatpak service)   ; FO1: flatpak-overrides-activation
               (guixcfg apps niri definition)  ; NI1: %niri-session-wrapper
@@ -788,6 +791,93 @@ host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析�
                  (and uids
                       (= 3 (length uids))
                       (every (lambda (u) (string=? "1000" u)) uids)))))
+
+;; ── UP1：user-persistence activation 真实执行 ────────────────
+;; boot 关键：/home/USER 与各 backing owner 必须归 USER（AGENTS §12/§13；
+;; 只 chown 直接 parent 会留下 root-owned 中间层）。真实执行 production
+;; activation gexp（fake root 内 uid 1000 与 boot 同构）。
+(define (capture-in-root program fake-root)
+  "在隔离 user+mount namespace 上 overlay FAKE-ROOT 执行 PROGRAM，
+返回合并的 stdout/stderr。"
+  (let ((script (string-append
+                 "unshare --user --map-root-user --map-users=auto "
+                 "--map-groups=auto --mount --pid --fork sh -c '"
+                 (sandbox-mounts fake-root)
+                 %guile " --no-auto-compile " program " 2>&1'")))
+    (let* ((pipe (open-input-pipe script))
+           (out (get-string-all pipe)))
+      (close-pipe pipe)
+      out)))
+
+(define %user-persist-exec
+  (build-thing
+   (program-file
+    "user-persistence-activation-test"
+    (with-imported-modules (source-module-closure '((guix build utils)))
+      #~(begin
+         (use-modules (guix build utils))
+         #$(user-persistence-activation "user")
+         (format #t "home=~a persist=~a~%"
+                 (stat:uid (stat "/home/user"))
+                 (stat:uid (stat "/persist/data-home/user"))))))))
+
+(let* ((root (make-fake-root "" #f))
+       (out (capture-in-root %user-persist-exec root)))
+  (false-if-exception (delete-file-recursively root))
+  (test-assert "UP1 user-persistence activation runs without unbound-variable"
+               (not (string-contains out "Unbound variable")))
+  (test-assert "UP1 /home/user and data-home backing are user-owned"
+               (string-contains out "home=1000 persist=1000")))
+
+;; ── MI1：machine-identity activation 真实执行 ────────────────
+(define %machine-identity-exec
+  (build-thing
+   (program-file
+    "machine-identity-activation-test"
+    (with-imported-modules (source-module-closure '((guix build utils)))
+      #~(begin
+         (use-modules (guix build utils) (ice-9 rdelim))
+         #$(machine-identity-activation)
+         (format #t "canonical=~a etc=~a~%"
+                 (call-with-input-file #$%machine-id-path
+                   (lambda (p) (read-line p)))
+                 (call-with-input-file #$%etc-machine-id-path
+                   (lambda (p) (read-line p)))))))))
+
+(let* ((root (make-fake-root "" #f))
+       (out (capture-in-root %machine-identity-exec root)))
+  (false-if-exception (delete-file-recursively root))
+  (test-assert "MI1 machine-identity activation runs without unbound-variable"
+               (not (string-contains out "Unbound variable")))
+  (test-assert "MI1 canonical machine-id equals projected /etc/machine-id"
+               (let ((line (find (lambda (l) (string-prefix? "canonical=" l))
+                                 (string-split out #\newline))))
+                 (and line
+                      (string-match "canonical=([0-9a-f]+) etc=\\1" line)
+                      #t))))
+
+;; ── SSHK1：ssh-host-key activation 真实执行 ──────────────────
+(define %ssh-host-key-exec
+  (build-thing
+   (program-file
+    "ssh-host-key-activation-test"
+    (with-imported-modules (source-module-closure '((guix build utils)))
+      #~(begin
+         (use-modules (guix build utils))
+         #$(ssh-host-key-activation)
+         (let ((key "/persist/system/ssh/ssh_host_ed25519_key"))
+           (format #t "exist=~a priv=~a pub=~a~%"
+                   (file-exists? key)
+                   (stat:perms (stat key))
+                   (stat:perms (stat (string-append key ".pub"))))))))))
+
+(let* ((root (make-fake-root "" #f))
+       (out (capture-in-root %ssh-host-key-exec root)))
+  (false-if-exception (delete-file-recursively root))
+  (test-assert "SSHK1 ssh-host-key activation runs without unbound-variable"
+               (not (string-contains out "Unbound variable")))
+  (test-assert "SSHK1 generates ed25519 key with 0600/0644 modes"
+               (string-contains out "exist=#t priv=384 pub=420")))
 
 ;; ── BF1：bind-file activation + 真实 file→file bind mount ────
 ;; generic (exposure 'bind-file) 的真实执行验证（fake root 内 uid
