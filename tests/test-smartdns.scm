@@ -75,8 +75,10 @@
                   (not (string-contains %smartdns-text "bind-tcp [::1]:53"))))
 (test-assert "S1: never binds wildcard interfaces"
              (not (string-contains %smartdns-text "bind [::]:53")))
-(test-assert "S1: no cache-persist (memory cache only)"
-             (not (string-contains %smartdns-text "cache-persist")))
+(test-assert "S1: cache persistence explicitly disabled"
+             ;; Upstream default is auto (persists when cache-file location
+             ;; has >128MB free); the v1 design is memory-only.
+             (string-contains %smartdns-text "cache-persist no"))
 (test-assert "S1: fixed upstreams declared"
               (and (string-contains %smartdns-text "server 223.5.5.5")
                    (string-contains %smartdns-text "server 119.29.29.29")))

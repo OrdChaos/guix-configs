@@ -142,7 +142,7 @@ smartdns/订阅/流量**天然直连**——所以 TUN off 不是"断网"，而�
 | 全节点健康检查 | `GET /group/PROXY/delay?url=…&timeout=5000` |
 | 手动刷订阅 | `PUT http://127.0.0.1:9090/providers/proxies/airport` |
 | 热改运行配置 | 改 `/run/mihomo/config.yaml` 后 **copy 到 `/var/lib/clash/config.yaml` 再 `PUT /configs {"path":"/var/lib/clash/config.yaml"}`**（SAFE_PATHS 只允许 `-d` 目录）。**不要 `herd restart mihomo`**——它会重跑物化器，从系统世代烘焙的模板重新生成配置，覆盖手工改动 |
-| 清 DNS 假 IP 缓存 | smartdns：`herd stop smartdns` → `rm /tmp/smartdns.cache`（stop 时会回写！）→ `herd start smartdns`；nscd：`herd stop nscd` → `rm /var/db/nscd/hosts` → `herd start nscd` |
+| 清 DNS 假 IP 缓存 | smartdns：`herd restart smartdns`（`cache-persist no`，无磁盘 cache 文件）；nscd：`herd stop nscd` → `rm /var/db/nscd/hosts` → `herd start nscd` |
 
 ---
 

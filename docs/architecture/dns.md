@@ -82,10 +82,11 @@ DHCP DNS（动态 fallback；认证前 captive portal 可用）
   localhost → DNS unavailable（fail-closed；不绕过 resolver）；respawn 默认开。
   固定上游不可达时 SmartDNS 会使用当前 DHCP fallback；无 DHCP DNS 时查询
   SERVFAIL，恢复后自动可用（VM 实测 smartdns 47）。
-- **cache persistence**：v1 不持久化（cache-persist no；丢失代价 =
-  首查稍慢）。未来若需要：`cache-file /var/lib/smartdns/cache.db`
-  + machine-state bind `/var/lib/smartdns`（目录级，绕开 single-file
-  bind 限制）。
+- **cache persistence**：v1 不持久化，配置文件显式 `cache-persist no`
+  （上游默认是 auto：cache-file 位置空闲 >128MB 时自动持久化到
+  `/var/cache/smartdns.cache`；丢失代价 = 首查稍慢）。未来若需要：
+  `cache-file /var/lib/smartdns/cache.db` + machine-state bind
+  `/var/lib/smartdns`（目录级，绕开 single-file bind 限制）。
 
 ## 实施文件
 

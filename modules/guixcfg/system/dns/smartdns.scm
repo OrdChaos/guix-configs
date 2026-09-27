@@ -7,7 +7,8 @@
 ;;; 且 config 无扩展面——本模块只多 ~40 行、语义全部本仓库所有。
 ;;;
 ;;; v1 边界（不引入分流/过滤/测速/ECS/DoH bootstrap）：
-;;;   - 只监听 loopback（127.0.0.1:53 与 [::1]:53，UDP+TCP）——
+;;;   - 只监听 loopback（127.0.0.1:53，UDP+TCP；刻意不绑 [::1]——
+;;;     resolver 是 v4-literal，绑 [::1] 会在 IPv6 禁用时启动失败）——
 ;;;     smartdns 默认 bind [::]:53 监听所有接口，必须显式收紧；
 ;;;   - 固定 IP literal upstream（无 hostname bootstrap；mihomo 侧
 ;;;     加对应 DIRECT 规则保证不绕经节点——见 mihomo-template.yaml）；
