@@ -171,7 +171,9 @@ rollback 只允许使用这个集合差，绝不从最大 slot 猜测删除目�
 
 (define (call-with-passphrase-file passphrase path proc)
   "以 0600 文件 PATH 向 PROC 暂时提供 PASSPHRASE，退出时删除。
-PROC 的整个动态范围都可使用 PATH，包括异常处理中的 keyslot rollback。"
+PATH 的父目录由 do-enroll chmod 为 0700，故 create-then-chmod 之间
+的 0644 窗口对其它用户不可达（不可遍历 parent）。PROC 的整个动态范围
+都可使用 PATH，包括异常处理中的 keyslot rollback。"
   (call-with-output-file path (lambda (port) (display passphrase port)))
   (chmod path #o600)
   (dynamic-wind
@@ -316,6 +318,10 @@ INVOKE-PROC 可由测试替换；调用方只可传 added-keyslot 的唯一结�
           (lambda ()
             
             (mkdir-p workdir)
+            ;; 0700（含父目录 tpm2-enroll）：.pw 在 create-then-chmod 的
+            ;; 短暂 0644 窗口内也因不可遍历的父目录而无法被其它用户读取。
+            (chmod workdir #o700)
+            (chmod (dirname workdir) #o700)
             (let ((passphrase
                    (or (and passphrase-source (passphrase-source))
                        (read-passphrase! "Enter recovery LUKS passphrase: "))))
