@@ -337,7 +337,7 @@ identity 则 fail fast（提示先 secrets unlock）。"
 
 ;; shadow 兼容 crypt hash 的格式（$id$salt$hash）——本仓库唯一
 ;; authority；(guixcfg system accounts) 的投影与验证共用同一常量。
-(define %password-hash-regex "^\\$[0-9a-z]+\\$[^:$]+\\$[^: \n]+$")
+(define %password-hash-regex "^\\$[0-9a-z]+\\$[^:$\n]+\\$[^: \n]+$")
 
 (define (password-hash-format? s)
   "S 是否是 shadow 兼容的 crypt hash（$id$salt$hash，非空、无换行/

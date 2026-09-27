@@ -265,4 +265,11 @@
                   (lambda () (age-unlock! root %test-pass) #f)
                   (lambda (k . a) #t)))))
 
+;; ── password hash 形态：salt 不得含换行（防 /etc/shadow 行注入）──
+(test-assert "password hash regex rejects newline in salt"
+             (not (string-match %password-hash-regex "$6$ab\ncd$rest")))
+(test-assert "password hash regex accepts a normal hash"
+             (string-match %password-hash-regex
+                           "$6$abcdefgh$0123456789abcdef"))
+
 (test-end "age")
