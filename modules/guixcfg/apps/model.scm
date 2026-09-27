@@ -83,8 +83,8 @@
 ;; （文件归属 service 选择规则））──────────────────────────────
 ;; 2026-08 规则反转：~/.config 目标一律经 home-files-service-type
 ;; 显式带 ".config/" 前缀（home-xdg-configuration-files-service-type
-;; 已被 pinned Guix 标记 deprecated，且其语义本就是 home-files 的
-;; .config 前缀包装——迁移零语义差）。聚合保持纯 concatenation，
+;; 只是 home-files 的 .config 前缀包装，语义零差；统一走 home-files
+;; 使目标单一 authority）。聚合保持纯 concatenation，
 ;; 无任何目标校验/合并逻辑。
 
 (define (applications-home-services apps)

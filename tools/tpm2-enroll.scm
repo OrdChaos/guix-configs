@@ -92,7 +92,7 @@
 (define %esp-tpm2-dir (string-append %esp "/" %esp-tpm2-directory))
 
 ;;; ────────────────────────────────────────────────────────────
-;;; 环境检查（从 d832ef4 恢复，去掉 PolicyAuthorize 部分）
+;;; 环境检查（沿用早期实现，去掉 PolicyAuthorize 部分）
 
 (define (recovery-boot?)
   "当前是否 Recovery 启动（/proc/cmdline rootmode=recovery）。"

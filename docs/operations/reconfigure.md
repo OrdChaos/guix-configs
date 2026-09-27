@@ -140,7 +140,10 @@ sudo 清理用户 channel load path 后重新编译整份 blueprint）→
     upstream `upgrade-shepherd-services` 不重启运行中 daemon——
     guix issue 33508；订阅/运行时配置变更必须热替换）
   → shepherd 升级自动 restart 变化的 one-shot 服务
-    （runtime secrets 代际发布、account verify、Home 热激活）
+    （runtime secrets 代际发布、account verify）
+  → 显式 herd restart guix-home-<user> 并轮询验证 ~/.guix-home 链接
+    （由本次 transaction 显式执行并验证，不是 shepherd 自动；
+    system reconfigure 对 one-shot 是 fire-and-forget，见下失败语义）
   → gvfs-mount-metadata one-shot 每轮落入 to-start 重跑（pinned guix
     语义：停止态 one-shot 每轮 start-service）——mount topology 变化
     同轮重建 utab，无需 reboot（docs/architecture/home.md）

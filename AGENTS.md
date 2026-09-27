@@ -61,8 +61,9 @@
 
 ## 4. 测试规则
 
-- 代码修改后跑：targeted test → 相关子系统 → 全量套件（
-  `guix time-machine -C channels.lock.scm -- repl tests/run-tests.scm`）。
+- 代码修改后跑：targeted test → 相关子系统 → 核心套件（app 套件用
+  `--apps` / `--all`；默认 core 不含 `modules/guixcfg/apps` 测试）：
+  `guix time-machine -C channels.lock.scm -- repl tests/run-tests.scm`。
 - 全量/构建型测试期间监控 kernel build（见 §1）。
 - 不使用 VM 做代码验证，除非用户明确要求 runtime acceptance。
 - 测试不得依赖公网实时可用性（substitute availability 是

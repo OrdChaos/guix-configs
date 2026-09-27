@@ -95,4 +95,4 @@ DHCP DNS（动态 fallback；认证前 captive portal 可用）
 - `modules/guixcfg/system/dns/smartdns.scm`（thin service + v1 配置）
 - `modules/guixcfg/system/mihomo/template.yaml`（upstream DIRECT 规则）
 - 删除 `modules/guixcfg/system/resolvconf.scm` 与其测试
-- `tests/test-smartdns.scm`（S1-S7）
+- `tests/test-smartdns.scm`（S1-S10）

@@ -237,7 +237,7 @@ apps/foo/
 
 ## Source-relative `local-file`
 
-pinned Guix 事实（94a84f9 `guix/gexp.scm`）：`local-file` 是宏，
+pinned Guix 事实（`guix/gexp.scm`）：`local-file` 是宏，
 **literal 相对路径按出现处 source directory 解析**，不依赖进程 CWD：
 
 ```scheme
@@ -273,7 +273,8 @@ tests 的 `add-to-load-path` 本来就拼绝对路径）。
 | 用户自己创建/拥有的数据？ | → `/persist/data-home` |
 | 大体积、可重新取得、程序主动访问固定路径？ | → `/persist/data-nobackup`（direct access） |
 | app-private declarative secret？ | → `apps/<app>/secrets/*.age` → `/run` |
-| shared/system/bootstrap/install secret？ | → top-level `secrets/` |
+| install/recovery/机制自身 secret？ | → `modules/guixcfg/security/secrets/`（如 luks-recovery.age、age identity） |
+| 用户 credential secret？ | → `modules/guixcfg/users/secrets/` |
 | machine identity/state？ | → `/persist/system` |
 
 **禁止**把以下目录整体纳入 app persistence（consumer 必须精确到

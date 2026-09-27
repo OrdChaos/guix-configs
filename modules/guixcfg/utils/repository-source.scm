@@ -5,7 +5,7 @@
 ;;; helper——禁止调用方各自散布 "../../../secrets/..."，禁止硬编码
 ;;; checkout 绝对路径。
 ;;;
-;;; 实现依据（pinned Guix 94a84f9 guix/gexp.scm）：local-file 是
+;;; 实现依据（pinned Guix guix/gexp.scm）：local-file 是
 ;;; 宏，literal 相对路径按出现处 source directory 解析；非 literal
 ;;; 用 assume-source-relative-file-name 声明 source-relative。本模块
 ;;; 固定在 modules/guixcfg/utils/ 下：加载时经 %load-path 定位自身

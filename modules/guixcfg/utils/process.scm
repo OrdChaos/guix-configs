@@ -11,7 +11,7 @@
 ;;;                                           credential、sealed blob），
 ;;;                                           不做 UTF-8/string 转换
 ;;;
-;;; 实现说明（相对旧实现 d832ef4 的修正）：
+;;; 实现说明（相对早期实现的修正）：
 ;;;   - 旧 invoke-with-stdin 用 display 写字符串，隐式走端口编码；
 ;;;     二进制数据必须走 put-bytevector，这里显式分成两组 API；
 ;;;   - 所有 helper 经 open-pipe* + execvp 直接执行程序，不经过 shell；

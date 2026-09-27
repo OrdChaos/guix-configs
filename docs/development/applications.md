@@ -80,10 +80,9 @@ Guix 自动实例化）；**不要** `(service home-files-service-type ...)`
 `(service ...)`。aggregator 只 concatenation，不做 same-kind
 merge（`service-type-extend` 不是 base-value merger）。
 
-**文件归属 service 选择规则**（2026-08 规则反转）：pinned Guix 已把
-`home-xdg-configuration-files-service-type` 标记 deprecated（其语义
-本就是 `home-files-service-type` 的 `.config/` 前缀包装）——仓库
-**全部统一走 `home-files-service-type`**：
+**文件归属 service 选择规则**（2026-08 规则反转）：`home-xdg-configuration-files-service-type`
+只是 `home-files-service-type` 的 `.config/` 前缀包装（pinned Guix 未标记 deprecated，
+本条是项目自定的单一 authority 选择）——仓库 **全部统一走 `home-files-service-type`**：
 
 - `~/.config` 下的文件：target 显式写 `.config/` 前缀（如
   `.config/mpv/mpv.conf`）；

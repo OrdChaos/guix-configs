@@ -208,10 +208,13 @@ deployment API token 属于前者。
 - keyring vault 视为 sensitive high-value data：不进 Git、不进 store、
   日志不输出内容；tests 只用 synthetic sentinel。
 - 不做“keyring 文件再 age 加密一层”。
-- **登录 keyring 自动解锁依赖登录 PAM 认证流**（密码在 PAM
-  transaction 内传递）。autologin / fingerprint / FIDO-only /
-  TPM-to-keyring / LUKS password forwarding 明确 out of scope；
-  未来改变登录认证方式时，需单独设计 keyring unlock。
+- keyring master credential 是 **repository-owned ordinary secret**
+  （`apps/gnome-keyring/secrets/master.age`），与登录认证**完全分离**：
+  登录认证（greetd/PAM）不向 keyring 传密码，PAM 里没有
+  pam_gnome_keyring；解锁由 user-session 的 gnome-keyring daemon 在
+  启动时从 `/run` 明文 master 文件经 stdin 完成（见 §2.1/§3）。
+  autologin / fingerprint / FIDO-only / TPM-to-keyring / LUKS password
+  forwarding 明确 out of scope。
 
 ## 5. Vault 状态与迁移
 

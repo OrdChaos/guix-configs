@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # T7 完整 VM E2E：真实 Guix 系统（真实 initrd）+ OVMF + Secure Boot +
-# swtpm + LUKS root。PCR7-only 版本（从 d832ef4 修剪：graft-kernel →
+# swtpm + LUKS root。PCR7-only 版本（从早期实现修剪：graft-kernel →
 # ukify，去掉 PCR11 预测 / signed authorization / patch-cmdline）。
 #
 # 场景（docs/architecture/boot.md（TPM2），T3）：

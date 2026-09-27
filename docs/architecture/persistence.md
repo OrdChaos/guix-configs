@@ -249,8 +249,9 @@ HOME-relative consumer；machine state 是 `/persist/system/state` →
 （declarative ciphertext）；`/persist/system/state` 是 machine
 authority（本机产生的 mutable state，独立于 repository）。
 
-当前无真实 production rule（NetworkManager 只作 canonical example，
-未启用——见 machine-state.md）。
+当前 production rules 见 `docs/architecture/machine-state.md`
+（NetworkManager 连接档案、machine-id、mihomo 数据目录、
+noctalia-greeter 等均已启用）。
 
 ## Machine identity（/etc/machine-id）
 
