@@ -262,5 +262,10 @@
                     (string-contains
                      (local-file-absolute-file-name (secret-decl-source d))
                      "/mihomo/secrets/"))))
+(test-assert "M13: runtime secret path matches the publisher's derivation"
+             ;; %mihomo-secret-path is a literal in the closure-minimal config
+             ;; module; guard it against drift from runtime-secret-target.
+             (string=? %mihomo-secret-path
+                       (runtime-secret-target (car %mihomo-secrets) #f)))
 
 (test-end "mihomo")

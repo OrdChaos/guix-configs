@@ -37,6 +37,7 @@
                 #:use-module (guixcfg system application-persistence) ; application-persistence-rule
                 #:use-module (guixcfg utils module-closure) ; guixcfg-module-select?
                #:export (%flatpak-installation-persistence-rule
+                         %flatpak-overrides-directory
                          flatpak-application-persistence-rules
                          flatpak-selected-applications
                          flatpak-persistence-rules
@@ -61,6 +62,15 @@
    (consumer ".local/share/flatpak")       ; HOME 相对（flatpak canonical path）
    (exposure 'bind-directory)
    (lifecycle 'application-owned)))
+
+;; overrides 目录是 installation backing 的固定子路径：从 persistence
+;; rule + %application-persistence-root 派生，避免在此重复拼写
+;; /persist/data-app（AGENTS §13 路径 authority 规则）。
+(define %flatpak-overrides-directory
+  (string-append %application-persistence-root "/"
+                 (application-persistence-rule-backing
+                  %flatpak-installation-persistence-rule)
+                 "/overrides"))
 
 (define (flatpak-default-persistence-rule app)
   "默认 persistence intent：~/.var/app/<id>（含 sandbox 内
@@ -172,7 +182,7 @@ Flatpak overrides into the canonical persistent installation backing."
                         (guixcfg utils atomic-file)
                         (ice-9 rdelim)
                         (ice-9 textual-ports))
-          (let* ((directory "/persist/data-app/flatpak/installation/overrides")
+          (let* ((directory #$%flatpak-overrides-directory)
                  (manifest (string-append directory "/.guixcfg-managed"))
                  (current (map car '#$entries)))
             (define (read-managed)
