@@ -9,12 +9,9 @@
 
 (use-modules (guixcfg security age)
              (guixcfg storage install)   ; read-secret-line
+             (guixcfg utils repository-source) ; repository-root
              (ice-9 match)
              (ice-9 rdelim))
-
-(define (repo-root)
-  ;; 本文件在 <root>/tools/ 下。
-  (dirname (dirname (canonicalize-path (car (command-line))))))
 
 (define (read-passphrase confirm?)
   "从终端 noecho 读 master password（confirm? 时读两遍并校验一致）。
@@ -41,22 +38,22 @@
 (define (main args)
   (match (cdr args)
          (("init")
-          (let ((recipient (age-init! (repo-root)
+          (let ((recipient (age-init! (repository-root)
                                       (read-passphrase #t))))
             (format #t "stable recipient: ~a~%" recipient)
             (format #t "encrypted identity: ~a~%"
-                    (string-append (repo-root) "/" %stable-identity-rel))
+                    (string-append (repository-root) "/" %stable-identity-rel))
             (format #t "Back up your master password offline; the repository \
 ciphertext alone cannot recover secrets without it.~%")))
          (("unlock")
-          (let ((r (age-unlock! (repo-root) (read-passphrase #f))))
+          (let ((r (age-unlock! (repository-root) (read-passphrase #f))))
             (format #t "runtime identity ready at ~a (~a)~%"
                     (%runtime-identity-path) r)))
          (("install")
-          (age-install! (repo-root))
+          (age-install! (repository-root))
           (format #t "identity installed to ~a~%" (%installed-identity-path)))
          (("verify")
-          (age-verify! (repo-root))
+          (age-verify! (repository-root))
           (format #t "installed identity matches repository recipient~%"))
          (("provision-password" user ciphertext)
           ;; explicit provisioning：解密 hash ciphertext → 校验 → 原子物化到

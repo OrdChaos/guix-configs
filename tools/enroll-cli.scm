@@ -23,12 +23,9 @@
 (add-to-load-path (string-append (getcwd) "/modules"))
 
 (use-modules (guixcfg security enroll)
+             (guixcfg utils repository-source) ; repository-root
              (ice-9 match)
              (ice-9 rdelim))
-
-(define (repo-root)
-  ;; 本文件在 <root>/tools/ 下。
-  (dirname (dirname (canonicalize-path (car (command-line))))))
 
 (define (usage)
   (format (current-error-port)
@@ -66,12 +63,12 @@
                             1 0)))))))
 
 (define (firstboot-guard-command host)
-  (run-checks (firstboot-readonly-checks (repo-root) host)
+  (run-checks (firstboot-readonly-checks (repository-root) host)
               "firstboot preflight")
   (exit 0))
 
 (define (plan-command host)
-  (let ((root (repo-root)))
+  (let ((root (repository-root)))
     (run-checks (enroll-readonly-checks root host) "enroll preflight")
     (for-each
      (lambda (line) (format #t "~a~%" line))
@@ -99,7 +96,7 @@
     (format (current-error-port)
             "enroll transaction requires root (effective UID 0)~%")
     (exit 1))
-  (let ((root (repo-root)))
+  (let ((root (repository-root)))
     (exit
      (enroll-transaction!
       root host

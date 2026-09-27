@@ -4,13 +4,11 @@
 ;;;   guix time-machine -C channels.lock.scm -- \
 ;;;     repl tools/reconfigure-cli.scm -- HOST HOME-USER
 
-(define (repo-root)
-  (dirname (dirname (canonicalize-path (car (command-line))))))
-
 (add-to-load-path (string-append (getcwd) "/modules"))
 
 (use-modules (guixcfg system deploy)
              (guixcfg system reconfigure)
+             (guixcfg utils repository-source) ; repository-root
              (ice-9 match))
 
 (define (usage)
@@ -24,7 +22,7 @@
   (exit 1))
 
 (define (run host home-user)
-  (let ((root (repo-root)))
+  (let ((root (repository-root)))
     (chdir root)
     (let ((code (reconfigure-transaction! host home-user #:root root)))
       (when (zero? code)

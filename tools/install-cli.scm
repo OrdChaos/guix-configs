@@ -21,12 +21,9 @@
 
 (use-modules (guixcfg system install)
              (guixcfg system deploy)
+             (guixcfg utils repository-source) ; repository-root
              (ice-9 match)
              (ice-9 rdelim))
-
-(define (repo-root)
-  ;; 本文件在 <root>/tools/ 下。
-  (dirname (dirname (canonicalize-path (car (command-line))))))
 
 (define (usage)
   (format (current-error-port)
@@ -37,7 +34,7 @@
 ;;; plan（只读；user 态与 blue -n 共用）
 
 (define (plan-command host device)
-  (let ((root (repo-root)))
+  (let ((root (repository-root)))
     (let loop ((checks (install-preflight-checks root host device))
                (failures 0))
       (if (null? checks)
@@ -87,7 +84,7 @@
     (format (current-error-port)
             "install transaction requires root (effective UID 0)~%")
     (exit 1))
-  (let ((root (repo-root)))
+  (let ((root (repository-root)))
     (let ((code
            (install-transaction!
             root host device
