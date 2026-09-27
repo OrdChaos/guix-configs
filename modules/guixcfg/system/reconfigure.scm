@@ -10,6 +10,9 @@
 ;;;     → guix time-machine … system reconfigure
 ;;;     → shepherd 升级自动 restart 变化的 one-shot 服务（secrets
 ;;;       代际发布、password 投影、Home 热激活）
+;;;     → 显式 herd restart 本清单中的运行中服务（upstream
+;;;       upgrade-shepherd-services 不重启运行中 daemon，guix
+;;;       issue 33508；Mihomo 订阅等运行时配置变更必须热替换）
 ;;;     → 验证：Home 链接状态 + 各 readiness capability 已就绪
 ;;;     → open gate
 ;;;
@@ -18,14 +21,22 @@
 ;;; fork 出去即视为成功——Home activate 失败不会反馈到 reconfigure
 ;;; 退出码。这里在 reconfigure 成功后显式 restart + 验证链接状态，
 ;;; 失败时明确报告。
+;;; 为什么需要显式 daemon restart：pinned guix
+;;; `upgrade-services-program` 明确注释 "Currently, this does NOT
+;;; attempt to restart running services"（upgrade-shepherd-services 只
+;;; load/start 新服务、unload 旧服务，不重启已运行服务）。Mihomo
+;;; 这类长期运行 daemon 即便其 service 定义变化，旧进程仍持旧
+;;; runtime 状态（订阅 URL、provider）；订阅密文更新不会自动生效。
+;;; 因此经集中常量显式重启。新增需要热替换的 daemon 时扩展
+;;; `%hot-restart-services`。
 ;;;
 ;;; 错误语义（exit code 契约，Blue 外层必须原样保留）：
 ;;;   0 = 完整成功（gate 重新打开）
 ;;;   1 = system reconfigure 失败 → Home 不动、gate 重开（system
 ;;;       没变，没有新的不一致）
-;;;   2 = system 已 switched，但 Home 热激活/readiness 阶段失败 →
-;;;       不回滚 system；gate 保持 CLOSED（新 session 拒绝），修复
-;;;       后重跑 blue reconfigure HOST 恢复（无需 reboot）
+;;;   2 = system 已 switched，但 hot restart/Home 热激活/readiness
+;;;       阶段失败 → 不回滚 system；gate 保持 CLOSED（新 session
+;;;       拒绝），修复后重跑 blue reconfigure HOST 恢复（无需 reboot）
 ;;;
 ;;; Home stale pivot 经 (guixcfg home pivot) 直接 Scheme 调用
 ;;; （remove-stale-pivot!）——不再有 CLI adapter。
@@ -51,6 +62,7 @@
                #:export (%gate-directory
                          %gate-file-name
                          %readiness-capabilities
+                         %hot-restart-services
                          reconfigure-transaction!))
 
 ;; 兼容导出名：gate 路径的权威定义在 (guixcfg system session-gate)
@@ -65,6 +77,14 @@
 (define %readiness-capabilities
   '(guixcfg-secrets-deploy account-state-ready persistent-state-ready
                            home-ready session-infra-ready interactive-session-ready))
+
+;; 需要 `guix system reconfigure` 热重启的长期运行 Shepherd daemon。
+;; pinned Guix 不重启运行中服务（见头部注释），因此这里显式 restart。
+;; 判断标准：daemon 的 runtime 状态（配置/URL/provider/数据目录）会随
+;; 系统代际变化，且 Shepherd definition 变化不足以触发重启。新增条目
+;; 需配套 transaction 测试（顺序、失败语义、readiness 关联）。
+(define %hot-restart-services
+  '(mihomo))
 
 (define (symlink-target path)
   "PATH 是 symlink → 其 target；否则 #f。不 follow 非 symlink 对象。"
@@ -144,65 +164,80 @@ HOST 与 HOME-USER 由调用方显式传入（Blue 的 privilege handoff）。"
               (format (current-error-port)
                       "reconfigure: system reconfigure FAILED; Home left untouched;~%  gate reopened (no state changed).~%")
               1)
-             ;; 2. pivot preflight：保守清理上次失败激活的 stale pivot
-             (let ((preflight (remove-stale-pivot! pivot)))
-               (if (eq? preflight 'unsafe)
+             ;; 2. 显式热重启长期运行 daemon（upstream 不自动重启运行中
+             ;;    服务；失败则 gate 保持 CLOSED，exit 2——与 Home 热
+             ;;    激活同语义，修复后重跑 blue reconfigure 恢复）。
+             (let ((hot-failed
+                    (find
+                     (lambda (svc)
+                       (not (zero? (run-command
+                                    `("herd" "restart" ,(symbol->string svc))))))
+                     %hot-restart-services)))
+               (if hot-failed
                  (begin
                   (format (current-error-port)
-                          "reconfigure: stale pivot ~a exists but is NOT a recognizable~%  Guix Home pivot symlink (plain file/directory/unknown link);~%  refusing to touch it. Investigate manually, then retry.~%  Gate remains CLOSED (system switched; Home not activated).~%"
-                          pivot)
+                          "reconfigure: hot restart of ~a FAILED; gate remains~%  CLOSED; next boot recovers. Fix the cause, then re-run blue reconfigure ~a.~%"
+                          hot-failed host)
                   2)
-                 (let ((had-pivot-before (file-exists? pivot)))
-                   ;; 3. Home 热激活（幂等；herd restart 被拒则失败）
-                   (if (not (zero? (run-command
-                                    `("herd" "restart"
-                                             ,(string-append "guix-home-" home-user)))))
+                 ;; 3. pivot preflight：保守清理上次失败激活的 stale pivot
+                 (let ((preflight (remove-stale-pivot! pivot)))
+                   (if (eq? preflight 'unsafe)
                      (begin
                       (format (current-error-port)
-                              "reconfigure: system generation switched, but Home hot-activation~%  could not be started (herd restart rejected). Gate remains~%  CLOSED; next boot recovers via the official service.~%")
+                              "reconfigure: stale pivot ~a exists but is NOT a recognizable~%  Guix Home pivot symlink (plain file/directory/unknown link);~%  refusing to touch it. Investigate manually, then retry.~%  Gate remains CLOSED (system switched; Home not activated).~%"
+                              pivot)
                       2)
-                     ;; 4. 验证：轮询链接直到出现且指向 store
-                     (let ((ok? (let loop ((i 0))
-                                  (cond
-                                    ((home-activation-ready? home-link) #t)
-                                    ((< i 30) (sleep-proc 1) (loop (1+ i)))
-                                    (else #f))))
-                           (new-home (symlink-target home-link)))
-                       (if (or (not ok?) (file-exists? pivot))
+                     (let ((had-pivot-before (file-exists? pivot)))
+                       ;; 4. Home 热激活（幂等；herd restart 被拒则失败）
+                       (if (not (zero? (run-command
+                                        `("herd" "restart"
+                                                 ,(string-append "guix-home-" home-user)))))
                          (begin
-                          ;; 本次失败激活产生的 safe pivot 清理
-                          ;; （不覆盖原始 activation 错误）
-                          (when (and (not had-pivot-before)
-                                     (file-exists? pivot))
-                            (unless (eq? 'safe-stale-pivot
-                                         (remove-stale-pivot! pivot))
-                              (format (current-error-port)
-                                      "reconfigure: additionally, cleanup of the stale pivot from~%  THIS failed activation failed; manual attention required:~%  ~a~%"
-                                      pivot)))
                           (format (current-error-port)
-                                  "reconfigure: system generation switched OK, but Home hot-activation~%  FAILED (old Home: ~a; system is NOT rolled back).~%  Gate remains CLOSED (new interactive sessions refused).~%  Investigate: pivot residue ~a, or ~a occupied by a non-symlink.~%  Fix, then re-run blue reconfigure ~a to recover without reboot.~%"
-                                  (or old-home "none") pivot home-link host)
+                                  "reconfigure: system generation switched, but Home hot-activation~%  could not be started (herd restart rejected). Gate remains~%  CLOSED; next boot recovers via the official service.~%")
                           2)
-                         ;; 5. readiness 复查：直接读取 Shepherd protocol；
-                         ;; running 服务或成功完成的 one-shot 才算 ready。
-                         (let ((failed
-                                (find
-                                 (lambda (svc)
-                                   (not (service-ready? svc)))
-                                 %readiness-capabilities)))
-                           (if failed
+                         ;; 5. 验证：轮询链接直到出现且指向 store
+                         (let ((ok? (let loop ((i 0))
+                                      (cond
+                                        ((home-activation-ready? home-link) #t)
+                                        ((< i 30) (sleep-proc 1) (loop (1+ i)))
+                                        (else #f))))
+                               (new-home (symlink-target home-link)))
+                           (if (or (not ok?) (file-exists? pivot))
                              (begin
+                              ;; 本次失败激活产生的 safe pivot 清理
+                              ;; （不覆盖原始 activation 错误）
+                              (when (and (not had-pivot-before)
+                                         (file-exists? pivot))
+                                (unless (eq? 'safe-stale-pivot
+                                             (remove-stale-pivot! pivot))
+                                  (format (current-error-port)
+                                          "reconfigure: additionally, cleanup of the stale pivot from~%  THIS failed activation failed; manual attention required:~%  ~a~%"
+                                          pivot)))
                               (format (current-error-port)
-                                      "reconfigure: capability ~a was not confirmed ready; gate remains CLOSED.~%  Fix the cause, then re-run blue reconfigure ~a to recover.~%"
-                                      failed host)
+                                      "reconfigure: system generation switched OK, but Home hot-activation~%  FAILED (old Home: ~a; system is NOT rolled back).~%  Gate remains CLOSED (new interactive sessions refused).~%  Investigate: pivot residue ~a, or ~a occupied by a non-symlink.~%  Fix, then re-run blue reconfigure ~a to recover without reboot.~%"
+                                      (or old-home "none") pivot home-link host)
                               2)
-                             (begin
-                              (open-gate!)
-                              (if (equal? new-home old-home)
-                                (format #t
-                                        "reconfigure: OK (Home closure unchanged; link idempotent: ~a)~%"
-                                        new-home)
-                                (format #t
-                                        "reconfigure: OK (Home hot-switched ~a -> ~a)~%"
-                                        old-home new-home))
-                              0))))))))))))
+                             ;; 6. readiness 复查：直接读取 Shepherd protocol；
+                             ;; running 服务或成功完成的 one-shot 才算 ready。
+                             (let ((failed
+                                    (find
+                                     (lambda (svc)
+                                       (not (service-ready? svc)))
+                                     %readiness-capabilities)))
+                               (if failed
+                                 (begin
+                                  (format (current-error-port)
+                                          "reconfigure: capability ~a was not confirmed ready; gate remains CLOSED.~%  Fix the cause, then re-run blue reconfigure ~a to recover.~%"
+                                          failed host)
+                                  2)
+                                 (begin
+                                  (open-gate!)
+                                  (if (equal? new-home old-home)
+                                    (format #t
+                                            "reconfigure: OK (Home closure unchanged; link idempotent: ~a)~%"
+                                            new-home)
+                                    (format #t
+                                            "reconfigure: OK (Home hot-switched ~a -> ~a)~%"
+                                            old-home new-home))
+                                  0))))))))))))))

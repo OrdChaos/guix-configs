@@ -132,10 +132,14 @@
   (test-equal "unsafe pivot: exit code 2" 2 result)
   (test-assert "unsafe pivot: gate stays closed" (gate-closed? gate-dir))
   (test-assert "unsafe pivot: file untouched" (file-exists? (pivot home-dir)))
-  (test-assert "unsafe pivot: no herd restart"
-               (not (any (lambda (argv) (equal? (car argv) "herd")) log))))
+  (test-assert "unsafe pivot: only hot restart attempted"
+               (every (lambda (argv)
+                        (equal? argv '("herd" "restart" "mihomo")))
+                      (filter (lambda (argv)
+                                (equal? (car argv) "herd"))
+                              log))))
 
-;; ── 3. herd restart 被拒 → gate CLOSED、exit 2 ──
+;; ── 3. hot restart 失败（mihomo）→ gate CLOSED、exit 2 ──
 
 (let ((sandbox (make-sandbox)))
   (define gate-dir (second sandbox))
@@ -149,12 +153,64 @@
      #:run-command
      (lambda (argv)
        (if (and (equal? (car argv) "herd")
-                (equal? (cadr argv) "restart"))
+                (equal? (cadr argv) "restart")
+                (equal? (caddr argv) "mihomo"))
          1 0))
      #:service-ready? all-services-ready?
      #:sleep-proc (lambda (s) #t)))
-  (test-equal "herd restart failure: exit code 2" 2 result)
-  (test-assert "herd restart failure: gate stays closed" (gate-closed? gate-dir)))
+  (test-equal "hot restart failure: exit code 2" 2 result)
+  (test-assert "hot restart failure: gate stays closed" (gate-closed? gate-dir)))
+
+;; ── 3b. hot restart 成功且先于 Home 热激活 ──
+
+(let ((sandbox (make-sandbox))
+      (log '()))
+  (define gate-dir (second sandbox))
+  (define home-dir (third sandbox))
+  (ready-home! home-dir)
+  (define result
+    (reconfigure-transaction!
+     "vm" "alice"
+     #:root "/repo"
+     #:gate-dir gate-dir
+     #:home-dir home-dir
+     #:run-command
+     (lambda (argv)
+       (set! log (cons argv log))
+       0)
+     #:service-ready? all-services-ready?
+     #:sleep-proc (lambda (s) #t)))
+  (test-equal "hot restart success: exit code 0" 0 result)
+  (let ((restarts (reverse (filter (lambda (argv)
+                                     (and (equal? (car argv) "herd")
+                                          (equal? (cadr argv) "restart")))
+                                   log))))
+    (test-equal "hot restart runs mihomo then guix-home"
+                '(("herd" "restart" "mihomo")
+                  ("herd" "restart" "guix-home-alice"))
+                restarts)))
+
+;; ── 3c. Home herd restart 被拒 → gate CLOSED、exit 2 ──
+
+(let ((sandbox (make-sandbox)))
+  (define gate-dir (second sandbox))
+  (define home-dir (third sandbox))
+  (define result
+    (reconfigure-transaction!
+     "vm" "alice"
+     #:root "/repo"
+     #:gate-dir gate-dir
+     #:home-dir home-dir
+     #:run-command
+     (lambda (argv)
+       (if (and (equal? (car argv) "herd")
+                (equal? (cadr argv) "restart")
+                (string-prefix? "guix-home-" (caddr argv)))
+         1 0))
+     #:service-ready? all-services-ready?
+     #:sleep-proc (lambda (s) #t)))
+  (test-equal "home herd restart failure: exit code 2" 2 result)
+  (test-assert "home herd restart failure: gate stays closed" (gate-closed? gate-dir)))
 
 ;; ── 4. Home activation 超时 → gate CLOSED、exit 2、轮询 30 次 ──
 
@@ -347,6 +403,10 @@
             '(guixcfg-secrets-deploy account-state-ready persistent-state-ready
                                      home-ready session-infra-ready interactive-session-ready)
             %readiness-capabilities)
+
+(test-equal "hot restart services include mihomo"
+            '(mihomo)
+            %hot-restart-services)
 
 (test-assert "reconfigure gate facts alias the session-gate authority"
              ;; 兼容导出名必须跟随 (guixcfg system session-gate) 的唯一

@@ -136,6 +136,9 @@ sudo 清理用户 channel load path 后重新编译整份 blueprint）→
 ```text
 关闭 login gate（新 session 拒绝；已有 session 不动）
   → guix time-machine … system reconfigure --no-kexec
+  → 显式 herd restart `%hot-restart-services`（当前仅 mihomo；
+    upstream `upgrade-shepherd-services` 不重启运行中 daemon——
+    guix issue 33508；订阅/运行时配置变更必须热替换）
   → shepherd 升级自动 restart 变化的 one-shot 服务
     （runtime secrets 代际发布、account verify、Home 热激活）
   → gvfs-mount-metadata one-shot 每轮落入 to-start 重跑（pinned guix
