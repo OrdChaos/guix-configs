@@ -162,8 +162,10 @@
                                    "server ~a -fallback")
                   (string-contains %dhcp-fallback-program-text
                                    "/run/resolvconf/resolv.conf")))
-(test-assert "S8: dispatcher reacts only to NetworkManager dns-change"
+(test-assert "S8: dispatcher reacts to link/DHCP/connectivity/DNS changes"
               (and (string-contains %dhcp-dispatcher-text "dns-change")
+                   (string-contains %dhcp-dispatcher-text "dhcp4-change")
+                   (string-contains %dhcp-dispatcher-text "up")
                    (string-contains %dhcp-dispatcher-text "reload")
                    (string-contains %dhcp-dispatcher-text "smartdns")))
 

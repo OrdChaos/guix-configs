@@ -13,7 +13,7 @@
 ;;;   - 固定 IP literal upstream（无 hostname bootstrap；mihomo 侧
 ;;;     加对应 DIRECT 规则保证不绕经节点——见 mihomo-template.yaml）；
 ;;;   - cache 仅内存（cache-persist no；丢失代价=首查稍慢）；
-;;;   - DHCP DNS 只作 fallback：NetworkManager 的 dns-change dispatcher
+;;;   - DHCP DNS 只作 fallback：NetworkManager 的 link/DHCP/DNS dispatcher
 ;;;     从 openresolv metadata 生成 runtime include；固定上游仍是默认。
 ;;;
 ;;; failure semantics（VM 实测 smartdns 47）：
@@ -134,10 +134,16 @@
   (program-file
    "smartdns-dhcp-dispatcher"
    #~(begin
-       ;; NetworkManager invokes dispatcher scripts with IFACE ACTION.  The
-       ;; dedicated dns-change event is emitted for additions and removals.
-       (when (and (= (length (command-line)) 3)
-                  (string=? (caddr (command-line)) "dns-change"))
+       ;; NetworkManager invokes dispatcher scripts with IFACE ACTION.  React
+       ;; to every event that can change the active DNS (activation, DHCP
+       ;; lease, connectivity, DNS).  Relying on the dedicated dns-change
+       ;; event alone was not robust: it can fire before this wrapper is
+       ;; installed at boot or before openresolv writes the metadata, leaving
+       ;; /run/smartdns/dhcp-upstreams.conf empty (observed 2026-09-28).
+       (when (and (>= (length (command-line)) 3)
+                  (member (caddr (command-line))
+                          '("up" "dhcp4-change" "dhcp6-change"
+                            "connectivity-change" "dns-change")))
          (unless (zero? (system* #$%smartdns-dhcp-fallback-program))
            (error "failed to materialize DHCP DNS fallback"))
          ;; During NetworkManager's first start SmartDNS may not be running
@@ -198,7 +204,7 @@ proven mihomo-config-ready / gvfs-mount-metadata pattern."
          (one-shot? #t)
          (respawn? #f)
          (documentation
-          "Write the regular NetworkManager dns-change dispatcher wrapper and
+          "Write the regular NetworkManager dispatcher wrapper and
 materialize /run/smartdns/dhcp-upstreams.conf.")
          (start #~(lambda ()
                     (unless (zero? (system* #$%smartdns-runtime-setup))
