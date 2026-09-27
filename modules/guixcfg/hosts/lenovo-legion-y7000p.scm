@@ -32,7 +32,9 @@
 
 (define-module (guixcfg hosts lenovo-legion-y7000p)
                #:use-module (gnu)                          ; operating-system、user-account、service 等
+               #:use-module (gnu services base)            ; pam-limits-service-type
                #:use-module (gnu services desktop)         ; upower-service-type
+               #:use-module (gnu system pam)               ; pam-limits-entry
                #:use-module (gnu home)                     ; home-environment（laptop home 组装）
                #:use-module (gnu services networking)      ; network-manager-service-type、wpa-supplicant-service-type
                #:use-module (guixcfg storage model)          ; host-storage-policy-keep-root-generations
@@ -122,6 +124,15 @@
   (machine-state-persistence-file-systems
    (list %network-manager-connections-persistence-rule)))
 
+;; Wine may exceed the inherited 4096 descriptor limit while streaming game
+;; resources.  Set both limits so the graphical PAM session passes 65536 to
+;; Flatpak and its child Wine processes without requiring an app-specific hook.
+(define %primary-user-pam-limits
+  (list (pam-limits-entry (user-profile-name %primary-user)
+                          'both
+                          'nofile
+                          65536)))
+
 (define %lenovo-legion-y7000p-services
   (append
    (make-host-services
@@ -137,7 +148,8 @@
     ;; UPower publishes battery and charging state on the system bus for
     ;; Noctalia.  It is a physical-laptop capability, not a VM service.
     #:additional-system-services
-    (list (service upower-service-type)))
+    (list (service upower-service-type)
+          (service pam-limits-service-type %primary-user-pam-limits)))
    ;; Activation precedes Shepherd's mounts and NetworkManager startup.
    (list (network-manager-connections-persistence-service))))
 

@@ -47,6 +47,7 @@
     "tests/test-credential-source.scm"
     "tests/test-kernel-platform.scm"
     "tests/test-nvidia.scm"
+    "tests/test-pam-limits.scm"
     "tests/test-prime-run.scm"
     "tests/test-channels.scm"
     "tests/test-certificates.scm"
