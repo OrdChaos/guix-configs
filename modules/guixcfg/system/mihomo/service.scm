@@ -47,6 +47,7 @@
                #:use-module (rosenthal packages networking) ; mihomo
                #:use-module (guixcfg utils module-closure)  ; guixcfg-module-select?
                #:use-module (guixcfg system mihomo config)
+               #:use-module (guixcfg system dns nm-dnsmasq) ; %nm-dnsmasq-uid（exclude-uid）
                #:use-module (guixcfg security secrets) ; secret-decl（subscription secret colocate）
                #:use-module (guixcfg system machine-state-persistence) ; %machine-state-root
                #:export (%mihomo-data-directory
@@ -144,9 +145,10 @@ shell；URL 绝不进 argv/environment/日志（成功日志只报路径）。"
                  (lambda args
                    (fail! (string-append "cannot read secret file "
                                          %mihomo-secret-path))))))
-         (catch 'mihomo-config-error
-           (lambda ()
-             (let ((config (compose-mihomo-config template secret)))
+          (catch 'mihomo-config-error
+            (lambda ()
+              (let ((config (compose-mihomo-config template secret
+                                                   #$%nm-dnsmasq-uid)))
                (unless (file-exists? %mihomo-runtime-dir)
                  (mkdir %mihomo-runtime-dir))
                (chmod %mihomo-runtime-dir #o700)
@@ -186,11 +188,11 @@ template and the decrypted subscription URL into \
 (define (mihomo-daemon-shepherd-service)
   "Mihomo daemon：-d 数据目录 + -f runtime config。requirement 显式
 含 mihomo-config-ready（materializer）与 networking（NM 就绪）；
-respawn 保持 shepherd 默认；stop 走 make-kill-destructor（SIGTERM
-→ Mihomo 自清理 TUN/route/nftables）。"
+ respawn 保持 shepherd 默认；stop 走 make-kill-destructor（SIGTERM
+ → Mihomo 自清理 TUN/route/nftables）。"
   (list (shepherd-service
          (provision '(mihomo))
-         (requirement '(loopback networking mihomo-config-ready smartdns))
+         (requirement '(loopback networking mihomo-config-ready))
          (documentation
           "Run Mihomo as the system transparent proxy (TUN with \
 auto-route/auto-redirect; external controller on loopback only).")

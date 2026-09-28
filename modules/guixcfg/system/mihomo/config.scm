@@ -25,6 +25,7 @@
                #:use-module (ice-9 string-fun) ; string-replace-substring（非 SRFI-13）
                #:use-module (ice-9 match)
                #:export (%mihomo-subscription-placeholder
+                         %mihomo-nm-dnsmasq-uid-placeholder
                          %mihomo-secret-path
                          %mihomo-runtime-dir
                          %mihomo-runtime-config-path
@@ -32,6 +33,11 @@
                          count-substring))
 
 (define %mihomo-subscription-placeholder "@@MIHOMO_SUBSCRIPTION_URL@@")
+
+;; NetworkManager dnsmasq 的稳定 UID 占位符。service 层以
+;; (guixcfg system dns nm-dnsmasq) 的 %nm-dnsmasq-uid 传入——
+;; 保持本模块无 gnu/guix 依赖（generated runtime 闭包最小）。
+(define %mihomo-nm-dnsmasq-uid-placeholder "@@MIHOMO_NM_DNSMASQ_UID@@")
 
 (define %mihomo-secret-path
   "/run/guixcfg-secrets-ordinary/system/mihomo-subscription.url")
@@ -74,20 +80,34 @@ string-count——它只数字符不数子串）。"
            ((ch . rest)
             (loop rest (cons ch out))))))
 
-(define (compose-mihomo-config template secret-raw)
-  "TEMPLATE（公开模板，含恰好一次占位符）+ SECRET-RAW（subscription
-URL 文件原文，可能带尾换行）→ 完整 runtime config 文本。
-违反任一契约时 (throw 'mihomo-config-error MESSAGE) fail closed。
-不打印、不返回值之外地暴露 secret。"
-  (let ((url (strip-one-trailing-newline secret-raw)))
+(define* (compose-mihomo-config template secret-raw
+                                #:optional (nm-dnsmasq-uid #f))
+  "TEMPLATE（公开模板，含恰好一次 subscription URL 占位符）+
+SECRET-RAW（subscription URL 文件原文，可能带尾换行）→ 完整 runtime
+config 文本。可选 NM-DNSMASQ-UID（整数）启用 `tun.exclude-uid` 占位符
+替换；给出时模板必须恰好含一次该占位符。违反任一契约时
+(throw 'mihomo-config-error MESSAGE) fail closed。不打印、不返回值
+之外地暴露 secret。"
+  (let* ((url (strip-one-trailing-newline secret-raw))
+         (template* (if nm-dnsmasq-uid
+                      (begin
+                        (unless (= (count-substring
+                                    template %mihomo-nm-dnsmasq-uid-placeholder)
+                                   1)
+                          (throw 'mihomo-config-error
+                                 "nm-dnsmasq uid placeholder must appear exactly once"))
+                        (string-replace-substring
+                         template %mihomo-nm-dnsmasq-uid-placeholder
+                         (number->string nm-dnsmasq-uid)))
+                      template)))
     (when (or (string-contains url "\r")
               (string-contains url "\n")
               (string-contains url (string #\nul)))
       (throw 'mihomo-config-error
         "subscription URL contains CR, LF or NUL after trailing-newline strip"))
-    (unless (= (count-substring template %mihomo-subscription-placeholder) 1)
+    (unless (= (count-substring template* %mihomo-subscription-placeholder) 1)
       (throw 'mihomo-config-error
         "template placeholder must appear exactly once"))
-    (string-replace-substring template
+    (string-replace-substring template*
                               %mihomo-subscription-placeholder
                               (yaml-double-quote-escape url))))

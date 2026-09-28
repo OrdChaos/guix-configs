@@ -55,8 +55,7 @@
                #:use-module (guixcfg system application-persistence) ; application persistence generic executor
                #:use-module (guixcfg system mount-metadata) ; gvfs-mount-metadata-service
                #:use-module (guixcfg system mihomo service) ; mihomo-service（透明代理）
-               #:use-module (guixcfg system dns ownership) ; system-dns-etc-service（DNS ownership）
-               #:use-module (guixcfg system dns smartdns) ; smartdns-service（system resolver）
+               #:use-module (guixcfg system dns nm-dnsmasq) ; NetworkManager dnsmasq 专用账号
                #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
                #:use-module (guixcfg system machine-identity) ; /etc/machine-id 持久化（先于 D-Bus activation）
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind + 系统集成
@@ -135,8 +134,8 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
                              persistent-mount-file-systems
                              (additional-system-services '()))
          "共享 system services 列表。NETWORK-SERVICES 是 host 的网络服务
- 头（NetworkManager 配置 + 可选 wpa-supplicant，排在 DNS ownership
- 之前）；KEEP-ROOT-GENERATIONS 是 storage policy 的 keep 数；
+ 头（NetworkManager（dns=dnsmasq）+ 可选 wpa-supplicant）；
+ KEEP-ROOT-GENERATIONS 是 storage policy 的 keep 数；
  PERSISTENT-MOUNT-FILE-SYSTEMS 是 HOME persistence bind 列表
  （gvfs-mount-metadata 与 file-systems 字段共用）；
   ADDITIONAL-SYSTEM-SERVICES 是 host-only system services；
@@ -144,10 +143,9 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
   已提升为全局共享（Steam 属全局用户软件）。"
          (append
           (append network-services
-                  (list ;; 系统 DNS ownership（docs/architecture/dns.md）。
-                        (system-dns-etc-service)
-                        ;; SmartDNS：唯一 system resolver。
-                        (smartdns-service)
+                  (list ;; NetworkManager dnsmasq 专用账号（稳定 UID，被
+                        ;; mihomo TUN exclude-uid 引用；docs/architecture/dns.md）。
+                        (nm-dnsmasq-account-service)
                         ;; GVfs 桌面 metadata（x-gvfs-hide/x-gvfs-trash → utab）。
                         (gvfs-mount-metadata-service persistent-mount-file-systems)
                         ;; Mihomo 系统透明代理（docs/architecture/mihomo.md）。

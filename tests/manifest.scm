@@ -60,7 +60,7 @@
     "tests/test-substitutes.scm"
     "tests/test-desktop.scm"
     "tests/test-mihomo.scm"
-    "tests/test-smartdns.scm"
+    "tests/test-nm-dnsmasq.scm"
     "tests/test-session-env.scm"
     "tests/test-apps.scm"
     "tests/test-home.scm"

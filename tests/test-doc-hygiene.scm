@@ -48,8 +48,7 @@
 (define %doc-path-exemptions
   '("definition.scm" "state.scm" "limine-menu.scm"
                      "EFI/Guix/candidate.scm" "gnu/build/file-systems.scm"
-                     "guix/gexp.scm" "nonguix/transformations.scm"
-                     "modules/guixcfg/system/resolvconf.scm")) ; dns.md 的删除决策记录
+                     "guix/gexp.scm" "nonguix/transformations.scm"))
 
 ;; modules/guixcfg 下的全部文件 basename（bare-name 引用的兜底解析：
 ;; docs 常用 `readiness.scm` 等不带 area 前缀的短名）。

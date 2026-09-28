@@ -1,14 +1,21 @@
-# Mihomo Phase 1 base config template（repository authority，
-# docs/architecture/mihomo.md）。
+# Mihomo base config template（repository authority，docs/architecture/mihomo.md）。
 #
-# subscription URL 占位符由 mihomo-config materializer 在 boot 时替换，
-# 合成结果写入 /run/mihomo/config.yaml（root 0600）经 -f 交给 Mihomo。
-# 本模板【不可直接运行】——占位符不是合法 URL（materializer 的
-# fail-closed 契约：占位符必须恰好出现一次，缺失/重复即失败）。
+# 两个占位符由 mihomo-config materializer 在 boot 时替换：订阅 URL
+# （secret）与 NetworkManager dnsmasq 的稳定 UID。合成结果写入
+# /run/mihomo/config.yaml（root 0600）经 -f 交给 Mihomo。
+# 本模板【不可直接运行】——占位符不是合法值（materializer 的 fail-closed
+# 契约：每个占位符必须恰好出现一次，缺失/重复即失败；因此本注释不写出
+# 占位符字面量）。
 #
-# Phase 1 边界：不接管 DNS（无 dns 段、dns-hijack 显式置空）、
-# 不启用 fake-ip、不启用 self-update（binary 归 Guix）、controller
-# 仅 loopback（secret 置空是单用户 loopback-only 部署的明确选择）。
+# DNS 所有权（docs/architecture/dns.md）：
+#   TUN off：应用 → 系统 resolver（/etc/resolv.conf 127.0.0.1）→
+#            NetworkManager dnsmasq → DHCP DNS。
+#   TUN on ：mihomo 接管 DNS（fake-ip + dns-hijack）；DIRECT/local 经
+#            `direct-nameserver: system` 回到 dnsmasq → DHCP DNS；代理侧
+#            经 DoH。NetworkManager dnsmasq 的上游以专用 UID 运行并被
+#            `tun.exclude-uid` 排除，切断递归。
+# self-update 关闭（binary 归 Guix）；controller 仅 loopback（secret
+# 置空是单用户 loopback-only 部署的明确选择）。
 
 mode: rule
 log-level: info
@@ -19,14 +26,59 @@ log-level: info
 ipv6: false
 external-controller: 127.0.0.1:9090
 secret: ""
+dns:
+  enable: true
+  ipv6: false
+  # 仅供 mihomo 内部/hijack 使用；127.0.0.1:53 归 NetworkManager
+  # dnsmasq，这里用另一个端口避免冲突。
+  listen: "127.0.0.1:1053"
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "*.lan"
+    - "+.local"
+    - "localhost.ptlogin2.qq.com"
+  # DoH 服务器域名的 bootstrap（必须是 IP，仅用于解析 nameserver /
+  # proxy-server-nameserver 的域名；不承担普通系统解析）。
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  # DIRECT / local 流量解析经系统 resolver：/etc/resolv.conf（127.0.0.1）
+  # → NetworkManager dnsmasq → DHCP DNS（含 captive portal）。
+  direct-nameserver:
+    - system
+  # 代理侧可靠 DNS（DoH）。
+  nameserver:
+    - https://doh.pub/dns-query
+    - https://dns.alidns.com/dns-query
+  # 代理节点域名的 bootstrap DNS（拨号节点前解析节点域名）。
+  proxy-server-nameserver:
+    - https://doh.pub/dns-query
+    - https://dns.alidns.com/dns-query
+sniffer:
+  enable: true
+  sniff:
+    TLS:
+      ports: [443, 8443]
+    HTTP:
+      ports: [80, 8080-8880]
+    QUIC:
+      ports: [443, 8443]
 tun:
   enable: true
   stack: mixed
   device: mihomo0
-  dns-hijack: []
+  dns-hijack:
+    - any:53
+    - tcp://any:53
   auto-route: true
   auto-redirect: true
   auto-detect-interface: true
+  # NetworkManager dnsmasq 的专用稳定 UID：其上游 DHCP DNS 查询必须
+  # 绕过 TUN（否则进入 dns-hijack → mihomo DNS → 递归）。UID 由
+  # (guixcfg system dns nm-dnsmasq) 单一拥有。
+  exclude-uid:
+    - @@MIHOMO_NM_DNSMASQ_UID@@
 proxy-providers:
   airport:
     type: http
@@ -34,10 +86,9 @@ proxy-providers:
     path: ./providers/airport.yaml
     interval: 3600
     # 订阅刷新直连（proxy: DIRECT）：不依赖代理组/节点可用性——节点
-    # 全挂时刷新照常。可直连的前提：节点域名解析经 SmartDNS 直连
-    # 上游（见 rules 段的自举注释），且宿主直连出站可信（实测
-    # api.wd-purple.com 直连拉取成功，updatedAt 更新；早前 EOF 是
-    # 宿主侧残留 clash 所致，已恢复）。
+    # 全挂时刷新照常。节点/订阅域名经 mihomo `proxy-server-nameserver`
+    # 解析；宿主直连出站可信（实测直连拉取成功，updatedAt 更新；早前
+    # EOF 是宿主侧残留 clash 所致）。
     proxy: DIRECT
     health-check:
       enable: true
@@ -58,13 +109,4 @@ rules:
   - IP-CIDR6,fc00::/7,DIRECT,no-resolve
   - IP-CIDR6,fe80::/10,DIRECT,no-resolve
   - IP-CIDR6,::1/128,DIRECT,no-resolve
-  # SmartDNS 上游（223.5.5.5/119.29.29.29）必须 DIRECT——这是自举
-  # 必需：机场节点服务器是域名（oss-cn-*.toshiba-nvme.com），mihomo
-  # 拨号节点前要先经系统 DNS（SmartDNS）解析它；若上游查询走
-  # MATCH→PROXY（经节点），解析节点域名又需要节点本身——死锁，
-  # 全部节点 SERVFAIL/timeout（2026-08-28 重启后实测：all proxies
-  # timeout）。直连上游还附带 DNS 不随节点存亡（TUN off 时退化为
-  # 直连机器，见 docs/architecture/network.md §7）。
-  - IP-CIDR,223.5.5.5/32,DIRECT,no-resolve
-  - IP-CIDR,119.29.29.29/32,DIRECT,no-resolve
   - MATCH,PROXY

@@ -124,22 +124,53 @@
                                        "")
                                    "SECRET_URL")))
 
+;; ── M14：nm-dnsmasq UID 占位符替换（可选参数）───────────────
+(test-assert "M14: uid placeholder substituted when uid is given"
+             (string-contains
+              (compose-mihomo-config
+               (string-append %mini-template
+                              "tun:\n  exclude-uid:\n"
+                              "    - @@MIHOMO_NM_DNSMASQ_UID@@\n")
+               "https://a.invalid/x\n" 985)
+              "- 985"))
+(test-assert "M14: missing uid placeholder fails closed when uid is given"
+             (caught-error
+              (lambda () (compose-mihomo-config
+                          %mini-template "https://a.invalid/x\n" 985))))
+(test-assert "M14: uid not required when omitted"
+             (string-contains (compose-mihomo-config
+                               %mini-template "https://a.invalid/x\n")
+                              "https://a.invalid/x"))
+
 ;; ── M7：模板静态契约 ────────────────────────────────────────
-(test-assert "M7: placeholder appears exactly once in template"
-             (= (count-substring (template-text)
-                                 %mihomo-subscription-placeholder) 1))
-(test-assert "M7: no subscription URL in public template"
-             ;; 模板中唯一的 "://" 是健康检查 URL（gstatic 公开常量）；
-             ;; 订阅 URL 行只有占位符。
-             (and (= (count-substring (template-text) "://") 1)
-                  (string-contains (template-text)
-                                   "https://www.gstatic.com/generate_204")
-                  (string-contains (template-text)
-                                   "url: \"@@MIHOMO_SUBSCRIPTION_URL@@\"")))
-(test-assert "M7: dns-hijack explicitly empty"
-             (string-contains (template-text) "dns-hijack: []"))
-(test-assert "M7: no fake-ip key"
-             (not (string-contains (template-text) "fake-ip:")))
+(test-assert "M7: both placeholders appear exactly once in template"
+             (and (= (count-substring (template-text)
+                                      %mihomo-subscription-placeholder) 1)
+                  (= (count-substring
+                      (template-text) %mihomo-nm-dnsmasq-uid-placeholder) 1)))
+(test-assert "M7: no subscription URL value in public template"
+             (and (string-contains (template-text)
+                                   "url: \"@@MIHOMO_SUBSCRIPTION_URL@@\"")
+                  (not (string-contains (template-text) "token="))))
+(test-assert "M7: dns-hijack hijacks UDP+TCP 53"
+             (let ((text (template-text)))
+               (and (string-contains text "dns-hijack:")
+                    (string-contains text "- any:53")
+                    (string-contains text "- tcp://any:53"))))
+(test-assert "M7: fake-ip DNS is enabled"
+             (let ((text (template-text)))
+               (and (string-contains text "enhanced-mode: fake-ip")
+                    (string-contains text "fake-ip-range:"))))
+(test-assert "M7: direct-nameserver uses the system resolver"
+             (let ((text (template-text)))
+               (and (string-contains text "direct-nameserver:")
+                    (string-contains text "- system"))))
+(test-assert "M7: tun exclude-uid references the nm-dnsmasq uid placeholder"
+             (let ((text (template-text)))
+               (and (string-contains text "exclude-uid:")
+                    (string-contains
+                     text
+                     (string-append "- " %mihomo-nm-dnsmasq-uid-placeholder)))))
 (test-assert "M7: no default DNS hijack target"
              (not (string-contains (template-text) "0.0.0.0:53")))
 
@@ -154,8 +185,8 @@
 
 ;; ── M9：provider 原生 http + DIRECT 订阅刷新 ─────────────────
 ;; proxy: DIRECT——订阅刷新不依赖代理组/节点可用性（节点全挂时刷新
-;; 照常；直连可行性：节点域名解析经 SmartDNS 直连上游自举 +
-;; 宿主直连出站可信，2026-08-28 VM 实测直连拉取成功）。
+;; 照常；直连可行性：节点域名经 mihomo `proxy-server-nameserver`
+;; 解析 + 宿主直连出站可信，2026-08-28 VM 实测直连拉取成功）。
 (test-assert "M9: provider refresh dials DIRECT"
              (string-contains (template-text) "proxy: DIRECT"))
 
@@ -183,14 +214,14 @@
 (define %mihomo-config-svc
   (shepherd-service-with-provision 'mihomo-config-ready))
 
-(test-assert "M11: mihomo daemon requires config-ready + networking + smartdns"
+(test-assert "M11: mihomo daemon requires config-ready + networking (no smartdns)"
              (let ((req (shepherd-service-requirement %mihomo-daemon)))
                (and (memq 'mihomo-config-ready req)
                     (memq 'networking req)
                     (memq 'loopback req)
-                    ;; Node/subscription domains are resolved through the
-                    ;; system resolver; start after SmartDNS is up.
-                    (memq 'smartdns req))))
+                    ;; DNS is owned by mihomo itself (fake-ip + hijack) and by
+                    ;; NetworkManager dnsmasq; the old SmartDNS requirement is gone.
+                    (not (memq 'smartdns req)))))
 (test-assert "M11: materializer requires ordinary-secrets-ready"
              (memq 'ordinary-secrets-ready
                    (shepherd-service-requirement %mihomo-config-svc)))

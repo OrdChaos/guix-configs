@@ -30,6 +30,7 @@
                #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
                #:use-module (guixcfg apps model)      ; applications-secrets
                #:use-module (guixcfg system mihomo service) ; %mihomo-secrets、%mihomo-data-persistence-rule
+               #:use-module (guixcfg system dns nm-dnsmasq) ; dnsmasq 专用账号配置
                #:export (%vm-storage-policy %vm-services %vm-test-secrets
                                             %vm-os))
 
@@ -67,11 +68,14 @@
 (define %vm-services
   (make-host-services
    ;; QEMU user-mode 网络（SLIRP：DHCP 10.0.2.15 / DNS 10.0.2.3）。
-   ;; DNS 语义见 docs/architecture/dns.md（/etc/resolv.conf 归
-   ;; (guixcfg system dns ownership) 静态声明）。
+   ;; DNS 语义见 docs/architecture/dns.md：NetworkManager 自带 dnsmasq
+   ;; backend（127.0.0.1:53 → DHCP DNS），以专用稳定 UID 运行。
    #:network-services
    (list (service network-manager-service-type
                   (network-manager-configuration
+                   (dns "dnsmasq")
+                   (dnsmasq-configuration-files
+                    (nm-dnsmasq-dnsmasq-configuration-files))
                    (shepherd-requirement '()))))
    #:keep-root-generations
    (host-storage-policy-keep-root-generations %vm-storage-policy)

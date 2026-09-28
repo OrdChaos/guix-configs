@@ -47,5 +47,6 @@ xsettingsd。）
   NVIDIA open module adapter + niri iGPU/offload 机器事实）；剩余：
   实机 firmware 选择、microcode revision 验收、实机运行验证清单
   （prime-run/vulkaninfo/nvidia-smi/powerd，见 graphics.md）。
-- **SmartDNS**：未来支持 DHCP DNS 作为附加 upstream 组（hook 产出 + config
-  再生成 + SIGHUP）；cache 持久化（如需要）。
+- **DNS**：已迁移为 NetworkManager dnsmasq（基础）+ mihomo fake-ip
+  （TUN 接管）；`tun.exclude-uid` 排除 NM dnsmasq 的专用 UID 以切断
+  递归。后续可评估 nameserver-policy / geosite 分流与 DoH 供应商调整。

@@ -29,7 +29,7 @@
 (define %store (open-connection))
 
 (define (lower-text file-like)
-  "lower FILE-LIKE 并读 store 内容（test-smartdns 同款模式）。"
+  "lower FILE-LIKE 并读 store 内容（test-mihomo 同款模式）。"
   (call-with-input-file
    (run-with-store %store (lower-object file-like))
    get-string-all))

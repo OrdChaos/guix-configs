@@ -51,6 +51,7 @@
                #:use-module (guixcfg system machine-state-persistence) ; machine-state binds
                #:use-module (guixcfg system network-manager-persistence) ; saved connection profiles
                #:use-module (guixcfg system mihomo service) ; %mihomo-secrets、%mihomo-data-persistence-rule
+               #:use-module (guixcfg system dns nm-dnsmasq) ; dnsmasq 专用账号配置
                #:export (%lenovo-legion-y7000p-storage-policy
                          %lenovo-legion-y7000p-application-configuration-selections
                          %lenovo-legion-y7000p-guix-home
@@ -119,10 +120,15 @@
 (define %lenovo-legion-y7000p-services
   (append
    (make-host-services
-    ;; 实机网络：NetworkManager 默认配置 + 显式 wpa-supplicant。
-    ;; DNS 语义同 VM（docs/architecture/dns.md）。
+    ;; 实机网络：NetworkManager（dnsmasq backend）+ 显式 wpa-supplicant。
+    ;; DNS 语义同 VM（docs/architecture/dns.md）：dnsmasq 127.0.0.1:53 →
+    ;; DHCP DNS，以专用稳定 UID 运行（mihomo TUN exclude-uid 引用）。
     #:network-services
-    (list (service network-manager-service-type)
+    (list (service network-manager-service-type
+                   (network-manager-configuration
+                    (dns "dnsmasq")
+                    (dnsmasq-configuration-files
+                     (nm-dnsmasq-dnsmasq-configuration-files))))
           (service wpa-supplicant-service-type))
     #:keep-root-generations
     (host-storage-policy-keep-root-generations
