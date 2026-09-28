@@ -31,3 +31,14 @@ $env.config.highlight_resolved_externals = true
 # starship
 mkdir ($nu.data-dir | path join "vendor/autoload")
 starship init nu | save -f ($nu.data-dir | path join "vendor/autoload/starship.nu")
+
+# carapace external completer (package owned by apps/carapace).
+# Generated at runtime, not at build time: `carapace _carapace nushell`
+# embeds UserConfigDir into the generated script ($HOME/.config/carapace),
+# so a store-backed file would hardcode one user's HOME.  The cache file is
+# ephemeral (regenerated below / $nu.cache-dir is not persisted); the guard
+# keeps nushell usable if the carapace app is disabled.
+if (which carapace | is-not-empty) {
+    ^carapace _carapace nushell | save -f ($nu.cache-dir | path join "carapace.nu")
+    source ($nu.cache-dir | path join "carapace.nu")
+}
