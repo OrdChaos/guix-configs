@@ -33,12 +33,18 @@ mkdir ($nu.data-dir | path join "vendor/autoload")
 starship init nu | save -f ($nu.data-dir | path join "vendor/autoload/starship.nu")
 
 # carapace external completer (package owned by apps/carapace).
-# Generated at runtime, not at build time: `carapace _carapace nushell`
-# embeds UserConfigDir into the generated script ($HOME/.config/carapace),
-# so a store-backed file would hardcode one user's HOME.  The cache file is
-# ephemeral (regenerated below / $nu.cache-dir is not persisted); the guard
-# keeps nushell usable if the carapace app is disabled.
+# Generated at runtime into the vendor autoload directory, like starship:
+# nushell evaluates config.nu first and vendor autoload files afterwards, so
+# the generated file takes effect in the same startup.  `source` cannot be
+# used here -- nushell resolves sourced paths at parse time, before the
+# generation line runs (nu::parser::sourced_file_not_found).  Generation is
+# runtime (not build-time) because `carapace _carapace nushell` embeds
+# UserConfigDir ($HOME/.config/carapace); a store-backed file would hardcode
+# one user's HOME.  $nu.data-dir is not persisted, so the file is
+# regenerated per boot and needs no persistence rule.
 if (which carapace | is-not-empty) {
-    ^carapace _carapace nushell | save -f ($nu.cache-dir | path join "carapace.nu")
-    source ($nu.cache-dir | path join "carapace.nu")
+    ^carapace _carapace nushell | save -f ($nu.data-dir | path join "vendor/autoload/carapace.nu")
+} else {
+    let stale = ($nu.data-dir | path join "vendor/autoload/carapace.nu")
+    if ($stale | path exists) { rm -f $stale }
 }
