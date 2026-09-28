@@ -68,12 +68,13 @@ DHCP DNS（动态 fallback；认证前 captive portal 可用）
   `/run` metadata；NetworkManager 官方 dispatcher（up / dhcp-change /
   connectivity-change / dns-change）严格提取 IPv4
   nameserver，原子生成 SmartDNS 上游 include 并 SIGHUP 重载。captive-portal
-  感知：dispatcher 读取 NM 连接状态（`CONNECTIVITY_STATE`，缺失时用
-  `nmcli -t -f CONNECTIVITY general`）；仅 `full` 时把 DHCP DNS 写成
-  `-fallback`（正常网络不把查询交给 DHCP resolver），非 `full`
-  （portal/limited/none，认证前）时写成普通 `server`（立即参与解析——认证前
-  固定上游被劫持/阻断，`-fallback` 不会触发，只有 DHCP resolver 可用；
-  2026-09-28 实测 TUN OFF 认证前解析失败即此因）。其 hook
+  感知：dispatcher 直接探测一个中立连通性检查 URL
+  （`http://detectportal.firefox.com/success.txt`，在线时正文恰好 `success`）
+  ——NM 自身连通性状态不可信（实测：校园网只放行门户时 NM 仍报 `full`）。
+  仅当探测成功时把 DHCP DNS 写成 `-fallback`（正常网络不把查询交给 DHCP
+  resolver）；探测失败（门户重定向/劫持/超时，认证前）时写成普通 `server`
+  （立即参与解析——认证前固定上游被劫持/阻断，`-fallback` 不会触发，
+  只有 DHCP resolver 可用；2026-09-28 实测 TUN OFF 认证前解析失败即此因）。其 hook
   必须是 root-owned regular file（NM 拒绝符号链接），因此由独立的 one-shot
   Shepherd 服务 `smartdns-dhcp-setup` 安装 wrapper 并物化 include；`smartdns`
   依赖它。ordering：openresolv metadata 由 NM 产生（NM → openresolv →

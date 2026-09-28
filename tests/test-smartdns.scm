@@ -165,12 +165,12 @@
                   (string-contains %dhcp-fallback-program-text
                                    "/run/resolvconf/resolv.conf")
                   (string-contains %dhcp-fallback-program-text "--portal")))
-(test-assert "S8: dispatcher is captive-portal aware and reacts to link/DNS changes"
+(test-assert "S8: dispatcher probes a neutral URL and reacts to link/DNS changes"
               (and (string-contains %dhcp-dispatcher-text "dns-change")
                    (string-contains %dhcp-dispatcher-text "dhcp4-change")
                    (string-contains %dhcp-dispatcher-text "up")
-                   (string-contains %dhcp-dispatcher-text "CONNECTIVITY_STATE")
-                   (string-contains %dhcp-dispatcher-text "nmcli")
+                   (string-contains %dhcp-dispatcher-text "detectportal.firefox.com")
+                   (string-contains %dhcp-dispatcher-text "success")
                    (string-contains %dhcp-dispatcher-text "--portal")
                    (string-contains %dhcp-dispatcher-text "reload")
                    (string-contains %dhcp-dispatcher-text "smartdns")))

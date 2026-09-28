@@ -49,7 +49,7 @@
 | D7 | 订阅刷新直连（`proxy: DIRECT`） | 刷新不依赖代理组/节点可用性——节点全挂时订阅照常更新。可行性：节点域名解析经 SmartDNS 直连上游（D4 自举）+ 宿主直连出站可信（2026-08-28 实测直连拉取成功；早前 EOF 是宿主残留 clash 所致） | 宿主直连出站不稳时刷新失败（cache-first 兜底，换节点/修宿主后经 refresh API 恢复） |
 | D8 | **TUN 是唯一流量入口**：无 mixed-port、无 HTTP_PROXY 系统代理语义 | 单入口 = 可审计、无静默旁路；透明代理下应用零配置 | TUN off = 无显式回退口（干净宿主下自动退化为直连机器，见 §7；不提供"半代理"中间态） |
 | D9 | 节点选择是**运行时偏好**，repo 只声明 select 组 | 节点健康随机场变化，不是 declarative 事实 | 重启/换节点后选择持久化于 `/var/lib/clash` 缓存；repo 不 pin 节点 |
-| D10 | DHCP DNS 不丢弃：openresolv 输出重定向到 `/run/resolvconf/resolv.conf`，经 root-owned regular NM dispatcher（up/dhcp-change/connectivity-change/dns-change）投影为 SmartDNS 上游；captive-portal 感知——NM 状态 `full` 时写 `-fallback`，非 `full`（认证前 portal/limited/none）时写普通 `server`（认证前固定上游被劫持/阻断，`-fallback` 不触发）；多连接的非 private 条目按 metric 合并 | captive portal 认证前通常只允许 DHCP DNS；正常网络仍优先固定上游、不把查询交给 DHCP resolver | 固定上游不可达时查询会交给当前网络 DHCP DNS；它可观察并伪造该降级期间的答案 |
+| D10 | DHCP DNS 不丢弃：openresolv 输出重定向到 `/run/resolvconf/resolv.conf`，经 root-owned regular NM dispatcher（up/dhcp-change/connectivity-change/dns-change）投影为 SmartDNS 上游；captive-portal 感知——dispatcher 探测中立 URL `detectportal.firefox.com/success.txt`（NM 状态不可信），在线（`success`）写 `-fallback`，失败（认证前门户/劫持/超时）写普通 `server`；多连接的非 private 条目按 metric 合并 | captive portal 认证前通常只允许 DHCP DNS；正常网络仍优先固定上游、不把查询交给 DHCP resolver | 固定上游不可达时查询会交给当前网络 DHCP DNS；它可观察并伪造该降级期间的答案 |
 | D11 | resolvconf-bootstrap 退役 | 静态 resolv.conf 由 etc-service 每 boot 重建，无需 openresolv -u 接管 | — |
 | D12 | 订阅密文与引用者同置（mihomo/secrets/），domain ordinary | secret taxonomy（secrets.md）；订阅不可用只影响刷新，节点仍可从本地 cache 工作 | 解密失败不阻塞登录、只降级订阅刷新 |
 | D13 | 配置合成 fail-closed：placeholder 恰好一次、严格 YAML 转义、残留 CR/LF/NUL 拒绝 | 订阅 URL 是唯一 secret 注入点，坏输入必须失败而非产出可运行错配置 | 物化失败 → mihomo 起不来（显式失败优于静默错） |

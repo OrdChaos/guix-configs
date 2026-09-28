@@ -29,7 +29,7 @@
                 #:use-module (gnu packages bash)     ; bash-minimal（NM dispatcher wrapper）
                 #:use-module (gnu packages dns)      ; smartdns
                 #:use-module (gnu packages admin)    ; shepherd（herd）
-                #:use-module (gnu packages gnome)    ; network-manager（nmcli，门户状态探测）
+                #:use-module (gnu packages curl)     ; curl（门户连通性探测）
                 #:use-module (guix gexp)
                 #:use-module (guix modules)          ; source-module-closure
                 #:use-module (guixcfg system dns ownership) ; %dhcp-dns-metadata-path
@@ -145,12 +145,19 @@
              (mkdir-p (dirname target))
              (atomic-write-fallback! target (dhcp-nameservers source) portal?)))))))
 
+(define %smartdns-captive-check-url
+  ;; Neutral connectivity-check endpoint (Mozilla): while online it returns
+  ;; exactly "success"; a captive portal redirects/hijacks it.  Used to decide
+  ;; whether the fixed upstreams are trustworthy.
+  "http://detectportal.firefox.com/success.txt")
+
 (define %smartdns-dhcp-dispatcher
   (program-file
    "smartdns-dhcp-dispatcher"
    #~(begin
        (use-modules (ice-9 popen)
                     (ice-9 rdelim)
+                    (ice-9 textual-ports)
                     (srfi srfi-13))
        ;; NetworkManager invokes dispatcher scripts with IFACE ACTION.  React
        ;; to every event that can change the active DNS (activation, DHCP
@@ -159,29 +166,25 @@
        ;; installed at boot or before openresolv writes the metadata, leaving
        ;; /run/smartdns/dhcp-upstreams.conf empty (observed 2026-09-28).
        ;;
-       ;; Captive-portal awareness: NM's connectivity is full / limited /
-       ;; portal / none / unknown.  Only `full' guarantees the fixed upstreams
-       ;; work; otherwise (pre-auth portal) they are hijacked/blocked, so the
-       ;; DHCP resolver must be a plain upstream.  Prefer the CONNECTIVITY_STATE
-       ;; NM exports on `connectivity-change'; fall back to asking nmcli.
-       (define (not-full? state)
-         (and state
-              (not (string=? (string-downcase (string-trim-both state))
-                             "full"))))
-       (define (query-connectivity)
+       ;; Captive-portal detection: fetch a neutral connectivity-check URL and
+       ;; require exactly "success".  NetworkManager's own connectivity state
+       ;; is not trustworthy here (it reported `full' while the campus network
+       ;; only served the portal, 2026-09-28), so probe directly.  Any other
+       ;; result (portal redirect, hijacked body, timeout) means the fixed
+       ;; upstreams are untrustworthy and the DHCP resolver must be a plain
+       ;; upstream.
+       (define (online?)
          (catch #t
            (lambda ()
-             (let ((port (open-input-pipe
-                          (string-append
-                           #$(file-append network-manager "/bin/nmcli")
-                           " -t -f CONNECTIVITY general"))))
-               (let ((line (read-line port)))
-                 (close-pipe port)
-                 line)))
+             (let* ((port (open-input-pipe
+                           (string-append
+                            #$(file-append curl "/bin/curl")
+                            " -sS -m 4 " #$%smartdns-captive-check-url)))
+                    (out (get-string-all port)))
+               (close-pipe port)
+               (string=? (string-trim-both out) "success")))
            (lambda _ #f)))
-       (define (portal-state?)
-         (or (not-full? (getenv "CONNECTIVITY_STATE"))
-             (not-full? (query-connectivity))))
+       (define (portal-state?) (not (online?)))
        (when (and (>= (length (command-line)) 3)
                   (member (caddr (command-line))
                           '("up" "dhcp4-change" "dhcp6-change"
