@@ -200,11 +200,14 @@
 (define %mihomo-config-svc
   (shepherd-service-with-provision 'mihomo-config-ready))
 
-(test-assert "M11: mihomo daemon requires config-ready + networking"
+(test-assert "M11: mihomo daemon requires config-ready + networking + smartdns"
              (let ((req (shepherd-service-requirement %mihomo-daemon)))
                (and (memq 'mihomo-config-ready req)
                     (memq 'networking req)
-                    (memq 'loopback req))))
+                    (memq 'loopback req)
+                    ;; Node/subscription domains are resolved through the
+                    ;; system resolver; start after SmartDNS is up.
+                    (memq 'smartdns req))))
 (test-assert "M11: materializer requires ordinary-secrets-ready"
              (memq 'ordinary-secrets-ready
                    (shepherd-service-requirement %mihomo-config-svc)))

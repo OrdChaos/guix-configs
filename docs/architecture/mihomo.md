@@ -56,7 +56,7 @@ mihomo-config（one-shot materializer；provision mihomo-config-ready）
         │                          │
         ▼                          ▼
 mihomo（daemon）
-    requirement: loopback networking mihomo-config-ready
+    requirement: loopback networking mihomo-config-ready smartdns
     start: mihomo -d /var/lib/clash -f /run/mihomo/config.yaml（root，clash 组）
     stop:  make-kill-destructor（SIGTERM → Mihomo 自清理 TUN/route/nftables）
     respawn: shepherd 默认 #t

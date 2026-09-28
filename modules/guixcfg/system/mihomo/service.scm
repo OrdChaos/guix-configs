@@ -190,7 +190,7 @@ respawn 保持 shepherd 默认；stop 走 make-kill-destructor（SIGTERM
 → Mihomo 自清理 TUN/route/nftables）。"
   (list (shepherd-service
          (provision '(mihomo))
-         (requirement '(loopback networking mihomo-config-ready))
+         (requirement '(loopback networking mihomo-config-ready smartdns))
          (documentation
           "Run Mihomo as the system transparent proxy (TUN with \
 auto-route/auto-redirect; external controller on loopback only).")
