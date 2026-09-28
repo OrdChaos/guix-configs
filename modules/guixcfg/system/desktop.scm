@@ -2,6 +2,19 @@
 ;;; 本模块不知道任何具体 GPU vendor/driver（vendor 相关内容见
 ;;; graphics adapter module）。
 ;;;
+;;; ── 可移动介质（udisks2）──
+;;; nautilus 的侧栏卷列表来自 gvfs 的 UDisks2 volume monitor
+;;; （org.gtk.vfs.UDisks2VolumeMonitor，gvfs 包随 home profile
+;;; 分发，经 session D-Bus 激活），它经 system bus 查询
+;;; org.freedesktop.UDisks2——该 daemon 属 system infrastructure。
+;;; 此前只声明了 gvfs（apps/nautilus/home 层），缺
+;;; udisks-service-type，插入 U 盘后 volume monitor 无后端可查，
+;;; 侧栏不出现卷（2026-09 实测）。这里用官方
+;;; `udisks-service-type`（gnu/services/desktop.scm）补齐：
+;;; D-Bus activation + udev rules + polkit actions + /run/udisks2
+;;; activation + system profile udisksctl，单一机制、无 custom 层
+;;; （docs/architecture/upstream-boundaries.md 的 official 边界）。
+;;;
 ;;; 登录链（docs/architecture/graphics.md）：
 ;;;   interactive-session-ready（core readiness join barrier）
 ;;;     ├─ greetd（tty1，requirement 含 interactive-session-ready）
@@ -82,6 +95,7 @@
 (define-module (guixcfg system desktop)
                #:use-module (gnu services)            ; service
                #:use-module (gnu services base)       ; greetd-service-type、greetd-configuration、greetd-terminal-configuration
+               #:use-module (gnu services desktop)    ; udisks-service-type（可移动介质后端）
                #:use-module (virelith services noctalia-greeter) ; noctalia-greeter-service-type、noctalia-greeter-configuration、greetd-noctalia-session
                #:use-module (guixcfg system noctalia-greeter) ; %noctalia-greeter-state-dir、noctalia-greeter-session-profile-service
                #:export (desktop-services))
@@ -155,6 +169,10 @@
         (service noctalia-greeter-service-type
                  (noctalia-greeter-configuration
                   (state-directory %noctalia-greeter-state-dir)))
+        ;; 可移动介质后端：gvfs 的 UDisks2 volume monitor 的 system 侧
+        ;; daemon（见文件头"可移动介质"）。官方 udisks-service-type
+        ;; 从 system bus / udev / polkit 三处接线，无需 custom rules。
+        (service udisks-service-type)
         ;; repo-owned 登录会话发现数据（niri.desktop）→ system
         ;; profile（greeter 的会话发现路径）。
         (noctalia-greeter-session-profile-service)))

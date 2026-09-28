@@ -228,6 +228,15 @@
              (let ((cfg (os-service elogind-service-type)))
                (and cfg #t)))
 
+;; ── D9：可移动介质后端（udisks2 daemon）───────────────────
+;; gvfs 的 UDisks2 volume monitor（gvfs 包，home profile，经 session
+;; D-Bus 激活）需要 system bus 上的 org.freedesktop.UDisks2 daemon
+;; 才能枚举 U 盘卷；缺 udisks-service-type 时插入 U 盘后 nautilus
+;; 侧栏不出现卷（2026-09 实测，desktop.scm 文件头"可移动介质"）。
+;; 断言语义：恰一个官方 udisks 服务实例（不重复声明）。
+(test-assert "D9: exactly one udisks2 service (removable media backend)"
+             (= 1 (length (os-services-of-type udisks-service-type))))
+
 ;; ── HOME provenance（exact pinned source audit）────────────
 ;; 契约（desktop.scm 头注释 + docs/architecture/graphics.md）：
 ;;   用户会话 HOME 由 greetd 0.10.3 从认证用户的 passwd entry 设置
@@ -450,19 +459,22 @@
               'polkit-configuration-actions))
 
 (test-assert "PK2: polkit action/rules contributions come only from elogind
-+ upstream wheel admin rule + NetworkManager + noctalia-greeter (no custom rules)"
++ upstream wheel admin rule + NetworkManager + noctalia-greeter + udisks
+(no custom rules)"
              (let* ((folded (fold-services (operating-system-services %vm-os)
                                            #:target-type polkit-service-type))
                     (actions (%polkit-configuration-actions
                               (service-value folded))))
-               ;; 4 = elogind + polkit-wheel + NetworkManager（NM 的
+               ;; 5 = elogind + polkit-wheel + NetworkManager（NM 的
                ;; polkit actions——2026-08-25 VM 网络换 NetworkManager
                ;; 引入，Guix 官方 service 自带，非仓库 custom rules）
                ;; + noctalia-greeter（channel package 自带
                ;; org.noctalia.greeter.apply-appearance policy，经官方
                ;; polkit-service-type extension 暴露——elogind 同款
-               ;; 组合，非手工 symlink/复制 policy）。
-               (= 4 (length actions))))
+               ;; 组合，非手工 symlink/复制 policy）+ udisks（官方
+               ;; udisks-service-type 的 org.freedesktop.UDisks2 policy，
+               ;; 可移动介质挂载授权）。
+               (= 5 (length actions))))
 
 (test-assert "PK2: upstream polkit-wheel admin identity is used"
              (any (lambda (svc)
