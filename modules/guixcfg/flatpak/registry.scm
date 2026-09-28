@@ -24,6 +24,9 @@
                #:use-module (guixcfg flatpak applications wechat definition)
                #:use-module (guixcfg flatpak applications aagl definition)
                #:use-module (guixcfg flatpak applications steam definition)
+               #:use-module (guixcfg flatpak applications telegram definition)
+               #:use-module (guixcfg flatpak applications discord definition)
+               #:use-module (guixcfg flatpak applications thunderbird definition)
                #:use-module (guixcfg flatpak extensions gamescope definition)
                #:use-module (guixcfg flatpak extensions proton-ge definition)
                #:export (%flatpak-remotes
@@ -56,7 +59,10 @@
   (list %flatpak-qq
         %flatpak-wechat
         %flatpak-aagl
-        %flatpak-steam))
+        %flatpak-steam
+        %flatpak-telegram
+        %flatpak-discord
+        %flatpak-thunderbird))
 
 ;; 应用 selection 缺省：全局用户软件 policy——每台设备的用户态
 ;; Flatpak 集合完全一致；硬件差异不通过 selection 表达，只经
@@ -64,7 +70,7 @@
 ;; 追加 environment adapter（如 NVIDIA PRIME），见
 ;; docs/architecture/flatpak.md（driver overlays）。
 (define %flatpak-selection
-  '(qq wechat aagl steam))
+  '(qq wechat aagl steam telegram discord thunderbird))
 
 ;; Catalog：已知 extension（auxiliary ref；定义在 extensions/ 下）。
 (define %flatpak-extensions
