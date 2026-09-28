@@ -14,5 +14,8 @@
     "git.confirmSync": false,
     "workbench.colorTheme": "Nord Light Brighter",
     "window.zoomLevel": 0.6,
-    "security.workspace.trust.enabled": false
+    "security.workspace.trust.enabled": false,
+    "chat.titleBar.openInAgentsWindow.enabled": false,
+    "workbench.browser.showInTitleBar": false,
+    "workbench.layoutControl.enabled": false
 }
