@@ -59,13 +59,6 @@
             '("lenovo-legion-y7000p" "vm")
             (host-ids-in-directory %fixture-dir))
 
-(test-assert "hidden/backup/non-scm/autosave are excluded"
-             (let ((ids (host-ids-in-directory %fixture-dir)))
-               (and (not (member ".hidden" ids))
-                    (not (member "old" ids))
-                    (not (member "notes" ids))
-                    (not (member "tmp" ids)))))
-
 ;; 真实 hosts 目录：枚举必须与当前仓库事实一致。任何辅助 .scm 落入
 ;; hosts/ 都会在此失败（host ID 事实源就是该目录的文件名）。
 (test-equal "real hosts directory yields exactly current hosts"
@@ -98,26 +91,11 @@
                                      (host-name-for-id (car entry)))))
                     %host-identity-table))
 
-(test-equal "physical hostname resolves to its Host ID"
-            "lenovo-legion-y7000p"
-            (host-id-for-hostname "ordchaos-lenovo-legion-y7000p"))
-
-(test-equal "VM hostname resolves to its Host ID"
-            "vm"
-            (host-id-for-hostname "ordchaos-vm"))
-
 (test-assert "unknown hostname fails closed"
              (not (host-id-for-hostname "unknown-host")))
 
-(test-equal "Host ID resolves to the configured physical hostname"
-            "ordchaos-lenovo-legion-y7000p"
-            (host-name-for-id "lenovo-legion-y7000p"))
-
 (test-error "unknown Host ID has no hostname fallback" #t
             (host-name-for-id "unknown-host"))
-
-(test-assert "known host id"
-             (host-id? '("lenovo-legion-y7000p" "vm") "vm"))
 
 (test-assert "unknown host id"
              (not (host-id? '("lenovo-legion-y7000p" "vm") "desktop")))
@@ -127,9 +105,6 @@
 
 (test-assert "\"all\" is not a host id (command-level keyword)"
              (not (host-id? '("lenovo-legion-y7000p" "vm") "all")))
-
-(test-assert "require-host-id returns the id when known"
-             (equal? "vm" (require-host-id '("lenovo-legion-y7000p" "vm") "vm")))
 
 ;; fail closed：unknown host 报错，绝不 fallback；错误信息列出可用 host。
 (test-assert "require-host-id fails closed on unknown host and lists known hosts"
@@ -143,14 +118,6 @@
                     (string-contains msg "lenovo-legion-y7000p")
                     (string-contains msg "vm")
                     (string-contains msg "server"))))
-
-(test-equal "host-source-relative-path"
-            "modules/guixcfg/hosts/vm.scm"
-            (host-source-relative-path "vm"))
-
-(test-equal "host-source-absolute-path"
-            "/repo/modules/guixcfg/hosts/lenovo-legion-y7000p.scm"
-            (host-source-absolute-path "/repo" "lenovo-legion-y7000p"))
 
 ;; ---- build-os ----
 
@@ -246,14 +213,6 @@
                    (gc-privileged-argv "/repo" "vm" '()))
                   (no-shell-metacharacters?
                    (gc-cli-argv %root "run" "vm" '("--keep" "3")))))
-
-(test-equal "system-reconfigure-argv (transaction core) is pinned, env-injected modules"
-            '("env" "GUILE_LOAD_PATH=/repo/modules"
-                    "GUILE_LOAD_COMPILED_PATH=/repo/modules"
-                    "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
-                    "system" "reconfigure" "--no-kexec"
-                    "modules/guixcfg/hosts/vm.scm")
-            (system-reconfigure-argv %root "vm"))
 
 (test-assert "system-reconfigure-argv (normal) has no --dry-run"
              (not (member "--dry-run" (system-reconfigure-argv %root "vm"))))

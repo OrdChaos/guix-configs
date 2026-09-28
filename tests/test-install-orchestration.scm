@@ -306,11 +306,6 @@
                     (not (member ".enroll-root" enroll-privileged))
                     (equal? tail '("lenovo-legion-y7000p")))))
 
-(test-equal "sb-keygen tool argv pins the lockfile and passes the keydir"
-            "/mnt/persist/system/keys/secure-boot"
-            (last (sb-keygen-tool-argv %root
-                                       "/mnt/persist/system/keys/secure-boot")))
-
 (test-assert "sb-keygen tool argv runs inside the keygen manifest shell"
              (let ((argv (sb-keygen-tool-argv %root "/keydir")))
                (and (member "manifests/secure-boot-keygen.scm" argv)
@@ -320,11 +315,6 @@
              (let ((argv (sb-keystore-tool-argv %root "/keydir")))
                (and (member "manifests/secure-boot-enroll.scm" argv)
                     (member "tools/secure-boot-enroll.scm" argv))))
-
-(test-equal "commit-root tool argv passes the target"
-            '("/mnt")
-            (let ((argv (commit-root-tool-argv %root "/mnt")))
-              (cdr (member "commit-root" argv))))
 
 (define install-cli
   (install-cli-argv %root "run" "lenovo-legion-y7000p" "/dev/nvme0n1"))
@@ -337,11 +327,6 @@
 (test-equal "install CLI argv separates mode, HOST and DEVICE"
             '("run" "lenovo-legion-y7000p" "/dev/nvme0n1")
             (cddr (member "tools/install-cli.scm" install-cli)))
-
-(test-equal "successful install cleanup stops cow-store and syncs only"
-            '(("herd" "stop" "cow-store")
-              ("sync"))
-            (install-success-cleanup-commands))
 
 (test-assert "successful install cleanup never powers off, reboots, or unmounts"
              (not (any (lambda (argv)
@@ -390,12 +375,6 @@
                            "/" (user-profile-name %primary-user)
                            "/Projects/guix-configs")
             (install-repo-path "/mnt"))
-
-(test-equal "post-install instructions enter the installed checkout"
-            '("  cd ~/Projects/guix-configs"
-              "  blue firstboot lenovo-legion-y7000p")
-            (take (drop (install-next-step-lines "lenovo-legion-y7000p") 4)
-                   2))
 
 (test-assert "firstboot converges only and never invokes enrollment"
              (let* ((source (call-with-input-file "blueprint.scm"

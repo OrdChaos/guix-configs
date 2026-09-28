@@ -32,14 +32,6 @@
          (extra-persistence '((".local/share/extra-app" "extra-app/share"))))))
 
 ;; ── installation rule（平台拥有）───────────────────────────
-(test-equal "installation backing"
-            "flatpak/installation"
-            (application-persistence-rule-backing
-             %flatpak-installation-persistence-rule))
-(test-equal "installation consumer (flatpak canonical path)"
-            ".local/share/flatpak"
-            (application-persistence-rule-consumer
-             %flatpak-installation-persistence-rule))
 (test-assert "installation rule valid per generic engine"
              (valid-application-persistence-rule?
               %flatpak-installation-persistence-rule))

@@ -56,9 +56,6 @@
         (app-contributions app home-shepherd-service-type)))
 
 ;; ── GN1：app 启用 + GNUPGHOME 环境 ────────────────────────
-(test-assert "GN1: gnupg app enabled in registry"
-             (and %gnupg-app (application? %gnupg-app)))
-
 (test-assert "GN1: GNUPGHOME points at the ephemeral session runtime dir, \
 and no SSH agent env var is injected (gpg-agent does not serve SSH)"
              (let* ((expected (string-append

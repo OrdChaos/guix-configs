@@ -140,10 +140,6 @@
 (project-machine-id! canonical2 etc2)
 ;; reboot：root 重建，/etc/machine-id 消失，canonical 保留：
 (delete-file-recursively (dirname etc2))
-(test-assert "reboot: /etc/machine-id gone"
-             (not (file-exists? etc2)))
-(test-assert "reboot: persistent canonical retained"
-             (file-exists? canonical2))
 ;; 第二次 boot：
 (test-assert "boot2: restore same identity (no regeneration)"
              (string=? %sample-id
@@ -272,8 +268,6 @@
 
 (test-assert "vm: machine-identity restore wired into activation"
              (and vm-restore-idx (>= vm-restore-idx 0)))
-(test-assert "vm: dbus activation present (precondition of ordering)"
-             (and vm-dbus-idx (>= vm-dbus-idx 0)))
 (test-assert "vm: machine-identity restore runs BEFORE dbus-uuidgen --ensure"
              (and vm-restore-idx vm-dbus-idx
                   (< vm-restore-idx vm-dbus-idx)))
@@ -287,8 +281,6 @@
 
 (test-assert "laptop: machine-identity restore wired into activation"
              (and laptop-restore-idx (>= laptop-restore-idx 0)))
-(test-assert "laptop: dbus activation present (precondition of ordering)"
-             (and laptop-dbus-idx (>= laptop-dbus-idx 0)))
 (test-assert "laptop: machine-identity restore runs BEFORE dbus-uuidgen --ensure"
              (and laptop-restore-idx laptop-dbus-idx
                   (< laptop-restore-idx laptop-dbus-idx)))

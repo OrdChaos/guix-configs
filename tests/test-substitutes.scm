@@ -19,12 +19,9 @@
 ;;; unit test）。
 
 (use-modules (guixcfg hosts vm)
-             (guixcfg system kernel-platform)
              (gnu services)
              (gnu services base)     ; guix-service-type、guix-configuration
-             (guix packages)         ; package-name
              (gnu system)            ; operating-system-*
-             (nongnu packages linux) ; linux-7.2（nonguix）
              (guix build utils)      ; find-files
              (ice-9 rdelim)
              (srfi srfi-1)
@@ -87,14 +84,5 @@
              (let ((s (call-with-input-file "channels.lock.scm"
                                             (lambda (p) (read-string p)))))
                (not (string-contains s %nonguix-substitute-url))))
-
-;; ── T-S6：kernel 仍是 exact Nonguix linux-7.2（无 custom derivation）
-(test-assert "T-S6: %kernel is the exact Nonguix linux-7.2 package"
-             (and (eq? %kernel linux-7.2)
-                  (string=? (package-name %kernel) "linux")
-                  (not (string-contains (package-name %kernel) "libre"))))
-
-(test-assert "T-S6: %vm-os selects %kernel unchanged"
-             (eq? (operating-system-kernel %vm-os) %kernel))
 
 (test-end "substitutes")

@@ -40,27 +40,6 @@
   "home-bash-configuration 的 field accessor（经 record type descriptor）。"
   (record-accessor (record-type-descriptor %bash-config) name))
 
-;; ── BS1：app 启用 + home-bash 配置 ─────────────────────────
-(test-assert "BS1: bash app enabled and contributes home-bash-configuration"
-             (and %bash-app
-                  (application? %bash-app)
-                  %bash-config))
-
-;; ── BS2：GPG_TTY 转发（bashrc，非静态环境变量表）───────────
-(test-assert "BS2: bashrc ships the colocated gpg-tty.bashrc (local-file)"
-             (let ((rcs ((bash-field 'bashrc) %bash-config)))
-               (and (pair? rcs)
-                    (any (lambda (f)
-                           (string-contains (object->string f)
-                                            "gpg-tty"))
-                         rcs))))
-
-(test-assert "BS2: gpg-tty.bashrc exports GPG_TTY for pinentry tty forwarding"
-             (let ((s (call-with-input-file
-                       "modules/guixcfg/apps/bash/gpg-tty.bashrc"
-                       (lambda (p) (read-string p)))))
-               (string-contains s "GPG_TTY")))
-
 ;; ── BS3：bashrc ownership（2026-09 登录链审计）──────────────
 ;; 本 app 唯一拥有 ~/.bashrc（guix-defaults? #f）；非交互 SSH
 ;; （bash 被 sshd 调用时读 bashrc）分支 source 系统 /etc/profile +

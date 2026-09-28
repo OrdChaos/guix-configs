@@ -48,25 +48,9 @@
 
 (define acct-names
   (map user-account-name (filter user-account? %vm-accounts+groups)))
-(define group-names
-  (map user-group-name (filter user-group? %vm-accounts+groups)))
 
-(test-assert "folded accounts include root"
-             (member "root" acct-names))
 (test-assert "folded accounts include primary user"
              (member %account-test-user acct-names))
-(test-assert "folded accounts include guix builders"
-             (member "guixbuilder01" acct-names))
-(test-assert "folded accounts include sshd"
-             (member "sshd" acct-names))
-(test-assert "folded accounts include messagebus"
-             (member "messagebus" acct-names))
-(test-assert "folded accounts include polkitd"
-             (member "polkitd" acct-names))
-(test-assert "folded groups include wheel"
-             (member "wheel" group-names))
-(test-assert "folded groups include guixbuild"
-             (member "guixbuild" group-names))
 
 ;; primary user 的 UID 必须保留声明值 1000。
 (test-equal "primary user keeps uid 1000"

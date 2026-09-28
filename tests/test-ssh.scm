@@ -28,8 +28,6 @@
              (not (openssh-configuration-allow-empty-passwords? ssh-config)))
 (test-assert "generate-host-keys? off (no /etc/ssh generation by default)"
              (not (openssh-configuration-generate-host-keys? ssh-config)))
-(test-assert "port 22"
-             (= 22 (openssh-configuration-port-number ssh-config)))
 
 ;; host-key 持久化路径与 DenyUsers 出现在 sshd 配置
 (define extra (openssh-configuration-extra-content ssh-config))

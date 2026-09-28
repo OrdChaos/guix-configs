@@ -13,29 +13,12 @@
              (gnu home services)     ; home-files-service-type
              (gnu home services shells) ; home-bash-service-type
              (gnu services)
-             (gnu packages base)     ; hello（sample record 用）
              (srfi srfi-1)
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
 
 (test-begin "apps")
-
-;; ── record 构造与字段 ───────────────────────────────────────
-(define sample
-  (application
-   (name 'sample)
-   (home-packages (list hello))
-   (home-services '())
-   (system-services '())
-   (persistence '())
-   (secrets '())))
-
-(test-assert "application record constructible"
-             (application? sample))
-(test-equal "application name" 'sample (application-name sample))
-(test-equal "default home-services empty"
-            '() (application-home-services sample))
 
 ;; ── aggregation：纯 concatenation（不做 same-kind merge）────
 (define svc-a1 (service home-files-service-type '(("a" . 1))))

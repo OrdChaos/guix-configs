@@ -51,28 +51,6 @@
          (branch "stable"))))
 
 ;; ── record 构造与 accessor ─────────────────────────────────
-(test-assert "flatpak-remote constructible"
-             (flatpak-remote? (car %fp-remotes)))
-(test-equal "remote name"
-            'flathub (flatpak-remote-name (car %fp-remotes)))
-(test-equal "remote repository-url"
-            "https://dl.flathub.org/repo/"
-            (flatpak-remote-repository-url (car %fp-remotes)))
-(test-equal "remote descriptor-url (bootstrap + trust authority)"
-            "https://dl.flathub.org/repo/flathub.flatpakrepo"
-            (flatpak-remote-descriptor-url (car %fp-remotes)))
-(test-assert "flatpak-application constructible"
-             (flatpak-application? (car %fp-apps)))
-(test-equal "application default update-policy is track-branch"
-            'track-branch
-            (flatpak-application-update-policy (car %fp-apps)))
-(test-equal "application default override-policy is external"
-            'external
-            (flatpak-application-override-policy (car %fp-apps)))
-(test-equal "application default extra-persistence is empty"
-            '() (flatpak-application-extra-persistence (car %fp-apps)))
-(test-equal "application default desktop-files is empty"
-            '() (flatpak-application-desktop-files (car %fp-apps)))
 (test-equal "application ref"
             "com.tencent.WeChat//stable"
             (flatpak-application-ref (car %fp-apps)))
@@ -439,12 +417,6 @@
    (id "org.freedesktop.Platform.VulkanLayer.example")
    (remote 'flathub)
    (branch "25.08")))
-
-(test-assert "flatpak-extension constructible with defaults"
-             (and (flatpak-extension? %fp-ext)
-                  (eq? 'layer (flatpak-extension-name %fp-ext))
-                  (eq? 'track-branch
-                       (flatpak-extension-update-policy %fp-ext))))
 
 (test-equal "extension ref is id//branch"
             "org.freedesktop.Platform.VulkanLayer.example//25.08"

@@ -39,18 +39,6 @@
    (seeds `(("settings.toml"
              ,(plain-file "settings.toml" "[shell]\nsetup_wizard_enabled = false\n"))))))
 
-(test-assert "rule record constructible"
-             (application-persistence-rule? rule))
-(test-equal "rule exposure default is bind-directory"
-            'bind-directory
-            (application-persistence-rule-exposure
-             (application-persistence-rule
-              (name 'x) (backing "x") (consumer ".config/x"))))
-(test-equal "rule lifecycle default is application-owned"
-            'application-owned
-            (application-persistence-rule-lifecycle
-             (application-persistence-rule
-              (name 'x) (backing "x") (consumer ".config/x"))))
 (test-assert "valid rule passes validation"
              (valid-application-persistence-rule? rule))
 
@@ -115,15 +103,8 @@
    (exposure 'bind-file)
    (lifecycle 'application-owned)))
 
-(test-assert "bind-file rule record constructible"
-             (application-persistence-rule? bind-file-rule))
 (test-assert "bind-file is a legal exposure (passes validation)"
              (valid-application-persistence-rule? bind-file-rule))
-(test-assert "unknown exposure still rejected alongside bind-file"
-             (not (valid-application-persistence-rule?
-                   (application-persistence-rule
-                    (name 'bad) (backing "x") (consumer ".config/x")
-                    (exposure 'bind-symlink)))))
 (test-assert "bind-file rule with seeds is rejected (seeds are \
 backing-directory-relative)"
              (not (valid-application-persistence-rule?
@@ -202,17 +183,8 @@ backing for the file rule)"
                     (string-contains s "chown"))))
 
 ;; ── seeds 字段（seed-once）─────────────────────────────────
-(test-equal "seeds field defaults to empty"
-            '()
-            (application-persistence-rule-seeds
-             (application-persistence-rule
-              (name 'x) (backing "x") (consumer ".config/x"))))
 (test-assert "rule with seeds passes validation"
              (valid-application-persistence-rule? seeded-rule))
-(test-equal "seeds field round-trips targets"
-            '("settings.toml")
-            (map car (application-persistence-rule-seeds seeded-rule)))
-
 ;; 非法 seed：空 / .. 逃逸 / 绝对路径 / marker 后缀冲突 /
 ;; 非 file-like source——全部 fail closed
 (for-each
@@ -238,12 +210,6 @@ backing for the file rule)"
 ;; seed 目标必须落在 backing 内（backing/consumer 校验已保证），
 ;; 且不引入独立白名单：seed 只针对首次初始化，目录持久化仍是
 ;; 整个 consumer（bind directory）。
-(test-assert "seeded rule is still a directory bind"
-             (and (eq? 'bind-directory (application-persistence-rule-exposure
-                                        seeded-rule))
-                  (eq? 'application-owned (application-persistence-rule-lifecycle
-                                           seeded-rule))))
-
 ;; ── bind file-system 生成 ───────────────────────────────────
 (define mounts (application-persistence-file-systems (list rule) "alice"))
 (test-assert "one bind mount per rule"

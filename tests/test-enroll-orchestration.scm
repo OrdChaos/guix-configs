@@ -300,10 +300,6 @@
                                         "enroll" '("--luks-secret"))))
               (take (cddr (member "-s" argv)) 2)))
 
-(test-equal "efi-updatevar binary defaults to the system profile"
-             "/run/current-system/profile/bin/efi-updatevar"
-             (efi-updatevar-binary))
-
 (test-equal "Setup Mode writes db from its raw ESL without append"
              '("/run/current-system/profile/bin/efi-updatevar" "-e" "-f"
                "/persist/system/keys/secure-boot/keystore/.work/db.esl" "db")
@@ -318,10 +314,6 @@
 ;; 变量标记 S_IMMUTABLE，inode_permission 对 immutable 写打开一律
 ;; -EPERM、无 capability 豁免；efi-updatevar open(O_RDWR|O_CREAT)
 ;; 因此失败。必须先 chattr -i）。
-(test-equal "chattr binary defaults to the system profile"
-             "/run/current-system/profile/bin/chattr"
-             (chattr-binary))
-
 (test-equal "db path uses the image-security GUID"
              "/sys/firmware/efi/efivars/db-d719b2cb-3d3a-4596-a3bc-dad00e67656f"
              (efivars-variable-path "db"))

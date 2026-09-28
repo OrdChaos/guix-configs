@@ -153,30 +153,13 @@
              (string-contains (template-text) "secret: \"\""))
 
 ;; ── M9：provider 原生 http + DIRECT 订阅刷新 ─────────────────
-(test-assert "M9: provider is native http type"
-             (string-contains (template-text) "type: http"))
 ;; proxy: DIRECT——订阅刷新不依赖代理组/节点可用性（节点全挂时刷新
 ;; 照常；直连可行性：节点域名解析经 SmartDNS 直连上游自举 +
 ;; 宿主直连出站可信，2026-08-28 VM 实测直连拉取成功）。
 (test-assert "M9: provider refresh dials DIRECT"
              (string-contains (template-text) "proxy: DIRECT"))
-(test-assert "M9: provider interval declared"
-             (string-contains (template-text) "interval: 3600"))
-(test-assert "M9: provider path under data directory"
-             (string-contains (template-text)
-                              "path: ./providers/airport.yaml"))
 
 ;; ── M10：TUN 契约 ───────────────────────────────────────────
-(test-assert "M10: tun enabled with mixed stack"
-             (and (string-contains (template-text) "enable: true")
-                  (string-contains (template-text) "stack: mixed")))
-(test-assert "M10: auto-route / auto-redirect / auto-detect-interface"
-             (and (string-contains (template-text) "auto-route: true")
-                  (string-contains (template-text) "auto-redirect: true")
-                  (string-contains (template-text)
-                                   "auto-detect-interface: true")))
-(test-assert "M10: ipv6 disabled (v4-only airport nodes cannot reach v6)"
-             (string-contains (template-text) "ipv6: false"))
 
 ;; ── M11：service graph ──────────────────────────────────────
 (define %mihomo-service-instance

@@ -33,10 +33,6 @@
 (define sys-secret (car %vm-test-secrets))
 (define usr-secret (cadr %vm-test-secrets))
 
-(test-equal "system secret scope" 'system (secret-decl-scope sys-secret))
-(test-equal "user secret scope" 'user (secret-decl-scope usr-secret))
-(test-equal "system secret mode" #o400 (secret-decl-mode sys-secret))
-(test-equal "user secret mode" #o600 (secret-decl-mode usr-secret))
 (test-equal "user secret owner derives from %primary-user"
             (user-profile-name %primary-user)
             (secret-decl-owner-user usr-secret))

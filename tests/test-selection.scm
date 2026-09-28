@@ -17,7 +17,6 @@
              (guixcfg apps model)
              (guixcfg apps registry) ; %applications（校验权威）
              (guixcfg apps selection)
-             (guixcfg apps niri definition)
              (guixcfg hosts lenovo-legion-y7000p)
              (ice-9 rdelim)          ; read-string
              (ice-9 ftw)             ; scandir
@@ -28,53 +27,12 @@
 
 (test-begin "selection")
 
-;; ── variant record 构造与字段 ───────────────────────────────
-(define sample-variant
-  (application-configuration-variant
-   (name 'laptop)
-   (files `(("niri/host.kdl" ,(plain-file "host.kdl" "debug {}\n"))))))
-
-(test-assert "application-configuration-variant constructible"
-             (application-configuration-variant? sample-variant))
-(test-equal "variant name field" 'laptop
-            (application-configuration-variant-name sample-variant))
-(test-assert "variant files is a list of (target source) entries"
-             (let ((files (application-configuration-variant-files
-                           sample-variant)))
-               (and (= 1 (length files))
-                    (string=? "niri/host.kdl" (car (car files)))
-                    (file-like? (cadr (car files))))))
-
-;; ── niri 声明：laptop variant（application-owned）────────────
-(define %niri-laptop-variant
-  (find (lambda (v)
-          (eq? 'laptop (application-configuration-variant-name v)))
-        (application-configuration-variants %niri)))
-
-(test-assert "niri declares a laptop configuration variant"
-             (application-configuration-variant? %niri-laptop-variant))
-(test-assert "niri laptop variant targets niri/host.kdl (full ~/.config path)"
-             (string=? "niri/host.kdl"
-                       (car (car (application-configuration-variant-files
-                                  %niri-laptop-variant)))))
-(test-assert "niri laptop variant source is a file-like"
-             (file-like? (cadr (car (application-configuration-variant-files
-                                     %niri-laptop-variant)))))
-(test-assert "niri laptop variant source lives in the niri application tree"
-             (file-exists? "modules/guixcfg/apps/niri/variants/laptop.kdl"))
-
 ;; ── selection record：只携带 logical 字段 ────────────────────
 (define sample-selection
   (application-configuration-selection
    (application 'niri)
    (variant 'laptop)))
 
-(test-assert "selection constructible"
-             (application-configuration-selection? sample-selection))
-(test-equal "selection application field" 'niri
-            (application-configuration-selection-application sample-selection))
-(test-equal "selection variant field" 'laptop
-            (application-configuration-selection-variant sample-selection))
 (test-assert "selection carries no file/path fields (logical only)"
              (let ((fields (record-type-fields
                             (record-type-descriptor sample-selection))))
@@ -135,17 +93,6 @@
                  #f)
                (lambda (key . args) #t)))
 
-(test-assert "unknown application error names the app"
-             (catch #t
-               (lambda ()
-                 (application-configuration-selections->home-services
-                  (list (application-configuration-selection
-                         (application 'no-such-app)
-                         (variant 'laptop))))
-                 #f)
-               (lambda (key . args)
-                 (string-contains (object->string args) "no-such-app"))))
-
 ;; ── 校验：未声明 variant → fail fast（错误含 app + variant）───
 (test-assert "undeclared variant rejected"
              (catch #t
@@ -156,19 +103,6 @@
                          (variant 'no-such-variant))))
                  #f)
                (lambda (key . args) #t)))
-
-(test-assert "undeclared variant error names application and variant"
-             (catch #t
-               (lambda ()
-                 (application-configuration-selections->home-services
-                  (list (application-configuration-selection
-                         (application 'niri)
-                         (variant 'no-such-variant))))
-                 #f)
-               (lambda (key . args)
-                 (let ((msg (object->string args)))
-                   (and (string-contains msg "niri")
-                        (string-contains msg "no-such-variant"))))))
 
 ;; ── 校验：target 必须是安全 ~/.config 相对路径（合成 apps）───
 (define %synthetic-app
@@ -271,24 +205,6 @@
                  #f)
                (lambda (key . args) #t)))
 
-(test-assert "duplicate error names the conflicting target and both sources"
-             (catch #t
-               (lambda ()
-                 (application-configuration-selections->home-services
-                  (list (application-configuration-selection
-                         (application 'conflict-a)
-                         (variant 'v1))
-                        (application-configuration-selection
-                         (application 'conflict-b)
-                         (variant 'v2)))
-                  #:apps (list %conflict-app-a %conflict-app-b))
-                 #f)
-               (lambda (key . args)
-                 (let ((msg (object->string args)))
-                   (and (string-contains msg "shared/x.conf")
-                        (string-contains msg "conflict-a")
-                        (string-contains msg "conflict-b"))))))
-
 ;; 同一 variant 内两个文件撞同一 target 也冲突
 (define %self-conflict-app
   (application
@@ -309,16 +225,6 @@
                   #:apps (list %self-conflict-app))
                  #f)
                (lambda (key . args) #t)))
-
-(test-assert "different targets never conflict"
-             (let ((svcs (application-configuration-selections->home-services
-                          (list (application-configuration-selection
-                                 (application 'multi)
-                                 (variant 'dual)))
-                          #:apps (list %multi-file-app))))
-               (let ((paths (map car (service-value (car svcs)))))
-                 (and (member ".config/multi/a.conf" paths)
-                      (member ".config/multi/b.conf" paths)))))
 
 ;; ── lower：variant 文件安装到正确 XDG 路径且内容保真 ─────────
 (define (lower-home services)

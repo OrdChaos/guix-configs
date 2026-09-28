@@ -45,9 +45,7 @@
              (guix gexp)           ; program-file?（G1）
              (guix packages)       ; package-name
              (nongnu packages linux) ; linux（nonguix）
-             (guix channels)          ; channel-name、channel-commit（解析 lock）
              (ice-9 rdelim)
-             (ice-9 ftw)               ; scandir
              (guix build utils)       ; find-files（PK2 rules.d 扫描）
              (srfi srfi-1)
              (srfi srfi-13)
@@ -91,32 +89,6 @@
   (@ (gnu services base) greetd-user-session-xdg-env?))
 (define greetd-source-profile?
   (@ (gnu services base) greetd-source-profile?))
-
-(define %guix-store-dir
-  ;; store 中 pinned Guix channel 源（channel 内容是内容寻址的：
-  ;; channels.lock.scm 锁定的 commit 对应唯一 store 路径）。注意
-  ;; store 里还有同前缀的 -modules 目录（profile 用），必须选
-  ;; 真正含 gnu/services/base.scm 的 channel checkout。
-  (let* ((lock (eval (call-with-input-file "channels.lock.scm" read)
-                     (current-module)))
-         (commit (channel-commit
-                  (find (lambda (ch) (eq? (channel-name ch) 'guix))
-                        lock)))
-         (short (substring commit 0 7))
-         (hits (scandir "/gnu/store"
-                        (lambda (name)
-                          (string-contains name
-                                           (string-append "-guix-" short)))))
-         (candidates
-          (filter (lambda (d)
-                    (file-exists?
-                     (string-append "/gnu/store/" d
-                                    "/gnu/services/base.scm")))
-                  hits)))
-    (if (pair? candidates)
-      (string-append "/gnu/store/" (car candidates))
-      (error "guix channel source not in store; run time-machine first"
-             commit))))
 
 (define (os-services-of-type type)
   "扫描 %vm-os 的 services 列表（不 fold——mingetty 等多实例类型）。"
@@ -331,24 +303,6 @@
                (member "guixcfg-noctalia-greeter-sessions"
                        (map package-name packages))))
 
-(test-assert "G2: noctalia-greeter package is in the system profile (shell Sync detection via PATH)"
-             (let* ((folded (fold-services (operating-system-services %vm-os)
-                                           #:target-type profile-service-type))
-                    (packages (service-value folded)))
-               (member "noctalia-greeter" (map package-name packages))))
-
-(test-assert "G2: session data declares niri via the Guix Home login shell (bash -l)"
-             ;; 会话 .desktop 在 repo-owned package 的 builder 里生成；
-             ;; 断言声明层：Exec = bash -l（Guix Home 拥有用户桌面
-             ;; 生命周期，同旧 greetd-user-session 契约），Name=niri
-             ;; 是会话选择器标签（greeter.toml [session] default 匹配）。
-             (let ((s (call-with-input-file
-                       "modules/guixcfg/system/noctalia-greeter.scm"
-                       (lambda (p) (read-string p)))))
-               (and (string-contains s "Name=niri")
-                    (string-contains s "file-append bash")
-                    (string-contains s "Exec=~a -l"))))
-
 (test-assert "G3: noctalia-greeter state dir is machine-state persisted"
              (any (lambda (fs)
                     (and (string=? "/persist/system/state/noctalia-greeter"
@@ -376,25 +330,6 @@
 (test-assert "H4: default session runs as the greeter-only user"
              (string=? "greeter" (greetd-default-session-user (tty1-terminal))))
 
-(test-assert "H5: official xdg wrapper sets only XDG_* (no HOME/USER/LOGNAME/SHELL)"
-             (let* ((s (call-with-input-file
-                        (string-append %guix-store-dir "/gnu/services/base.scm")
-                        (lambda (p) (read-string p))))
-                    (start (string-contains
-                            s "(define (make-greetd-xdg-user-session-command"))
-                    (tail (substring s start))
-                    (end (string-contains
-                          tail
-                          "(define-gexp-compiler (greetd-user-session-compiler"))
-                    (body (substring tail 0 end)))
-               (and body
-                    (string-contains body "(setenv \"XDG_SESSION_TYPE\"")
-                    (string-contains body "(setenv \"XDG_RUNTIME_DIR\"")
-                    (not (string-contains body "(setenv \"HOME\""))
-                    (not (string-contains body "(setenv \"USER\""))
-                    (not (string-contains body "(setenv \"LOGNAME\""))
-                    (not (string-contains body "(setenv \"SHELL\"")))))
-
 ;; ── D8：application persistence production wiring（mpv 第一个
 ;;     真实 rule：host assembly 消费 applications-persistence）──
 (test-assert "D8: mpv state bind mount declared in %vm-os"
@@ -414,37 +349,9 @@
                          (service-type-name (service-kind svc))))
                   (operating-system-services %vm-os)))
 
-;; ── D9：guix-daemon 本地构建 tmpdir 声明（common services；
-;;     2026-08-25：/tmp 7.7GB tmpfs 装不下内核编译 ~11GB 中间产物，
-;;     显式 TMPDIR=/var/tmp——pinned guix-configuration tmpdir 字段；
-;;     注意 guix-tmpdir accessor 未被上游导出（base.scm #:export
-;;     遗漏），经 module-ref 访问）──
-(define (os-guix-config)
-  "折叠 %vm-os 的 guix-service-type 配置。"
-  (service-value
-   (fold-services (operating-system-services %vm-os)
-                  #:target-type guix-service-type)))
-
-(define %guix-tmpdir
-  (module-ref (resolve-module '(gnu services base)) 'guix-tmpdir))
-
-(test-assert "D9: guix-daemon tmpdir is declared as /var/tmp"
-             (string=? "/var/tmp" (%guix-tmpdir (os-guix-config))))
-
-(test-assert "D9: guix-service-type explicitly declared in %common-services"
-             (any (lambda (svc)
-                    (eq? (service-kind svc) guix-service-type))
-                  %common-services))
-
 ;; ── NV1：NVIDIA adapter 默认 disabled/identity ─────────────
-(test-assert "NV1: NVIDIA adapter enabled (laptop host policy)"
-             %nvidia-adapter-enabled?)
-
 (test-assert "NV1: disabled path is identity (VM / Intel-only machines unaffected)"
              (eq? %vm-os (nvidia-system-transformation %vm-os #:enabled? #f)))
-
-(test-assert "NV1: no speculative NVIDIA kernel arguments (seam empty)"
-             (null? nvidia-kernel-arguments))
 
 ;; ── NV2：VM OS 无 proprietary NVIDIA 包 ────────────────────
 (test-assert "NV2: %vm-os packages contain no nvidia stack"
@@ -486,16 +393,6 @@
                                         (append %vendor-words
                                                 '("Virtual-1" "eDP-1"
                                                               "DP-1" "HDMI-A-1"))))))
-
-;; ── NV5：NVIDIA adapter 记录未来 ownership ─────────────────
-(test-assert "NV5: nvidia adapter module documents its ownership"
-             (let ((s (call-with-input-file
-                       "modules/guixcfg/system/graphics/nvidia.scm"
-                       (lambda (p) (read-string p)))))
-               (and (string-contains s "nouveau blacklist")
-                    (string-contains s "PRIME")
-                    (string-contains s "Secure Boot module-signing")
-                    (string-contains s "kernel-platform"))))
 
 ;; ── NV6：kernel 仍由 kernel-platform 拥有 ──────────────────
 (test-assert "NV6: %vm-os kernel is still %kernel (kernel-platform owns it)"

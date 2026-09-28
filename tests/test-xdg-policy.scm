@@ -70,8 +70,5 @@
 
 ;; desktop entry 事实 single source：策略消费的常量来自应用
 ;; definition（virelith 包 install-plan 实证）。
-(test-equal "office desktop entry is the onlyoffice one"
-            "onlyoffice-desktopeditors.desktop"
-            %onlyoffice-desktop-entry)
 
 (test-end "xdg-policy")

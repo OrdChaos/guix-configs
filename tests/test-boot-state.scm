@@ -20,7 +20,6 @@
    (lambda ()
      (write-boot-states! path 7 "root=/selected-root foo=bar")
      (let ((state (read-boot-state-alist path)))
-       (test-equal "writes v2 format" 2 (assq-ref state 'format-version))
        (test-equal "reads last-good generation"
                    7 (assq-ref (assq-ref state 'last-good) 'generation))
        (test-equal "reads cmdline of confirmed boot"

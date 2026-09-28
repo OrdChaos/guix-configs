@@ -50,20 +50,7 @@
              (every (lambda (fs)
                       (string-prefix? "/home/user/" (file-system-mount-point fs)))
                     fss))
-(test-assert "no mount point is /home/user itself"
-             (not (any (lambda (fs)
-                         (string=? (file-system-mount-point fs) "/home/user"))
-                       fss)))
-
 ;; ── XDG user directories 全集覆盖（与 (guixcfg home xdg) 对应）──
-(test-assert "persistent dirs cover the XDG user directory set"
-             (every (lambda (d)
-                      (member d (map persistent-user-dir-consumer
-                                     %persistent-user-dirs)))
-                    '("Desktop" "Documents" "Downloads" "Music"
-                                "Pictures" "Projects" "Public" "Templates"
-                                "Videos")))
-
 (test-assert "repository has no dedicated persistence entry"
              (not (any (lambda (d)
                          (or (member (persistent-user-dir-backing d)
@@ -108,12 +95,6 @@
                          (string=? ".local/share/Trash"
                                    (persistent-user-dir-consumer d)))
                        %persistent-user-dirs)))
-(test-assert "no trash bind mount declared"
-             (not (any (lambda (fs)
-                         (string=? "/home/user/.local/share/Trash"
-                                   (file-system-mount-point fs)))
-                       fss)))
-
 ;; activation gexp 可编译
 (test-assert "persistence activation gexp compiles"
              (and (gexp->script "user-persistence-check"

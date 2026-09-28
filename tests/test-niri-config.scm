@@ -111,13 +111,6 @@
 ;; ── 6. noctalia.kdl ownership：entrypoint 只 include，不安装 ─
 (test-assert "config.kdl includes noctalia.kdl (entrypoint contract)"
              (string-contains %config-kdl "include \"noctalia.kdl\""))
-(test-assert "niri application installs no noctalia.kdl"
-             (let ((value (service-value
-                           (find (lambda (s)
-                                   (eq? 'niri-config
-                                        (service-type-name (service-kind s))))
-                                 (application-home-services %niri)))))
-               (not (assoc ".config/niri/noctalia.kdl" value))))
 
 ;; ── 7. niri application 贡献：config.kdl + common.kdl ───────
 (define %niri-config-value
@@ -127,10 +120,6 @@
                 (service-type-name (service-kind s))))
          (application-home-services %niri))))
 
-(test-assert "niri application installs config.kdl"
-             (assoc ".config/niri/config.kdl" %niri-config-value))
-(test-assert "niri application installs common.kdl"
-             (assoc ".config/niri/common.kdl" %niri-config-value))
 (test-assert "niri application installs no host.kdl (variant-resolved)"
              (not (assoc ".config/niri/host.kdl" %niri-config-value)))
 

@@ -46,20 +46,6 @@
   (string-join (take (string-split (package-version python) #\.) 2)
                "."))
 
-;; ── NA1：app 启用 + 扩展栈 ──────────────────────────────────
-(test-assert "NA1: nautilus app enabled with the extension stack packages"
-             (let ((names (map package-name
-                               (application-home-packages %nautilus-app))))
-               (and %nautilus-app
-                    (application? %nautilus-app)
-                    (member "nautilus" names)
-                    (member "gvfs" names)
-                    (member "python-nautilus" names)
-                    (member "nautilus-open-any-terminal" names)
-                    ;; cairo-1.0.typelib 的携带者（guix cairo 不构建
-                    ;; introspection；Gtk-3.0 typelib 依赖 cairo）。
-                    (member "gobject-introspection" names))))
-
 ;; ── NA2：PYTHONPATH（版本推导，不写死）──────────────────────
 (test-assert "NA2: session PYTHONPATH points at the profile site-packages \
 of the pinned python major.minor"

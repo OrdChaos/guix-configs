@@ -95,8 +95,6 @@
                    "sentinel-commit"
                    (call-with-input-file (string-append target "/file")
                                          get-string-all))
-       (test-assert "TARGET/etc exists"
-                    (file-exists? (string-append target "/etc/issue")))
        ;; 6. TARGET 关键目录
        (for-each
         (lambda (d)

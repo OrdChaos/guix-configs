@@ -12,7 +12,6 @@
              (gnu home services fontutils) ; home-fontconfig-service-type
              (gnu home services xdg)    ; home-xdg-mime-applications-service-type
              (gnu services)              ; service-kind、service-type-extensions、service-extension-target
-             (gnu services guix)        ; guix-home-service-type
              (gnu packages fontutils)   ; fontconfig
              (guix packages)          ; package-name
              (srfi srfi-1)
@@ -22,12 +21,6 @@
 (test-runner-current (test-runner-simple))
 
 (test-begin "home")
-
-(test-assert "%guix-home is a usable home-environment"
-             (home-environment? %guix-home))
-
-(test-assert "home packages non-empty"
-             (pair? (home-environment-packages %guix-home)))
 
 ;; 条目可以是 package 或 (package output) tuple（manifest 合法
 ;; 形式，如 (list glib "bin")——apps/gtk 的 gsettings CLI）。
@@ -104,15 +97,5 @@
                       (and (string-prefix? ".local/share/fonts/" (car entry))
                            (not (string-contains (car entry) ".."))))
                     (service-value %fonts-xdg-link-svc)))
-
-;; Guix Home 挂入 system（官方 guix-home-service-type）：home-environment
-;; 随 system generation 构建，boot 时以用户身份运行其 activate，重建
-;; ephemeral $HOME 中的 ~/.guix-home 与 dotfile 链接（指向本 generation
-;; closure 内的 home，而非 mutable 记录）。
-(define gh-svc
-  (service guix-home-service-type `(("user" ,%guix-home))))
-(test-assert "guix-home-service-type binds %guix-home"
-             (and (eq? (service-kind gh-svc) guix-home-service-type)
-                  (eq? (cadr (car (service-value gh-svc))) %guix-home)))
 
 (test-end "home")

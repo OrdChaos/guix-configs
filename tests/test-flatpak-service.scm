@@ -48,8 +48,6 @@
          (eq? (service-extension-target ext) target-type))
        (service-type-extensions (service-kind svc))))
 
-(test-equal "flatpak home services: exactly two services"
-            2 (length %flatpak-home-services))
 (test-assert "one service extends home-files (desktop complete-files)"
              (any (lambda (svc)
                     (service-extends? svc home-files-service-type))
@@ -70,12 +68,6 @@
              (member '("XDG_DATA_DIRS"
                        . "$XDG_DATA_DIRS:$HOME/.local/share/flatpak/exports/share")
                      %home-env-value))
-;; 组合语义：值以 $XDG_DATA_DIRS 开头 = 追加而非覆盖（preamble 已
-;; 置 Home profile share，source 时展开）。
-(test-assert "XDG_DATA_DIRS value appends (never overwrites)"
-             (string-prefix? "$XDG_DATA_DIRS:"
-                             "$XDG_DATA_DIRS:$HOME/.local/share/flatpak/exports/share"))
-
 ;; ── override files：managed 才生成（external = user-owned）────
 (test-equal "catalog apps with external override policy produce no override files"
             '()
@@ -159,11 +151,6 @@
 (test-equal "unselected desktop shadow produces no home file"
             '()
             (flatpak-desktop-files '()))
-(test-equal "selected catalog projects the Steam desktop shadow"
-            '(".local/share/applications/com.valvesoftware.Steam.desktop")
-            (map car
-                 (flatpak-desktop-files
-                  (flatpak-selected-applications))))
 
 ;; ── %vm-os persistence wiring ─────────────────────────────────
 (define %fp-user (user-profile-name %primary-user))

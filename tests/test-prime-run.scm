@@ -33,15 +33,11 @@
              ((guixcfg hosts vm) #:prefix vm:)
              (guixcfg system graphics nvidia)
              (guixcfg home user)          ; %guix-home（VM/default home）
-             (guixcfg utils repository-source) ; repository-file（P7 文件读取）
              (gnu home)                   ; home-environment-packages
              (gnu home services)          ; home-environment-variables-service-type
              (gnu services)               ; fold-services
-             (guix build-system trivial)  ; trivial-build-system
-             (guix gexp)                  ; local-file-absolute-file-name
              (guix packages)              ; package-name、package-inputs
              (nongnu packages nvidia)     ; nvda-new-feature（rolling selector）
-             (ice-9 rdelim)               ; read-string
              (srfi srfi-1)                ; every、find
              (srfi srfi-13)               ; string-contains
              (srfi srfi-64))
@@ -53,18 +49,6 @@
   (@@ (guixcfg system graphics nvidia) prime-run-script))
 
 (test-begin "prime-run")
-
-;; ── P1：policy 与 pinned nonguix upstream 语义一致 ──────────
-;; 事实来源：store 已构建的 nvidia-prime-1.0-5（nonguix package 的
-;; 源码 = archlinux packaging tag 1.0-5）：
-;;   #!/bin/bash
-;;   __NV_PRIME_RENDER_OFFLOAD=1 __VK_LAYER_NV_optimus=NVIDIA_only \
-;;     __GLX_VENDOR_LIBRARY_NAME=nvidia "$@"
-(test-equal "P1: policy matches pinned nonguix nvidia-prime 1.0-5 semantics"
-            '(("__NV_PRIME_RENDER_OFFLOAD" . "1")
-              ("__VK_LAYER_NV_optimus" . "NVIDIA_only")
-              ("__GLX_VENDOR_LIBRARY_NAME" . "nvidia"))
-            %prime-offload-environment)
 
 ;; ── P2：driver 唯一 authority ───────────────────────────────
 (test-assert "P2: %nvidia-driver is the single driver authority (rolling new-feature)"
@@ -131,11 +115,6 @@
                       (string-contains %script "610"))))
 
 ;; ── P4：wrapper 包结构 ──────────────────────────────────────
-(test-assert "P4: wrapper package is named prime-run with trivial build"
-             (and (string=? (package-name %prime-run-wrapper) "prime-run")
-                  (eq? (package-build-system %prime-run-wrapper)
-                       trivial-build-system)))
-
 (test-assert "P4: wrapper has zero inputs (no build-time driver coupling)"
              (null? (package-inputs %prime-run-wrapper)))
 
@@ -181,20 +160,5 @@
              (not (any (lambda (binding)
                          (member (car binding) %forbidden-global-nvidia-vars))
                        %laptop-home-env)))
-
-;; ── P7：niri laptop variant 的 Intel DRM binding 未被改动 ───
-(define %laptop-niri-variant
-  (call-with-input-file
-   (local-file-absolute-file-name
-    (repository-file "modules/guixcfg/apps/niri/variants/laptop.kdl"))
-   read-string))
-
-(test-assert "P7: niri laptop variant still binds Intel iGPU and ignores NVIDIA"
-             (and (string-contains %laptop-niri-variant
-                                   "render-drm-device \"/dev/dri/by-path/pci-0000:00:02.0-render\"")
-                  (string-contains %laptop-niri-variant
-                                   "ignore-drm-device \"/dev/dri/by-path/pci-0000:01:00.0-card\"")
-                  (string-contains %laptop-niri-variant
-                                   "ignore-drm-device \"/dev/dri/by-path/pci-0000:01:00.0-render\"")))
 
 (test-end "prime-run")

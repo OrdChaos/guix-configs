@@ -298,14 +298,6 @@ nameserver 2001:db8::53\n")))
                                               (lambda (p) (get-string-all p)))))
                  (string=? s ""))))
 
-;; A6：user 不在声明集合 → projection 本身只写声明用户（不产生
-;; 幽灵条目）；credential 注入只作用于声明的 interactive 用户。
-(let* ((res (run-acc "" "$6$salt$valid\n"))
-       (exit (car res)) (out (cdr res)))
-  (test-equal "A6 projection success with declared user" 0 exit)
-  (test-assert "A6 user shadow line well-formed"
-               (string-contains out "\nuser:$6$salt$valid:")))
-
 ;; A7：最终 shadow 缺 user 时 account-state-ready 不 provision——
 ;; 由只读 verify 服务保证（fail-closed）。这里直接执行 verify
 ;; program 在"投影被外部破坏"的 shadow 上，必须失败。

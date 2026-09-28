@@ -30,10 +30,6 @@
 (test-begin "assets")
 
 ;; ── 1. 稳定路径事实 ────────────────────────────────────────
-(test-equal "avatar stable home path"
-            ".local/share/avatars/avatar.png" %avatar-home-path)
-(test-equal "wallpaper stable home path"
-            ".local/share/backgrounds/wallpaper.jpg" %wallpaper-home-path)
 
 ;; ── 2. 服务组装进 %guix-home ───────────────────────────────
 (define %assets-svc

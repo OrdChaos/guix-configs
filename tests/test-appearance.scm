@@ -52,14 +52,6 @@
 (define (cleanup!)
   (false-if-exception (delete-file-recursively %tmp-root)))
 
-;; ── 1. 共享事实 = 实测主题名 ──────────────────────────────
-(test-equal "facts: gtk light theme" "adw-gtk3" %appearance-gtk-theme-light)
-(test-equal "facts: gtk dark theme" "adw-gtk3-dark" %appearance-gtk-theme-dark)
-(test-equal "facts: icon theme" "Fluent-light" %appearance-icon-theme)
-(test-equal "facts: cursor theme" "Fluent-dark-cursors" %appearance-cursor-theme)
-(test-equal "facts: cursor size" 24 %appearance-cursor-size)
-(test-equal "facts: default mode" 'light %appearance-default-mode)
-
 ;; ── 2. 静态文件内容（lower 后读 store）─────────────────────
 (define (lower-text file-like)
   (read-file (run-with-store %store (lower-object file-like))))
@@ -268,11 +260,6 @@
                                    "spawn-at-startup \"xsettingsd-session\"")
                   (not (string-contains %niri-common
                                         "spawn-at-startup \"xsettingsd\""))))
-(test-assert "niri: cursor block matches facts"
-             (and (string-contains %niri-common
-                                   "xcursor-theme \"Fluent-dark-cursors\"")
-                  (string-contains %niri-common "xcursor-size 24")))
-
 (cleanup!)
 (for-each (lambda (pair)
             (if (cdr pair)

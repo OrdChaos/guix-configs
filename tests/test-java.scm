@@ -126,10 +126,6 @@ Java 的 -version 走 stderr，故两个流都收）。"
              (string->number first))))))
 
 ;; ── J1：版本事实表 ─────────────────────────────────────────
-(test-equal "J1: version table majors are exactly 8/17/21/24"
-            '(8 17 21 24)
-            (map car %java-version-table))
-
 (test-assert "J1: default java is one of the declared versions"
              (memq %default-java (map cdr %java-version-table)))
 

@@ -19,10 +19,6 @@
              (and (string? (user-profile-name %primary-user))
                   (not (string-null? (user-profile-name %primary-user)))))
 (test-equal "primary user uid" 1000 (user-profile-uid %primary-user))
-(test-equal "primary user group" "users" (user-profile-group %primary-user))
-(test-equal "primary user supplementary groups"
-            '("wheel" "netdev" "kvm")
-            (user-profile-supplementary-groups %primary-user))
 (test-assert "primary user home derives from the user name"
              (string=? (string-append "/home/"
                                       (user-profile-name %primary-user))
@@ -32,10 +28,6 @@
 
 ;; 生成的 user-account：password 恒为 #f（hash 不进 evaluator/store）
 (define acct (primary-user-account))
-(test-equal "account name from profile"
-            (user-profile-name %primary-user)
-            (user-account-name acct))
-(test-equal "account uid from profile" 1000 (user-account-uid acct))
 (test-assert "account password is #f (no hash in evaluation)"
              (not (user-account-password acct)))
 

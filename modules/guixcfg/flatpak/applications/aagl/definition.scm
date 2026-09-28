@@ -14,11 +14,14 @@
 ;;; update policy：'track-branch（默认策略）。
 ;;;
 ;;; override policy：(managed-overrides <flatpak-override>)——文件本身
-;;; 硬件中性。Guix 会话导出的 GIT_EXEC_PATH 指向宿主 profile，Flatpak
-;;; sandbox 无法访问；AAGL 又调用包内 git 同步组件索引，因此固定为
-;;; Flathub 包内 helper 目录 /app/libexec/git-core。游戏内容经
-;;; /persist/data-nobackup/aagl 直接访问（路径 authority 在
-;;; (guixcfg system gaming)）。
+;;; 硬件中性。上游 Flathub manifest 只声明 `sockets=...;x11;`，sandbox
+;;; 因而不暴露 Wayland socket，GTK 回退到 XWayland；此处追加 wayland
+;;; socket（override 是追加语义，x11 基线保留——游戏经 Wine 仍需
+;;; X11/XWayland，故不使用 fallback-x11）。Guix 会话导出的
+;;; GIT_EXEC_PATH 指向宿主 profile，Flatpak sandbox 无法访问；AAGL 又
+;;; 调用包内 git 同步组件索引，因此固定为 Flathub 包内 helper 目录
+;;; /app/libexec/git-core。游戏内容经 /persist/data-nobackup/aagl 直接
+;;; 访问（路径 authority 在 (guixcfg system gaming)）。
 ;;; 硬件差异（如 NVIDIA PRIME offload）由 hardware adapter 在
 ;;; Lenovo Guix Home 经 (flatpak-applications-with-environments)
 ;;; 追加 environment（变量语义归 (guixcfg system graphics nvidia)
@@ -49,6 +52,7 @@
    (override-policy
     (list 'managed-overrides
            (flatpak-override
+            (sockets (list "wayland"))
             (filesystems (list %aagl-games-library-path))
             (environment
              '("GIT_EXEC_PATH=/app/libexec/git-core")))))))

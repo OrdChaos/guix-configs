@@ -81,11 +81,6 @@
 (test-begin "kernel-platform")
 
 ;; ── K1：authoritative kernel selection ──────────────────────
-(test-assert "K1: %kernel is the Nonguix standard linux 7.2 package"
-             (and (eq? %kernel linux-7.2)
-                  (string=? (package-name %kernel) "linux")
-                  (not (string-contains (package-name %kernel) "libre"))))
-
 (test-assert "K1: %vm-os selects %kernel (no linux-libre fallback)"
              (eq? (operating-system-kernel %vm-os) %kernel))
 

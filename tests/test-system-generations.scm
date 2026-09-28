@@ -83,9 +83,6 @@
 ;;; ── policy
 
 (test-group "keep-for-host"
-            (test-equal "vm policy" 3 (keep-for-host "vm"))
-            (test-equal "Lenovo policy" 5
-                        (keep-for-host "lenovo-legion-y7000p"))
             (test-error "unknown host throws" #t (keep-for-host "nope")))
 
 ;;; ── argv

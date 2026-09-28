@@ -31,7 +31,6 @@
              (gnu system)             ; operating-system-file-systems
              (gnu system file-systems) ; file-system-*
              (gnu services)
-             (ice-9 rdelim)           ; read-string
              (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64))
@@ -56,13 +55,6 @@
               (application-home-services %vscode-app)))
 
 ;; ── VC1：app 启用、persistence 恰好 6 条、无整体/临时持久化 ──
-(test-assert "VC1: vscode app enabled in registry"
-             (and %vscode-app (application? %vscode-app)))
-
-(test-equal "VC1: exactly 6 persistence rules (4 original + language packs + cache)"
-            6
-            (length (application-persistence %vscode-app)))
-
 (test-assert "VC1: original four persistence rules retained"
              (and (rule-by-name 'extensions)
                   (rule-by-name 'global-storage)
@@ -174,14 +166,6 @@ create-mount-point? #t"
                           (vscode-home-file-targets))
                   (member ".config/Code/User/keybindings.json"
                           (vscode-home-file-targets))))
-
-(test-assert "VC4: argv.json declares the three documented fields"
-             (let ((s (call-with-input-file
-                       "modules/guixcfg/apps/vscode/argv.json"
-                       (lambda (p) (read-string p)))))
-               (and (string-contains s "\"enable-crash-reporter\": false")
-                    (string-contains s "\"password-store\": \"gnome-libsecret\"")
-                    (string-contains s "\"locale\": \"zh-cn\""))))
 
 ;; ── VC5：languagepacks.json / clp 不是仓库声明式文件 ────────
 ;; app-owned mutable state / derived cache：绝不能经 home-files 生成

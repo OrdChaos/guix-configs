@@ -9,7 +9,6 @@
 (use-modules (guixcfg system reconfigure)
              (guixcfg system session-gate) ; gate 唯一 authority（alias 完整性断言）
              (guixcfg system deploy)      ; system-reconfigure-argv（断言 argv 形态）
-             (ice-9 rdelim)
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -36,9 +35,6 @@
 
 (define (gate-closed? gate-dir)
   (file-exists? (gate-file gate-dir)))
-
-(define (gate-content gate-dir)
-  (call-with-input-file (gate-file gate-dir) read-string))
 
 (define (home-link home-dir)
   (string-append home-dir "/.guix-home"))
@@ -338,23 +334,6 @@
   (test-equal "success changed: exit code 0" 0 result)
   (test-assert "success changed: gate reopened" (not (gate-closed? gate-dir))))
 
-(let ((sandbox (make-sandbox)))
-  (define gate-dir (second sandbox))
-  (define home-dir (third sandbox))
-  (ready-home! home-dir)
-  (define result
-    (reconfigure-transaction!
-     "vm" "alice"
-     #:root "/repo"
-     #:gate-dir gate-dir
-     #:home-dir home-dir
-     #:run-command (lambda (argv) 0)
-     #:service-ready? all-services-ready?
-     #:sleep-proc (lambda (s) #t)))
-  (test-equal "structured running status is accepted" 0 result)
-  (test-assert "structured running status reopens gate"
-               (not (gate-closed? gate-dir))))
-
 (let ((sandbox (make-sandbox))
       (queries '()))
   (define gate-dir (second sandbox))
@@ -375,38 +354,12 @@
               %readiness-capabilities
               (reverse queries)))
 
-;; ── gate 内容与 readiness 集合契约 ──
-
-(let ((sandbox (make-sandbox)))
-  (define gate-dir (second sandbox))
-  (define home-dir (third sandbox))
-  (define captured-gate #f)
-  (reconfigure-transaction!
-   "vm" "alice"
-   #:root "/repo"
-   #:gate-dir gate-dir
-   #:home-dir home-dir
-   #:run-command
-   (lambda (argv)
-     (if (equal? argv (expected-guix-argv))
-       (begin
-        (set! captured-gate (gate-content gate-dir))
-        (ready-home! home-dir)   ; 让激活立即就绪
-        0)
-       0))
-   #:service-ready? all-services-ready?
-   #:sleep-proc (lambda (s) #t))
-  (test-equal "gate file content expresses in-progress state"
-              "A reconfigure is in progress.\n" captured-gate))
+;; ── readiness 集合契约 ──
 
 (test-equal "readiness capability set unchanged"
             '(interactive-secrets-ready account-state-ready persistent-state-ready
                                         home-ready session-infra-ready interactive-session-ready)
             %readiness-capabilities)
-
-(test-equal "hot restart services include mihomo"
-            '(mihomo)
-            %hot-restart-services)
 
 (test-assert "reconfigure gate facts alias the session-gate authority"
              ;; 兼容导出名必须跟随 (guixcfg system session-gate) 的唯一

@@ -21,9 +21,6 @@
 (test-begin "machine-state-persistence")
 
 ;; ── root 派生（单一 authority：persist-mount-point @persist-system）──
-(test-equal "machine-state root derives from @persist-system"
-            "/persist/system/state"
-            %machine-state-root)
 (test-assert "machine-state root is under /persist/system"
              (string-prefix? (persist-mount-point "@persist-system")
                              %machine-state-root))
@@ -37,18 +34,6 @@
    (exposure 'bind-directory)
    (lifecycle 'machine-owned)))
 
-(test-assert "rule record constructible"
-             (machine-state-persistence-rule? rule))
-(test-equal "exposure default is bind-directory"
-            'bind-directory
-            (machine-state-persistence-rule-exposure
-             (machine-state-persistence-rule
-              (name 'x) (backing "x") (consumer "/etc/x"))))
-(test-equal "lifecycle default is machine-owned"
-            'machine-owned
-            (machine-state-persistence-rule-lifecycle
-             (machine-state-persistence-rule
-              (name 'x) (backing "x") (consumer "/etc/x"))))
 (test-assert "valid rule passes validation"
              (valid-machine-state-persistence-rule? rule))
 

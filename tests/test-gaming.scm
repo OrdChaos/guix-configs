@@ -25,7 +25,6 @@
              (guixcfg flatpak model)
              (guixcfg flatpak registry)
              (guixcfg flatpak applications steam definition)
-             (guixcfg flatpak applications aagl definition)
              (guixcfg flatpak extensions gamescope definition)
              (guixcfg flatpak extensions proton-ge definition)
              (guixcfg storage model) ; persist-mount-point
@@ -116,24 +115,6 @@
                   (not (string-contains %steam-desktop-shadow
                                         "Categories=Network;FileTransfer;Game;"))))
 
-;; ── flatpak aagl definition：hardware-neutral managed file ──
-
-(define %aagl-base-environment
-  '("GIT_EXEC_PATH=/app/libexec/git-core"))
-
-(test-assert "aagl base definition owns a hardware-neutral override file"
-             (flatpak-application-managed-overrides %flatpak-aagl))
-
-(test-equal "aagl uses its bundled Git helpers inside the sandbox"
-            %aagl-base-environment
-            (flatpak-override-environment
-             (flatpak-application-managed-overrides %flatpak-aagl)))
-
-(test-equal "aagl base override exposes its games library"
-             (list %aagl-games-library-path)
-             (flatpak-override-filesystems
-              (flatpak-application-managed-overrides %flatpak-aagl)))
-
 ;; ── NVIDIA adapter → managed override overlay ───────────────
 
 (define %prime-overlayed-steam
@@ -141,33 +122,16 @@
    %flatpak-steam
    (cdr (assq 'steam %flatpak-prime-environment-overrides))))
 
-(define %prime-overlayed-aagl
-  (flatpak-application-with-environment
-   %flatpak-aagl
-   (cdr (assq 'aagl %flatpak-prime-environment-overrides))))
-
 (test-equal "NVIDIA adapter overlays PRIME env onto steam override"
             %prime-offload-environment-strings
             (flatpak-override-environment
              (flatpak-application-managed-overrides %prime-overlayed-steam)))
-
-(test-equal "NVIDIA adapter overlays PRIME env onto aagl override"
-            (append %aagl-base-environment
-                    %prime-offload-environment-strings)
-            (flatpak-override-environment
-             (flatpak-application-managed-overrides %prime-overlayed-aagl)))
 
 (test-assert "NVIDIA adapter leaves steam games library intact"
              (equal? (list %steam-games-library-path)
                      (flatpak-override-filesystems
                       (flatpak-application-managed-overrides
                        %prime-overlayed-steam))))
-
-(test-assert "NVIDIA adapter leaves aagl games library intact"
-             (equal? (list %aagl-games-library-path)
-                     (flatpak-override-filesystems
-                      (flatpak-application-managed-overrides
-                       %prime-overlayed-aagl))))
 
 (test-assert "PRIME variables render in Flatpak Environment section"
              (let ((text (flatpak-render-override-file

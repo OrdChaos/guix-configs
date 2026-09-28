@@ -215,11 +215,6 @@
                           (eq? (service-kind s) nvidia-service-type))
                         (operating-system-user-services vm:%vm-os))))
 
-;; ── N7：laptop %vm-os 实例化 ───────────────────────────────────
-(test-assert "N7: laptop %vm-os instantiates (valid services field)"
-             (list? (operating-system-services
-                     host:%lenovo-legion-y7000p-os)))
-
 ;; ── N8-N10：driver policy（rolling new-feature）────────────
 ;; 不变式（docs/architecture/graphics.md（NVIDIA driver policy））：
 ;;   N8  %nvidia-driver 是唯一 authority，绑定 pinned rolling

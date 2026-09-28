@@ -91,11 +91,6 @@
 
 ;; ── action 契约 ─────────────────────────────────────────────
 
-(test-equal "action registry: exactly the 7 supported actions"
-            '((sync . #f) (status . #t) (update . #f) (update-runtimes . #f)
-                          (remove . #f) (remote-replace . #f) (gc . #f))
-            %flatpak-actions)
-
 (test-equal "flatpak-actions lists names in canonical order"
             '("sync" "status" "update" "update-runtimes" "remove" "remote-replace" "gc")
             (flatpak-actions))

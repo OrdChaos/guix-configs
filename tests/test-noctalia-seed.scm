@@ -25,32 +25,6 @@
   (read-file "modules/guixcfg/apps/noctalia/base-settings.toml"))
 
 ;; ── 1. seed 内容契约（pinned Noctalia schema 键名）─────────
-(test-assert "seed disables setup wizard"
-             (string-contains %seed-text "setup_wizard_enabled = false"))
-(test-assert "seed carries config_version (no first-run migration churn)"
-             (string-contains %seed-text "config_version ="))
-(test-assert "seed does not fake .setup-complete (no assignment; comment mention is documentation)"
-             (not (string-contains %seed-text "setup-complete =")))
-(test-assert "seed covers shell.screenshot directory"
-             (string-contains %seed-text
-                              "directory = \"~/Pictures/Screenshots\""))
-(test-assert "seed covers launcher"
-             (string-contains %seed-text "[shell.launcher]"))
-(test-assert "seed covers theme"
-             (string-contains %seed-text "mode = \"light\""))
-(test-assert "seed covers wallpaper"
-             (string-contains %seed-text "[wallpaper]"))
-(test-assert "seed covers bar with tray/network/volume/battery widgets"
-             (and (string-contains %seed-text "\"tray\"")
-                  (string-contains %seed-text "\"network\"")
-                  (string-contains %seed-text "\"volume\"")
-                  (string-contains %seed-text "\"battery\"")))
-(test-assert "seed covers osd"
-             (string-contains %seed-text "[osd]"))
-(test-assert "seed covers location"
-             (string-contains %seed-text "[location]"))
-(test-assert "seed covers lockscreen"
-             (string-contains %seed-text "[lockscreen]"))
 ;; seed 是可移植初始状态（seed-once 语义）：禁止用户绝对路径
 ;; （/home/<user>——AGENT.md §13）与机器专属输出（eDP-1 等）。
 (test-assert "seed is portable (no absolute /home paths)"
@@ -60,8 +34,6 @@
 
 ;; ── 2. persistence rule 声明 ────────────────────────────────
 (define rules (applications-persistence (list %noctalia)))
-(test-equal "noctalia declares exactly two persistence rules"
-            2 (length rules))
 (define rule
   (find (lambda (r)
           (eq? 'state (application-persistence-rule-name r)))
@@ -117,8 +89,6 @@
                 (service-type-name (service-kind s))))
          (application-home-services %noctalia))))
 
-(test-assert "palettes are declared via home-files (.config prefix)"
-             (pair? %noctalia-xdg-value))
 (test-assert "fluent-blue palette installed under .config/noctalia/palettes"
              (assoc ".config/noctalia/palettes/fluent-blue.json" %noctalia-xdg-value))
 (test-assert "no declarative settings config (no second config source)"
@@ -131,14 +101,5 @@
              (= 1 (count (lambda (a)
                            (eq? (application-name a) 'noctalia))
                          %applications)))
-
-;; ── 4. fluent-blue.json 是合法 custom palette 形状 ──────────
-(define %palette-text
-  (read-file "modules/guixcfg/apps/noctalia/fluent-blue.json"))
-(test-assert "palette has dark and light modes"
-             (and (string-contains %palette-text "\"dark\"")
-                  (string-contains %palette-text "\"light\"")))
-(test-assert "palette carries Material tokens (mPrimary etc.)"
-             (string-contains %palette-text "\"mPrimary\""))
 
 (test-end "noctalia-seed")

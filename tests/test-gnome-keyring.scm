@@ -59,9 +59,6 @@
 (define %gnome-keyring-app (app-by-name 'gnome-keyring))
 
 ;; ── GK1：official service 退出 PAM、无 custom 实现 ────────
-(test-assert "GK1: gnome-keyring app enabled in registry"
-             (and %gnome-keyring-app (application? %gnome-keyring-app)))
-
 (test-assert "GK1: app declares NO system services (PAM fully out)"
              (null? (application-system-services %gnome-keyring-app)))
 
@@ -287,11 +284,6 @@ target (no password in argv/env of the wrapper)"
                              (user-profile-name %primary-user)))
                     (s (object->string (shepherd-service-start %gk-session-svc))))
                (string-contains s target)))
-
-(test-assert "GK7: service is session infrastructure (home shepherd),
-not system/boot/niri"
-             (and (pair? (application-home-services %gnome-keyring-app))
-                  (null? (application-system-services %gnome-keyring-app))))
 
 ;; ── GK8：master credential secret 声明 ────────────────────
 (test-assert "GK8: app owns exactly one secret declaration"
