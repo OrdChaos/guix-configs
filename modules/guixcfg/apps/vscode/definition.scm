@@ -48,6 +48,9 @@
 ;;;   out/vs/workbench 的 configuration 注册）：
 ;;;     "extensions.autoUpdate": false  —— 已审计 extension 不被后台
 ;;;        自行升级（改变运行边界）；
+;;;     "extensions.verifySignature": false —— Guix compatibility：pinned
+;;;        VS Code 内置 vsce-sign 是未修补的 FHS ELF，无法执行；关闭
+;;;        安装时签名校验，直到 channel package 修补该 helper；
 ;;;     "update.mode": "none"           —— VS Code 二进制由 Guix
 ;;;        channel 更新，不由 VS Code 自更新（enum 含 none，核实）。
 ;;;     "security.workspace.trust.enabled": false

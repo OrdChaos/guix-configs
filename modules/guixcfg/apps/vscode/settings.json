@@ -1,6 +1,9 @@
 {
     "telemetry.telemetryLevel": "off",
     "update.mode": "none",
+    "extensions.autoUpdate": false,
+    "extensions.verifySignature": false,
+    "rust-analyzer.server.path": "rust-analyzer",
     "terminal.integrated.profiles.linux": {
         "bash": {
             "path": "bash",
