@@ -193,15 +193,15 @@
         ;; (/run/resolvconf/resolv.conf), so it cannot be started after the
         ;; file exists.  Instead, hold smartdns (which requires this one-shot)
         ;; until NM has written at least one nameserver, then materialize the
-        ;; include from that single source.  Bounded so an offline boot is not
-        ;; blocked forever; later dispatcher events update the include.
+        ;; include from that single source.  Bounded (10s) so an offline boot
+        ;; is not delayed much; later dispatcher events update the include.
         (let ((metadata #$%dhcp-dns-metadata-path))
           (define (dhcp-dns-present?)
             (and (file-exists? metadata)
                  (let ((content (call-with-input-file metadata get-string-all)))
                    (and content (string-contains content "nameserver")))))
           (let loop ((i 0))
-            (unless (or (dhcp-dns-present?) (>= i 20))
+            (unless (or (dhcp-dns-present?) (>= i 10))
               (sleep 1)
               (loop (+ i 1)))))
         (unless (zero? (system* #$%smartdns-dhcp-fallback-program))
