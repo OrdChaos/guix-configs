@@ -158,20 +158,16 @@
                 (not (string-contains all "://"))))
 
 ;; ── S8：DHCP fallback runtime projection ─────────────────────
-(test-assert "S8: generated fallback supports plain (portal) and -fallback modes"
+(test-assert "S8: generated fallback accepts only strict IPv4 nameservers"
              (and (string-contains %dhcp-fallback-program-text "valid-ipv4?")
                   (string-contains %dhcp-fallback-program-text
                                    "server ~a -fallback")
                   (string-contains %dhcp-fallback-program-text
-                                   "/run/resolvconf/resolv.conf")
-                  (string-contains %dhcp-fallback-program-text "--portal")))
-(test-assert "S8: dispatcher probes a neutral URL and reacts to link/DNS changes"
+                                   "/run/resolvconf/resolv.conf")))
+(test-assert "S8: dispatcher reacts to link/DHCP/connectivity/DNS changes"
               (and (string-contains %dhcp-dispatcher-text "dns-change")
                    (string-contains %dhcp-dispatcher-text "dhcp4-change")
                    (string-contains %dhcp-dispatcher-text "up")
-                   (string-contains %dhcp-dispatcher-text "detectportal.firefox.com")
-                   (string-contains %dhcp-dispatcher-text "success")
-                   (string-contains %dhcp-dispatcher-text "--portal")
                    (string-contains %dhcp-dispatcher-text "reload")
                    (string-contains %dhcp-dispatcher-text "smartdns")))
 

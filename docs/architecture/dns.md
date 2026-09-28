@@ -67,14 +67,7 @@ DHCP DNS（动态 fallback；认证前 captive portal 可用）
 - **openresolv 保留**：不再写 `/etc/resolv.conf`，改为产出 DHCP DNS 的
   `/run` metadata；NetworkManager 官方 dispatcher（up / dhcp-change /
   connectivity-change / dns-change）严格提取 IPv4
-  nameserver，原子生成 SmartDNS 上游 include 并 SIGHUP 重载。captive-portal
-  感知：dispatcher 直接探测一个中立连通性检查 URL
-  （`http://detectportal.firefox.com/success.txt`，在线时正文恰好 `success`）
-  ——NM 自身连通性状态不可信（实测：校园网只放行门户时 NM 仍报 `full`）。
-  仅当探测成功时把 DHCP DNS 写成 `-fallback`（正常网络不把查询交给 DHCP
-  resolver）；探测失败（门户重定向/劫持/超时，认证前）时写成普通 `server`
-  （立即参与解析——认证前固定上游被劫持/阻断，`-fallback` 不会触发，
-  只有 DHCP resolver 可用；2026-09-28 实测 TUN OFF 认证前解析失败即此因）。其 hook
+  nameserver，原子生成 SmartDNS 的 `-fallback` include 并 SIGHUP 重载。其 hook
   必须是 root-owned regular file（NM 拒绝符号链接），因此由独立的 one-shot
   Shepherd 服务 `smartdns-dhcp-setup` 安装 wrapper 并物化 include；`smartdns`
   依赖它。ordering：openresolv metadata 由 NM 产生（NM → openresolv →
@@ -83,7 +76,8 @@ DHCP DNS（动态 fallback；认证前 captive portal 可用）
   （单一数据源）。setup 必须跑在 service start（不能在 shepherd 加载 service
   文件时或 boot activation 里嵌套 `system*`——2026-09-28 部署世代因此在
   shepherd 启动前死锁挂起）。openresolv 会合并当前所有非 private
-  条目并按 metric 排序，故 Wi-Fi、有线和多个有线连接的全局有效 DNS 都进入 include。
+  条目并按 metric 排序，故 Wi-Fi、有线和多个有线连接的全局有效 DNS 都进入 fallback。
+  这样 captive portal 认证前能使用本地 DHCP DNS，正常网络仍优先固定上游。
 - **固定 upstream 用 IP literal**：无 hostname bootstrap 路径，也
   不经过 SLIRP 的 10.0.2.3——宿主 Fake-IP 污染被彻底隔离（此前
   guest 收到的 198.18.0.x 来自宿主 resolver，本链不再经过它）。
