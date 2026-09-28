@@ -29,6 +29,7 @@
                 #:use-module (gnu packages bash)     ; bash-minimal（NM dispatcher wrapper）
                 #:use-module (gnu packages dns)      ; smartdns
                 #:use-module (gnu packages admin)    ; shepherd（herd）
+                #:use-module (gnu packages gnome)    ; network-manager（nmcli，门户状态探测）
                 #:use-module (guix gexp)
                 #:use-module (guix modules)          ; source-module-closure
                 #:use-module (guixcfg system dns ownership) ; %dhcp-dns-metadata-path
@@ -104,23 +105,37 @@
                                 (loop servers))))))))
                 '()))
 
-         (define (atomic-write-fallback! target servers)
+         (define (atomic-write-fallback! target servers portal?)
            ;; /run is ephemeral, so visibility atomicity is the only required
            ;; property: SmartDNS sees either the old complete file or the new
            ;; complete file, never a partially written config.
+           ;; PORTAL? selects the SmartDNS role of the DHCP nameservers:
+           ;;   #f → `-fallback` (only used when the fixed upstreams fail;
+           ;;        normal online networks never send queries to the DHCP
+           ;;        resolver);
+           ;;   #t → plain server (queried immediately).  A captive portal
+           ;;        hijacks/blocks the fixed upstreams, so they appear to
+           ;;        answer and `-fallback` never triggers; in portal state the
+           ;;        DHCP resolver is the only working one (observed 2026-09-28).
            (let ((new (string-append target ".new")))
              (call-with-output-file
               new
               (lambda (port)
                 (for-each (lambda (server)
-                            (format port "server ~a -fallback~%" server))
+                            (format port
+                                    (if portal?
+                                      "server ~a~%"
+                                      "server ~a -fallback~%")
+                                    server))
                           servers)))
              (chmod new #o644)
              (rename-file new target)))
 
-         (let ((arguments (cdr (command-line))))
+         (let* ((raw (cdr (command-line)))
+                (portal? (and (pair? raw) (string=? (car raw) "--portal")))
+                (arguments (if portal? (cdr raw) raw)))
            (unless (or (null? arguments) (= (length arguments) 2))
-             (error "usage: smartdns-dhcp-fallback [SOURCE TARGET]"))
+             (error "usage: smartdns-dhcp-fallback [--portal] [SOURCE TARGET]"))
            (let ((source (if (null? arguments)
                              #$%dhcp-dns-metadata-path
                              (car arguments)))
@@ -128,23 +143,52 @@
                              #$%smartdns-dhcp-fallback-file
                              (cadr arguments))))
              (mkdir-p (dirname target))
-             (atomic-write-fallback! target (dhcp-nameservers source))))))))
+             (atomic-write-fallback! target (dhcp-nameservers source) portal?)))))))
 
 (define %smartdns-dhcp-dispatcher
   (program-file
    "smartdns-dhcp-dispatcher"
    #~(begin
+       (use-modules (ice-9 popen)
+                    (ice-9 rdelim)
+                    (srfi srfi-13))
        ;; NetworkManager invokes dispatcher scripts with IFACE ACTION.  React
        ;; to every event that can change the active DNS (activation, DHCP
        ;; lease, connectivity, DNS).  Relying on the dedicated dns-change
        ;; event alone was not robust: it can fire before this wrapper is
        ;; installed at boot or before openresolv writes the metadata, leaving
        ;; /run/smartdns/dhcp-upstreams.conf empty (observed 2026-09-28).
+       ;;
+       ;; Captive-portal awareness: NM's connectivity is full / limited /
+       ;; portal / none / unknown.  Only `full' guarantees the fixed upstreams
+       ;; work; otherwise (pre-auth portal) they are hijacked/blocked, so the
+       ;; DHCP resolver must be a plain upstream.  Prefer the CONNECTIVITY_STATE
+       ;; NM exports on `connectivity-change'; fall back to asking nmcli.
+       (define (not-full? state)
+         (and state
+              (not (string=? (string-downcase (string-trim-both state))
+                             "full"))))
+       (define (query-connectivity)
+         (catch #t
+           (lambda ()
+             (let ((port (open-input-pipe
+                          (string-append
+                           #$(file-append network-manager "/bin/nmcli")
+                           " -t -f CONNECTIVITY general"))))
+               (let ((line (read-line port)))
+                 (close-pipe port)
+                 line)))
+           (lambda _ #f)))
+       (define (portal-state?)
+         (or (not-full? (getenv "CONNECTIVITY_STATE"))
+             (not-full? (query-connectivity))))
        (when (and (>= (length (command-line)) 3)
                   (member (caddr (command-line))
                           '("up" "dhcp4-change" "dhcp6-change"
                             "connectivity-change" "dns-change")))
-         (unless (zero? (system* #$%smartdns-dhcp-fallback-program))
+         (unless (zero? (if (portal-state?)
+                          (system* #$%smartdns-dhcp-fallback-program "--portal")
+                          (system* #$%smartdns-dhcp-fallback-program)))
            (error "failed to materialize DHCP DNS fallback"))
          ;; During NetworkManager's first start SmartDNS may not be running
          ;; yet; its later start reads the already materialized include.  A

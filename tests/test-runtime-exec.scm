@@ -191,14 +191,16 @@ user:x:1000:1000:u:/home/user:/bin/bash\n" p)))
 (define %smartdns-dhcp-fallback-executable
   (build-thing %smartdns-dhcp-fallback-program))
 
-(define (run-smartdns-dhcp-fallback metadata)
+(define* (run-smartdns-dhcp-fallback metadata #:optional (extra-args '()))
   (let ((root (make-fake-root "" #f)))
     (mkdir-p (string-append root "/run"))
     (call-with-output-file (string-append root "/run/input.resolvconf")
       (lambda (port) (display metadata port)))
     (let ((exit (run-executable-in-root
                   %smartdns-dhcp-fallback-executable root
-                  '("/run/input.resolvconf" "/run/smartdns/dhcp-upstreams.conf"))))
+                  (append extra-args
+                          '("/run/input.resolvconf"
+                            "/run/smartdns/dhcp-upstreams.conf")))))
       (cons exit
             (let ((output (string-append root "/run/smartdns/dhcp-upstreams.conf")))
               (and (file-exists? output)
@@ -221,6 +223,16 @@ nameserver 2001:db8::53\n")))
 (let ((result (run-smartdns-dhcp-fallback "")))
   (test-equal "SD2 empty DHCP metadata clears fallback include" 0 (car result))
   (test-equal "SD2 empty DHCP metadata emits an empty include" "" (cdr result)))
+
+;; SD3: in captive-portal state the DHCP resolver must be a plain upstream
+;; (queried immediately), not -fallback.
+(let ((result (run-smartdns-dhcp-fallback
+               "search campus.example\nnameserver 211.69.143.174\n"
+               '("--portal"))))
+  (test-equal "SD3 portal mode exits successfully" 0 (car result))
+  (test-equal "SD3 portal mode emits a plain server (no -fallback)"
+              "server 211.69.143.174\n"
+              (cdr result)))
 
 ;; ── account databases projection：真实执行 ──────────────────
 ;; 测试 /etc/{passwd,group,shadow} 的单一 authoritative writer：
