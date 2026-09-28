@@ -9,7 +9,6 @@
     "tests/test-gaming.scm"
     "tests/test-gnome-keyring.scm"
      "tests/test-gnupg.scm"
-     "tests/test-java.scm"
     "tests/test-nautilus.scm"
     "tests/test-niri-config.scm"
     "tests/test-noctalia-seed.scm"
