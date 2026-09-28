@@ -58,7 +58,7 @@
   (local-file "smartdns.conf" "smartdns.conf"))
 
 (define %smartdns-dhcp-fallback-program
-  ;; The dispatcher runs this as root after NetworkManager reports a DNS
+  ;; The dispatcher runs this as root after NetworkManager reports a link/DNS
   ;; change.  Only strict IPv4 nameserver entries become SmartDNS syntax:
   ;; DHCP input never gets to inject arbitrary configuration directives.
   (program-file
@@ -102,7 +102,7 @@
                                      (not (member (cadr words) servers)))
                                 (loop (cons (cadr words) servers))
                                 (loop servers))))))))
-               '()))
+                '()))
 
          (define (atomic-write-fallback! target servers)
            ;; /run is ephemeral, so visibility atomicity is the only required
@@ -169,9 +169,13 @@
   (program-file
    "smartdns-runtime-setup"
    (with-imported-modules
-    (source-module-closure '((guix build utils)))
+    (source-module-closure '((guix build utils)
+                             (ice-9 textual-ports)
+                             (srfi srfi-13)))
     #~(begin
-        (use-modules (guix build utils))
+        (use-modules (guix build utils)
+                     (ice-9 textual-ports)
+                     (srfi srfi-13))
         (let* ((target #$%smartdns-dhcp-dispatcher-path)
                (new (string-append target ".new")))
           (mkdir-p (dirname target))
@@ -185,6 +189,21 @@
           (rename-file new target))
         (mkdir-p #$%smartdns-runtime-directory)
         (chmod #$%smartdns-runtime-directory #o755)
+        ;; Ordering: NetworkManager is the producer of the openresolv metadata
+        ;; (/run/resolvconf/resolv.conf), so it cannot be started after the
+        ;; file exists.  Instead, hold smartdns (which requires this one-shot)
+        ;; until NM has written at least one nameserver, then materialize the
+        ;; include from that single source.  Bounded so an offline boot is not
+        ;; blocked forever; later dispatcher events update the include.
+        (let ((metadata #$%dhcp-dns-metadata-path))
+          (define (dhcp-dns-present?)
+            (and (file-exists? metadata)
+                 (let ((content (call-with-input-file metadata get-string-all)))
+                   (and content (string-contains content "nameserver")))))
+          (let loop ((i 0))
+            (unless (or (dhcp-dns-present?) (>= i 20))
+              (sleep 1)
+              (loop (+ i 1)))))
         (unless (zero? (system* #$%smartdns-dhcp-fallback-program))
           (error "failed to materialize DHCP DNS fallback"))))))
 

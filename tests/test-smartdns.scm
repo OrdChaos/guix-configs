@@ -53,6 +53,8 @@
   (file-text %smartdns-dhcp-fallback-program))
 (define %dhcp-dispatcher-text
   (file-text %smartdns-dhcp-dispatcher))
+(define %runtime-setup-text
+  (file-text %smartdns-runtime-setup))
 
 (define (shepherd-service-with-provision name)
   (find (lambda (s)
@@ -208,5 +210,11 @@
                            (gexp->approximate-sexp
                             (shepherd-service-start %smartdns-svc)))
                           "smartdns-runtime-setup")))))
+
+(test-assert "S10: setup waits for the DHCP DNS metadata before materializing"
+             ;; Single source of truth: hold smartdns until NM/openresolv has
+             ;; written a nameserver, instead of racing the write.
+             (and (string-contains %runtime-setup-text "nameserver")
+                  (string-contains %runtime-setup-text "sleep")))
 
 (test-end "smartdns")

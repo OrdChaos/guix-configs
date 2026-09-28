@@ -69,11 +69,13 @@ DHCP DNS（动态 fallback；认证前 captive portal 可用）
   connectivity-change / dns-change）严格提取 IPv4
   nameserver，原子生成 SmartDNS 的 `-fallback` include 并 SIGHUP 重载。其 hook
   必须是 root-owned regular file（NM 拒绝符号链接），因此由独立的 one-shot
-  Shepherd 服务 `smartdns-dhcp-setup` 在真实 root 上原子写入调用 store
-  program 的最小 wrapper 并物化 include；`smartdns` 依赖它。setup 必须跑在
-  service start（不能在 shepherd 加载 service 文件时或在 boot activation 里
-  嵌套 `system*`——2026-09-28 部署世代因此在 shepherd 启动前死锁挂起）。
-  openresolv 会合并当前所有非 private
+  Shepherd 服务 `smartdns-dhcp-setup` 安装 wrapper 并物化 include；`smartdns`
+  依赖它。ordering：openresolv metadata 由 NM 产生（NM → openresolv →
+  `/run/resolvconf/resolv.conf`），不可能先于 NM 存在；因此改为让该 one-shot
+  有界等待 metadata 出现至少一个 nameserver 后再物化，smartdns 因此晚于写入启动
+  （单一数据源）。setup 必须跑在 service start（不能在 shepherd 加载 service
+  文件时或 boot activation 里嵌套 `system*`——2026-09-28 部署世代因此在
+  shepherd 启动前死锁挂起）。openresolv 会合并当前所有非 private
   条目并按 metric 排序，故 Wi-Fi、有线和多个有线连接的全局有效 DNS 都进入 fallback。
   这样 captive portal 认证前能使用本地 DHCP DNS，正常网络仍优先固定上游。
 - **固定 upstream 用 IP literal**：无 hostname bootstrap 路径，也
