@@ -10,9 +10,9 @@
 ;;;   §0 子进程出口 —— %run（统一 dry-run 短路）/ %exec / %capture
 ;;;   §1 命令构造复用层 —— 直接使用 (guixcfg system deploy) 的纯 argv
 ;;;   §2 preflight —— doctor（含 git clean gate）与 build preflight（不含）
-;;;   §3 命令定义 —— doctor / build-os / reconfigure / install /
-;;;                    enroll / firstboot / gc（+ 内部 privileged
-;;;                    mode）/ update / flatpak / gsettings
+;;;   §3 命令定义 —— doctor / build-os / reconfigure / converge /
+;;;                    install / enroll / firstboot / gc（+ 内部
+;;;                    privileged mode）/ update / flatpak / gsettings
 ;;;   §4 repository-tests testable —— 薄包装 tests/run-tests.scm
 ;;;   §5 入口 —— (blueprint ...) 注册
 ;;;
@@ -26,6 +26,9 @@
 ;;;   reconfigure -n → 下游 guix system reconfigure --dry-run；
 ;;;                    绝不进入 privileged transaction（无 sudo、无
 ;;;                    gate、无 herd、无 Home 热激活）
+;;;   converge -n   → reconfigure -n + flatpak sync/update/
+;;;                   update-runtimes 只读 plan（零 mutation、无 sudo、
+;;;                   不联网）
 ;;;   update -n     → command preview only（不联网、不写锁、无未来 revision）
 ;;;   firstboot -n  → 下游 guix system reconfigure --dry-run +
 ;;;                   enrollment plan（只读；不进入任何事务）
@@ -267,8 +270,9 @@ preflight（git status / describe 等）——blue -n 下也真实执行，以�
              (format #f "expected exactly one HOST argument; known hosts: ~a"
                      (string-join (known-host-ids (%repo-root)) ", "))))))
 
-(define (%reconfigure-host-argument arguments)
-  "reconfigure 接受零或一个 HOST。零参数时按当前 hostname 精确反查。"
+(define* (%reconfigure-host-argument arguments #:key (command "reconfigure"))
+  "reconfigure 接受零或一个 HOST。零参数时按当前 hostname 精确反查。
+COMMAND 只用于 usage/错误信息里的命令名（converge 复用同一解析）。"
   (match arguments
          (()
           (let* ((hostname (gethostname))
@@ -277,15 +281,15 @@ preflight（git status / describe 等）——blue -n 下也真实执行，以�
             (cond
               ((not host)
                (%usage-error
-                (format #f "cannot identify local host from hostname: ~a~%known hosts: ~a~%usage: blue reconfigure [HOST]"
-                        hostname (string-join known ", "))))
+                (format #f "cannot identify local host from hostname: ~a~%known hosts: ~a~%usage: blue ~a [HOST]"
+                        hostname (string-join known ", ") command)))
               ((not (host-id? known host))
                (%usage-error
                 (format #f "local hostname ~a maps to unavailable host: ~a~%known hosts: ~a"
                         hostname host (string-join known ", "))))
               (else host))))
          ((host) (%require-host-argument (list host)))
-         (_ (%usage-error "usage: blue reconfigure [HOST]"))))
+         (_ (%usage-error (format #f "usage: blue ~a [HOST]" command)))))
 
 (define (build-os-hosts root arguments)
   "build-os 的 HOST|all 解析。绝不无参 fallback。"
@@ -662,6 +666,47 @@ Dry-run (blue -n):
   gc                         command preview only (no read-only equivalent)"))
                 (%flatpak-command arguments))
 
+;;; ---------- converge（system + user Flatpak 一次收敛） ----------
+
+(define-command (converge-command arguments)
+                ((invoke "converge")
+                 (category 'deployment)
+                 (synopsis "Reconfigure HOST, then converge the user Flatpak layer")
+                 (help "[HOST]
+One-shot convergence of the machine's system and user application
+layers:
+  1. reconfigure            deploy the system for HOST (defaults to the
+                            local hostname, same resolution as
+                            'blue reconfigure'; clean committed worktree
+                            required);
+  2. flatpak sync           ensure declared remotes + selected apps;
+  3. flatpak update         update unpinned selected+installed apps;
+  4. flatpak update-runtimes
+                            update installed runtimes -- this is the step
+                            that pulls the org.freedesktop.Platform.GL.nvidia-*
+                            extension matching the running driver.
+The Flatpak steps run user-scope (never sudo) and only after reconfigure
+succeeds. If the NVIDIA driver was just upgraded, reboot first so
+/sys/module/nvidia/version reflects the running module, then run this
+command to pull the matching GL extension.
+With blue -n: reconfigure derivation dry-run plus read-only Flatpak
+plans; zero mutation, no sudo, no network."))
+                (let* ((root (%repo-root))
+                       (host (%reconfigure-host-argument arguments
+                                                         #:command "converge")))
+                  (if (dry-build?)
+                    (begin
+                     (%doctor root host)
+                     (%exec (system-reconfigure-dry-run-argv root host))
+                     (%flatpak-command '("sync"))
+                     (%flatpak-command '("update"))
+                     (%flatpak-command '("update-runtimes")))
+                    (begin
+                     (%reconfigure-host root host)
+                     (%flatpak-command '("sync"))
+                     (%flatpak-command '("update"))
+                     (%flatpak-command '("update-runtimes"))))))
+
 ;;; ============================================================
 ;;; §3.7 GSettings namespace（repository-derived static app
 ;;; preferences；docs/architecture/gsettings.md）
@@ -950,6 +995,7 @@ no sudo, no confirmation."))
  (commands (list doctor-command
                  build-os-command
                  reconfigure-command
+                 converge-command
                  install-command
                  enroll-command
                  firstboot-command

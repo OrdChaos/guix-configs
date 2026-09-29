@@ -18,6 +18,7 @@ blue help
 blue doctor HOST             # 部署就绪检查（离线只读）
 blue build-os HOST           # 构建系统配置（允许脏工作树）
 blue reconfigure [HOST]      # 部署；省略 HOST 时按本机 hostname 精确识别
+blue converge [HOST]         # reconfigure 后接 flatpak sync/update/update-runtimes
 blue install HOST DEVICE     # 安装生命周期（LiveCD；见 installation.md）
 blue firstboot HOST          # 首次启动收敛：仅 reconfigure（见 installation.md）
 blue enroll HOST             # 机器绑定 enrollment（目标系统上；见 installation.md）
@@ -59,6 +60,10 @@ blue reconfigure                         # 本机部署（前置 doctor + git cl
 blue -n reconfigure                      # 本机部署 dry-run
 blue reconfigure lenovo-legion-y7000p    # 显式形式；hostname 变更/修复时使用
 
+blue converge                            # reconfigure + flatpak sync/update/update-runtimes
+blue -n converge                         # 只读：reconfigure plan + flatpak 只读 plan
+blue converge lenovo-legion-y7000p       # 显式形式；同 reconfigure 的缺省 HOST 解析
+
 blue firstboot lenovo-legion-y7000p     # 首次启动收敛：仅 reconfigure
 blue -n firstboot lenovo-legion-y7000p  # 只读：reconfigure 推导 plan
 
@@ -85,6 +90,13 @@ blue flatpak gc
 `blue update`（频道锁更新）与 `blue flatpak update`（Flatpak 应用
 更新）是两个不同的操作,不可混用。Flatpak 属于 user application
 lifecycle,不属于 system provisioning。
+
+`blue converge [HOST]` 是二者的一次性组合入口：reconfigure 成功后
+（HOST 解析与 `blue reconfigure` 相同，可省略）依次执行 `flatpak
+sync` → `flatpak update` → `flatpak update-runtimes`。Flatpak 步骤
+始终 user scope（无 sudo）。NVIDIA 驱动刚升级时先 reboot（让
+`/sys/module/nvidia/version` 反映运行中模块），再运行本命令拉取匹配
+的 GL extension。
 
 ## Host
 
@@ -260,6 +272,7 @@ channels.scm 与 channels.lock.scm 结构兼容
 | --- | --- |
 | `blue -n build-os HOST` | 下游 `guix system build --dry-run`：真实 derivation/build plan（保留 facts/module lowering 验证），不构建 store object |
 | `blue -n reconfigure [HOST]` | 只读前置照常执行（含 git clean gate），然后 `guix system reconfigure --dry-run`。**只验证 system derivation/build plan**——不模拟 gate 事务、shepherd restart、Home 热激活；**绝不进入 privileged transaction（无 sudo、无 gate、无 herd）** |
+| `blue -n converge [HOST]` | reconfigure dry-run（同上）+ `flatpak sync` / `update` / `update-runtimes` 的只读 plan；零 mutation、无 sudo、不联网 |
 | `blue -n firstboot HOST` | 先执行一次性 lifecycle guard；未完成时运行 reconfigure dry-run（同 `-n reconfigure`）。已写入固件 PK 时在 derivation 计算前阻断；始终零 mutation、无 sudo、无确认 |
 | `blue -n update` | **command preview only**：不联网、不解析新 revision、不写锁；只打印将执行的命令与目标文件。无法预告"将更新到什么 commit" |
 | `blue -n check` | 不真正运行测试套件（Blue testable builtin dry-run 语义，有意为之） |
