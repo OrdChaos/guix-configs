@@ -2,10 +2,12 @@
 ;;; 对应 docs/architecture/overview.md（host 是组装点，共享内容放这里）。
 
 (define-module (guixcfg system common)
-               #:use-module (gnu services)         ; service
-               #:use-module (gnu services base)    ; guix-service-type、guix-configuration
+               #:use-module (gnu services)         ; service, simple-service
+               #:use-module (gnu services base)    ; guix-service-type、guix-configuration、special-files-service-type
                #:use-module (gnu services desktop) ; elogind-service-type、elogind-configuration、polkit-wheel-service
                #:use-module (gnu services dbus)    ; polkit-service-type（polkitd 的 authority）
+               #:use-module (gnu packages base)    ; glibc
+               #:use-module (guix gexp)            ; file-append
                #:use-module (virelith packages elogind) ; elogind-compat（257.16）
                #:export (%common-timezone
                          %common-locale
@@ -61,10 +63,27 @@
 ;; 默认 /tmp 是 7.7GB tmpfs，装不下内核编译的 ~11GB 中间产物——
 ;; 2026-08-25 实测 -j8/-j2 均 ENOSPC）。主机（Arch systemd daemon）
 ;; 由 /etc/systemd/system/guix-daemon.service 的 Environment 单独配置。
+;; FHS compatibility for prebuilt binaries that hard-code the glibc
+;; interpreter.  Concrete consumer: AAGL's native package downloads
+;; upstream Wine runners whose bin/wine is
+;;   interpreter /lib64/ld-linux-x86-64.so.2, NEEDED libc.so.6, no RPATH;
+;; without these paths exec fails with ENOENT ("更新 Wine Prefix 失败：
+;; 没有那个文件或目录") and the Wine prefix can never be created.
+;; special-files-service-type is the official Guix mechanism for this
+;; (see the manual's /lib64/ld-linux-x86-64.so.2 example); pinned glibc's
+;; loader searches the compiled-in /lib, so /lib points at the glibc
+;; library directory (which also contains the loader).
+(define %fhs-glibc-compat-service
+  (simple-service 'fhs-glibc-compat special-files-service-type
+                  `(("/lib" ,(file-append glibc "/lib"))
+                    ("/lib64/ld-linux-x86-64.so.2"
+                     ,(file-append glibc "/lib/ld-linux-x86-64.so.2")))))
+
 (define %common-services
   (list (service guix-service-type
                  (guix-configuration (tmpdir "/var/tmp")))
         (service elogind-service-type (elogind-configuration
                                        (elogind elogind-compat)))
         (service polkit-service-type)
-        polkit-wheel-service))
+        polkit-wheel-service
+        %fhs-glibc-compat-service))
