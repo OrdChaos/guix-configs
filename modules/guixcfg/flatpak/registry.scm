@@ -22,7 +22,6 @@
                #:use-module (guixcfg flatpak model)
                #:use-module (guixcfg flatpak applications qq definition)
                #:use-module (guixcfg flatpak applications wechat definition)
-               #:use-module (guixcfg flatpak applications aagl definition)
                #:use-module (guixcfg flatpak applications steam definition)
                #:use-module (guixcfg flatpak applications telegram definition)
                #:use-module (guixcfg flatpak applications discord definition)
@@ -58,7 +57,6 @@
 (define %flatpak-applications
   (list %flatpak-qq
         %flatpak-wechat
-        %flatpak-aagl
         %flatpak-steam
         %flatpak-telegram
         %flatpak-discord
@@ -70,7 +68,7 @@
 ;; 追加 environment adapter（如 NVIDIA PRIME），见
 ;; docs/architecture/flatpak.md（driver overlays）。
 (define %flatpak-selection
-  '(qq wechat aagl steam telegram discord thunderbird))
+  '(qq wechat steam telegram discord thunderbird))
 
 ;; Catalog：已知 extension（auxiliary ref；定义在 extensions/ 下）。
 (define %flatpak-extensions

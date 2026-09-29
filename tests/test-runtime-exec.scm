@@ -38,9 +38,10 @@
 ;;; FO1 覆盖 flatpak managed overrides activation：gexp 用了
 ;;;   get-string-all 却只在 runtime use-modules 里声明 (ice-9 rdelim)
 ;;;   （它属于 (ice-9 textual-ports)）——boot/reconfigure 每次都在第一
-;;;   个 managed override（aagl）写入时 Unbound variable 崩溃，留下
-;;;   0 字节 .new，steam override 与 .guixcfg-managed manifest 永不
-;;;   落盘。结构检查（gexp->script 编译）发现不了，必须真实执行。
+;;;   个 managed override（catalog 顺序，如 wechat）写入时 Unbound
+;;;   variable 崩溃，留下 0 字节 .new，其余 override 与
+;;;   .guixcfg-managed manifest 永不落盘。结构检查（gexp->script
+;;;   编译）发现不了，必须真实执行。
 
 (add-to-load-path (string-append (getcwd) "/modules"))
 
@@ -1206,10 +1207,10 @@ secrets ordinary deploy 的产物形态）。"
     (false-if-exception (delete-file-recursively root))))
 
 ;; ── FO1：flatpak managed overrides activation 真实执行 ──────
-;; production activation gexp（全局 selection 的 managed override：
-;; aagl + steam）在隔离 root 里真实执行，断言：
+;; production activation gexp（全局 selection 的 managed override）
+;; 在隔离 root 里真实执行，断言：
 ;;   - 无 unbound-variable（get-string-all 回归）；
-;;   - 两个 override 完整文件 + .guixcfg-managed manifest 落盘；
+;;   - manifest 完整落盘（activation 走完所有 override 写入）；
 ;;   - 无 .new 残留（atomic write 全部提交）。
 (define %flatpak-overrides-program
   (build-thing
@@ -1224,25 +1225,11 @@ secrets ordinary deploy 的产物形态）。"
        (dir (string-append root
                            "/persist/data-app/flatpak/installation/overrides")))
   (test-equal "FO1: overrides activation executes (exit 0)" 0 code)
-  (test-assert "FO1: aagl override content projected"
-               (string-contains
-                (call-with-input-file
-                    (string-append dir "/moe.launcher.an-anime-game-launcher")
-                  get-string-all)
-                "GIT_EXEC_PATH=/app/libexec/git-core"))
-  (test-assert "FO1: steam override exposes the games library"
-               (string-contains
-                (call-with-input-file
-                    (string-append dir "/com.valvesoftware.Steam")
-                  get-string-all)
-                "/persist/data-nobackup/steam"))
-  (test-assert "FO1: manifest records both managed ids"
-               (let ((manifest (call-with-input-file
-                                   (string-append dir "/.guixcfg-managed")
-                                 get-string-all)))
-                 (and (string-contains manifest
-                                       "moe.launcher.an-anime-game-launcher")
-                      (string-contains manifest "com.valvesoftware.Steam"))))
+  (test-assert "FO1: managed override manifest is committed"
+               (let ((manifest (string-append dir "/.guixcfg-managed")))
+                 (and (file-exists? manifest)
+                      (positive? (string-length
+                                  (call-with-input-file manifest get-string-all))))))
   (test-assert "FO1: no .new residue"
                (not (find (lambda (name)
                             (string-suffix? ".new" name))

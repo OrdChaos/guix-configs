@@ -5,15 +5,20 @@
 ;;;     （persist-mount-point 派生 /persist/data-nobackup/{steam,aagl}）、
 ;;;     system services（steam-devices udev rules + 目录
 ;;;     activation）——所有 host 共享；
-;;;   - Flatpak steam definition：id / managed filesystem override =
+;;;   - Flatpak steam definition：managed filesystem override =
 ;;;     游戏库路径 authority 引用（硬件中性）；
 ;;;   - NVIDIA PRIME：单一 authority（%prime-offload-environment-strings
 ;;;     与 %flatpak-prime-environment-overrides）——application
 ;;;     definition 不直接引用 NVIDIA 模块；
-;;;   - registry：steam/aagl 与 gamescope/proton-ge 在 catalog，
-;;;     全局 selection 含全部四个 app 与两个 extension；
+;;;   - AAGL 已从 Flatpak 迁出，作为原生 virelith 应用进入
+;;;     (guixcfg apps anime-game-launcher)（persistence 由
+;;;     application 层声明）；
 ;;;   - host 差异：Lenovo Guix Home 传 PRIME environment adapter，
-;;;     VM 传空 adapter，全局 selection/persistence 仍一致。
+;;;     VM 传空 adapter。
+;;;
+;;; 不枚举 catalog/selection 的成员——registry 在模块加载期
+;;; fail-fast 校验（validate-flatpak-*!），加应用/extension 不应要求
+;;; 改本测试。
 
 (use-modules (gnu services)          ; service-kind
              (gnu services base)     ; udev-service-type、activation-service-type
@@ -25,15 +30,9 @@
              (guixcfg flatpak model)
              (guixcfg flatpak registry)
              (guixcfg flatpak applications steam definition)
-             (guixcfg flatpak extensions gamescope definition)
-             (guixcfg flatpak extensions proton-ge definition)
              (guixcfg storage model) ; persist-mount-point
              (guixcfg system gaming)
-             (guixcfg system application-persistence)
-             (guixcfg system graphics nvidia) ; %prime-offload-environment-strings
-             (guixcfg hosts common)
-             (guixcfg hosts vm)
-             (guixcfg hosts lenovo-legion-y7000p))
+             (guixcfg system graphics nvidia)) ; %prime-offload-environment-strings
 
 (test-runner-current (test-runner-simple))
 
@@ -175,54 +174,6 @@
                  (and (eq? key 'misc-error)
                       (any (cut string-contains <> "unknown")
                            (map object->string args))))))
-
-;; ── registry：catalog 与缺省 selection ──────────────────────
-
-(test-assert "steam and aagl registered in the flatpak catalog"
-             (every (lambda (name)
-                      (memq name
-                            (map flatpak-application-name
-                                 %flatpak-applications)))
-                    '(steam aagl)))
-
-(test-assert "gamescope and proton-ge registered as extensions"
-             (every (lambda (name)
-                      (memq name
-                            (map flatpak-extension-name
-                                 %flatpak-extensions)))
-                    '(gamescope proton-ge)))
-
-(test-assert "global application selection includes every catalog app"
-             (equal? '(qq wechat aagl steam)
-                     (map flatpak-application-name
-                          (flatpak-select-applications
-                           %flatpak-selection %flatpak-applications))))
-
-(test-assert "global extension selection includes gamescope and proton-ge"
-             (every (lambda (name)
-                      (memq name %flatpak-extension-selection))
-                    '(gamescope proton-ge)))
-
-;; ── 全局 selection 的 persistence 投影（所有 host 一致）──────
-
-(test-assert "global activation rules cover Steam and AAGL bind sources"
-             (let ((consumers
-                    (map application-persistence-rule-consumer
-                         (host-application-persistence-rules))))
-               (every (lambda (consumer) (member consumer consumers))
-                      '(".var/app/com.valvesoftware.Steam"
-                        ".var/app/moe.launcher.an-anime-game-launcher"))))
-
-(test-assert "production Flatpak selection is host-independent"
-             (let ((lenovo-consumers
-                    (map application-persistence-rule-consumer
-                         (host-application-persistence-rules))))
-               ;; VM 与 Lenovo 的 projection 来自同一全局 selection：
-               ;; 逐 app 断言由 test-flatpak-persistence 的通用回归覆盖，
-               ;; 这里固定"global 是唯一的 selection 事实源"。
-               (every (lambda (name)
-                        (memq name %flatpak-selection))
-                      '(qq wechat aagl steam))))
 
 ;; ── NVIDIA env projection：单一 authority ───────────────────
 

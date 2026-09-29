@@ -61,6 +61,7 @@
                #:use-module (guixcfg apps nushell definition)
                #:use-module (guixcfg apps carapace definition)
                #:use-module (guixcfg apps opencode definition)
+               #:use-module (guixcfg apps anime-game-launcher definition)
                #:use-module (guixcfg apps starship definition)
                 #:use-module (guixcfg apps blue definition)
                 #:use-module (guixcfg apps xdg-utils definition)
@@ -120,6 +121,7 @@
         %nushell
         %carapace
         %opencode
+        %anime-game-launcher
          %starship
          %blue
          %xdg-utils))

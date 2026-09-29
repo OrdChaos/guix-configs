@@ -4,9 +4,8 @@
 ;;; 选型（2026-09 调研结论）：Guix/Nonguix 均无 gamescope；公开
 ;;; Guix 配置无一使用 Flatpak Steam，但 Flatpak 路线的
 ;;; gamescope 是上游官方支持路径（steam wrapper 自动把
-;;; VulkanLayer extension bin 加入 PATH），且与 AAGL 共用同一
-;;; gamescope extension。NVIDIA GL/GL32 extension 按内核模块
-;;; 版本自动匹配（flatpak --gl-drivers），驱动升级仪式见
+;;; VulkanLayer extension bin 加入 PATH）。NVIDIA GL/GL32 extension
+;;; 按内核模块版本自动匹配（flatpak --gl-drivers），驱动升级仪式见
 ;;; flatpak.md（GL driver 一致性）。
 ;;;
 ;;; update policy：'track-branch。

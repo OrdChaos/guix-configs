@@ -57,7 +57,7 @@
 ;;; （tests/test-nvidia.scm N8-N10、tests/test-prime-run.scm）。
 ;;; 注意：nonguix README 明确 nvda-new-feature 为 "not
 ;;; production-ready"（rolling branch 的固有属性，本仓库 policy 已
-;;; 接受）。consumers 同源引用（Flatpak steam/aagl 的 managed
+;;; 接受）。consumers 同源引用（Flatpak steam 的 managed
 ;;; override 经 %prime-offload-environment-strings 投影；
 ;;; prime-run wrapper），禁止散落任何 version-specific
 ;;; 字面量（580/595/610 等只允许出现在测试的 package metadata
@@ -72,7 +72,7 @@
 ;;;     【不得】出现在 session-global 环境（graphics.md 契约）。
 ;;;   %prime-offload-environment-strings —— 中性 policy 数据的
 ;;;     "NAME=VALUE" 字符串视图（Flatpak override 的 [Context]
-;;;     environment 条目形态）——Flatpak NVIDIA app（steam/aagl）
+;;;     environment 条目形态）——Flatpak NVIDIA app（steam）
 ;;;     的 managed override 经此投影，不复制变量字面量。
 ;;;   %prime-run-wrapper —— host projection：Home profile（laptop
 ;;;     only，hosts/lenovo-legion-y7000p.scm 组装）作用域 wrapper。根因背景：
@@ -131,7 +131,7 @@
 ;; 与 host prime-run projection 都从这里取；配套（open module /
 ;; firmware / modprobe / settings）由 pinned Nonguix transformation
 ;; 按同一 binding 自动推导（见文件头）。consumers 同源引用
-;; （Flatpak steam/aagl override 的 env 投影、prime-run wrapper）。
+;; （Flatpak steam override 的 env 投影、prime-run wrapper）。
 (define %nvidia-driver nvda-new-feature)
 
 ;; NVIDIA 特定 kernel arguments 的 host 级调优 seam（当前空）：
@@ -168,7 +168,7 @@
     ("__GLX_VENDOR_LIBRARY_NAME" . "nvidia")))
 
 ;; policy 数据的 "NAME=VALUE" 字符串视图（Flatpak override
-;; environment 条目形态；Flatpak 的 NVIDIA app——steam/aagl——
+;; environment 条目形态；Flatpak 的 NVIDIA app——steam——
 ;; managed override 经此投影，变量语义仍归本 authority）。
 (define %prime-offload-environment-strings
   (map (lambda (entry)
@@ -181,8 +181,7 @@
 ;; 把这份 overlay 传给 flatpak-home-services，对 managed override
 ;; 追加 PRIME 环境；非 NVIDIA host 传空 overlay。
 (define %flatpak-prime-environment-overrides
-  `((aagl . ,%prime-offload-environment-strings)
-    (steam . ,%prime-offload-environment-strings)))
+  `((steam . ,%prime-offload-environment-strings)))
 
 (define (shell-variable-name? s)
   "S 是合法 POSIX shell 变量名（策略数据防注入；允许下划线开头，
