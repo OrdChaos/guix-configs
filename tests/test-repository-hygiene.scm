@@ -28,6 +28,15 @@
 (test-assert "channel update decodes subprocess failures"
              (string-contains blueprint "(%subprocess-fail! status argv)"))
 
+(test-assert "channel update separates stderr and validates before rewriting"
+             ;; blue's popen merges stderr into stdout by default; without an
+             ;; explicit #:error the guix describe channel list is polluted
+             ;; by progress/warnings, and the lock must not be overwritten
+             ;; unless the capture parses as a channel list.
+             (and (string-contains blueprint "#:error (current-error-port)")
+                  (string-contains blueprint
+                                   "not a channel list; channels.lock.scm left unchanged")))
+
 (test-assert "blueprint lazy-loads the user-only Flatpak dependency graph"
              (let* ((imports-end (or (string-contains blueprint
                                                       "(primitive-load")

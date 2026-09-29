@@ -224,9 +224,13 @@ reconfigure 后的 best-effort 维护步骤（失败只 WARNING，不改变已�
 (define (%capture command)
   "运行命令并捕获 stdout，返回 (values output status)。用于纯只读
 preflight（git status / describe 等）——blue -n 下也真实执行，以提供
-有效验证。调用方负责检查 status。"
+有效验证。调用方负责检查 status。stderr 显式转发到当前 error port：
+blue 的 popen 默认把 stderr 并入 stdout，`guix describe` 的 channel
+list 会被 channel 警告与拉取进度污染（blue update 曾据此写坏
+channels.lock.scm）。"
   (let ((port (open-output-string)))
     (let ((status (popen (car command) (cdr command) #:output port
+                         #:error (current-error-port)
                          #:working-directory (%repo-root))))
       (values (get-output-string port) status))))
 
@@ -581,12 +585,17 @@ to-delete); no mutation, no sudo."))
 
 ;;; ---------- update ----------
 
+(define (%channel-name name)
+  "频道声明里的 name 字段读出来是 (quote guix) 形式；摘要只显示符号。"
+  (if (and (pair? name) (eq? 'quote (car name))) (cadr name) name))
+
 (define (%channel-commits text)
   "从 (list (channel ...) ...) 文本提取 ((name . commit) ...)。"
   (let ((form (call-with-input-string text read)))
     (map (lambda (decl)
            (let ((alist (channel-declaration-alist decl)))
-             (cons (assq-ref alist 'name) (assq-ref alist 'commit))))
+             (cons (%channel-name (assq-ref alist 'name))
+                   (assq-ref alist 'commit))))
          (filter (lambda (x) (and (pair? x) (eq? (car x) 'channel)))
                  form))))
 
@@ -625,6 +634,16 @@ rewrite, no knowledge of future channel revisions."))
                        (lambda (content status)
                          (unless (zero? status)
                            (%subprocess-fail! status argv))
+                         ;; Fail closed: parse the captured stdout before
+                         ;; touching the lock, so a regression that leaks
+                         ;; stderr into the capture cannot overwrite a good
+                         ;; lock with a log prefix.
+                         (catch #t
+                           (lambda () (%channel-commits content))
+                           (lambda (key . args)
+                             (error "blue update: 'guix describe' output is \
+not a channel list; channels.lock.scm left unchanged"
+                                    key args)))
                          (atomic-write-file! lock
                                              (lambda (port) (display content port)))
                          (format #t "channels.lock.scm updated~%")
