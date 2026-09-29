@@ -73,7 +73,7 @@ reconcile projection（mutable）  selected definitions + extensions → install
 
 ### Global selection 与 host driver adapter
 
-用户态 Flatpak 集合跨设备一致：应用 selection 含 `qq wechat
+用户态 Flatpak 集合跨设备一致：应用 selection 含 `qq wechat aagl
 steam`，extension selection 含 `gamescope proton-ge`。两个消费方：
 
 - **Home/System 投影**（offline）：`guix-home` 与
@@ -92,7 +92,7 @@ driver adapter（如 NVIDIA PRIME environment overlay）：
   `#:flatpak-environment-overrides`，经
   `(flatpak-applications-with-environments)` 对 **managed-overrides**
   app 追加环境并生成单一完整 override 文件（complete-file single
-  owner 不变）；VM 传空 overlay，Steam override 不含 `__NV_*`；
+  owner 不变）；VM 传空 overlay，AAGL/Steam override 不含 `__NV_*`；
 - external app（user/Flatseal owns）拒绝环境 overlay（fail
   fast）；未知 app、重复变量、非法条目同样 fail closed。
 - **extension selection 与硬件驱动**：gamescope / proton-ge 是
@@ -299,41 +299,37 @@ flatpak status` 对比 active GL driver 与已装 nvidia extension，
 
 ### Gaming（steam / aagl）
 
-Steam 与 AAGL 都是全局用户软件（所有设备一致）；host-level system
-集成（controller udev rules + 游戏库目录 activation，`(guixcfg
-system gaming)`）在 `(guixcfg hosts common)` 共享组装。两者分发
-形态不同：
+Steam 与 AAGL 是全局用户软件（所有设备 selection 一致）；其
+host-level system 集成（controller udev rules + 游戏库目录
+activation，`(guixcfg system gaming)`）也在 `(guixcfg hosts
+common)` 共享组装。Steam 全线 Flatpak 化（2026-09 调研结论：
+Guix/Nonguix 均无 gamescope，Flatpak gamescope 是上游官方支持
+路径，且与 AAGL 共用同一 extension）：
 
-- **Steam：Flatpak**（2026-09 调研结论：Guix/Nonguix 均无
-  gamescope，Flatpak gamescope 是上游官方支持路径；Steam 与 AAGL
-  仍共用同一 gamescope extension）。**NVIDIA PRIME（唯一 host
-  driver adapter）**：steam definition 保持 hardware-neutral；
-  NVIDIA host 的 Guix Home 把
+- **NVIDIA PRIME（唯一 host driver adapter）**：steam/aagl 的
+  definition 保持 hardware-neutral；NVIDIA host 的 Guix Home 把
   `%flatpak-prime-environment-overrides` 传给
   `(flatpak-applications-with-environments)`，对 managed override
   追加 `%prime-offload-environment-strings`（变量语义归
-  `(guixcfg system graphics nvidia)`）；VM 传空 overlay，Steam
-  override 不含 `__NV_*`。
-- **AAGL：原生 virelith 包**（`(virelith packages anime-launchers)`
-  的 `anime-game-launcher-bin`，application 定义在 `(guixcfg apps
-  anime-game-launcher)`）。此前基于 Flatpak 的定义
-  （`moe.launcher.an-anime-game-launcher`）已删除。launcher state
-  `~/.local/share/anime-game-launcher`（含 app-owned `config.json`、
-  Wine/DXVK、Wine prefix、组件索引）由 application persistence
-  bind 到 `/persist/data-app/anime-game-launcher/data`。上游 schema
-  把 launcher 偏好与游戏路径、Wine prefix/build、DXVK/component
-  下载状态放在同一 JSON，并在 preferences/main window 关闭及组件
-  变化时整文件重写；Home store symlink 或 seed-once 会与应用形成
-  双 owner 或改变 first-run 初始化，因此该目录整体作为 app-owned
-  mutable state，不从仓库派生。此结论核对过 AAGL 3.19.8 /
-  anime-launcher-sdk 1.36.11。游戏本体不进 app persistence：用户在
-  first-run 的 game installation folder 选择
-  `/persist/data-nobackup/aagl`（bulk、reacquirable）。原生二进制包
-  自身携带 git helper，故不再需要旧 Flatpak override 的
-  `GIT_EXEC_PATH`/包内 git 处理。
-- 游戏库 `/persist/data-nobackup/{steam,aagl}`（路径 authority 在
-  `(guixcfg system gaming)`，目录由其 activation 创建并归还 USER）
-  与手柄 udev rules 是全局共享的 gaming host infrastructure。
+  `(guixcfg system graphics nvidia)`）。游戏库
+  `/persist/data-nobackup/{steam,aagl}`（路径 authority 在
+  `(guixcfg system gaming)`，目录由其 activation 创建）与手柄
+  udev rules 是全局共享的 gaming host infrastructure。
+- **AAGL config 不从仓库派生**：Flatpak 内 `$XDG_DATA_HOME` 对应宿主
+  `~/.var/app/moe.launcher.an-anime-game-launcher/data`，AAGL 的完整配置
+  因而位于其下的 `anime-game-launcher/config.json`。上游 schema 把
+  launcher 偏好与游戏路径、Wine prefix/build、DXVK/component 下载
+  状态放在同一 JSON，并在 preferences/main window 关闭及组件变化时
+  整文件重写。Home store symlink 会与应用形成双 owner；seed-once 又会
+  提前创建配置并改变 first-run 初始化。因此该文件继续作为整个
+  `~/.var/app/<id>` persistence unit 内的 app-owned mutable state。
+  此结论核对过 AAGL 3.19.8 / anime-launcher-sdk 1.36.11；本仓库跟踪
+  stable branch，未来若上游拆出只读 policy/schema，需重新审计后再接入。
+- **AAGL 使用包内 Git helpers**：Guix 会话会导出宿主 profile 的
+  `GIT_EXEC_PATH`，而 Flatpak sandbox 不可访问该路径。AAGL 的组件索引
+  同步调用 Flathub 包内 `/app/bin/git`，因此 managed override 将
+  `GIT_EXEC_PATH` 固定为 `/app/libexec/git-core`；否则 `git clone` 失败，
+  上游 3.19.8 又会把该退出状态掩盖成组件目录 `ENOENT`。
 - **Gamescope 逐游戏**（如 niri 兼容性差的游戏）：游戏属性
   Launch Options 写 `gamescope -f -- %command%`（多显示器指针
   逃逸时用 `gamescope --backend sdl -f -- %command%`）；**不要**

@@ -11,15 +11,12 @@
 ;;;     机器能力（有没有手柄），不是某个 launcher 的属性；
 ;;;   - 游戏库目录 /persist/data-nobackup/{steam,aagl}：direct-access
 ;;;     bulk storage（docs/architecture/persistence.md（
-;;;     data-nobackup））。Steam 经 Flatpak managed override
-;;;     （filesystem）暴露进 sandbox；AAGL 是原生 virelith 包
-;;;     （(guixcfg apps anime-game-launcher)），其 first-run 的
-;;;     game installation folder 直接选此目录（路径 authority 仍
-;;;     在本模块，docs/architecture/applications.md（data-nobackup））。
-;;;     目录必须预先存在且归 USER（launcher 选择目录需要可写路径）
-;;;     ——activation 创建 + chown（noctalia-greeter backing
-;;;     ownership 同款模式：owner 经 /etc/passwd 运行时解析，不硬编码
-;;;     uid/gid）。
+;;;     data-nobackup）），经各自 Flatpak 的 managed override
+;;;     （filesystem）暴露进 sandbox（路径 authority 在本模块，
+;;;     definition 引用，不重复拼写）。目录必须预先存在且归 USER
+;;;     （launcher 选择目录需要可写路径）——activation 创建 + chown
+;;;     （noctalia-greeter backing ownership 同款模式：owner 经
+;;;     /etc/passwd 运行时解析，不硬编码 uid/gid）。
 ;;;
 ;;; NVIDIA PRIME offload 变量不在此投影——Flatpak managed override
 ;;; 的环境差异由 %flatpak-prime-environment-overrides 在 host Guix
@@ -37,10 +34,8 @@
                           %aagl-games-library-path
                           %gaming-system-services))
 
-;; 游戏库 canonical 位置：/persist/data-nobackup/{steam,aagl}
-;; （persist-mount-point 是 /persist/* 语义路径唯一 authority——
-;; AGENT.md §13）。steam 由 Flatpak managed override 暴露；aagl 由
-;; 原生 launcher 在 first-run 选定为 game installation folder。
+;; 游戏库 canonical 位置：/persist/data-nobackup/steam（persist-
+;; mount-point 是 /persist/* 语义路径唯一 authority——AGENT.md §13）。
 (define %steam-games-library-path
   (string-append (persist-mount-point "@persist-data-nobackup") "/steam"))
 
