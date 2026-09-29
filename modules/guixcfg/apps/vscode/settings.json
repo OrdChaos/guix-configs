@@ -20,5 +20,6 @@
     "security.workspace.trust.enabled": false,
     "chat.titleBar.openInAgentsWindow.enabled": false,
     "workbench.browser.showInTitleBar": false,
-    "workbench.layoutControl.enabled": false
+    "workbench.layoutControl.enabled": false,
+    "workbench.startupEditor": "none"
 }
