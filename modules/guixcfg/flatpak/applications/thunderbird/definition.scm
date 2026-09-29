@@ -8,13 +8,14 @@
 ;;;
 ;;; 选型理由/风险：Thunderbird 邮件客户端（Guix 无对应包）。
 ;;; app-id/branch 以 Flathub 官方 appstream 核实
-;;; （flathub.org/apps/org.mozilla.Thunderbird，
-;;; ref app/org.mozilla.Thunderbird/x86_64/stable）。
-;;; 注意：Flathub appstream 当前标记 is_eol=true（runtime
-;;; org.freedesktop.Platform 24.08，版本 140.10.2esr）——Flathub
-;;; 无其它官方 Thunderbird id（net.thunderbird.Thunderbird 不存在），
-;;; 故选此 id；upstream 若恢复维护/迁移 id，更新本 definition。
-;;; 这是有意接受的维护风险，不是默认安全假设。
+;;; （flathub.org/apps/org.mozilla.thunderbird_esr，
+;;; ref app/org.mozilla.thunderbird_esr/x86_64/stable）。
+;;; 注意：旧 id org.mozilla.Thunderbird（大小写不同）已被 Flathub
+;;; 标记 is_eol=true，并明确 replacement = org.mozilla.thunderbird_esr
+;;; （`flatpak remote-info flathub org.mozilla.Thunderbird` 的
+;;; “寿命完结”字段）。此前本 definition 误用旧 id，导致 persistence
+;;; 绑定到 ~/.var/app/org.mozilla.Thunderbird，而实机安装的
+;;; org.mozilla.thunderbird_esr 数据落在 ephemeral HOME 未持久化。
 ;;;
 ;;; update policy：'track-branch（默认策略；如需 pin 改为
 ;;; (flatpak-commit-pin "...") 并注释理由）。
@@ -23,7 +24,7 @@
 ;;; 验证发现真正需要的 delta 后，按 Flatseal 实验工作流
 ;;; （flatpak.md（overrides））改为 (managed-overrides ...) 回填。
 ;;;
-;;; persistence：默认 ~/.var/app/org.mozilla.Thunderbird 由 ID 推导
+;;; persistence：默认 ~/.var/app/org.mozilla.thunderbird_esr 由 ID 推导
 ;;; （service 投影，无需在此声明）；extra-persistence 只声明默认
 ;;; 之外的例外。
 
@@ -34,7 +35,7 @@
 (define %flatpak-thunderbird
   (flatpak-application
    (name 'thunderbird)
-   (id "org.mozilla.Thunderbird")
+   (id "org.mozilla.thunderbird_esr")
    (remote 'flathub)
    (branch "stable")
    (update-policy 'track-branch)
