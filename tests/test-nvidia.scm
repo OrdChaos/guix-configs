@@ -203,6 +203,13 @@
                      (eq? input mesa)
                      (not repl))))
 
+(test-assert "N5: Intel Raptor Lake-P GPU has a udev hwdb name"
+             (find (lambda (s)
+                     (eq? (service-type-name (service-kind s))
+                          'intel-rpl-p-gpu-udev-hardware))
+                   (operating-system-user-services
+                    host:%lenovo-legion-y7000p-os)))
+
 ;; ── N6：VM isolation ────────────────────────────────────────
 (test-assert "N6: vm %vm-os has no nvidia kernel arguments"
              (every (lambda (a)
