@@ -14,6 +14,9 @@ debug {
     // Ignore NVIDIA dGPU as a display/render device.
     ignore-drm-device "/dev/dri/by-path/pci-0000:01:00.0-card"
     ignore-drm-device "/dev/dri/by-path/pci-0000:01:00.0-render"
+
+    // Fix
+    disable-direct-scanout
 }
 
 output "eDP-1" {
