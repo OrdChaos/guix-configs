@@ -1,7 +1,7 @@
 {
     "telemetry.telemetryLevel": "off",
     "update.mode": "none",
-    "extensions.autoUpdate": false,
+    "extensions.autoUpdate": "off",
     "extensions.verifySignature": false,
     "rust-analyzer.server.path": "rust-analyzer",
     "terminal.integrated.profiles.linux": {
