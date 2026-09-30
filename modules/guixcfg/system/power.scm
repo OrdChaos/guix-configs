@@ -64,7 +64,7 @@
              (list #$(file-append tlp-with-pd "/sbin/tlp-pd"))
              #:environment-variables
              (list (string-append "PATH="
-                                  #$(file-append glib "/bin")
+                                  #$(file-append (gexp-input glib "bin") "/bin")
                                   ":/run/current-system/profile/bin"))))
    (stop #~(make-kill-destructor))))
 

@@ -79,7 +79,7 @@
                             "modules/guixcfg/system/power.scm"
                             (lambda (port) (read-string port)))))
                (and (string-contains source "(gnu packages glib)")
-                    (string-contains source "(file-append glib \"/bin\")")
+                    (string-contains source "(gexp-input glib \"bin\")")
                     (string-contains source "PATH="))))
 
 ;; ── P3：simple-service 接线 ─────────────────────────────────

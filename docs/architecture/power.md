@@ -33,7 +33,7 @@ Python daemon（dbus-python + PyGObject）重写 shebang 并 wrap
 `GUIX_PYTHONPATH` / `GI_TYPELIB_PATH`。升级 TLP 时随 channel 一起验证。
 TLP 每次切 profile 后用 `gdbus` 回调 `SyncProfile`；`tlp-pd` 的
 Shepherd PATH 必须显式包含 `glib/bin`，因为 system profile 不提供
-`gdbus`。否则硬件 profile 会改变、但 PPD 的 `ActiveProfile`（进而
+`gdbus`（Guix 的可执行文件位于 `glib` 的 `bin` output）。否则硬件 profile 会改变、但 PPD 的 `ActiveProfile`（进而
 Noctalia UI）保持旧值。
 
 ## Single owner 不变式
