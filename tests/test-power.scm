@@ -23,6 +23,7 @@
              (gnu services pm)                   ; tlp-service-type、power-profiles-daemon-service-type
              (gnu services shepherd)             ; shepherd-service?
              (gnu system)                        ; operating-system-user-services
+             (ice-9 rdelim)                      ; read-string（静态源断言）
              (srfi srfi-1)                       ; find、any
              (srfi srfi-64))
 
@@ -30,12 +31,20 @@
 
 (define tlp-configuration-tlp
   (@@ (gnu services pm) tlp-configuration-tlp))
+(define tlp-configuration-cpu-energy-perf-policy-on-ac
+  (@@ (gnu services pm) tlp-configuration-cpu-energy-perf-policy-on-ac))
 (define tlp-configuration-cpu-energy-perf-policy-on-bat
   (@@ (gnu services pm) tlp-configuration-cpu-energy-perf-policy-on-bat))
 (define tlp-configuration-cpu-boost-on-bat?
   (@@ (gnu services pm) tlp-configuration-cpu-boost-on-bat?))
 (define tlp-configuration-disks-devices
   (@@ (gnu services pm) tlp-configuration-disks-devices))
+(define tlp-configuration-runtime-pm-on-ac
+  (@@ (gnu services pm) tlp-configuration-runtime-pm-on-ac))
+(define tlp-configuration-runtime-pm-on-bat
+  (@@ (gnu services pm) tlp-configuration-runtime-pm-on-bat))
+(define tlp-configuration-runtime-pm-driver-blacklist
+  (@@ (gnu services pm) tlp-configuration-runtime-pm-driver-blacklist))
 
 (test-begin "power")
 
@@ -43,6 +52,11 @@
 (test-assert "P1: laptop TLP uses the virelith tlp-with-pd package"
              (eq? (tlp-configuration-tlp %laptop-tlp-configuration)
                   tlp-with-pd))
+
+(test-equal "P1: EPP on AC releases performance"
+            "performance"
+            (tlp-configuration-cpu-energy-perf-policy-on-ac
+             %laptop-tlp-configuration))
 
 (test-equal "P1: EPP on battery is balance_power"
             "balance_power"
@@ -56,6 +70,17 @@
 (test-equal "P1: TLP manages the NVMe disk (record default is sda-only)"
             '("nvme0n1" "sda")
             (tlp-configuration-disks-devices %laptop-tlp-configuration))
+
+(test-equal "P1: AC runtime PM remains auto so TLP does not defeat NVIDIA RTD3"
+            "auto"
+            (tlp-configuration-runtime-pm-on-ac %laptop-tlp-configuration))
+(test-equal "P1: battery runtime PM remains auto"
+            "auto"
+            (tlp-configuration-runtime-pm-on-bat %laptop-tlp-configuration))
+(test-assert "P1: NVIDIA is not excluded from TLP runtime PM"
+             (not (member "nvidia"
+                          (tlp-configuration-runtime-pm-driver-blacklist
+                           %laptop-tlp-configuration))))
 
 ;; ── P2：tlp-pd shepherd 服务语义 ────────────────────────────
 (define %tlp-pd-service

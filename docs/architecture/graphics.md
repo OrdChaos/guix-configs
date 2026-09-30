@@ -135,8 +135,16 @@ interactive-session-ready（core readiness join barrier）
   `VK_ERROR_UNKNOWN`，swapchain 永不建立（游戏黑/白屏但声音正常）。
   本模块用官方 `udev-rules-service` 追加一条同名匹配的
   `90-nvidia-modeset.rules`，`RUN+="/usr/bin/nvidia-modprobe -m"`
-  （路径复用 nvidia-service-type 已安装的 special file）；节点已存在
+   （路径复用 nvidia-service-type 已安装的 special file）；节点已存在
   时为 no-op。由 `tests/test-nvidia.scm` N11 固定；
+- **RTD3 owner**：Nonguix NVIDIA service 的官方 udev rule 在 bind 时为
+  VGA/audio functions 写 `power/control=auto`；NVIDIA module 的
+  `DynamicPowerManagement=3` 启用 Ada fine-grained RTD3。TLP 不另写
+  NVIDIA rule，但 laptop TLP policy 在 AC/BAT 均设 `RUNTIME_PM=auto`，
+  防止 Guix record 的 AC 默认 `on` 覆盖该 policy（`test-power.scm` 固定）。
+  验收必须在没有 `prime-run`/游戏/浏览器 GPU process 时进行：两项 PCI
+  functions 都应为 `control=auto`，VGA `runtime_status=suspended`；活跃
+  workload 下 `active` 属预期；
 - 参数（laptop = RTX 4050 Laptop，Ada）：`#:driver %nvidia-driver`
   （rolling new-feature selector，见下）、`#:open-source-kernel-module? #t`
   （NVIDIA 自 R560 起推荐 Turing+ 使用 open module）、

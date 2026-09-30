@@ -62,9 +62,13 @@ system bus name（`org.freedesktop.UPower.PowerProfiles`），且 TLP 1.6+
 自身优化过的 `defaults.conf`（`tlp-configuration` 的 `maybe-*` 字段未
 设置时不写入 `/etc/tlp.conf`）：
 
-- `cpu-energy-perf-policy-on-ac "balance_performance"` /
-  `on-bat "balance_power"`（intel_pstate EPP，与 TLP 默认一致，显式化）；
+- `cpu-energy-perf-policy-on-ac "performance"` /
+  `on-bat "balance_power"`（intel_pstate EPP：插电放开性能、离电偏向省电；
+  其余 AC/BAT 差异沿用 TLP 成熟默认——AC 性能、BAT 省电）；
 - `cpu-boost-on-ac? #t` / `on-bat? #f`（离电关睿频，主要 CPU 功耗来源）；
+- `runtime-pm-on-ac "auto"` / `on-bat "auto"`——Guix record 默认在 AC
+  使用 `on`，会覆盖 Nonguix NVIDIA service 的 `power/control=auto` udev
+  policy，阻止 Ada dGPU RTD3；`nvidia` 不在 runtime-PM driver denylist；
 - `disks-devices '("nvme0n1" "sda")`——**必须显式设置**：Guix
   `tlp-configuration` 的 record 默认是 `("sda")`，会覆盖 TLP default 的
   `"nvme0n1 sda"`，而本机从 NVMe 启动。

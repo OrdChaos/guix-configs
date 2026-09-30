@@ -40,13 +40,21 @@
 (define %laptop-tlp-configuration
   (tlp-configuration
    (tlp tlp-with-pd)
-   ;; intel_pstate EPP：插电平衡性能，离电偏向省电（与 TLP 默认一致，
-   ;; 显式化以固定策略）。
-   (cpu-energy-perf-policy-on-ac "balance_performance")
+   ;; intel_pstate EPP：插电放开性能（performance），离电偏向省电
+   ;; （balance_power）。其余 AC/BAT 差异（PCIe ASPM、SATA ALPM、disk
+   ;; APM、WiFi/audio power save、sched-powersave、EPB）沿用 TLP/
+   ;; Guix record 的成熟默认（AC 性能、BAT 省电），不重复声明。
+   (cpu-energy-perf-policy-on-ac "performance")
    (cpu-energy-perf-policy-on-bat "balance_power")
    ;; 睿频是 CPU 功耗的主要来源；离电关闭。
    (cpu-boost-on-ac? #t)
    (cpu-boost-on-bat? #f)
+   ;; TLP 的 Guix record 默认在 AC 写 RUNTIME_PM=on，会覆盖 Nonguix
+   ;; NVIDIA service 的 power/control=auto udev policy，使 Ada dGPU 无法
+   ;; RTD3。两种供电状态均保持 auto；nvidia 不得加入 driver blacklist。
+   (runtime-pm-on-ac "auto")
+   (runtime-pm-on-bat "auto")
+   (runtime-pm-all? #t)
    ;; 本机启动盘是 NVMe（Guix record 默认只有 "sda"）。
    (disks-devices '("nvme0n1" "sda"))))
 
