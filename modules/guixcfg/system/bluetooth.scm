@@ -29,12 +29,11 @@
                          %laptop-bluetooth-persistence-rule
                          %laptop-bluetooth-services))
 
-;; auto-enable? #t → main.conf 的 [Policy] AutoEnable=true：bluetoothd 启动
-;; 时自动给控制器上电。默认 #f 时 adapter 保持 powered-off，桌面控件表现为
-;; 蓝牙“不可用/关不亮”。
+;; auto-enable? #f → main.conf 的 [Policy] AutoEnable=false：bluetoothd 启动
+;; 后控制器保持 powered-off，由用户在桌面控件里按需开启（默认关闭策略）。
 (define %laptop-bluetooth-configuration
   (bluetooth-configuration
-   (auto-enable? #t)))
+   (auto-enable? #f)))
 
 ;; BlueZ pairing state：/persist/system/state/bluetooth → /var/lib/bluetooth
 ;; （root-owned machine state；consumer 是 daemon 运行期读取的标准位置）。

@@ -32,11 +32,13 @@ D-Bus 服务、没有 `bluetoothctl`，桌面（Noctalia 的 bluetooth widget）
   bluez 的 D-Bus system policy/activation（`org.bluez`）、bluez udev
   rules、`/etc/bluetooth/main.conf`。
 
-## AutoEnable
+## AutoEnable（默认关闭）
 
-`%laptop-bluetooth-configuration` 设 `(auto-enable? #t)` → `main.conf` 的
-`[Policy] AutoEnable=true`：`bluetoothd` 启动时自动给控制器上电。默认
-`#f` 时 adapter 保持 powered-off，桌面控件表现为蓝牙“不可用”。
+`%laptop-bluetooth-configuration` 设 `(auto-enable? #f)` → `main.conf` 的
+`[Policy] AutoEnable=false`：`bluetoothd` 启动后控制器保持 powered-off，
+由用户在桌面控件（或 `bluetoothctl power on`）里按需开启——蓝牙默认关闭。
+
+> 早期实现曾用 `#t`（开机自动上电）；现按机器策略改为默认关闭。
 
 ## 配对状态持久化
 

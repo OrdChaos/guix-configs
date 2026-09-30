@@ -1,7 +1,8 @@
 ;;; Laptop Bluetooth wiring test（docs/architecture/bluetooth.md）。
 ;;;
 ;;; 覆盖：
-;;;   B1  laptop OS 含官方 bluetooth-service-type，且 AutoEnable=true；
+;;;   B1  laptop OS 含官方 bluetooth-service-type，且 AutoEnable=false
+;;;       （默认关闭，由用户按需开启）；
 ;;;   B2  host gating：VM OS 无 bluetooth-service-type（零 BlueZ closure）；
 ;;;   B3  pairing-state 规则：/var/lib/bluetooth ← machine-state backing
 ;;;       "bluetooth"，rule 合法；
@@ -38,11 +39,11 @@
 (test-assert "B1: laptop OS includes the official bluetooth-service-type"
              laptop-bluetooth-service)
 
-(test-assert "B1: BlueZ auto-enables the controller (AutoEnable=true)"
+(test-assert "B1: BlueZ does not auto-enable the controller (default off)"
              (and laptop-bluetooth-service
                   (eq? (bluetooth-configuration-auto-enable?
                         (service-value laptop-bluetooth-service))
-                       #t)))
+                       #f)))
 
 ;; ── B2：VM gating ──────────────────────────────────────────
 (test-assert "B2: VM OS has no bluetooth-service-type (zero BlueZ closure)"
