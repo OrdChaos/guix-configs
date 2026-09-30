@@ -54,7 +54,41 @@ system bus name（`org.freedesktop.UPower.PowerProfiles`），且 TLP 1.6+
 - `tlp-with-pd` 扩进 `dbus-root-service-type`（发布
   `share/dbus-1/system.d` 的 D-Bus system policy）；
 - `tlp-with-pd` 扩进 `polkit-service-type`（发布
-  `share/polkit-1/actions/tlp-pd.policy`，profile 切换经 polkit 授权）。
+  `share/polkit-1/actions/tlp-pd.policy`，profile 切换经 polkit 授权）；
+- `%platform-profile-sync-service`：fn+q ↔ 桌面面板同步 udev 规则（见下）。
+
+## fn+q ↔ 桌面面板同步（THIN ADAPTER）
+
+问题：`tlp-pd` 只在 TLP 应用 profile（AC/BAT 切换或用户经面板选择）时更新
+`ActiveProfile`；用户按 **fn+q**（Lenovo EC 热模式）直接改硬件时，tlp-pd 收
+不到通知，面板显示会滞后（例如已切到红色 performance，面板仍是 balanced）。
+
+硬件渠道与机制（pinned kernel 7.2 核对）：本机 `platform-profile` provider
+是 `lenovo-wmi-gamezone`；fn+q 触发 `LWMI_EVENT_THERMAL_MODE`，驱动调
+`platform_profile_notify()`，内核对该 `platform-profile` class device
+（`SUBSYSTEM=platform-profile`）发 `KOBJ_CHANGE`。`%platform-profile-sync-
+service` 用官方 `udev-rules-service` 安装规则：
+
+```text
+ACTION=="change", SUBSYSTEM=="platform-profile", RUN+="<program-file>"
+```
+
+helper（`%platform-profile-sync-program`，Guile program-file，root）读取
+`/sys/firmware/acpi/platform_profile`，按与 TLP `defaults.conf` 正向一致的
+映射（`PLATFORM_PROFILE_ON_AC=performance`、`ON_BAT=balanced`、
+`ON_SAV=low-power`）反映射为 TLP profile 并调 `org.freedesktop.UPower.
+PowerProfiles.SyncProfile`：
+
+| 硬件 platform_profile | 面板 TLP profile |
+|---|---|
+| low-power | power-saver |
+| balanced | balanced |
+| performance / max-power | performance |
+| custom | （不映射，保持面板不动） |
+
+`SyncProfile` 只更新 tlp-pd 内部状态并发出 `PropertiesChanged`，**不回写**
+`platform_profile`，因此与 TLP 正向写入不构成环（TLP 写入也会触发一次
+udev，得到同样 profile，幂等）。
 
 ## TLP 机器策略
 
@@ -80,7 +114,12 @@ system bus name（`org.freedesktop.UPower.PowerProfiles`），且 TLP 1.6+
    /org/freedesktop/UPower/PowerProfiles`：确认 `tlp-pd` 已 claim 名称；
 - `powerprofilesctl` 应**不存在**（PPD 不安装）；
 - `cat /sys/class/power_supply/BAT1/power_now`（拔插电源前后）评估效果；
-- `dmesg | grep -i nvme`：排查 PCIe ASPM 是否引发盘错误。
+- `dmesg | grep -i nvme`：排查 PCIe ASPM 是否引发盘错误；
+- fn+q 同步：按 fn+q 后应立刻看到
+  `busctl --system get-property org.freedesktop.UPower.PowerProfiles \
+  /org/freedesktop/UPower/PowerProfiles \
+  org.freedesktop.UPower.PowerProfiles ActiveProfile` 与
+  `/sys/firmware/acpi/platform_profile` 一致（udev change 规则生效）。
 
 ## 非目标（本阶段不做）
 

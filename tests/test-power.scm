@@ -8,7 +8,8 @@
 ;;;   P3  simple-service 接线到正确的 service-type（shepherd-root /
 ;;;       dbus-root / polkit）；
 ;;;   P4  host gating：laptop OS 含 TLP + tlp-pd；VM OS 零 power；
-;;;   P5  single owner：laptop 不引入 power-profiles-daemon。
+;;;   P5  single owner：laptop 不引入 power-profiles-daemon；
+;;;   P6  fn+q（platform-profile）→ tlp-pd SyncProfile 同步适配器。
 ;;;
 ;;; 纯 Scheme——不触 flatpak/网络/derivation 构建。tlp-configuration /
 ;;; dbus / polkit 的 accessor 未 export，经 @@ 取私有绑定（仓库既有
@@ -143,5 +144,28 @@
 (test-assert "P5: laptop OS does not include power-profiles-daemon"
              (not (has-kind? host:%lenovo-legion-y7000p-os
                              power-profiles-daemon-service-type)))
+
+;; ── P6：fn+q（platform-profile）→ tlp-pd 同步适配器 ──────────
+(test-assert "P6: laptop OS installs the platform-profile sync udev rule"
+             (find (lambda (s)
+                     (eq? (service-type-name (service-kind s))
+                          'power-profile-sync-udev-rules))
+                   (operating-system-user-services host:%lenovo-legion-y7000p-os)))
+
+(test-assert "P6: VM OS has no platform-profile sync rule (laptop-only)"
+             (not (find (lambda (s)
+                          (eq? (service-type-name (service-kind s))
+                               'power-profile-sync-udev-rules))
+                        (operating-system-user-services vm:%vm-os))))
+
+(test-assert "P6: sync adapter matches platform-profile change and reuses SyncProfile"
+             (let ((source (call-with-input-file
+                            "modules/guixcfg/system/power.scm"
+                            (lambda (port) (read-string port)))))
+               (and (string-contains source "SUBSYSTEM==")
+                    (string-contains source "platform-profile")
+                    (string-contains source "SyncProfile")
+                    (string-contains source "low-power")
+                    (string-contains source "power-saver"))))
 
 (test-end "power")
