@@ -15,6 +15,7 @@ Guix System 配置工程的文档入口。
 7. [architecture/secrets.md](architecture/secrets.md) — 秘密管理与威胁模型
 8. [architecture/flatpak.md](architecture/flatpak.md) — Flatpak 子系统
 9. [architecture/gsettings.md](architecture/gsettings.md) — repository-derived GSettings → dconf 投影
+10. [architecture/power.md](architecture/power.md) — 离电功耗控制（TLP + tlp-pd）
 
 然后按需：
 

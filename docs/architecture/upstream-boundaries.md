@@ -30,6 +30,7 @@ OFFICIAL；项目 invariant 需要 → THIN ADAPTER / KEEP（custom）。
 | Home pivot cleanup | guixcfg shim（NARROW） | 上游 symlink-manager 无 stale pivot 处理（pinned 实测） | `home/pivot.scm`（保守判定 + unlink） | removal condition：上游修复后删 |
 | NVIDIA proprietary | guixcfg active adapter | Nonguix `nonguix-transformation-nvidia` | `system/graphics/nvidia.scm` | Laptop 启用 open module/KMS/PRIME；保留项目参数与服务边界 |
 | Graphical session services（polkit-gnome/fcitx5 等） | niri config spawn | — | `modules/guixcfg/apps/niri/config.kdl` | graphical-only lifecycle（polkit agent libexec 不在 PATH：apps/polkit-gnome 经 ~/.local/bin wrapper 暴露后恢复使用）；notification daemon 由 Noctalia 持有（mako 已移除） |
+| Laptop power management | guixcfg adapter | Guix official `tlp-service-type`；TLP 1.9 `tlp-pd`（virelith `tlp-with-pd`） | `modules/guixcfg/system/power.scm`（TLP machine policy + tlp-pd shepherd + dbus/polkit 接线） | 官方 `tlp` 包不安装 `tlp-pd`；PPD 兼容接口需自行接线，TLP 作唯一后端（禁止并存 PPD） |
 
 ## HOME/PATH/D-Bus 语义（§7 根除 HOME=/var/empty）
 
