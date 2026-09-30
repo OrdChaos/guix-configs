@@ -125,6 +125,18 @@ interactive-session-ready（core readiness join barrier）
   （firmware/udev/nvidia-modprobe/linux-loadable-module/
   nvidia-prime/nvidia-powerd）、replace-mesa：全部由锁定版 Nonguix
   transformation 负责，本模块不重新实现；
+- **pure-Wayland modeset 设备节点补丁**：pinned Nonguix 的
+  `90-nvidia.rules` 只在 `add|bind` 时运行 `nvidia-modprobe`
+  （nvidia0/nvidiactl）与 `nvidia-modprobe -c0 -u`（uvm），**不建**
+  `/dev/nvidia-modeset`——该节点原本由 Xorg 的 nvidia DDX 建立。
+  本机 `#:configure-xorg? #f`（纯 Wayland），DDX 永不启动，节点从
+  不存在；而 NVIDIA Vulkan WSI（PRIME offload）需要以 O_RDWR 打开
+  它，缺失时 `vkGetPhysicalDeviceSurfacePresentModesKHR` 返回
+  `VK_ERROR_UNKNOWN`，swapchain 永不建立（游戏黑/白屏但声音正常）。
+  本模块用官方 `udev-rules-service` 追加一条同名匹配的
+  `90-nvidia-modeset.rules`，`RUN+="/usr/bin/nvidia-modprobe -m"`
+  （路径复用 nvidia-service-type 已安装的 special file）；节点已存在
+  时为 no-op。由 `tests/test-nvidia.scm` N11 固定；
 - 参数（laptop = RTX 4050 Laptop，Ada）：`#:driver %nvidia-driver`
   （rolling new-feature selector，见下）、`#:open-source-kernel-module? #t`
   （NVIDIA 自 R560 起推荐 Turing+ 使用 open module）、

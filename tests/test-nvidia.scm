@@ -277,4 +277,34 @@
                               (service-value laptop-nvidia-service)))
                             (package-version nvidia-module-open-new-feature))))
 
+;; ── N11：pure-Wayland modeset 设备节点 ───────────────────────
+;; 不变式：纯 Wayland 主机没有 Xorg DDX，pinned nonguix 的
+;; 90-nvidia.rules 只建 nvidia0/nvidiactl/uvm，从不建
+;; /dev/nvidia-modeset；adapter 必须补一条规则显式调用
+;; `nvidia-modprobe -m`（NVIDIA Vulkan WSI 要求 O_RDWR 打开该节点，
+;; 缺失时 vkGetPhysicalDeviceSurfacePresentModesKHR 返回
+;; VK_ERROR_UNKNOWN，表现为黑/白屏）。
+(define nvidia-modeset-rule-contents
+  (@@ (guixcfg system graphics nvidia) %nvidia-modeset-udev-rule-contents))
+
+(test-assert "N11: modeset rule matches the NVIDIA DRM device and runs nvidia-modprobe -m"
+             (and (string-contains nvidia-modeset-rule-contents "0x10de")
+                  (string-contains nvidia-modeset-rule-contents
+                                   "DRIVER==\"nvidia\"")
+                  (string-contains nvidia-modeset-rule-contents
+                                   "nvidia-modprobe -m")))
+
+(test-assert "N11: laptop %vm-os includes the modeset udev rule service"
+             (find (lambda (s)
+                     (eq? (service-type-name (service-kind s))
+                          'nvidia-modeset-udev-rules))
+                   (operating-system-user-services
+                    host:%lenovo-legion-y7000p-os)))
+
+(test-assert "N11: VM %vm-os does not include the modeset udev rule service"
+             (not (find (lambda (s)
+                          (eq? (service-type-name (service-kind s))
+                               'nvidia-modeset-udev-rules))
+                        (operating-system-user-services vm:%vm-os))))
+
 (test-end "nvidia")

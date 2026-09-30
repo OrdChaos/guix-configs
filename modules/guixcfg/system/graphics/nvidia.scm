@@ -151,6 +151,28 @@
     "60-intel-rpl-p-gpu.hwdb"
     "pci:v00008086d0000A7A8*\n ID_MODEL_FROM_DATABASE=Raptor Lake-P [UHD Graphics]\n")))
 
+;; Pure-Wayland 的 modeset 设备节点缺口：pinned nonguix 的
+;; 90-nvidia.rules 只在 add|bind 时调 `nvidia-modprobe`
+;; （nvidia0/nvidiactl）与 `nvidia-modprobe -c0 -u`（uvm），【不建】
+;; /dev/nvidia-modeset——该节点原本由 Xorg 的 nvidia DDX 建立。本机是
+;; 纯 Wayland（greetd/niri，configure-xorg? #f），DDX 永不启动，因此
+;; 节点从不存在；而 NVIDIA Vulkan WSI（PRIME offload）需要以 O_RDWR
+;; 打开它，缺失时 vkGetPhysicalDeviceSurfacePresentModesKHR 返回
+;; VK_ERROR_UNKNOWN（-13），swapchain 永不建立，游戏表现为黑/白屏但
+;; 声音正常。这里补一条同名匹配的规则显式建节点，路径复用
+;; nvidia-service-type 已安装的 /usr/bin/nvidia-modprobe（与上游规则
+;; 同一路径）。节点已存在时命令为 no-op，对 Xorg 机器无影响。
+(define %nvidia-modeset-udev-rule-contents
+  (string-append
+   "ACTION==\"add|bind\", ATTR{vendor}==\"0x10de\", "
+   "ATTR{class}==\"0x03[0-9]*\", DRIVER==\"nvidia\", "
+   "RUN+=\"/usr/bin/nvidia-modprobe -m\"\n"))
+
+(define %nvidia-modeset-udev-service
+  (udev-rules-service
+   'nvidia-modeset
+   (udev-rule "90-nvidia-modeset.rules" %nvidia-modeset-udev-rule-contents)))
+
 ;;; ────────────────────────────────────────────────────────────
 ;;; PRIME Render Offload policy（中性数据，单一 authority）
 ;;;
@@ -345,6 +367,7 @@ built against it via linux-module-build-system's #:linux keyword."
                   (operating-system-user-kernel-arguments nvidia-only))
                  (services
                   (append (operating-system-user-services nvidia-only)
-                          (list %intel-rpl-p-gpu-hwdb-service)
+                          (list %intel-rpl-p-gpu-hwdb-service
+                                %nvidia-modeset-udev-service)
                           (operating-system-user-services os)))))
               os))
