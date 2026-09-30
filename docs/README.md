@@ -16,6 +16,7 @@ Guix System 配置工程的文档入口。
 8. [architecture/flatpak.md](architecture/flatpak.md) — Flatpak 子系统
 9. [architecture/gsettings.md](architecture/gsettings.md) — repository-derived GSettings → dconf 投影
 10. [architecture/power.md](architecture/power.md) — 离电功耗控制（TLP + tlp-pd）
+11. [architecture/bluetooth.md](architecture/bluetooth.md) — Bluetooth（BlueZ + 配对状态持久化）
 
 然后按需：
 

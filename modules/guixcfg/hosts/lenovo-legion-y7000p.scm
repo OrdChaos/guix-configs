@@ -43,6 +43,7 @@
                #:use-module (guixcfg inventory hosts)      ; Host ID → hostname 单一映射
                #:use-module (guixcfg system graphics nvidia) ; nvidia-system-transformation（laptop 专属）
                #:use-module (guixcfg system power)        ; TLP + tlp-pd（laptop 专属）
+               #:use-module (guixcfg system bluetooth)    ; BlueZ userspace + pairing state（laptop 专属）
                #:use-module (guixcfg users user)           ; %primary-user（结构事实权威源）
                #:use-module (guixcfg home user)            ; guix-home（挂入 system）
                #:use-module (guixcfg security secrets)     ; secrets 部署机制
@@ -103,11 +104,14 @@
 (define %persistent-mount-file-systems
   (host-persistent-mount-file-systems))
 
-;; GUI-created NetworkManager keyfile profiles only.  Derived/volatile state
-;; under /var/lib/NetworkManager remains on the ephemeral root.
-(define %network-manager-machine-state-file-systems
+;; Machine-owned system state on the ephemeral root:
+;;   - GUI-created NetworkManager keyfile profiles only (derived/volatile
+;;     state under /var/lib/NetworkManager stays ephemeral);
+;;   - BlueZ pairing state (/var/lib/bluetooth).
+(define %laptop-machine-state-file-systems
   (machine-state-persistence-file-systems
-   (list %network-manager-connections-persistence-rule)))
+   (list %network-manager-connections-persistence-rule
+         %laptop-bluetooth-persistence-rule)))
 
 ;; Wine may exceed the inherited 4096 descriptor limit while streaming game
 ;; resources.  Set both limits so the graphical PAM session passes 65536 to
@@ -141,7 +145,9 @@
     (append (list (service upower-service-type)
                   (service pam-limits-service-type %primary-user-pam-limits))
             ;; TLP + tlp-pd（离电功耗控制 + PPD 兼容 D-Bus 接口）。
-            %laptop-power-services))
+            %laptop-power-services
+            ;; BlueZ userspace（bluetoothd + org.bluez + udev）。
+            %laptop-bluetooth-services))
    ;; Activation precedes Shepherd's mounts and NetworkManager startup.
    (list (network-manager-connections-persistence-service))))
 
@@ -153,7 +159,8 @@
    (host-application-persistence-rules)
    #:flatpak-environment-overrides %flatpak-prime-environment-overrides
    #:additional-machine-state-persistence-rules
-   (list %network-manager-connections-persistence-rule)
+   (list %network-manager-connections-persistence-rule
+         %laptop-bluetooth-persistence-rule)
    #:secrets %lenovo-legion-y7000p-secrets
    #:home-environment %lenovo-legion-y7000p-guix-home))
 
@@ -164,7 +171,7 @@
    #:host-name (host-name-for-id "lenovo-legion-y7000p")
    #:persistent-mount-file-systems %persistent-mount-file-systems
    #:additional-machine-state-file-systems
-   %network-manager-machine-state-file-systems
+   %laptop-machine-state-file-systems
    #:user-services %lenovo-legion-y7000p-user-services))
 
 ;; 最终 OS：account fold + machine-identity + account-databases 投影，
