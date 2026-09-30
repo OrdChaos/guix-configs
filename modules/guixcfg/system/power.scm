@@ -29,6 +29,7 @@
                #:use-module (gnu services dbus)       ; dbus-root-service-type、polkit-service-type
                #:use-module (gnu services pm)         ; tlp-service-type、tlp-configuration
                #:use-module (gnu services shepherd)   ; shepherd-service
+               #:use-module (gnu packages glib)        ; glib（gdbus：TLP -> tlp-pd 回调）
                #:use-module (guix gexp)               ; file-append
                #:use-module (virelith packages tlp)   ; tlp-with-pd
                #:export (%laptop-tlp-configuration
@@ -51,14 +52,20 @@
 
 ;; tlp-pd：常驻 root 服务，claim PPD 的 system bus name。必须在
 ;; dbus-system 之后启动（否则 claim name 失败）。wrapper（virelith
-;; 包）已注入 python/GI 与自身 sbin 的 PATH。
+;; 包）已注入 python/GI 与自身 sbin；TLP 在 profile 应用后必须用 gdbus
+;; 调 SyncProfile 更新 PPD D-Bus 状态，所以显式提供 glib/bin。系统 profile
+;; 本身不含 gdbus，缺少它会导致硬件 profile 已变、Noctalia 却显示旧值。
 (define %tlp-pd-shepherd-service
   (shepherd-service
    (documentation "TLP profiles daemon (org.freedesktop.UPower.PowerProfiles API).")
    (provision '(tlp-pd))
    (requirement '(dbus-system))
    (start #~(make-forkexec-constructor
-             (list #$(file-append tlp-with-pd "/sbin/tlp-pd"))))
+             (list #$(file-append tlp-with-pd "/sbin/tlp-pd"))
+             #:environment-variables
+             (list (string-append "PATH="
+                                  #$(file-append glib "/bin")
+                                  ":/run/current-system/profile/bin"))))
    (stop #~(make-kill-destructor))))
 
 ;; laptop power services（host 经 additional-system-services 消费）：

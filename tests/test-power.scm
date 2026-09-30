@@ -4,7 +4,7 @@
 ;;;   P1  laptop TLP 使用 virelith tlp-with-pd，且机器策略字段正确
 ;;;       （EPP、离电关睿频、NVMe disk）；
 ;;;   P2  %laptop-power-services 的 tlp-pd shepherd 服务语义
-;;;       （provision tlp-pd、requirement dbus-system）；
+;;;       （provision tlp-pd、requirement dbus-system、gdbus callback PATH）；
 ;;;   P3  simple-service 接线到正确的 service-type（shepherd-root /
 ;;;       dbus-root / polkit）；
 ;;;   P4  host gating：laptop OS 含 TLP + tlp-pd；VM OS 零 power；
@@ -70,6 +70,17 @@
                (and (shepherd-service? svc)
                     (memq 'tlp-pd (shepherd-service-provision svc))
                     (memq 'dbus-system (shepherd-service-requirement svc)))))
+
+(test-assert "P2: tlp-pd PATH includes glib gdbus for TLP SyncProfile callbacks"
+             ;; tlp-pd runs `tlp <profile>` asynchronously.  TLP then calls
+             ;; gdbus SyncProfile to update ActiveProfile; without glib/bin,
+             ;; hardware changes while Noctalia keeps the stale D-Bus value.
+             (let ((source (call-with-input-file
+                            "modules/guixcfg/system/power.scm"
+                            (lambda (port) (read-string port)))))
+               (and (string-contains source "(gnu packages glib)")
+                    (string-contains source "(file-append glib \"/bin\")")
+                    (string-contains source "PATH="))))
 
 ;; ── P3：simple-service 接线 ─────────────────────────────────
 (define (service-extends? svc target-type)
