@@ -12,8 +12,11 @@
 ;;; 侧栏不出现卷（2026-09 实测）。这里用官方
 ;;; `udisks-service-type`（gnu/services/desktop.scm）补齐：
 ;;; D-Bus activation + udev rules + polkit actions + /run/udisks2
-;;; activation + system profile udisksctl，单一机制、无 custom 层
+;;; activation + system profile udisksctl，单一机制
 ;;; （docs/architecture/upstream-boundaries.md 的 official 边界）。
+;;; 唯一的 custom 补充是一条 90- udev 规则：把 udisks 对 'ntfs'
+;;; 签名的驱动选择固定为 ntfs-3g（内建顺序 ntfs3,ntfs 且对 ntfs3
+;;; 的非 "unknown fs" 失败不回退；见规则定义处注释）。
 ;;;
 ;;; 登录链（docs/architecture/graphics.md）：
 ;;;   interactive-session-ready（core readiness join barrier）
@@ -155,6 +158,24 @@
                   '(("NOCTALIA_GREETER_LOG" . "/tmp/noctalia-greeter.log")
                     ("WLR_LOG" . "info"))))))))))
 
+;; udisks 对 'ntfs' 签名的内建驱动顺序是 ntfs3,ntfs，且仅在 ntfs3 返回
+;; "unknown fs" 时才回退。本机内核对某些 NTFS 卷（实测 Zephr's 移动盘）
+;; 的 ntfs3 rw 挂载失败，而 ntfs-3g 可正常读写；udisks 因此直接报错。
+;; 用 udisks 的 udev 覆盖接口（UDISKS_MOUNT_OPTIONS_<FS>_<KEY>）把该签名
+;; 的驱动固定为 ntfs-3g。等价于 /etc/udisks2/mount_options.conf，但 Guix
+;; 把 udisks 的 sysconfdir 编进 store（/etc 不被读取），故走 udev 通道。
+;; 规则必须晚于 60-persistent-storage.rules（blkid → ID_FS_TYPE）。
+(define %udisks-ntfs-driver-udev-rule-contents
+  (string-append
+   "ENV{ID_FS_TYPE}==\"ntfs\", "
+   "ENV{UDISKS_MOUNT_OPTIONS_NTFS_DRIVERS}=\"ntfs\"\n"))
+
+(define %udisks-ntfs-driver-udev-service
+  (udev-rules-service
+   'udisks-ntfs-driver
+   (udev-rule "90-udisks-ntfs-driver.rules"
+              %udisks-ntfs-driver-udev-rule-contents)))
+
 (define desktop-services
   ;; M2 Wayland desktop 系统层服务。Noctalia Greeter 的通用系统
   ;; 集成（polkit policy / system profile / state directory）由
@@ -171,8 +192,10 @@
                   (state-directory %noctalia-greeter-state-dir)))
         ;; 可移动介质后端：gvfs 的 UDisks2 volume monitor 的 system 侧
         ;; daemon（见文件头"可移动介质"）。官方 udisks-service-type
-        ;; 从 system bus / udev / polkit 三处接线，无需 custom rules。
+        ;; 从 system bus / udev / polkit 三处接线；仅补一条 ntfs 驱动
+        ;; 覆盖规则（见上）。
         (service udisks-service-type)
+        %udisks-ntfs-driver-udev-service
         ;; repo-owned 登录会话发现数据（niri.desktop）→ system
         ;; profile（greeter 的会话发现路径）。
         (noctalia-greeter-session-profile-service)))

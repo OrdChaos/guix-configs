@@ -64,7 +64,13 @@
                #:use-module (guixcfg gsettings model) ; gsettings-setting
                #:use-module (guixcfg users user) ; %primary-user、user-profile-home-directory
                #:use-module (srfi srfi-1)       ; take
-               #:export (%nautilus))
+               #:export (%nautilus
+                         %nautilus-desktop-entry))
+
+;; Nautilus 的 XDG desktop entry 名（pinned gnome 包 share/
+;; applications/ 产物核实）。纯数据常量：供统一 XDG/default-apps
+;; 策略模块引用（(guixcfg home xdg)），本模块不决定默认应用。
+(define %nautilus-desktop-entry "org.gnome.Nautilus.desktop")
 
 ;; loader 内嵌解释器的 site-packages 搜索路径：profile 下
 ;; lib/python<major.minor>/site-packages。版本号从 pinned python

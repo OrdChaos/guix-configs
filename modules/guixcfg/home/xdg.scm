@@ -22,6 +22,7 @@
                #:use-module (guixcfg apps loupe definition)
                #:use-module (guixcfg apps gnome-text-editor definition)
                #:use-module (guixcfg apps onlyoffice definition) ; %onlyoffice-desktop-entry
+               #:use-module (guixcfg apps nautilus definition) ; %nautilus-desktop-entry
                #:export (%xdg-default-applications
                          %xdg-default-apps-service
                          %xdg-user-dirs-service))
@@ -163,6 +164,12 @@
                          %gnome-text-editor-desktop-entry)
           (mime-defaults %office-default-mime-types
                          %onlyoffice-desktop-entry)
+          ;; 目录 → Nautilus（文件管理器）。必须显式声明：Amberol 的
+          ;; desktop entry 也声明了 inode/directory（上游 MimeType
+          ;; 异常）；无显式默认时 GIO 会把它解析为默认，"打开文件夹"
+          ;; 因此启动 Amberol 而非 Nautilus（Prism Launcher 的
+          ;; QDesktopServices::openUrl 同样受影响）。
+          (mime-defaults '("inode/directory") %nautilus-desktop-entry)
           (map (lambda (mime)
                  (cons mime (list %chrome-desktop-entry)))
                '("text/html"
