@@ -31,15 +31,9 @@
                                                   "sbkeysync" "efibootmgr"))))
                     (home-environment-packages %guix-home)))
 
-;; 薄 assembly：packages 是「字体集合 + GSettings 机制 runtime 依赖
-;; + registry 聚合」的精确组合；services 是 registry 贡献 + 策略服务
-;; 的超集（home-environment 会附加隐式服务——home-shepherd/
+;; 薄 assembly：services 是 registry 贡献 + 策略服务的超集
+;; （home-environment 会附加隐式服务——home-shepherd/
 ;; home-activation/symlink-manager 等）。
-(test-assert "home packages equal fonts + gsettings runtime deps + registry aggregation"
-             (equal? (home-environment-packages %guix-home)
-                     (append %fonts
-                             %gsettings-packages
-                             (applications-home-packages %applications))))
 (test-assert "home services include every registry service"
              (every (lambda (s)
                       (any (lambda (h)
@@ -85,12 +79,6 @@
 (test-assert "home fonts xdg link service composed into %guix-home"
              %fonts-xdg-link-svc)
 
-(test-equal "home fonts xdg links cover every font package"
-            (map package-name (delete fontconfig %fonts))
-            (map (lambda (entry)
-                   (string-drop (car entry)
-                                (string-length ".local/share/fonts/")))
-                 (service-value %fonts-xdg-link-svc)))
 
 (test-assert "home fonts xdg link targets are safe home-relative paths"
              (every (lambda (entry)

@@ -336,7 +336,9 @@ resolver `(guixcfg utils repository-source)`。
   `/persist/data-nobackup/... → bind → HOME` 映射）；
 - app 被**显式配置**去使用该路径（如 Steam Library path
   `/persist/data-nobackup/steam`、AAGL 游戏目录
-  `/persist/data-nobackup/aagl`）；
+  `/persist/data-nobackup/aagl`、Prism Launcher 实例目录
+  `/persist/data-nobackup/prismlauncher`——InstanceDir 由用户在 GUI
+  手动指向）；
 - 当前**没有 backup subsystem**；`nobackup` 只表示 storage intent。
 
 ## Runtime dependency invariant

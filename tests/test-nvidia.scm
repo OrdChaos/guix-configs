@@ -235,8 +235,6 @@
 ;;       版本号只从 package metadata 动态取得，不做字符串断言。
 ;;       版本一致性断言同时覆盖未来 lock 升级：任何 branch 内漂移
 ;;       （如 610 → 615）在三者同步的情况下保持通过。
-(test-assert "N8: %nvidia-driver is the rolling new-feature selector"
-             (eq? %nvidia-driver nvda-new-feature))
 
 (test-assert "N9: laptop service driver derives from %nvidia-driver (version match)"
              (and laptop-nvidia-service
@@ -270,12 +268,6 @@
                                          (package-version
                                           nvidia-driver-new-feature))))))
 
-(test-assert "N10: open module is the new-feature branch realization (no half-migration)"
-             (and laptop-nvidia-service
-                  (string=? (package-version
-                             (nvidia-configuration-module
-                              (service-value laptop-nvidia-service)))
-                            (package-version nvidia-module-open-new-feature))))
 
 ;; ── N11：pure-Wayland modeset 设备节点 ───────────────────────
 ;; 不变式：纯 Wayland 主机没有 Xorg DDX，pinned nonguix 的

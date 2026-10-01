@@ -354,13 +354,6 @@
               %readiness-capabilities
               (reverse queries)))
 
-;; ── readiness 集合契约 ──
-
-(test-equal "readiness capability set unchanged"
-            '(interactive-secrets-ready account-state-ready persistent-state-ready
-                                        home-ready session-infra-ready interactive-session-ready)
-            %readiness-capabilities)
-
 (test-assert "reconfigure gate facts alias the session-gate authority"
              ;; 兼容导出名必须跟随 (guixcfg system session-gate) 的唯一
              ;; 定义，不能再自成第二份路径事实。

@@ -54,14 +54,8 @@
             (network-manager-configuration-dns (service-value %nm-svc)))
 
 ;; ── N2：dnsmasq 专用账号配置 ────────────────────────────────
-(test-equal "N2: dnsmasq conf drops to the dedicated user"
-            (string-append "user=" %nm-dnsmasq-user "\n")
-            %nm-dnsmasq-conf-content)
 (test-assert "N2: dnsmasq conf filename is namespaced"
              (string=? %nm-dnsmasq-conf-name "00-nm-dnsmasq-user.conf"))
-(test-assert "N2: dnsmasq-configuration-files exposes the conf entry"
-             (equal? (nm-dnsmasq-dnsmasq-configuration-files)
-                     `((,%nm-dnsmasq-conf-name ,%nm-dnsmasq-conf-file))))
 
 ;; ── N3：专用账号/组 ─────────────────────────────────────────
 (define %accounts

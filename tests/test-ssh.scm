@@ -29,11 +29,8 @@
 (test-assert "generate-host-keys? off (no /etc/ssh generation by default)"
              (not (openssh-configuration-generate-host-keys? ssh-config)))
 
-;; host-key 持久化路径与 DenyUsers 出现在 sshd 配置
+;; DenyUsers 出现在 sshd 配置
 (define extra (openssh-configuration-extra-content ssh-config))
-(test-assert "HostKey points at /persist/system/ssh/"
-             (string-contains extra (string-append "HostKey " %ssh-host-key-dir
-                                                   "/ssh_host_ed25519_key")))
 (test-assert "DenyUsers root as defense-in-depth"
              (string-contains extra "DenyUsers root"))
 

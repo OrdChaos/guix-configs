@@ -17,6 +17,12 @@
 ;;;     （launcher 选择目录需要可写路径）——activation 创建 + chown
 ;;;     （noctalia-greeter backing ownership 同款模式：owner 经
 ;;;     /etc/passwd 运行时解析，不硬编码 uid/gid）。
+;;;   - Prism Launcher 游戏实例目录 /persist/data-nobackup/
+;;;     prismlauncher：同上 storage class。Prism 是原生应用
+;;;     （(guixcfg apps prismlauncher)），用户在 GUI 里把 InstanceDir
+;;;     指到这里（prismlauncher.cfg 是应用自有 mutable state，不从
+;;;     仓库 seed）；本模块只保证目录预先存在并归 USER——/persist/
+;;;     data-nobackup 本身 root-owned，USER 无法自建子目录。
 ;;;
 ;;; NVIDIA PRIME offload 变量不在此投影——Flatpak managed override
 ;;; 的环境差异由 %flatpak-prime-environment-overrides 在 host Guix
@@ -32,6 +38,7 @@
                #:use-module (guixcfg users user)    ; %primary-user（owner 推导）
                 #:export (%steam-games-library-path
                           %aagl-games-library-path
+                          %prismlauncher-instances-path
                           %gaming-system-services))
 
 ;; 游戏库 canonical 位置：/persist/data-nobackup/steam（persist-
@@ -41,6 +48,12 @@
 
 (define %aagl-games-library-path
   (string-append (persist-mount-point "@persist-data-nobackup") "/aagl"))
+
+;; Prism Launcher 的实例（游戏内容）目录；InstanceDir 由用户在 GUI
+;; 手动指向此处（应用自有 cfg，仓库不 seed）。
+(define %prismlauncher-instances-path
+  (string-append (persist-mount-point "@persist-data-nobackup")
+                 "/prismlauncher"))
 
 ;; 游戏库目录 activation：mkdir + 归还 USER（幂等，不触碰已存在
 ;; 内容）。account projection 先于 activation 写 /etc/passwd。
@@ -74,7 +87,8 @@ from /etc/passwd" user-name))
                                   ;; 游戏库仅 primary user 可遍历。
                                   (chmod dir #o700))
                                 (list #$%steam-games-library-path
-                                      #$%aagl-games-library-path))
+                                      #$%aagl-games-library-path
+                                      #$%prismlauncher-instances-path))
                                #t))))
 
 ;; gaming system services：controller udev rules + 游戏库目录

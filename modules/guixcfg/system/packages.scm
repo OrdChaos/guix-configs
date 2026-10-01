@@ -14,6 +14,10 @@
 (define %system-packages
   (append (list btrfs-progs       ; 子卷/快照管理（恢复时必需）
                 cryptsetup        ; LUKS 维护（恢复时必需）
+                ntfs-3g           ; NTFS 读写（udisks 只使用系统 profile
+                ; 里的 mount 工具——可移动 NTFS 介质的用户态驱动与
+                ; ntfsfix 等修复工具；内核 ntfs3 之外的必要补充，
+                ; Guix 手册（udisks-service-type））
                 age               ; secrets 解密（guixcfg-secrets-deploy
                 ; 的运行时依赖；account projection 只
                 ; 读 persistent hash，不调 age）

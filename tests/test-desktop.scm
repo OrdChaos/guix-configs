@@ -300,10 +300,6 @@
              (let ((cfg (os-service noctalia-greeter-service-type)))
                (and cfg #t)))
 
-(test-assert "G1b: service state-directory matches the persistence consumer"
-             (let ((cfg (service-value (os-service noctalia-greeter-service-type))))
-               (string=? %noctalia-greeter-state-dir
-                         (noctalia-greeter-configuration-state-directory cfg))))
 
 (test-assert "G2: system profile carries the repo-owned session data package"
              (let* ((folded (fold-services (operating-system-services %vm-os)

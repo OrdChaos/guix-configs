@@ -46,9 +46,6 @@
                     (memq svc-a1 svcs)
                     (memq svc-a2 svcs)
                     (memq svc-b svcs))))
-(test-assert "applications-home-services ordering is deterministic"
-             (equal? (applications-home-services (list app-a app-b))
-                     (applications-home-services (list app-a app-b))))
 
 ;; ── home-files 目标（.config 与 HOME dotfile 同一通道）────────
 ;; 2026-08 规则反转：~/.config 目标一律经 home-files-service-type

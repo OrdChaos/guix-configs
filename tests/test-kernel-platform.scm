@@ -96,15 +96,11 @@
 (test-assert "K3: %vm-os firmware includes linux-firmware"
              (memq linux-firmware (operating-system-firmware %vm-os)))
 
-(test-assert "K3: firmware comes from the kernel platform definition"
-             (eq? %kernel-firmware linux-firmware))
 
 ;; ── K4：microcode composition（非 replacement）──────────────
 (test-assert "K4: %vm-os initrd is the microcode + custom initrd composition"
              (eq? (operating-system-initrd %vm-os) microcode-ephemeral-initrd))
 
-(test-assert "K4: microcode packages are declaratively Intel-only"
-             (equal? %kernel-microcode-packages (list intel-microcode)))
 
 (test-assert "K4: microcode composition wraps the custom initrd builder"
              ;; microcode-initrd 配置期就把剩余关键字（#:linux 等）

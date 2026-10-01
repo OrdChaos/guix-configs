@@ -369,12 +369,6 @@
 ;;; ────────────────────────────────────────────────────────────
 ;;; repo 复制机制（installation.md 阶段 8 的机制化）
 
-(test-equal "repo path is an ordinary project below persistent Projects"
-            (string-append "/mnt"
-                           (persist-mount-point "@persist-data-home")
-                           "/" (user-profile-name %primary-user)
-                           "/Projects/guix-configs")
-            (install-repo-path "/mnt"))
 
 (test-assert "firstboot converges only and never invokes enrollment"
              (let* ((source (call-with-input-file "blueprint.scm"

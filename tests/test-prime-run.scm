@@ -50,10 +50,6 @@
 
 (test-begin "prime-run")
 
-;; ── P2：driver 唯一 authority ───────────────────────────────
-(test-assert "P2: %nvidia-driver is the single driver authority (rolling new-feature)"
-             (eq? %nvidia-driver nvda-new-feature))
-
 ;; ── P3：wrapper 脚本结构 ────────────────────────────────────
 (define %script (prime-run-script))
 

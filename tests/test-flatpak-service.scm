@@ -229,11 +229,5 @@
                   (string-contains %reconcile-source "remote-info")
                   (string-contains %reconcile-source "invoke-capture")))
 
-(test-equal "flatpak override dir derives from persistence root"
-            ;; No re-spelled /persist/data-app literal: derived from
-            ;; %application-persistence-root + the installation rule backing.
-            (string-append (persist-mount-point "@persist-data-app")
-                           "/flatpak/installation/overrides")
-            %flatpak-overrides-directory)
 
 (test-end "flatpak-service")

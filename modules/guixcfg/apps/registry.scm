@@ -63,6 +63,7 @@
                #:use-module (guixcfg apps starship definition)
                 #:use-module (guixcfg apps blue definition)
                 #:use-module (guixcfg apps xdg-utils definition)
+               #:use-module (guixcfg apps prismlauncher definition)
                #:export (%applications))
 
 (define %applications
@@ -120,7 +121,8 @@
         %opencode
          %starship
          %blue
-         %xdg-utils))
+         %xdg-utils
+         %prismlauncher))
 
 ;; 完整性检查：启用集合的名字必须唯一（fail fast，加载即报错）。
 (define %application-names (map application-name %applications))

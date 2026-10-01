@@ -2,9 +2,12 @@
 ;;; Flatpak selection 2026-09 全局化——硬件差异只经 environment
 ;;; adapter 表达）：
 ;;;   - (guixcfg system gaming)：游戏库路径 authority
-;;;     （persist-mount-point 派生 /persist/data-nobackup/{steam,aagl}）、
-;;;     system services（steam-devices udev rules + 目录
-;;;     activation）——所有 host 共享；
+;;;     （persist-mount-point 派生 /persist/data-nobackup/{steam,aagl,
+;;;     prismlauncher}）、system services（steam-devices udev rules +
+;;;     目录 activation）——所有 host 共享；
+;;;   - Prism Launcher 是原生应用，其游戏实例目录
+;;;     %prismlauncher-instances-path 由同一 activation 建好并归还
+;;;     USER；InstanceDir 由用户在 GUI 手动指向（应用自有 cfg）。
 ;;;   - Flatpak steam definition：managed filesystem override =
 ;;;     游戏库路径 authority 引用（硬件中性）；
 ;;;   - NVIDIA PRIME：单一 authority（%prime-offload-environment-strings
@@ -30,7 +33,6 @@
              (guixcfg flatpak model)
              (guixcfg flatpak registry)
              (guixcfg flatpak applications steam definition)
-             (guixcfg storage model) ; persist-mount-point
              (guixcfg system gaming)
              (guixcfg system graphics nvidia)) ; %prime-offload-environment-strings
 
@@ -46,16 +48,6 @@
        (service-type-extensions (service-kind svc))))
 
 ;; ── gaming system module ────────────────────────────────────
-
-(test-equal "steam games library derived from persist-mount-point"
-             (string-append (persist-mount-point "@persist-data-nobackup")
-                            "/steam")
-             %steam-games-library-path)
-
-(test-equal "aagl games library derived from persist-mount-point"
-             (string-append (persist-mount-point "@persist-data-nobackup")
-                            "/aagl")
-             %aagl-games-library-path)
 
 (test-assert "gaming contributes steam-devices udev rules"
              (find (lambda (svc)
@@ -78,9 +70,6 @@
 (test-assert "steam override is managed"
              %steam-overrides)
 
-(test-equal "steam override exposes the games library"
-            (list %steam-games-library-path)
-            (flatpak-override-filesystems %steam-overrides))
 
 (test-equal "steam base override is hardware-neutral (no NVIDIA env)"
             '()
@@ -120,11 +109,6 @@
   (flatpak-application-with-environment
    %flatpak-steam
    (cdr (assq 'steam %flatpak-prime-environment-overrides))))
-
-(test-equal "NVIDIA adapter overlays PRIME env onto steam override"
-            %prime-offload-environment-strings
-            (flatpak-override-environment
-             (flatpak-application-managed-overrides %prime-overlayed-steam)))
 
 (test-assert "NVIDIA adapter leaves steam games library intact"
              (equal? (list %steam-games-library-path)

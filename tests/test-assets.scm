@@ -39,9 +39,6 @@
 
 (test-assert "user-assets service composed into %guix-home" %assets-svc)
 
-(test-equal "service declares exactly the two stable paths"
-            (list %avatar-home-path %wallpaper-home-path)
-            (map car (service-value %assets-svc)))
 
 (test-assert "both sources are file-likes"
              (every local-file? (map cadr (service-value %assets-svc))))

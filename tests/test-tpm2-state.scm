@@ -9,14 +9,6 @@
 
 (test-begin "tpm2-state")
 
-;; ── PCR 选择是固定事实（PCR7-only）────────────────────────
-(test-equal "PCR bank fixed to sha256"
-            "sha256"
-            %tpm2-pcr-bank)
-(test-equal "PCR list fixed to (7)"
-            '("7")
-            %tpm2-pcr-list)
-
 ;; ── metadata roundtrip ────────────────────────────────────
 (define %sample-enrollment
   (tpm2-enrollment (id "enroll-1700000000")

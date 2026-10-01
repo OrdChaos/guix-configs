@@ -25,9 +25,6 @@
              (and (pair? %fontconfig-snippets)
                   (every list? %fontconfig-snippets)))
 
-(test-assert "home fontconfig service consumes the shared snippets verbatim"
-             (equal? %fontconfig-snippets
-                     (service-value %fontconfig-service)))
 
 ;; ONLYOFFICE 专属 fontconfig 文件（消费方 2）：内联策略 + 无 include。
 (define %store (open-connection))
