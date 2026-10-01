@@ -29,15 +29,18 @@
 (define-module (guixcfg flatpak service)
                #:use-module (gnu home services) ; home-environment-variables-service-type、home-files-service-type
                 #:use-module (gnu services)      ; simple-service、activation-service-type
-                #:use-module (guix gexp)         ; plain-file
+                #:use-module (guix gexp)         ; plain-file、mixed-text-file、file-append
                 #:use-module (guix modules)      ; source-module-closure
                 #:use-module (srfi srfi-1)       ; filter-map、append-map
                 #:use-module (guixcfg flatpak model)
                 #:use-module (guixcfg flatpak registry)
+                #:use-module (guixcfg home appearance) ; %appearance-cursor-theme/size（shared facts）
                 #:use-module (guixcfg system application-persistence) ; application-persistence-rule
                 #:use-module (guixcfg utils module-closure) ; guixcfg-module-select?
+                #:use-module (virelith packages cursors) ; fluent-cursor-theme
                #:export (%flatpak-installation-persistence-rule
                          %flatpak-overrides-directory
+                         %flatpak-global-override-file
                          flatpak-application-persistence-rules
                          flatpak-selected-applications
                          flatpak-persistence-rules
@@ -157,9 +160,56 @@ external app 与未知 target fail closed）。"
            environment-overrides
            (flatpak-selected-applications))))
 
-(define (flatpak-overrides-activation environment-overrides)
+;;; ── 全局 override（overrides/global）────────────────────────
+;;; X11（XWayland）应用在客户端经 libXcursor 解析光标主题，读
+;;; XCURSOR_PATH/XCURSOR_THEME。Flatpak 会转发 XCURSOR_THEME/XCURSOR_SIZE
+;;; 但【丢弃 XCURSOR_PATH】，且不暴露宿主 profile 的 share/icons（只提供
+;;; /run/host/fonts 与 runtime 的 /usr/share/icons/hicolor）——因此沙箱内
+;;; X11 应用找不到 Fluent 主题，回退为默认黑色光标；原生 XWayland 应用
+;;; 因宿主环境完整而正常。
+;;;
+;;; 修复：overrides/global 是 Flatpak 的全局 override（作用于全部应用，
+;;; 含 'external/user-owned 的应用——它们没有 managed override 文件）。
+;;; 只读暴露光标主题目录并把 XCURSOR_PATH 指向它（同时显式固定
+;;; XCURSOR_THEME/SIZE，使沙箱不依赖宿主 session env）。主题目录随
+;;; store 路径嵌入本文件 derivation，是 system closure 的输入（GC 安全）。
+(define %flatpak-cursor-theme-bundle
+  (computed-file
+   "flatpak-cursor-theme-bundle"
+   (with-imported-modules '((guix build utils))
+     #~(begin
+         (use-modules (guix build utils))
+         (let ((out #$output)
+               (theme #$(file-append fluent-cursor-theme
+                                     "/share/icons/Fluent-dark-cursors")))
+           (copy-recursively theme (string-append out "/Fluent-dark-cursors"))
+           ;; Chromium 的光标主题名优先级是 LinuxUi(GTK) → Xcursor.theme
+           ;; → "default"；沙箱内 GTK 默认返回 "Adwaita"。把常见回退名
+           ;; 软链到配置主题，避免回落到核心黑色字体指针。
+           (for-each (lambda (name)
+                       (symlink "Fluent-dark-cursors"
+                                (string-append out "/" name)))
+                     '("default" "Adwaita")))))))
+
+(define %flatpak-global-override-file
+  (mixed-text-file
+   "flatpak-global-override"
+   "# (guixcfg flatpak service) global override for ALL apps (incl. 'external).\n"
+   "# X11/XWayland apps resolve the cursor theme client-side; expose it here.\n"
+   "[Context]\n"
+   "filesystems=" %flatpak-cursor-theme-bundle ":ro;\n"
+   "\n"
+   "[Environment]\n"
+   "XCURSOR_THEME=" %appearance-cursor-theme "\n"
+   "XCURSOR_SIZE=" (number->string %appearance-cursor-size) "\n"
+   "XCURSOR_PATH=" %flatpak-cursor-theme-bundle "\n"))
+
+(define* (flatpak-overrides-activation environment-overrides
+                                       #:key (global-override
+                                              %flatpak-global-override-file))
   "Return a system activation service that atomically projects managed
-Flatpak overrides into the canonical persistent installation backing."
+Flatpak overrides (plus the platform GLOBAL-OVERRIDE, applied to every app)
+into the canonical persistent installation backing."
   (let ((entries
          (map (lambda (entry)
                 (list (string-drop (car entry)
@@ -184,7 +234,12 @@ Flatpak overrides into the canonical persistent installation backing."
                         (ice-9 textual-ports))
           (let* ((directory #$%flatpak-overrides-directory)
                  (manifest (string-append directory "/.guixcfg-managed"))
-                 (current (map car '#$entries)))
+                 ;; 全局 override 单独处理：其 file-like 经【非引号】gexp
+                 ;; 注入（store path），避免把带 store 路径的 computed
+                 ;; 文件塞进被 quote 的 entries（会引入非确定性）。
+                 (global-file #$global-override)
+                 (current (append (map car '#$entries)
+                                  (list "global"))))
             (define (read-managed)
               (if (file-exists? manifest)
                   (call-with-input-file
@@ -224,6 +279,11 @@ Flatpak overrides into the canonical persistent installation backing."
                   (display (call-with-input-file (cadr entry) get-string-all)
                            port))))
              '#$entries)
+            (atomic-write-file!
+             (string-append directory "/global")
+             (lambda (port)
+               (display (call-with-input-file global-file get-string-all)
+                        port)))
             (atomic-write-file!
               manifest
               (lambda (port)

@@ -256,6 +256,34 @@ repo-owned override 是 **read-only declarative state**，不建议直接
 7. reconfigure（repo 重新取得 authority）
 ```
 
+### Global override（overrides/global）
+
+除 per-app 文件外，system activation 还写 Flatpak 的全局 override
+`overrides/global`（作用于**全部**应用，含 `'external`/user-owned——
+后者没有 managed override 文件，故只有 global 能覆盖它们）。它由
+`(guixcfg flatpak service)` 的 `%flatpak-global-override-file` 渲染，
+当前唯一用途是 X11 光标主题：
+
+- **X11（XWayland）光标主题**：X11 应用经 libXcursor 在**客户端**解析
+  主题（读 `XCURSOR_PATH` / `XCURSOR_THEME`）。Flatpak 转发
+  `XCURSOR_THEME`/`XCURSOR_SIZE` 但**丢弃 `XCURSOR_PATH`**，且不暴露
+  宿主 profile 的 `share/icons`（只提供 `/run/host/fonts` 与 runtime
+  的 `/usr/share/icons/hicolor`）——沙箱内 X11 应用因此找不到 Fluent
+  主题，回退默认黑色光标；原生 XWayland 应用（如 onlyoffice）因宿主
+  环境完整而正常。
+
+  全局 override 暴露一个 store 里的**别名包**
+  （`%flatpak-cursor-theme-bundle`）：把 Fluent 主题拷入，并把
+  `default`、`Adwaita` 软链到它——因为 Chromium 的光标主题名优先级是
+  `LinuxUi(GTK)` → `Xcursor.theme` → `"default"`（`XCURSOR_THEME` 环境
+  变量对它无效），沙箱内 GTK 默认返回 `Adwaita`。override 以
+  `filesystems=<bundle>:ro` 只读暴露该包，并把 `XCURSOR_PATH` 指向它
+  （同时固定 `XCURSOR_THEME/SIZE`）。别名包 store 路径是该 override
+  文件的 derivation input（随 theme 更新自动刷新且 GC 安全）。此方案
+  不依赖 XSETTINGS——Xwayland 侧 XSETTINGS 归 `xwayland-satellite`
+  （分数缩放 DPI 三键），仓库不再运行 `xsettingsd`（避免抢
+  `_XSETTINGS_S0` 挤掉缩放）。
+
 ## Operations（唯一联网入口 = Blue flatpak 命令）
 
 ```bash
