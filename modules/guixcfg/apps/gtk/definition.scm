@@ -25,36 +25,22 @@
 ;;;         非仅 sandbox）；portal gnome backend 读 dconf；
 ;;;       * settings.ini 的实际消费者：GTK4 无 portal 时的 fallback、
 ;;;         Qt 的 gtk3 platform theme（noctalia 经它读图标主题）；
-;;;       * X11/XWayland：XSETTINGS（apps/xsettingsd）。
+;;;       * X11/XWayland：本仓库不再提供 XSETTINGS——Xwayland 侧的
+;;;         XSETTINGS 由 xwayland-satellite 独占（分数缩放 DPI）；原生
+;;;         X11 GTK 应用从 dconf 取外观键。
 ;;;     因此权威下发点 = appearance-sync 写 dconf（runtime derived
-;;;     state，不是 source of truth；每次登录由 apps/xsettingsd 的
-;;;     session wrapper 按声明默认 reconcile，Noctalia mode 切换时经
-;;;     post-hook 重写）；settings.ini 保留为无 portal/dconf 环境的
-;;;     fallback，运行时永不改写。
+;;;     state，不是 source of truth；每次登录由本单元 appearance-
+;;;     reconcile Home one-shot service 按声明默认 reconcile，Noctalia
+;;;     mode 切换时经 post-hook 重写）；settings.ini 保留为无
+;;;     portal/dconf 环境的 fallback，运行时永不改写。
 ;;;
 ;;; appearance-sync（~/.local/bin，runtime mode 同步工具，不是
-;;; 配置权威）：light|dark →
-;;;   1. GSettings org.gnome.desktop.interface 全量键：
-;;;      color-scheme=prefer-<mode>、gtk-theme=<adw-gtk3|
-;;;      adw-gtk3-dark>（随 mode），icon-theme、cursor-theme、
-;;;      cursor-size、font-name（静态，不随 mode）——dconf 是
-;;;      runtime derived state，每次登录从声明 reconcile；
-;;;   2. 原子重建 $XDG_RUNTIME_DIR/guixcfg/xsettingsd.conf
-;;;      （tmp+rename；XSETTINGS 键语法经 pinned xsettingsd 1.0.2
-;;;      config_parser 核实：字符串带引号、整数裸写）；
-;;;   3. 读 pidfile SIGHUP 当前会话的 xsettingsd（pinned 1.0.2
-;;;      settings_manager.cc：SIGHUP → select EINTR → reload；
-;;;      精确 PID，禁止 killall）。
-;;;   调用方：xsettingsd-session wrapper（登录 reconcile）与
-;;;   Noctalia template post-hook（mode 切换）。
-;;;   2. 原子重建 $XDG_RUNTIME_DIR/guixcfg/xsettingsd.conf
-;;;      （tmp+rename；XSETTINGS 键语法经 pinned xsettingsd 1.0.2
-;;;      config_parser 核实：字符串带引号、整数裸写）；
-;;;   3. 读 pidfile SIGHUP 当前会话的 xsettingsd（pinned 1.0.2
-;;;      settings_manager.cc：SIGHUP → select EINTR → reload；
-;;;      精确 PID，禁止 killall）。
-;;;   调用方：xsettingsd-session wrapper（登录 reconcile）与
-;;;   Noctalia template post-hook（mode 切换）。
+;;; 配置权威）：light|dark → GSettings org.gnome.desktop.interface
+;;; 全量键（color-scheme=prefer-<mode>、gtk-theme=<adw-gtk3|
+;;; adw-gtk3-dark> 随 mode；icon-theme / cursor-theme / cursor-size /
+;;; font-name 静态）——dconf 是 runtime derived state，每次登录从声明
+;;; reconcile。调用方：本单元 appearance-reconcile Home one-shot
+;;; service（登录）与 Noctalia template post-hook（mode 切换）。
 ;;;
 ;;; 包：adw-gtk3-theme（share/themes/adw-gtk3{,-dark} 实测）、
 ;;; fluent-icon-theme/fluent-cursor-theme（Virelith；目录名
@@ -70,10 +56,12 @@
 
 (define-module (guixcfg apps gtk definition)
                #:use-module (gnu home services)      ; xdg-config、home-files
+               #:use-module (gnu home services shepherd) ; home-shepherd-service-type
                #:use-module (gnu packages glib)      ; glib（bin 输出：gsettings）
                #:use-module (gnu packages gnome)     ; gsettings-desktop-schemas、dconf
                #:use-module (gnu packages gnome-xyz) ; adw-gtk3-theme
                #:use-module (gnu services)           ; simple-service
+               #:use-module (gnu services shepherd)  ; shepherd-service
                #:use-module (guix gexp)              ; local-file、plain-file、program-file
                #:use-module (guix records)
                #:use-module (virelith packages icons)   ; fluent-icon-theme
@@ -139,11 +127,10 @@
         (cond ((string=? mode "light") #$%appearance-gtk-theme-light)
           ((string=? mode "dark") #$%appearance-gtk-theme-dark)
           (else (usage))))
-      ;; 1. GSettings org.gnome.desktop.interface 全量键（GTK3
-      ;;    on Wayland 直读 GSettings；GTK4 经 portal Settings 读同一
-      ;;    组——pinned 审计见文件头）。color-scheme/gtk-theme 随
-      ;;    mode，icon/cursor/font 不随 mode。无 session bus /
-      ;;    schema 缺失时只警告不中断——xsettingsd 部分仍须完成。
+      ;; GSettings org.gnome.desktop.interface 全量键（GTK3 on Wayland
+      ;; 直读 GSettings；GTK4 经 portal Settings 读同一组——pinned
+      ;; 审计见文件头）。color-scheme/gtk-theme 随 mode，icon/cursor/
+      ;; font 不随 mode。无 session bus / schema 缺失时只警告不中断。
       (for-each
        (lambda (pair)
          (catch 'system-error
@@ -162,40 +149,41 @@
              (cons "icon-theme" #$%appearance-icon-theme)
              (cons "cursor-theme" #$%appearance-cursor-theme)
              (cons "cursor-size" (number->string #$%appearance-cursor-size))
-             (cons "font-name" #$%appearance-ui-font)))
-      ;; 2. 重建 runtime xsettingsd 配置（tmp+rename 原子替换）。
-      (define runtime-dir (getenv "XDG_RUNTIME_DIR"))
-      (when (or (not runtime-dir) (string=? runtime-dir ""))
-        (format (current-error-port)
-                "appearance-sync: XDG_RUNTIME_DIR is not set~%")
-        (exit 1))
-      (define dir (string-append runtime-dir "/guixcfg"))
-      (define config (string-append dir "/xsettingsd.conf"))
-      (catch 'system-error (lambda () (mkdir dir)) (lambda (key . rest) #t))
-      (call-with-output-file (string-append config ".tmp")
-                             (lambda (port)
-                               (for-each
-                                (lambda (line) (display line port) (newline port))
-                                (list
-                                 (string-append "Net/ThemeName \"" theme "\"")
-                                 (string-append "Net/IconThemeName \""
-                                                #$%appearance-icon-theme "\"")
-                                 (string-append "Gtk/CursorThemeName \""
-                                                #$%appearance-cursor-theme "\"")
-                                 (string-append "Gtk/CursorThemeSize "
-                                                (number->string #$%appearance-cursor-size))
-                                 (string-append "Gtk/FontName \"" #$%appearance-ui-font "\"")))
-                               (fsync port)))
-      (rename-file (string-append config ".tmp") config)
-      ;; 3. SIGHUP 当前会话 xsettingsd（pidfile 精确寻址；进程已死
-      ;;    或无 pidfile 时跳过——session 起点 reconcile 即此形）。
-      (let ((pid-file (string-append dir "/xsettingsd.pid")))
-        (when (file-exists? pid-file)
-          (let ((pid (call-with-input-file pid-file read)))
-            (when (integer? pid)
-              (catch 'system-error
-                (lambda () (kill pid SIGHUP))
-                (lambda (key . rest) #t)))))))))
+             (cons "font-name" #$%appearance-ui-font))))))
+
+;; 登录 reconcile launcher：Home Shepherd 环境 PATH 不保证含 glib bin，
+;; 这里显式前置 glib bin（gsettings）后 exec appearance-sync；其余环境
+;; （HOME / session D-Bus / XDG_RUNTIME_DIR）沿用 shepherd 进程。
+(define %appearance-reconcile-launcher
+  (program-file
+   "appearance-reconcile"
+   #~(begin
+       (setenv "PATH"
+               (string-append
+                #$(file-append (gexp-input glib "bin") "/bin")
+                ":" (or (getenv "PATH") "")))
+       (execl #$%appearance-sync "appearance-sync"
+              #$(symbol->string %appearance-default-mode)))))
+
+;; one-shot Home Shepherd 服务：session D-Bus 就绪后按声明默认 mode 把
+;; 外观 6 键投影进 runtime dconf（Noctalia mode 切换时再经 post-hook 调
+;; appearance-sync）。dconf 是 runtime derived state，不持久化。
+(define %appearance-reconcile-service
+  (simple-service
+   'appearance-reconcile
+   home-shepherd-service-type
+   (list (shepherd-service
+          (documentation "Project the declared appearance mode into runtime dconf.")
+          (provision '(appearance-reconcile))
+          (requirement '(dbus))
+          (one-shot? #t)
+          (respawn? #f)
+          (modules '((shepherd support))) ; %user-log-dir
+          (start #~(make-forkexec-constructor
+                    (list #$%appearance-reconcile-launcher)
+                    #:log-file
+                    (string-append %user-log-dir "/appearance-reconcile.log")))
+          (stop #~(make-kill-destructor))))))
 
 (define %gtk
   (application
@@ -216,4 +204,5 @@
           (simple-service 'gtk-appearance-sync-tool
                           home-files-service-type
                           `((".local/bin/appearance-sync"
-                             ,%appearance-sync)))))))
+                             ,%appearance-sync)))
+          %appearance-reconcile-service))))

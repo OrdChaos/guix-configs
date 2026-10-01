@@ -49,7 +49,6 @@
                #:use-module (guixcfg apps ssh definition)
                #:use-module (guixcfg apps fcitx5 definition)
                #:use-module (guixcfg apps gtk definition)
-               #:use-module (guixcfg apps xsettingsd definition)
                #:use-module (guixcfg apps amberol definition)
                #:use-module (guixcfg apps celluloid definition)
                #:use-module (guixcfg apps loupe definition)
@@ -108,7 +107,6 @@
         %ssh
         %fcitx5
         %gtk
-        %xsettingsd
         %amberol
         %celluloid
         %loupe

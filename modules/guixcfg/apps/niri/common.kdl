@@ -665,7 +665,3 @@ spawn-at-startup "fcitx5" "-d"
 // owner——AGENT.md §7 双 owner 禁令）；也是 noctalia.kdl 的
 // 运行时 owner。
 spawn-at-startup "noctalia"
-// X11/XWayland 的 XSETTINGS 服务（apps/xsettingsd）：wrapper 先按
-// 声明默认 mode reconcile runtime 外观状态，再 exec xsettingsd
-// -c $XDG_RUNTIME_DIR/guixcfg/xsettingsd.conf。
-spawn-at-startup "xsettingsd-session"

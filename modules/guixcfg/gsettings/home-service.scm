@@ -18,9 +18,9 @@
 ;;; 生命周期接线（与既有 session 基础设施一致）：
 ;;;   Home Shepherd →（requirement '(dbus)）→ gsettings-reconcile
 ;;;   one-shot → 运行唯一 runtime contract（runtime.scm）→ validate
-;;;   （fail-loud）→ `dconf load /`。appearance-sync 走
-;;;   xsettingsd-session 的既有触发，互不冲突（appearance 6 键保留域
-;;;   由 ownership 校验强制）。
+;;;   （fail-loud）→ `dconf load /`。appearance 6 键由 apps/gtk 的
+;;;   appearance-reconcile / appearance-sync 独占（互不重叠，
+;;;   ownership 校验强制保留域）。
 ;;;
 ;;; 明确不放在普通 Home activation：activation 时 user D-Bus 未就绪，
 ;;; dconf 写入依赖 ca.desktop.dconf 服务——one-shot + dbus 依赖才是

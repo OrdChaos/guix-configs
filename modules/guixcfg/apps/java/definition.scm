@@ -70,7 +70,7 @@
 ;;; 版本已由 profile 直接提供。若要给某版本加 javac，在
 ;;; %java-version-table 的 wrapper 生成里加一项即可（不预生成 4×N
 ;;; 个 wrapper）。~/.local/bin 进 PATH 的唯一 owner 是 apps/
-;;; polkit-gnome 的 PATH 贡献（xsettingsd/gtk 同款约定）——本单元
+;;; polkit-gnome 的 PATH 贡献（gtk 同款约定）——本单元
 ;;; 不声明第二次 PATH。
 ;;;
 ;;; JAVA_HOME：默认 JDK 的 "jdk" output（home-environment-variables

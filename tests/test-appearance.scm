@@ -1,5 +1,4 @@
-;;; 桌面外观测试：apps/gtk、apps/xsettingsd、(guixcfg home
-;;; appearance)。
+;;; 桌面外观测试：apps/gtk、(guixcfg home appearance)。
 ;;;
 ;;; 覆盖：
 ;;;   - 事实值 = pinned 构建产物实测主题名（不凭包名猜）；
@@ -7,11 +6,8 @@
 ;;;     gtk-theme-name；无 gtk-xft-*/gtk-im-module/
 ;;;     gtk-application-prefer-dark-theme）；
 ;;;   - appearance-sync 真实执行（materialize 后跑——AGENT.md §3
-;;;     runtime smoke）：mode 校验、runtime xsettingsd.conf 重建、
-;;;     pidfile SIGHUP 精确寻址、无 gsettings/bus 时 warn-and-
-;;;     continue；
-;;;   - xsettingsd-session wrapper 真实执行：reconcile → pidfile →
-;;;     exec xsettingsd（无 X 时连接失败 fail visible）。
+;;;     runtime smoke）：mode 校验、GSettings 全量键写入、无
+;;;     gsettings/bus 时 warn-and-continue。
 ;;;
 ;;; 网络：无（gsettings 从 PATH 移除以走降级路径）。
 
@@ -28,8 +24,7 @@
              (srfi srfi-64)
              (guixcfg home appearance)
              (guixcfg apps model)   ; application-home-services
-             (guixcfg apps gtk definition)
-             (guixcfg apps xsettingsd definition))
+             (guixcfg apps gtk definition))
 
 (test-runner-current (test-runner-simple))
 
@@ -64,11 +59,15 @@
     (derivation->output-path drv)))
 
 (define (home-files-entry app target)
-  "从 APP 的 home-files 贡献中取 TARGET 的 file-like。"
+  "从 APP 的 home-files 贡献中取 TARGET 的 file-like（跳过非
+home-files 的 service：它们的 service-value 不是 (target . file) 表）。"
   (let loop ((svcs (application-home-services app)))
     (if (null? svcs)
       #f
-      (let ((entry (assoc target (service-value (car svcs)))))
+      (let* ((value (service-value (car svcs)))
+             (entry (and (list? value)
+                         (every pair? value)
+                         (assoc target value))))
         (if entry
           (cadr entry)
           (loop (cdr svcs)))))))
@@ -127,9 +126,11 @@
 
 (define (run-sync . args)
   "在隔离环境执行 appearance-sync：XDG_RUNTIME_DIR=tmp，PATH 只有
-测试 bin 目录（含假 gsettings 记录器）。"
+测试 bin 目录（含假 gsettings 记录器）。guixcfg 目录由测试自建
+（假 gsettings 只负责追加日志）。"
   (let ((rt (string-append %tmp-root "/runtime")))
     (mkdir-p rt)
+    (mkdir-p (string-append rt "/guixcfg"))
     (setenv "XDG_RUNTIME_DIR" rt)
     (setenv "PATH" %test-bin)
     (apply system* %sync-bin args)))
@@ -153,14 +154,6 @@
 
 (test-equal "sync: light exits 0" 0
             (status:exit-val (run-sync "light")))
-(define %light-conf
-  (read-file (string-append %tmp-root "/runtime/guixcfg/xsettingsd.conf")))
-(test-assert "sync: light xsettingsd.conf content"
-             (and (string-contains %light-conf "Net/ThemeName \"adw-gtk3\"")
-                  (string-contains %light-conf "Net/IconThemeName \"Fluent-light\"")
-                  (string-contains %light-conf "Gtk/CursorThemeName \"Fluent-dark-cursors\"")
-                  (string-contains %light-conf "Gtk/CursorThemeSize 24")
-                  (string-contains %light-conf "Gtk/FontName \"Sans Serif 11\"")))
 
 ;; GSettings 全量键（GTK3-on-Wayland 直读 GSettings；GTK4 经 portal
 ;; 读同一组——这是图标/光标/字体/主题的实际下发通道）。
@@ -174,71 +167,12 @@
                     (string-contains log "set org.gnome.desktop.interface font-name Sans Serif 11"))))
 
 (test-equal "sync: dark exits 0" 0 (status:exit-val (run-sync "dark")))
-(test-assert "sync: dark flips Net/ThemeName"
-             (string-contains
-              (read-file (string-append %tmp-root
-                                        "/runtime/guixcfg/xsettingsd.conf"))
-              "Net/ThemeName \"adw-gtk3-dark\""))
 (test-assert "sync: dark writes dark GSettings keys"
              (let ((log (gsettings-log)))
                (and (string-contains log "color-scheme prefer-dark")
                     (string-contains log "gtk-theme adw-gtk3-dark"))))
 
-;; pidfile SIGHUP：fork 一个 sleep 子进程作为受控目标——SIGHUP 的
-;; 默认动作是终止，子进程死亡即证明信号精确送达（非 killall）。
-;; 有界 WNOHANG 轮询回收（最多 ~5s），未送达则 SIGTERM 清理并记失败。
-(define %child-pid (primitive-fork))
-(when (= %child-pid 0)
-  (sleep 300)
-  (primitive-exit 0))
-(call-with-output-file (string-append %tmp-root "/runtime/guixcfg/xsettingsd.pid")
-                       (lambda (port) (display %child-pid port)))
-(run-sync "light")
-(define %child-reaped
-  (let loop ((tries 50))
-    (let ((w (waitpid %child-pid WNOHANG)))
-      (cond ((= (car w) %child-pid) w)
-        ((zero? tries)
-         (kill %child-pid SIGTERM)
-         (waitpid %child-pid)
-         #f)
-        (else (usleep 100000) (loop (- tries 1)))))))
-(test-assert "sync: SIGHUP terminates pidfile target (precise reload)"
-             %child-reaped)
-(test-equal "sync: terminating signal is SIGHUP" SIGHUP
-            (and %child-reaped (status:term-sig (cdr %child-reaped))))
-
-;; 死 PID（stale pidfile）不报错。
-(call-with-output-file (string-append %tmp-root "/runtime/guixcfg/xsettingsd.pid")
-                       (lambda (port) (display %child-pid port))) ; 上面子进程已死
-(test-equal "sync: stale pidfile tolerated" 0
-            (status:exit-val (run-sync "light")))
-
-;; ── 4. xsettingsd-session wrapper 真实执行 ────────────────
-(define %wrapper-bin (materialize %xsettingsd-session-wrapper))
-
-(cleanup!)
-;; cleanup 删掉了 %tmp-root（含 %test-bin 内容）——重建。
-(setup-test-bin!)
-(let ((rt (string-append %tmp-root "/runtime")))
-  (mkdir-p rt)
-  (setenv "XDG_RUNTIME_DIR" rt)
-  (setenv "PATH" %test-bin)      ; appearance-sync 经同名 symlink 解析
-  (setenv "DISPLAY" ":99"))     ; 跳过有界等待；xsettingsd 连接必败
-(define %wrapper-status (system* %wrapper-bin))
-(test-assert "wrapper: execs xsettingsd (fails on unreachable X)"
-             (not (zero? (status:exit-val %wrapper-status))))
-(test-assert "wrapper: reconcile wrote runtime xsettingsd.conf"
-             (string-contains
-              (read-file (string-append %tmp-root
-                                        "/runtime/guixcfg/xsettingsd.conf"))
-              "Net/ThemeName \"adw-gtk3\""))
-(test-assert "wrapper: pidfile written with numeric pid"
-             (integer? (call-with-input-file
-                        (string-append %tmp-root "/runtime/guixcfg/xsettingsd.pid")
-                        read)))
-
-;; ── 5. noctalia seed：GTK 模板窄 hook 接线 ────────────────
+;; ── 4. noctalia seed：GTK 模板窄 hook 接线 ────────────────
 (define %seed (read-file "modules/guixcfg/apps/noctalia/base-settings.toml"))
 (test-assert "seed: builtin gtk3/gtk4 removed"
              (not (string-contains %seed "\"gtk3\"")))
@@ -253,13 +187,6 @@
                   (string-contains %seed
                                    "output_path = \"$XDG_CONFIG_HOME/gtk-4.0/noctalia.css\"")))
 
-;; ── 6. niri spawn 与 cursor ───────────────────────────────
-(define %niri-common (read-file "modules/guixcfg/apps/niri/common.kdl"))
-(test-assert "niri: spawns xsettingsd-session wrapper, not raw xsettingsd"
-             (and (string-contains %niri-common
-                                   "spawn-at-startup \"xsettingsd-session\"")
-                  (not (string-contains %niri-common
-                                        "spawn-at-startup \"xsettingsd\""))))
 (cleanup!)
 (for-each (lambda (pair)
             (if (cdr pair)

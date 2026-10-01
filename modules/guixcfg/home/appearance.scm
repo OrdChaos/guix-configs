@@ -1,6 +1,6 @@
-;;; 桌面外观共享事实（appearance facts）：GTK/Noctalia/niri/
-;;; xsettingsd 共同消费的单一事实来源（任务十五——同一组值不得在
-;;; 多个模块散落，也不为它们建框架）。
+;;; 桌面外观共享事实（appearance facts）：GTK/Noctalia/niri 共同
+;;; 消费的单一事实来源（任务十五——同一组值不得在多个模块散落，
+;;; 也不为它们建框架）。
 ;;;
 ;;; 所有主题名均从构建产物实测，不凭包名猜测（2026-08，pinned
 ;;; virelith 60fbe17 / guix b5ff8a00）：
@@ -21,8 +21,8 @@
 ;;;     "light" 一致（Noctalia 是运行时 mode 权威；本值是静态
 ;;;     fallback / session 起点 reconcile 目标）。
 ;;;
-;;; 消费方：apps/gtk（settings.ini + gtk.css + appearance-sync）、
-;;; apps/xsettingsd（session wrapper）。niri 的 cursor 块是静态
+;;; 消费方：apps/gtk（settings.ini + gtk.css + appearance-sync +
+;;; appearance-reconcile Home one-shot）。niri 的 cursor 块是静态
 ;;; kdl，无法插值——按注释交叉引用（值变更需同步两边）。
 
 (define-module (guixcfg home appearance)

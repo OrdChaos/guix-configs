@@ -47,8 +47,9 @@ interactive-session-ready（core readiness join barrier）
      │                ├─ pipewire + wireplumber
      │                │    （home-pipewire-service-type）
      │                └─ niri config spawn：polkit-gnome、fcitx5、
-     │                     noctalia（兼 notification daemon）、
-     │                     xsettingsd-session（X11 XSETTINGS）
+     │                     noctalia（兼 notification daemon）
+     │                     （X11 XSETTINGS 由 xwayland-satellite 独占，
+     │                      本仓库不再提供）
      │
      │   注销语义：niri 由 Home Shepherd 监管（respawn? #f），
      │   合成器退出 = 桌面会话结束。Noctalia 上游 Logout =
