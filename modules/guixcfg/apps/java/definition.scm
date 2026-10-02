@@ -81,7 +81,7 @@
 
 (define-module (guixcfg apps java definition)
                #:use-module (gnu home services) ; home-files / home-environment-variables
-               #:use-module (gnu packages java) ; icedtea-8、openjdk17/21/24
+               #:use-module (gnu packages java) ; icedtea-8、openjdk17/21/24/25
                #:use-module (gnu services)      ; simple-service
                #:use-module (guix gexp)         ; gexp-input、program-file、ungexp
                #:use-module (guix records)
@@ -98,6 +98,7 @@
 (define %java17 openjdk17) ; 17.0.10
 (define %java21 openjdk21) ; 21.0.2
 (define %java24 openjdk24) ; 24.0.1
+(define %java24 openjdk25) ; 25.0.2
 
 ;; 默认 Java：声明式选择。profile 的 java/javac 与 JAVA_HOME 都跟随
 ;; 这里；非默认版本 wrapper 与之无关。
@@ -111,7 +112,8 @@
   (list (cons 8 %java8)
         (cons 17 %java17)
         (cons 21 %java21)
-        (cons 24 %java24)))
+        (cons 24 %java24)
+        (cons 25 %java25)))
 
 (define (java-command-program major jdk)
   "返回 `javaMAJOR` wrapper（program-file）：exec JDK 包默认 output
