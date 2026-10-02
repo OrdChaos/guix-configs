@@ -98,7 +98,7 @@
 (define %java17 openjdk17) ; 17.0.10
 (define %java21 openjdk21) ; 21.0.2
 (define %java24 openjdk24) ; 24.0.1
-(define %java24 openjdk25) ; 25.0.2
+(define %java25 openjdk25) ; 25.0.2
 
 ;; 默认 Java：声明式选择。profile 的 java/javac 与 JAVA_HOME 都跟随
 ;; 这里；非默认版本 wrapper 与之无关。
