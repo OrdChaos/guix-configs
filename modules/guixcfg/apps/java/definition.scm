@@ -86,7 +86,7 @@
                #:use-module (guix gexp)         ; gexp-input、program-file、ungexp
                #:use-module (guix records)
                #:use-module (guixcfg apps model)
-               #:export (%java8 %java17 %java21 %java24
+               #:export (%java8 %java17 %java21 %java24 %java25
                                 %default-java %java-version-table
                                 java-command-program java-home-gexp
                                 %java))
