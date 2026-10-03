@@ -194,9 +194,13 @@ production consumers：
   嵌套；规则由 `modules/guixcfg/flatpak/service.scm` 从 Catalog 派生
   （与 selection 无关）；`apps/<id>` 与 installation 的删除语义见
   `docs/architecture/flatpak.md`（persistence/lifecycle））；
-- vscode（extensions/global-storage/workspace-storage/local-history
-  四条 directory bind + `languagepacks.json` 单文件 bind-file +
-  `clp/` NLS cache directory bind；边界四类划分见
+- vscode（global-storage/workspace-storage/local-history 三条
+  directory bind + `languagepacks.json` 单文件 bind-file + `clp/`
+  NLS cache directory bind；外加 extensions 一条 inert directory
+  bind——不可变扩展模型（2026-10-03 起，wrapper 以
+  `--extensions-dir` 指向 store union）下 VS Code 完全忽略默认
+  `~/.vscode/extensions`（已实测 CLI/GUI 均不再列出），该 rule 保留
+  仅为不清除磁盘旧数据，对运行无作用。边界四类划分与扩展模型见
   `apps/vscode/definition.scm` 头注释——`languagepacks.json` 是
   bind-file 的第一生产 consumer：VS Code 早期 NLS 初始化依赖它，
   直写同一路径（非 temp+rename），因此单文件 bind 合适；

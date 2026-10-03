@@ -268,6 +268,7 @@ tests 的 `add-to-load-path` 本来就拼绝对路径）。
 | 数据 | 去向 |
 |---|---|
 | 可由 repo 确定性重建？ | → Guix Home / System（derived state） |
+| 编辑器/工具扩展（VS Code extension 等）？ | → pinned VSIX 的 fixed-output origin → extension package → 不可变集合目录 → wrapper 以官方接口（`--extensions-dir`）注入；集合结构性等于 generation 声明（先例：apps/vscode——`extensions.scm` 是唯一数据入口，virelith `(virelith packages vscode-extensions)` 提供机制；不经 activation、不写 mutable 默认扩展目录） |
 | 上游只提供滚动 URL、无固定版本地址的应用数据资源？ | → 上游/自建 channel 以版本化 snapshot release pin（先例：rime-data-wanxiang——tag = 快照时间戳，asset 按 tag immutable，fixed-output sha256 稳定；version 与 tag 同步升级） |
 | 应用产生、需保留、要求标准 HOME/XDG/FHS 路径？ | → `/persist/data-app` + bind projection |
 | 用户自己创建/拥有的数据？ | → `/persist/data-home` |
