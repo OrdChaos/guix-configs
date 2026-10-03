@@ -1,8 +1,18 @@
 ;;; vscode application unit：Microsoft Visual Studio Code（自建
 ;;; virelith channel 提供的官方 Linux x64 二进制包）。
 ;;;
-;;; 来源（pinned virelith d233d134 审计）：vscode 定义于
-;;; (virelith packages vscode)，v1.134.0，chromium-binary-build-
+;;; Extension model（2026-10-03 起，不可变 extension model）：
+;;; 扩展集合是声明式的——(guixcfg apps vscode extensions) 的
+;;; %vscode-extensions 是一组 pinned Marketplace VSIX 包，经
+;;; virelith 的 vscode-with-extensions 组合为不可变 store 目录，
+;;; wrapper 以 --extensions-dir 指向它。可见扩展集合结构性等于当前
+;;; Guix generation 的声明集合；无 activation reconcile、无
+;;; code --install-extension、不依赖 ~/.vscode/extensions。
+;;; GUI 内 Install/Update/Uninstall 不是受支持的工作流（store 只读，
+;;; 操作会失败）；扩展的增删改一律走 extensions.scm + reconfigure。
+;;;
+;;; 来源（pinned virelith 审计）：vscode 定义于
+;;; (virelith packages vscode)，v1.139.1，chromium-binary-build-
 ;;; system（nonguix 提供：注入 Electron runtime input 集、按
 ;;; wrapper-plan 做 patchelf、包入口包装）。包层自带：
 ;;;   - /bin/code（symlink → opt/vscode/VSCode-linux-x64/code，
@@ -59,8 +69,11 @@
 ;;;   应用自有持久化（application-owned persistent，application
 ;;;   persistence；canonical backing 是 data-app root 下的
 ;;;   vscode/...，consumer 是 HOME 相对 bind projection）：
-;;;     ~/.vscode/extensions/                         —— 官方 extension
-;;;        安装目录（marketplace/手动安装，非仓库声明式）；
+;;;     ~/.vscode/extensions/                         —— 历史 mutable
+;;;        extension 目录。不可变 model 下 VS Code 以 --extensions-dir
+;;;        指向 store union，默认目录被完全忽略（已实测：CLI/GUI 均
+;;;        不再列出其中扩展）。此 rule 保留只为不清除磁盘上的旧数据，
+;;;        对运行中的 VS Code 无任何作用；
 ;;;     ~/.config/Code/languagepacks.json             —— bind-file
 ;;;        （单文件）。installed language-pack metadata：VS Code 在
 ;;;        很早的 NLS 初始化阶段（main 进程先于窗口的
@@ -113,10 +126,13 @@
 
 (define-module (guixcfg apps vscode definition)
                #:use-module (gnu home services)      ; home-files-service-type
+               #:use-module (gnu packages guile-xyz) ; guile-lsp-server
                #:use-module (gnu services)           ; simple-service
                #:use-module (guix gexp)              ; local-file
                #:use-module (guix records)
                #:use-module (virelith packages vscode) ; vscode（自建 channel）
+               #:use-module (virelith packages vscode-extensions)
+               #:use-module (guixcfg apps vscode extensions)
                #:use-module (guixcfg apps model)
                #:use-module (guixcfg system application-persistence) ; rule
                #:export (%vscode
@@ -130,7 +146,13 @@
 (define %vscode
   (application
    (name 'vscode)
-   (home-packages (list vscode))
+   ;; wrapper 包与裸 vscode 的 bin/code、desktop entry 同名——profile 中
+   ;; 两者并存会以 collision 报错，这是有意设计（防止桌面启动绕过
+   ;; --extensions-dir）。guile-lsp-server 为 rgherdt.scheme-lsp 的
+   ;; server：扩展经 hasbin 在 PATH 上查找（见 extensions.scm 头注释）。
+   (home-packages
+    (list (vscode-with-extensions vscode %vscode-extensions)
+          guile-lsp-server))
    (home-services
     (list (simple-service 'vscode-user-config
                           home-files-service-type
