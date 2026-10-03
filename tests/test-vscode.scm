@@ -25,12 +25,15 @@
 (use-modules (guixcfg hosts vm)       ; %vm-os（assembly 真实接线）
              (guixcfg apps model)
              (guixcfg apps registry)  ; %applications
+             (guixcfg apps vscode extensions) ; %vscode-extensions
              (guixcfg system application-persistence) ; rule accessors
              (guixcfg users user)     ; %primary-user
+             (guix packages)          ; package-name/-version/-properties
              (gnu home services)      ; home-files-service-type
              (gnu system)             ; operating-system-file-systems
              (gnu system file-systems) ; file-system-*
              (gnu services)
+             (virelith packages vscode-extensions) ; vscode-extension-package?
              (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64))
@@ -175,5 +178,60 @@ create-mount-point? #t"
                           (vscode-home-file-targets))))
 (test-assert "VC5: clp is NOT a repo-owned home-files target"
              (not (member ".config/Code/clp" (vscode-home-file-targets))))
+
+;; ── VC6：不可变扩展集合（vscode-with-extensions）──────────────
+;; 架构不变量：home-packages 含且仅含一个 wrapper 包（裸 vscode 与
+;; wrapper 并存会 bin/desktop 冲突——单 wrapper 是显式约束）；声明
+;; 集合恰为 extensions.scm 的 6 个 id（含 zh-hans 语言包——不可变
+;; 集合下语言包必须声明式提供；含 rust-analyzer——native override
+;; PoC 且为 platform-specific linux-x64 variant）；扩展版本/hash
+;; pin 于 extensions.scm；guile-lsp-server 在 PATH 供应 scheme-lsp
+;; server。
+(define %vscode-home-packages (application-home-packages %vscode-app))
+
+(define (package-named name)
+  (find (lambda (p) (string=? name (package-name p)))
+        %vscode-home-packages))
+
+(test-assert "VC6: exactly one vscode-with-extensions wrapper, no bare vscode"
+             (and (package-named "vscode-with-extensions")
+                  (not (package-named "vscode"))))
+
+(test-equal "VC6: wrapper declares exactly the six pinned extension ids"
+            '("huytd.nord-light"
+              "lxl66566.anyformatter-vscode"
+              "MS-CEINTL.vscode-language-pack-zh-hans"
+              "rgherdt.scheme-lsp"
+              "rust-lang.rust-analyzer"
+              "tsyesika.guile-scheme-enhanced")
+            (assoc-ref (package-properties
+                        (package-named "vscode-with-extensions"))
+                       'vscode-extension-ids))
+
+(test-assert "VC6: rust-analyzer extension pins the linux-x64 platform variant"
+             (let ((ra (find (lambda (ext)
+                               (string-ci=? "rust-lang.rust-analyzer"
+                                            (vscode-extension-package-id ext)))
+                             %vscode-extensions)))
+               (and ra
+                    (string=? "linux-x64"
+                              (assoc-ref (package-properties ra)
+                                         'vscode-extension-platform)))))
+
+(test-assert "VC6: every declared extension carries id property and pinned version"
+             (every (lambda (ext)
+                      (and (vscode-extension-package? ext)
+                           (string? (vscode-extension-package-id ext))
+                           (not (string-null? (package-version ext)))))
+                    %vscode-extensions))
+
+(test-assert "VC6: zh-hans language pack is part of the declared set"
+             (find (lambda (ext)
+                     (string-ci=? "MS-CEINTL.vscode-language-pack-zh-hans"
+                                  (vscode-extension-package-id ext)))
+                   %vscode-extensions))
+
+(test-assert "VC6: guile-lsp-server supplied for rgherdt.scheme-lsp"
+             (package-named "guile-lsp-server"))
 
 (test-end "vscode")
