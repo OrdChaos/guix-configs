@@ -65,4 +65,11 @@
     "rust-lang" "rust-analyzer" "0.4.3070"
     (base32 "1fryz4wjclyj3hmh5gwhq4sq7di4nc0pflqd27gw1i6ls4d6zi69")
     #:target-platform "linux-x64"
-    #:license (list license:expat license:asl2.0))))
+    #:license (list license:expat license:asl2.0))
+   ;; clangd：纯 JS 前端（无捆绑二进制）；后端 clangd 经默认
+   ;; "clangd.path": "clangd"（PATH 查找）由 apps/clang 的
+   ;; clang-toolchain 提供。
+   (vscode-marketplace-extension
+    "llvm-vs-code-extensions" "vscode-clangd" "0.6.0"
+    (base32 "179k9qpfg07dkalqn1gpvc9l757360nh5xmcrxvs013l58y00sl6")
+    #:license license:expat)))
