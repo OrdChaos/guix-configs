@@ -6,6 +6,7 @@
                #:use-module (gnu services base)    ; guix-service-type、guix-configuration
                #:use-module (gnu services desktop) ; elogind-service-type、elogind-configuration、polkit-wheel-service
                #:use-module (gnu services dbus)    ; polkit-service-type（polkitd 的 authority）
+               #:use-module (guix gexp)            ; local-file
                #:use-module (virelith packages elogind) ; elogind-compat（257.16）
                #:export (%common-timezone
                          %common-locale
@@ -54,15 +55,20 @@
 ;;   guix-extension 追加，因为顺序即优先级）：
 ;;   - mirror.sjtu.edu.cn/guix：SJTU 镜像，官方 berlin 签名 narinfo
 ;;     的纯镜像（实测 2026-10-04），免新密钥；
-;;   - cache-cdn.guix.moe：guix.moe 农场（2026-08-23 起与 Nonguix
-;;     合并运营）的 Cloudflare 镜像——narinfo 由源站直出、nar 经
-;;     nars.guix.moe（Cloudflare anycast，与代理出口区域无关）；
-;;     主线内容 berlin 签名，免新密钥；
-;;   - 官方 ci/bordeaux 兜底。
-;;   不授权 nonguix 签名 key（C1FD53E5…）：2026-08-25 决策不变，
-;;   nonguix 包（linux-7.2/firmware/microcode）一律本地编译；
-;;   镜像上 nonguix-key 签名的 narinfo 会因未授权被跳过并回退
-;;   官方源，行为安全。
+;;   - cache-cdn.guix.moe：guix.moe 农场的镜像——narinfo 由源站直出、
+;;     nar 经 nars.guix.moe（Cloudflare anycast，与代理出口区域无关）；
+;;   - 官方 ci/bordeaux 兜底主线内容；
+;;   - substitutes.nonguix.org：nonguix 包（linux-7.2/firmware/
+;;     microcode）的 substitute 源，同时是 guix.moe 农场的源站
+;;     （2026-08-23 nonguix.org 与 guix.moe 基础设施合并，见
+;;     guix-devel 2026-08-07 公告）；置于末尾——nonguix 内容已由
+;;     cache-cdn 镜像承载，它是 origin 兜底。
+;;   nonguix 签名 key 经同目录 nonguix-key.pub 授权（内容与
+;;   https://substitutes.nonguix.org/signing-key.pub 逐字节一致）。
+;;   沿革：2026-08-25 曾移除第三方 substitute（当时
+;;   substitutes.nonguix.org 无镜像、可靠性存疑）；2026-10-04 随
+;;   guix.moe 合并运营 + 镜像体系可用而恢复，实测本地编译的
+;;   linux-7.2.7 在其上已有对应 narinfo（nuporta 签名）。
 ;; 本地编译空间：显式声明 guix-daemon TMPDIR=/var/tmp（pinned
 ;; guix-configuration 的 tmpdir 字段 → shepherd 服务环境 TMPDIR=；
 ;; 默认 /tmp 是 7.7GB tmpfs，装不下内核编译的 ~11GB 中间产物——
@@ -76,7 +82,10 @@
                    '("https://mirror.sjtu.edu.cn/guix"
                      "https://cache-cdn.guix.moe"
                      "https://ci.guix.gnu.org"
-                     "https://bordeaux.guix.gnu.org"))))
+                     "https://bordeaux.guix.gnu.org"
+                     "https://substitutes.nonguix.org"))
+                  (authorized-keys
+                   (list (local-file "nonguix-key.pub")))))
         (service elogind-service-type (elogind-configuration
                                        (elogind elogind-compat)))
         (service polkit-service-type)
