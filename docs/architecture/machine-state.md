@@ -131,6 +131,15 @@ pinned Guix 的 NetworkManager activation 也会 `mkdir-p` 同一 consumer，
   docs/architecture/persistence.md（Machine identity）。
 - **mihomo**（system/mihomo/service.scm）：providers cache + 选中
   节点/组状态，root-owned（0700，mihomo activation 强制）。
+- **guix-root-cache**（system/guix-cache.scm，2026-10-04）：
+  `/persist/system/state/guix/root-cache` → `/root/.cache/guix`
+  ——root 侧 guix channel checkout 缓存。无状态根下
+  `blue reconfigure` 以 root 跑 `guix time-machine` 每次都要全量
+  clone 全部 channel（codeberg 慢链路下数小时，2026-10-03 实测）；
+  持久化后 clone 只发生一次。与 user 侧 `~/.cache/guix` 有意分离：
+  共享后端会让 root fetch 在 user 缓存里留下 root-owned git 对象，
+  反向破坏 user 侧写入（ownership 冲突）。内容为公开 git 对象，
+  用机制默认 root:root 权限。
 - **noctalia-greeter**（system/noctalia-greeter.scm，2026-08-28）：
   `/persist/system/state/noctalia-greeter` → `/var/lib/noctalia-greeter`
   ——greeter 的 mutable state（sync.toml、Noctalia Shell Sync 的壁纸、
