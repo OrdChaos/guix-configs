@@ -28,7 +28,9 @@
 
 (define-module (guixcfg apps vscode extensions)
   #:use-module (guixcfg apps vscode extensions anyformatter)
+  #:use-module (guixcfg apps vscode extensions astro)
   #:use-module (guixcfg apps vscode extensions clangd)
+  #:use-module (guixcfg apps vscode extensions even-better-toml)
   #:use-module (guixcfg apps vscode extensions guile-scheme-enhanced)
   #:use-module (guixcfg apps vscode extensions language-pack-zh-hans)
   #:use-module (guixcfg apps vscode extensions nord-light)
@@ -43,4 +45,6 @@
         vscode-extension-language-pack-zh-hans
         vscode-extension-nord-light
         vscode-extension-rust-analyzer
-        vscode-extension-clangd))
+        vscode-extension-clangd
+        vscode-extension-astro
+        vscode-extension-even-better-toml))
