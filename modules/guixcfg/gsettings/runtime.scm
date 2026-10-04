@@ -33,7 +33,7 @@
              (ice-9 string-fun) ;string-tokenize
              (srfi srfi-1) ;member、filter
              (srfi srfi-13))
- ; string-split、string-trim-both、string-join
+; string-split、string-trim-both、string-join
 
 ;;; ── 子进程原语 ────────────────────────────────────────────
 

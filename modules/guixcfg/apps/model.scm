@@ -75,7 +75,7 @@
   application-configuration-variant?
   (name application-configuration-variant-name) ;symbol
   (files application-configuration-variant-files))
- ; list of (target source)
+; list of (target source)
 
 (define (applications-home-packages apps)
   "聚合 APPS 的全部 home packages。"

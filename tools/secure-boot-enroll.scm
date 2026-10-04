@@ -40,7 +40,7 @@
   (string-append (persist-mount-point "@persist-system") "/keys/secure-boot"))
 (define %ms-owner-guid
   "77fa9abd-0359-4d32-bd60-28f4e78f784b")
- ; Microsoft
+; Microsoft
 
 ;; keygen 必须完整产出这六个文件；缺任何一个都不能构建 keystore。
 (define %required-key-files

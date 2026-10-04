@@ -84,9 +84,9 @@
             'seeded
             (seed-once-file! dest2 src2 marker2))
 (write-text dest2 "B\n")
- ; 用户/应用随后修改
+; 用户/应用随后修改
 (write-text src2 "C\n")
- ; 仓库 seed 更新
+; 仓库 seed 更新
 (test-equal "updated seed does not overwrite user data"
             'already-seeded
             (seed-once-file! dest2 src2 marker2))

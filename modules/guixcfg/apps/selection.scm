@@ -44,7 +44,7 @@
   application-configuration-selection?
   (application application-configuration-selection-application) ;symbol
   (variant application-configuration-selection-variant))
- ; symbol
+; symbol
 
 ;; target 必须是合法的 ~/.config 相对路径：非空、非绝对、无 ".."
 ;; 逃逸（与 repository-file 相同的校验规则）。

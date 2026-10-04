@@ -22,13 +22,15 @@
 ;;; extensions/guile-scheme-enhanced.scm。
 
 (define-module (guixcfg apps vscode extensions example)
-  #:use-module (guix packages)          ; base32
-  #:use-module ((guix licenses) #:prefix license:)
+  #:use-module (guix packages) ;base32
+  #:use-module ((guix licenses)
+                #:prefix license:)
   #:use-module (virelith packages vscode-extensions)
   #:export (vscode-extension-example))
 
 (define-public vscode-extension-example
-  (vscode-marketplace-extension
-   "PUBLISHER" "EXTENSION-NAME" "VERSION"
-   (base32 "HASH")
-   #:license license:expat))
+  (vscode-marketplace-extension "PUBLISHER"
+                                "EXTENSION-NAME"
+                                "VERSION"
+                                (base32 "HASH")
+                                #:license license:expat))

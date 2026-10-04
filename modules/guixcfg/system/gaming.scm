@@ -58,7 +58,7 @@
 ;; 内容）。account projection 先于 activation 写 /etc/passwd。
 (define (gaming-libraries-activation)
   (with-imported-modules (source-module-closure '((gnu build accounts)
-                                                   ;read-passwd、password-entry-*
+                                                  ;; read-passwd、password-entry-*
                                                   (guix build utils)
                                                   (srfi srfi-1))) ;find
                          #~(begin

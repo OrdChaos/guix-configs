@@ -33,7 +33,7 @@
   (database vendor-certificate-database) ;'db 或 'KEK
   (purpose vendor-certificate-purpose) ;字符串
   (source vendor-certificate-source))
- ; <file-append>（包内 DER）
+; <file-append>（包内 DER）
 
 (define (ms-cert name db purpose path)
   "PATH 是包内 share/secure-boot/microsoft/ 下的相对路径（安装名与

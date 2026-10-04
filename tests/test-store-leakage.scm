@@ -30,7 +30,7 @@
   "GUIXCFG_SECRET_SENTINEL_USER_7c8d3e5f")
 (define %hash-marker
   "$6$MBShtaT")
- ; user-password.hash 的 salt 前缀
+; user-password.hash 的 salt 前缀
 
 (define (file-text path)
   (call-with-input-file path

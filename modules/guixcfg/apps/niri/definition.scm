@@ -153,9 +153,11 @@ logout lifecycle: respawn? #f + wrapper that runs
                                                                       (filter (negate (lambda 
                                                                                               (str)
                                                                                         
+                                                                                        
                                                                                         (string-prefix?
                                                                                          "WAYLAND_DISPLAY="
                                                                                          str)))
+
                                                                               
                                                                               (environ)))))
                           ;; 先写 guard marker（wrapper 检测到只退出不注销），再按官方

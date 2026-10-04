@@ -43,7 +43,7 @@
                (default '())) ;挂载点列表（空 = 未挂载）
   (children device-node-children
             (default '())))
- ; 子节点（分区等）
+; 子节点（分区等）
 
 (define (device-node-mounted? node)
   "该节点自身是否已挂载。"

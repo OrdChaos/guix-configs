@@ -208,8 +208,7 @@
  (and (package-named "vscode-with-extensions")
       (not (package-named "vscode"))))
 (test-equal "VC6: wrapper declares exactly the nine pinned extension ids"
-            '("astro-build.astro-vscode"
-              "huytd.nord-light"
+            '("astro-build.astro-vscode" "huytd.nord-light"
               "llvm-vs-code-extensions.vscode-clangd"
               "lxl66566.anyformatter-vscode"
               "MS-CEINTL.vscode-language-pack-zh-hans"
@@ -217,8 +216,8 @@
               "rust-lang.rust-analyzer"
               "tamasfe.even-better-toml"
               "tsyesika.guile-scheme-enhanced")
-            (assoc-ref (package-properties
-                        (package-named "vscode-with-extensions"))
+            (assoc-ref (package-properties (package-named
+                                            "vscode-with-extensions"))
                        'vscode-extension-ids))
 
 (test-assert

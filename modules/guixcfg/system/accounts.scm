@@ -139,6 +139,7 @@ needed and the FFI-dependent flock path is bypassed entirely.
                                                                                   (lambda 
                                                                                           (p)
                                                                                     
+                                                                                    
                                                                                     (read-string
                                                                                      p)))
                                                               #\newline))))
@@ -315,6 +316,7 @@ account-state-ready 不 provision（fail-closed）。"
                                            (let* ((hash (string-trim-right (call-with-input-file hash-path
                                                                              (lambda 
                                                                                      (p)
+                                                                               
                                                                                
                                                                                (read-string
                                                                                 p)))

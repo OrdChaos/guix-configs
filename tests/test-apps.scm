@@ -79,7 +79,7 @@
                 (extensions '())
                 (compose concatenate) ;extension values: string list
                 (extend (lambda (base ext-list)
-                           ;base: <synthetic-config>
+                          ;; base: <synthetic-config>
                           (synthetic-config (flag (and (synthetic-config-flag
                                                         base)
                                                        (every (lambda (s)

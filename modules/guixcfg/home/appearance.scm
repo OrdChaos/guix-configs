@@ -47,4 +47,4 @@
   "Sans Serif 11")
 (define %appearance-default-mode
   'light)
- ; 'light | 'dark
+; 'light | 'dark

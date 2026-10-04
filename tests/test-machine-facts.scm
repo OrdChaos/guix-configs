@@ -12,7 +12,7 @@
              (srfi srfi-13) ;string-contains
              (ice-9 textual-ports) ;get-string-all
              (gnu system mapped-devices))
- ; mapped-device-source
+; mapped-device-source
 
 ;; guile 3.0.11 的 error 异常参数形态是 (key format-string irritants ...)，
 ;; 消息可能嵌在 irritants 里；提取其中全部字符串做断言（对 misc-error

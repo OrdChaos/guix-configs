@@ -35,7 +35,7 @@
              (guixcfg flatpak applications steam definition)
              (guixcfg system gaming)
              (guixcfg system graphics nvidia))
- ; %prime-offload-environment-strings
+; %prime-offload-environment-strings
 
 (test-runner-current (test-runner-simple))
 

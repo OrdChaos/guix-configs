@@ -43,7 +43,7 @@
   #:use-module (guix gexp)
   #:use-module (guix modules) ;source-module-closure
   #:export (ephemeral-root-services ephemeral-root-confirm-program))
- ; 测试需要真实执行
+; 测试需要真实执行
 
 ;; 运行系统上 @persist-system 的挂载点（单一 authority：
 ;; (guixcfg storage model) 的 persist-mount-point——禁止重复 literal）。
@@ -199,21 +199,26 @@ last-good 时跳过 promote——登录路径每次图形登录都会触发本�
                                                                        (for-each (lambda 
                                                                                          (n)
                                                                                    
+                                                                                   
                                                                                    (format
                                                                                     #t
                                                                                     "ephemeral-root: deleting old generation ~a~%"
+
                                                                                     
                                                                                     (root-generation-name
                                                                                      n))
+
                                                                                    
                                                                                    (invoke
                                                                                     btrfs
                                                                                     "subvolume"
                                                                                     "delete"
+
                                                                                     
                                                                                     (string-append
                                                                                      top
                                                                                      "/"
+
                                                                                      
                                                                                      (root-generation-name
                                                                                       n))))

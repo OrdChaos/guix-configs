@@ -77,7 +77,7 @@
   mkdir/chown/chmod 幂等、不触碰已存在内容（不覆盖/不迁移
   backing 数据，machine-state 不变量 4）。"
   (with-imported-modules (source-module-closure '((gnu build accounts)
-                                                   ;read-passwd、password-entry-*
+                                                  ;; read-passwd、password-entry-*
                                                   (guix build utils)
                                                   (srfi srfi-1))) ;find
                          #~(begin

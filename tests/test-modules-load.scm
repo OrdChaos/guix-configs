@@ -25,7 +25,7 @@
 (use-modules (ice-9 ftw) ;scandir
              (ice-9 regex) ;regexp-exec、make-regexp
              (ice-9 rdelim))
- ; read-line
+; read-line
 
 (define (scheme-files-under dir)
   "DIR 下全部 .scm 文件（递归）。"

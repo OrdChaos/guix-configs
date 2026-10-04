@@ -43,7 +43,7 @@
   persistent-user-dir?
   (backing persistent-user-dir-backing) ;string
   (consumer persistent-user-dir-consumer))
- ; string
+; string
 
 ;; 持久化用户数据（XDG user directories 全集，与 (guixcfg home xdg)
 ;; 的 %xdg-user-dirs-service 对应——一致性由 tests/test-user-persistence.scm

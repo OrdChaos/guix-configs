@@ -24,7 +24,7 @@
              (srfi srfi-13) ;string-contains
              (srfi srfi-64)
              (system base compile))
- ; compile-file（D 测试）
+; compile-file（D 测试）
 
 (test-runner-current (test-runner-simple))
 
@@ -161,6 +161,7 @@
                                                                     "recovery-password"
                                                                     path
                                                                     #:invoke-proc (lambda args
+                                                                                    
                                                                                     
                                                                                     (set!
                                                                                      rollback-args

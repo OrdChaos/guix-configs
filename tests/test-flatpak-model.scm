@@ -129,17 +129,22 @@
             '("wayland")
             (flatpak-override-sockets (flatpak-application-managed-overrides (flatpak-application
                                                                               (name 'a)
+
                                                                               
                                                                               (id
                                                                                "com.x.A")
+
                                                                               
                                                                               (remote 'flathub)
+
                                                                               
                                                                               (branch
                                                                                "stable")
+
                                                                               
                                                                               (override-policy
                                                                                (list 'managed-overrides
+
                                                                                 
                                                                                 (flatpak-override
                                                                                  (sockets '

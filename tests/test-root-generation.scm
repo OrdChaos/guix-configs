@@ -84,7 +84,7 @@
 
 (define %installed
   (initial-state 1000))
- ; 装完未启动：current=0, next=1
+; 装完未启动：current=0, next=1
 
 (test-group "plan-boot"
             (test-group "first boot uses install-time @root-0 (section 17.4)"
@@ -103,7 +103,7 @@
             (test-group
              "normal boot creates generation from template (section 17.5)"
              (let* ((running (confirm-boot %installed))
-                     ;模拟已确认
+                    ;; 模拟已确认
                     (plan (plan-boot running %default-boot-mode 3000))
                     (after (boot-plan-state-after plan)))
                (test-equal "targets @root-1" "@root-1"

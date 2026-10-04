@@ -62,7 +62,7 @@
   (schema gsettings-setting-schema) ;string：GSettings schema id（如 org.gnome.TextEditor）
   (key gsettings-setting-key) ;string：schema 内的键名
   (value gsettings-setting-value))
- ; string：GVariant 文本表示（如 "true" / "'Adwaita'"）
+; string：GVariant 文本表示（如 "true" / "'Adwaita'"）
 
 (define (non-empty-string? s)
   (and (string? s)

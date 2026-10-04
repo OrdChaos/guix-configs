@@ -42,7 +42,7 @@
   (home-directory user-profile-home-directory) ;string
   (comment user-profile-comment) ;string
   (password-secret user-profile-password-secret))
- ; symbol（logical name）
+; symbol（logical name）
 
 ;; 当前仓库是 root + one primary user 的单用户设计。
 (define %primary-user

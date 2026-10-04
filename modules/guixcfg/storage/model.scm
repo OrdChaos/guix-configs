@@ -65,10 +65,10 @@
 
 (define %esp-partlabel
   "esp")
- ; GPT PARTLABEL：EFI 系统分区
+; GPT PARTLABEL：EFI 系统分区
 (define %system-partlabel
   "system")
- ; GPT PARTLABEL：加密系统分区
+; GPT PARTLABEL：加密系统分区
 
 ;; PARTLABEL 对应的 udev 设备节点（/dev/disk/by-partlabel/ 是固定前缀）。
 (define (by-partlabel-path label)
@@ -83,16 +83,16 @@
 
 (define %esp-filesystem-label
   "ESP")
- ; VFAT 卷标（惯例大写）
+; VFAT 卷标（惯例大写）
 (define %btrfs-filesystem-label
   "rootfs")
- ; Btrfs 文件系统标签
+; Btrfs 文件系统标签
 (define %luks-label
   "cryptroot")
- ; LUKS2 头标签
+; LUKS2 头标签
 (define %luks-mapper-name
   "cryptroot")
- ; device-mapper 名：/dev/mapper/cryptroot
+; device-mapper 名：/dev/mapper/cryptroot
 
 ;; LUKS mapper 设备路径（device-mapper 固定前缀 + 上面的语义名）。
 (define %luks-mapper-path
@@ -125,7 +125,7 @@
   (min-disk-size host-storage-policy-min-disk-size) ;字节，目标盘容量下限
   (swapfile-size host-storage-policy-swapfile-size) ;字节
   (keep-root-generations host-storage-policy-keep-root-generations))
- ; 保留的旧 root 数
+; 保留的旧 root 数
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 持久子卷（docs/architecture/storage.md（持久子卷）：固定项目事实）。
@@ -146,7 +146,7 @@
 
 (define %swap-subvolume-name
   "@persist-swap")
- ; swapfile 所在子卷（docs/architecture/storage.md（Swap））
+; swapfile 所在子卷（docs/architecture/storage.md（Swap））
 
 ;; 固定的 8 个持久子卷。顺序即创建顺序。
 ;; 除 /gnu/store 和 /var/guix 外，挂载点一律位于 /persist。
@@ -196,10 +196,10 @@ subvolume-name（遮蔽会 wrong-type-to-apply）。"
 
 (define %root-installing-name
   "@root-installing")
- ; 安装期工作 root
+; 安装期工作 root
 (define %root-template-name
   "@root-template")
- ; 只读模板
+; 只读模板
 
 (define (root-generation-name n)
   "第 N 个 root generation 的子卷名：@root-N（N 为非负整数，不补零）。"

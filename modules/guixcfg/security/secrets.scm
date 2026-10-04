@@ -280,18 +280,22 @@ publication，docs/architecture/secrets.md（Runtime secrets））：
                                                                            decl))
                                                                          (rel-target (match scope
                                                                                        
+                                                                                       
                                                                                        ('system
                                                                                         (string-append
                                                                                          "system/"
+
                                                                                          
                                                                                          (secret-decl-target-name
                                                                                           decl)))
+
                                                                                        
                                                                                        ('user
                                                                                         (string-append
                                                                                          "users/"
                                                                                          user
                                                                                          "/"
+
                                                                                          
                                                                                          (secret-decl-target-name
                                                                                           decl))))))
@@ -301,13 +305,16 @@ publication，docs/architecture/secrets.md（Runtime secrets））：
                                                                                (pw
                                                                                 (getpw #$owner))
                                                                                
+                                                                               
                                                                                (uid
                                                                                 (passwd:uid
                                                                                  pw))
+
                                                                                
                                                                                (gid
                                                                                 (passwd:gid
                                                                                  pw))
+
                                                                                
                                                                                (parent
                                                                                 (dirname
@@ -375,6 +382,7 @@ publication，docs/architecture/secrets.md（Runtime secrets））：
                                                                              (not
                                                                               (string=?
                                                                                e
+
                                                                                
                                                                                (number->string
                                                                                 n))))

@@ -28,6 +28,7 @@
   #:use-module (srfi srfi-11) ;let-values
   #:export ( ;环境（内部 parameter/helper；initrd 的
             
+
             ;; tpm-unlock 消费 %tpm2-tools-tcti / with-tcti）
             %tpm2-tools-tcti
             with-tcti

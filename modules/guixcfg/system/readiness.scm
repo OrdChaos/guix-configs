@@ -183,16 +183,20 @@ pam-extension transformer（横切机制，同 elogind 的 pam_elogind
                                                                         (cons (pam-entry
                                                                                (control
                                                                                 "required")
+
                                                                                
                                                                                (module
                                                                                 "pam_nologin.so")
+
                                                                                
                                                                                (arguments
                                                                                 (list
                                                                                  (string-append
                                                                                   "file="
+
                                                                                   
                                                                                   (session-gate-path)))))
+
                                                                               
                                                                               (pam-service-account
                                                                                pam))))
