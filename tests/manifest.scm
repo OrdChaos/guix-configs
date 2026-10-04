@@ -48,6 +48,7 @@
     "tests/test-kernel-platform.scm"
     "tests/test-nvidia.scm"
     "tests/test-bluetooth.scm"
+    "tests/test-guix-cache.scm"
     "tests/test-pam-limits.scm"
     "tests/test-power.scm"
     "tests/test-prime-run.scm"
