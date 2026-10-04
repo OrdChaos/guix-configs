@@ -1,12 +1,18 @@
-;;; 第三方 substitute 移除回归测试（2026-08-25 决策）：仓库不引入任何
-;;; 第三方 substitute 服务（substitutes.nonguix.org）——guix-daemon
-;;; 只信任官方 Guix substitute（bordeaux/ci.guix.gnu.org，guix-service-
-;;; type 默认值）；nonguix 包（linux-7.2/firmware/microcode）一律本地
-;;; 编译（docs/architecture/overview.md（Nonguix integration））。
+;;; Substitute policy 回归测试。
+;;;
+;;; 基线（2026-08-25 决策）：不引入 nonguix substitute 服务
+;;; （substitutes.nonguix.org）——nonguix 包（linux-7.2/firmware/
+;;; microcode）一律本地编译；不授权 nonguix 签名 key。
+;;;
+;;; 演进（2026-10-04）：在不新增信任材料的前提下，向官方内容的前置
+;;; 镜像开放——SJTU（mirror.sjtu.edu.cn/guix）与 cache-cdn.guix.moe
+;;; 均为官方 berlin 签名 narinfo 的镜像（主线内容免新密钥实测）；
+;;; substitute-urls 显式全列，镜像优先、官方 ci/bordeaux 兜底。
 ;;;
 ;;; 覆盖：
 ;;;   T-S1  installed OS 的 guix-daemon substitute-urls 不含 Nonguix
-;;;          URL（官方默认 bordeaux/ci 保留）
+;;;          URL；官方 ci/bordeaux 保留
+;;;   T-S7  SJTU 与 cache-cdn.guix.moe 镜像在列且排在官方之前
 ;;;   T-S2  modules/ 无第三方 substitute URL 字面量（原 substitutes.scm
 ;;;          已删除；断言仓库不再出现，杜绝复活）
 ;;;   T-S3  无 (guixcfg system substitutes) 模块 import（模块已删除）
@@ -52,6 +58,25 @@
              (and (member "https://ci.guix.gnu.org" %vm-substitute-urls)
                   (member "https://bordeaux.guix.gnu.org"
                           %vm-substitute-urls)))
+
+;; ── T-S7：官方内容的镜像前置（2026-10-04 策略演进）────────────
+(define (list-index pred lst)
+  (let loop ((rest lst) (i 0))
+    (cond ((null? rest) #f)
+          ((pred (car rest)) i)
+          (else (loop (cdr rest) (1+ i))))))
+
+(test-assert "T-S7: SJTU and cache-cdn mirrors precede official servers"
+             (let ((sjtu (list-index
+                          (lambda (u) (string=? u "https://mirror.sjtu.edu.cn/guix"))
+                          %vm-substitute-urls))
+                   (moe (list-index
+                         (lambda (u) (string=? u "https://cache-cdn.guix.moe"))
+                         %vm-substitute-urls))
+                   (ci (list-index
+                        (lambda (u) (string=? u "https://ci.guix.gnu.org"))
+                        %vm-substitute-urls)))
+               (and sjtu moe ci (< sjtu ci) (< moe ci))))
 
 ;; ── T-S2/T-S3/T-S4：仓库无第三方 substitute 残留 ────────────
 (define %scm-files
