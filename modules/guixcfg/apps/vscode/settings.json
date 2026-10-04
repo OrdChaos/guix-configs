@@ -17,6 +17,11 @@
     "terminal.integrated.defaultProfile.linux": "nushell",
     "git.confirmSync": false,
     "workbench.colorTheme": "Nord Light Brighter",
+    "workbench.colorCustomizations": {
+        "editorBracketHighlight.foreground4": "#BF616A",
+        "editorBracketHighlight.foreground5": "#5E81AC",
+        "editorBracketHighlight.foreground6": "#B48EAD"
+    },
     "window.zoomLevel": 0.6,
     "security.workspace.trust.enabled": false,
     "chat.titleBar.openInAgentsWindow.enabled": false,
