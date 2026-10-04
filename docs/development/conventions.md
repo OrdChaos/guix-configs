@@ -1,7 +1,11 @@
 # Implementation Conventions
 
 容易导致架构漂移的实现约定。不是完整 style guide；Scheme 排版遵循
-仓库当前一致风格即可。
+仓库当前一致风格即可。排版工具：`blue format [FILE...]`（pinned
+`guix style --whole-file`）/ `blue -n format`（check 模式，列出需
+重排文件；blueprint.scm 因 bluebox `#%` DSL 不在范围内）。注意
+guix style 会把行尾注释规范为 `;x` 形式——全仓一次性采用与否是
+单独决策，未采用前不要求新代码必须先过 format。
 
 ## Module layout
 

@@ -814,6 +814,29 @@ Dry-run (blue -n):
                              (never invokes dconf load)"))
                 (%gsettings-command arguments))
 
+;;; ---------- format（Scheme 排版） ----------
+
+(define (%format-script-argv arguments)
+  (guix-time-machine-argv
+   (%repo-root) "channels.lock.scm"
+   `("repl" ,(string-append (%repo-root) "/tools/format.scm")
+             "--" ,(if (dry-build?) "check" "run") ,@arguments)))
+
+(define-command (format-command arguments)
+                ((invoke "format")
+                 (category 'maintenance)
+                 (synopsis "Format Scheme sources with pinned guix style")
+                 (help "[FILE...]
+Format Scheme files in place with pinned Guix's `guix style
+--whole-file' (the authority upstream uses since etc/indent-code.el was
+removed).  Default scope: all *.scm under modules/, tests/, tools/ and
+templates/ (blueprint.scm excluded: the bluebox #% DSL syntax is not
+readable by guix's comment-preserving reader).  FILE arguments restrict
+the run.
+Dry-run (blue -n): check mode — list files that would change, exit 1,
+zero mutation."))
+                (%exec (%format-script-argv arguments)))
+
 ;;; ============================================================
 ;;; §3.8 install / enroll（安装生命周期 orchestration）
 ;;; ============================================================
@@ -1021,4 +1044,5 @@ no sudo, no confirmation."))
                  gc-command
                  update-command
                  flatpak-command
-                 gsettings-command)))
+                 gsettings-command
+                 format-command)))
