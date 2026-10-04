@@ -6,8 +6,10 @@
 ## 1. 构建安全（最高优先级）
 
 - **Linux kernel 本地编译分两类**（2026-08-25 起，第三方 substitute
-  已移除——substitutes.nonguix.org 不再被配置引用，nonguix 包
-  kernel/firmware/microcode 一律本地编译）：
+  服务器 substitutes.nonguix.org 不再被配置引用，nonguix 包
+  kernel/firmware/microcode 一律本地编译；2026-10-04 起官方内容
+  经 SJTU/cache-cdn.guix.moe 镜像加速——均为官方 berlin 签名的
+  纯镜像，无新增信任密钥）：
   - **预期编译**（用户/任务明确授权，如 kernel 升级、安装流程）：允许，
     用受控并行度（`--cores` 低值），完成后 store 缓存复用；
   - **意外触发**（build / test / repl probe 在未授权路径触发
@@ -32,10 +34,12 @@
   它会因 `non-self-references` 查询 output 而**真实触发 build**（已实测）。
 - `guix build --dry-run` 安全是因为 CLI 注册了 build-handler（请求被
   累积不执行）。
-- **第三方 substitute 已移除（2026-08-25）**：nonguix 包无 substitute，
-  dry-run 对它们总是 `would be built`——输出 store 路径 = 已在本地
-  store（缓存），否则需要本地编译（预期，见 §1）；官方 guix 包仍走
-  bordeaux/ci 默认 substitute。
+- **第三方 substitute 服务器已移除（2026-08-25）**：nonguix 包无
+  substitute，dry-run 对它们总是 `would be built`——输出 store
+  路径 = 已在本地 store（缓存），否则需要本地编译（预期，见 §1）；
+  官方 guix 包的 substitute-urls 显式列表（system/common.scm）：
+  SJTU/cache-cdn.guix.moe 镜像优先，bordeaux/ci 兜底（2026-10-04；
+  两镜像均为 berlin 签名的官方内容纯镜像，无新增授权密钥）。
 - 大包（kernel、toolchain、浏览器类）dry-run 意外显示 `will be built`
   时先停止诊断，不默认编完。
 
