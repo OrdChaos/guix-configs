@@ -196,11 +196,10 @@ production consumers：
   `docs/architecture/flatpak.md`（persistence/lifecycle））；
 - vscode（global-storage/workspace-storage/local-history 三条
   directory bind + `languagepacks.json` 单文件 bind-file + `clp/`
-  NLS cache directory bind；外加 extensions 一条 inert directory
-  bind——不可变扩展模型（2026-10-03 起，wrapper 以
-  `--extensions-dir` 指向 store union）下 VS Code 完全忽略默认
-  `~/.vscode/extensions`（已实测 CLI/GUI 均不再列出），该 rule 保留
-  仅为不清除磁盘旧数据，对运行无作用。边界四类划分与扩展模型见
+  NLS cache directory bind；共 5 条。`~/.vscode/extensions` 的 rule
+  与旧 mutable 数据已于 2026-10-04 一并移除——不可变扩展模型下
+  VS Code 以 `--extensions-dir` 指向 store union，默认目录被完全
+  忽略（实测 CLI/GUI 均不再列出）。边界四类划分与扩展模型见
   `apps/vscode/definition.scm` 头注释——`languagepacks.json` 是
   bind-file 的第一生产 consumer：VS Code 早期 NLS 初始化依赖它，
   直写同一路径（非 temp+rename），因此单文件 bind 合适；

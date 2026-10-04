@@ -8,7 +8,8 @@
 ;;; vscode 两条新 rule。
 ;;;
 ;;; 覆盖：
-;;;   VC1  app 启用；persistence 恰好 6 条（原有 4 条未丢失）；无
+;;;   VC1  app 启用；persistence 恰好 5 条（extensions rule 已于
+;;;        2026-10-04 随不可变扩展模型落地后移除）；无
 ;;;        整体 ~/.config/Code consumer；ephemeral 路径不持久化；
 ;;;   VC2  languagepacks.json → bind-file（单文件 application-owned）；
 ;;;        clp/ → bind-directory（derived cache）；
@@ -57,9 +58,9 @@
                 (map car (service-value svc)))
               (application-home-services %vscode-app)))
 
-;; ── VC1：app 启用、persistence 恰好 6 条、无整体/临时持久化 ──
-(test-assert "VC1: original four persistence rules retained"
-             (and (rule-by-name 'extensions)
+;; ── VC1：app 启用、persistence 恰好 5 条、无整体/临时持久化 ──
+(test-assert "VC1: persistence rules retained (extensions rule removed 2026-10-04)"
+             (and (not (rule-by-name 'extensions))
                   (rule-by-name 'global-storage)
                   (rule-by-name 'workspace-storage)
                   (rule-by-name 'local-history)))
@@ -116,8 +117,8 @@
                                  (file-system-device fs))))
           (operating-system-file-systems %vm-os)))
 
-(test-equal "VC3: six vscode bind mounts declared in %vm-os"
-            6 (length %vscode-mounts))
+(test-equal "VC3: five vscode bind mounts declared in %vm-os"
+            5 (length %vscode-mounts))
 
 (test-assert "VC3: languagepacks.json mounts file→file with \
 create-mount-point? #f"
@@ -149,7 +150,7 @@ create-mount-point? #t"
                               (file-system-device fs))
                     (file-system-create-mount-point? fs))))
 
-(test-assert "VC3: original four mounts keep create-mount-point? #t"
+(test-assert "VC3: original three directory mounts keep create-mount-point? #t"
              (let ((mounts (filter (lambda (f)
                                      (not (or (string-suffix?
                                                "/languagepacks.json"
@@ -158,7 +159,7 @@ create-mount-point? #t"
                                                "/clp"
                                                (file-system-mount-point f)))))
                                    %vscode-mounts)))
-               (and (= 4 (length mounts))
+               (and (= 3 (length mounts))
                     (every file-system-create-mount-point? mounts))))
 
 ;; ── VC4：repo-owned 声明式文件 ──────────────────────────────

@@ -69,11 +69,11 @@
 ;;;   应用自有持久化（application-owned persistent，application
 ;;;   persistence；canonical backing 是 data-app root 下的
 ;;;   vscode/...，consumer 是 HOME 相对 bind projection）：
-;;;     ~/.vscode/extensions/                         —— 历史 mutable
-;;;        extension 目录。不可变 model 下 VS Code 以 --extensions-dir
-;;;        指向 store union，默认目录被完全忽略（已实测：CLI/GUI 均
-;;;        不再列出其中扩展）。此 rule 保留只为不清除磁盘上的旧数据，
-;;;        对运行中的 VS Code 无任何作用；
+;;;     ~/.vscode/extensions/                         —— 不再持久化
+;;;        （2026-10-04 起 rule 与 backing 数据一并移除）：不可变
+;;;        model 下 VS Code 以 --extensions-dir 指向 store union，
+;;;        默认目录被完全忽略（已实测 CLI/GUI 均不再列出其中扩展），
+;;;        旧 mutable 数据已清除；
 ;;;     ~/.config/Code/languagepacks.json             —— bind-file
 ;;;        （单文件）。installed language-pack metadata：VS Code 在
 ;;;        很早的 NLS 初始化阶段（main 进程先于窗口的
@@ -167,15 +167,9 @@
                           home-files-service-type
                           `((".vscode/argv.json"
                              ,(local-file "argv.json" "vscode-argv.json"))))))
-   (persistence
-    (list (application-persistence-rule
-           (name 'extensions)
-           (backing "vscode/extensions")     ; backing root 相对（persistence.md）
-           (consumer ".vscode/extensions")   ; HOME 相对（官方 extension 目录）
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))
-          (application-persistence-rule
-           (name 'global-storage)
+    (persistence
+     (list (application-persistence-rule
+            (name 'global-storage)
            (backing "vscode/global-storage")
            (consumer ".config/Code/User/globalStorage")
            (exposure 'bind-directory)
