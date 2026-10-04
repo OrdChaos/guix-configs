@@ -20,12 +20,12 @@
 
 (add-to-load-path (string-append (getcwd) "/modules"))
 
-(use-modules (gnu system)            ; operating-system-services
+(use-modules (gnu system) ;operating-system-services
              (gnu services)
-             (guix gexp)             ; gexps->script、gexp->approximate-sexp
-             (guix build utils)      ; mkdir-p、delete-file-recursively
-             (ice-9 rdelim)          ; read-string
-             (srfi srfi-1)           ; list-index
+             (guix gexp) ;gexps->script、gexp->approximate-sexp
+             (guix build utils) ;mkdir-p、delete-file-recursively
+             (ice-9 rdelim) ;read-string
+             (srfi srfi-1) ;list-index
              (guixcfg utils machine-id)
              (guixcfg system machine-identity)
              (guixcfg hosts vm)
@@ -40,12 +40,13 @@
   (string-append (or (getenv "TMPDIR") "/tmp") "/guixcfg-machine-id-test"))
 
 (define (read-text p)
-  (call-with-input-file p (lambda (port) (read-string port))))
+  (call-with-input-file p
+    (lambda (port)
+      (read-string port))))
 
 (define (fresh-dir name)
   (let ((d (string-append %tmp-root "/" name)))
-    (mkdir-p d)
-    d))
+    (mkdir-p d) d))
 
 (define (cleanup!)
   (false-if-exception (delete-file-recursively %tmp-root)))
@@ -54,17 +55,16 @@
 (cleanup!)
 
 ;; 固定的合法 machine-id（32 hex）。
-(define %sample-id "a90fbfd877b80658dabf8e326a940c6a")
+(define %sample-id
+  "a90fbfd877b80658dabf8e326a940c6a")
 
 ;; fake dbus-uuidgen：打印 CONTENT（exit 0）或失败。
 (define (write-fake-uuidgen dir name content exit-code)
   (let ((p (string-append dir "/" name)))
     (call-with-output-file p
-                           (lambda (port)
-                             (format port "#!/bin/sh~%echo \"~a\"~%exit ~a~%"
-                                     content exit-code)))
-    (chmod p #o755)
-    p))
+      (lambda (port)
+        (format port "#!/bin/sh~%echo \"~a\"~%exit ~a~%" content exit-code)))
+    (chmod p #o755) p))
 
 ;; ── A. 格式校验 ──────────────────────────────────────────────
 (test-assert "valid: 32 hex"
@@ -84,59 +84,63 @@
 (test-assert "invalid: whitespace only"
              (not (machine-id-valid? "  \n\t")))
 (test-assert "invalid: non-hex"
-             (not (machine-id-valid? (string-append "z" (substring %sample-id 1)))))
+             (not (machine-id-valid? (string-append "z"
+                                                    (substring %sample-id 1)))))
 (test-assert "invalid: not a uuid-with-dashes format"
-             (not (machine-id-valid?
-                   "a90fbfd8-77b80658-dabf8e32-6a940c6a")))
-(test-equal "normalize: trims and returns content"
-            %sample-id
+             (not (machine-id-valid? "a90fbfd8-77b80658-dabf8e32-6a940c6a")))
+(test-equal "normalize: trims and returns content" %sample-id
             (normalize-machine-id (string-append %sample-id "\n")))
-(test-equal "normalize: invalid -> #f"
-            #f
+(test-equal "normalize: invalid -> #f" #f
             (normalize-machine-id "junk"))
 
 ;; ── B. 首次初始化（persistent canonical 不存在）──────────────
-(define boot1 (fresh-dir "first-boot"))
-(define canonical1 (string-append boot1 "/persist/machine-id"))
-(define etc1 (string-append boot1 "/etc/machine-id"))
-(define fake1 (write-fake-uuidgen boot1 "uuidgen" %sample-id 0))
+(define boot1
+  (fresh-dir "first-boot"))
+(define canonical1
+  (string-append boot1 "/persist/machine-id"))
+(define etc1
+  (string-append boot1 "/etc/machine-id"))
+(define fake1
+  (write-fake-uuidgen boot1 "uuidgen" %sample-id 0))
 
-(test-equal "first init: read-machine-id-file on missing -> #f"
-            #f
+(test-equal "first init: read-machine-id-file on missing -> #f" #f
             (read-machine-id-file canonical1))
 (test-assert "first init: ensure generates canonical"
              (string=? %sample-id
                        (ensure-machine-id! canonical1
-                                           (lambda () (generate-machine-id fake1)))))
+                                           (lambda ()
+                                             (generate-machine-id fake1)))))
 (test-equal "first init: canonical file content"
             (string-append %sample-id "\n")
             (read-text canonical1))
-(test-equal "first init: canonical mode 0444"
-            #o444
+(test-equal "first init: canonical mode 0444" 292
             (stat:perms (stat canonical1)))
-(test-equal "first init: project /etc/machine-id"
-            %sample-id
+(test-equal "first init: project /etc/machine-id" %sample-id
             (project-machine-id! canonical1 etc1))
 (test-equal "first init: /etc/machine-id content matches canonical"
             (string-append %sample-id "\n")
             (read-text etc1))
-(test-equal "first init: /etc/machine-id mode 0444"
-            #o444
+(test-equal "first init: /etc/machine-id mode 0444" 292
             (stat:perms (stat etc1)))
 
 ;; ── C. 第二次启动回归（ephemeral root 重建）──────────────────
 ;; 模拟 reboot：/etc 整个消失（新 root generation），persistent
 ;; canonical 保留 → 必须恢复同一个 ID。
-(define boot2 (fresh-dir "second-boot"))
-(define canonical2 (string-append boot2 "/persist/machine-id"))
-(define etc2 (string-append boot2 "/etc/machine-id"))
-(define fake2 (write-fake-uuidgen boot2 "uuidgen" %sample-id 0))
+(define boot2
+  (fresh-dir "second-boot"))
+(define canonical2
+  (string-append boot2 "/persist/machine-id"))
+(define etc2
+  (string-append boot2 "/etc/machine-id"))
+(define fake2
+  (write-fake-uuidgen boot2 "uuidgen" %sample-id 0))
 
 ;; 第一次 boot（install/init）：
 (test-assert "boot1: mint identity"
              (string=? %sample-id
                        (ensure-machine-id! canonical2
-                                           (lambda () (generate-machine-id fake2)))))
+                                           (lambda ()
+                                             (generate-machine-id fake2)))))
 (project-machine-id! canonical2 etc2)
 ;; reboot：root 重建，/etc/machine-id 消失，canonical 保留：
 (delete-file-recursively (dirname etc2))
@@ -144,11 +148,13 @@
 (test-assert "boot2: restore same identity (no regeneration)"
              (string=? %sample-id
                        (ensure-machine-id! canonical2
-                                           (lambda () (generate-machine-id fake2)))))
+                                           (lambda ()
+                                             (generate-machine-id fake2)))))
 (test-equal "boot2: /etc/machine-id == previous ID"
             (string-append %sample-id "\n")
-            (begin (project-machine-id! canonical2 etc2)
-                   (read-text etc2)))
+            (begin
+              (project-machine-id! canonical2 etc2)
+              (read-text etc2)))
 (test-equal "boot2: canonical unchanged after restore"
             (string-append %sample-id "\n")
             (read-text canonical2))
@@ -158,25 +164,28 @@
              (every (lambda (_)
                       (string=? %sample-id
                                 (ensure-machine-id! canonical2
-                                                    (lambda () (generate-machine-id fake2)))))
+                                                    (lambda ()
+                                                      (generate-machine-id
+                                                       fake2)))))
                     (iota 3)))
 (test-equal "idempotent: repeated projection leaves content unchanged"
             (string-append %sample-id "\n")
-            (begin (project-machine-id! canonical2 etc2)
-                   (read-text etc2)))
+            (begin
+              (project-machine-id! canonical2 etc2)
+              (read-text etc2)))
 
 ;; ── E. 防覆盖：canonical 已存在 → 生成器绝不再次调用 ────────
-(define calls 0)
+(define calls
+  0)
 (test-assert "no-overwrite: existing canonical short-circuits generator"
              (string=? %sample-id
-                       (ensure-machine-id!
-                        canonical2
-                        (lambda ()
-                          (set! calls (+ calls 1))
-                          (error "generator must not be called")))))
-(test-equal "no-overwrite: generator not called"
-            0
-            calls)
+                       (ensure-machine-id! canonical2
+                                           (lambda ()
+                                             (set! calls
+                                                   (+ calls 1))
+                                             (error
+                                              "generator must not be called")))))
+(test-equal "no-overwrite: generator not called" 0 calls)
 (test-equal "no-overwrite: canonical content untouched"
             (string-append %sample-id "\n")
             (read-text canonical2))
@@ -184,20 +193,28 @@
 (test-assert "no-overwrite: second identity never adopted"
              (string=? %sample-id
                        (ensure-machine-id! canonical2
-                                           (lambda () "deadbeef00000000000000000000000000"))))
+                                           (lambda ()
+                                             "deadbeef00000000000000000000000000"))))
 (test-equal "no-overwrite: canonical still first identity"
             (string-append %sample-id "\n")
             (read-text canonical2))
 
 ;; ── F. /etc/machine-id 损坏/空/缺失 → 投影自愈 ───────────────
-(define heal (fresh-dir "self-heal"))
-(define canonical-h (string-append heal "/persist/machine-id"))
-(define etc-h (string-append heal "/etc/machine-id"))
-(ensure-machine-id! canonical-h (lambda () %sample-id))
+(define heal
+  (fresh-dir "self-heal"))
+(define canonical-h
+  (string-append heal "/persist/machine-id"))
+(define etc-h
+  (string-append heal "/etc/machine-id"))
+(ensure-machine-id! canonical-h
+                    (lambda ()
+                      %sample-id))
 (project-machine-id! canonical-h etc-h)
 
 (chmod etc-h #o644)
-(call-with-output-file etc-h (lambda (port) (display "" port)))
+(call-with-output-file etc-h
+  (lambda (port)
+    (display "" port)))
 (test-assert "self-heal: empty /etc/machine-id replaced"
              (string=? %sample-id
                        (project-machine-id! canonical-h etc-h)))
@@ -206,7 +223,9 @@
             (read-text etc-h))
 
 (chmod etc-h #o644)
-(call-with-output-file etc-h (lambda (port) (display "junk-content\n" port)))
+(call-with-output-file etc-h
+  (lambda (port)
+    (display "junk-content\n" port)))
 (test-assert "self-heal: corrupt /etc/machine-id replaced"
              (string=? %sample-id
                        (project-machine-id! canonical-h etc-h)))
@@ -220,28 +239,35 @@
                        (project-machine-id! canonical-h etc-h)))
 
 ;; ── G. canonical 损坏 → fail closed ──────────────────────────
-(define corrupt (fresh-dir "corrupt-canonical"))
-(define canonical-c (string-append corrupt "/machine-id"))
+(define corrupt
+  (fresh-dir "corrupt-canonical"))
+(define canonical-c
+  (string-append corrupt "/machine-id"))
 (call-with-output-file canonical-c
-                       (lambda (port) (display "not-a-machine-id\n" port)))
+  (lambda (port)
+    (display "not-a-machine-id\n" port)))
 (test-assert "corrupt canonical: read reports invalid"
-             (eq? 'invalid (read-machine-id-file canonical-c)))
+             (eq? 'invalid
+                  (read-machine-id-file canonical-c)))
 (test-assert "corrupt canonical: ensure fails closed (raises)"
-             (not (false-if-exception
-                   (ensure-machine-id! canonical-c
-                                       (lambda () %sample-id)))))
+             (not (false-if-exception (ensure-machine-id! canonical-c
+                                                          (lambda ()
+                                                            %sample-id)))))
 (test-equal "corrupt canonical: file NOT regenerated/overwritten"
             "not-a-machine-id\n"
             (read-text canonical-c))
 
 ;; ── H. dbus-uuidgen 包装 ─────────────────────────────────────
-(define gen (fresh-dir "generator"))
-(define fake-ok (write-fake-uuidgen gen "uuidgen-ok" %sample-id 0))
-(define fake-fail (write-fake-uuidgen gen "uuidgen-fail" "whatever" 1))
-(define fake-junk (write-fake-uuidgen gen "uuidgen-junk" "not-hex!" 0))
+(define gen
+  (fresh-dir "generator"))
+(define fake-ok
+  (write-fake-uuidgen gen "uuidgen-ok" %sample-id 0))
+(define fake-fail
+  (write-fake-uuidgen gen "uuidgen-fail" "whatever" 1))
+(define fake-junk
+  (write-fake-uuidgen gen "uuidgen-junk" "not-hex!" 0))
 
-(test-equal "generator: ok output normalized"
-            %sample-id
+(test-equal "generator: ok output normalized" %sample-id
             (generate-machine-id fake-ok))
 (test-assert "generator: non-zero exit raises"
              (not (false-if-exception (generate-machine-id fake-fail))))
@@ -250,48 +276,56 @@
 
 ;; ── I. host 接线时序：restore 先于 D-Bus activation ──────────
 (define (activation-gexps os)
-  (service-value
-   (fold-services (operating-system-services os)
-                  #:target-type activation-service-type)))
+  (service-value (fold-services (operating-system-services os)
+                                #:target-type activation-service-type)))
 
 (define (gexp-source g)
-  (call-with-output-string (lambda (p) (write (gexp->approximate-sexp g) p))))
+  (call-with-output-string (lambda (p)
+                             (write (gexp->approximate-sexp g) p))))
 
 (define (gexp-index gexps marker)
-  (list-index (lambda (g) (and (gexp? g)
-                               (string-contains (gexp-source g) marker)))
-              gexps))
+  (list-index (lambda (g)
+                (and (gexp? g)
+                     (string-contains (gexp-source g) marker))) gexps))
 
-(define %vm-activation-gexps (activation-gexps %vm-os))
-(define vm-restore-idx (gexp-index %vm-activation-gexps "ensure-machine-id!"))
-(define vm-dbus-idx (gexp-index %vm-activation-gexps "--ensure=/etc/machine-id"))
+(define %vm-activation-gexps
+  (activation-gexps %vm-os))
+(define vm-restore-idx
+  (gexp-index %vm-activation-gexps "ensure-machine-id!"))
+(define vm-dbus-idx
+  (gexp-index %vm-activation-gexps "--ensure=/etc/machine-id"))
 
 (test-assert "vm: machine-identity restore wired into activation"
-             (and vm-restore-idx (>= vm-restore-idx 0)))
+             (and vm-restore-idx
+                  (>= vm-restore-idx 0)))
 (test-assert "vm: machine-identity restore runs BEFORE dbus-uuidgen --ensure"
              (and vm-restore-idx vm-dbus-idx
                   (< vm-restore-idx vm-dbus-idx)))
-(format #t "  vm: restore at ~a, dbus --ensure at ~a~%"
-        vm-restore-idx vm-dbus-idx)
+(format #t "  vm: restore at ~a, dbus --ensure at ~a~%" vm-restore-idx
+        vm-dbus-idx)
 
 (define %laptop-activation-gexps
   (activation-gexps %lenovo-legion-y7000p-os))
-(define laptop-restore-idx (gexp-index %laptop-activation-gexps "ensure-machine-id!"))
-(define laptop-dbus-idx (gexp-index %laptop-activation-gexps "--ensure=/etc/machine-id"))
+(define laptop-restore-idx
+  (gexp-index %laptop-activation-gexps "ensure-machine-id!"))
+(define laptop-dbus-idx
+  (gexp-index %laptop-activation-gexps "--ensure=/etc/machine-id"))
 
 (test-assert "laptop: machine-identity restore wired into activation"
-             (and laptop-restore-idx (>= laptop-restore-idx 0)))
-(test-assert "laptop: machine-identity restore runs BEFORE dbus-uuidgen --ensure"
-             (and laptop-restore-idx laptop-dbus-idx
-                  (< laptop-restore-idx laptop-dbus-idx)))
-(format #t "  laptop: restore at ~a, dbus --ensure at ~a~%"
-        laptop-restore-idx laptop-dbus-idx)
+             (and laptop-restore-idx
+                  (>= laptop-restore-idx 0)))
+(test-assert
+ "laptop: machine-identity restore runs BEFORE dbus-uuidgen --ensure"
+ (and laptop-restore-idx laptop-dbus-idx
+      (< laptop-restore-idx laptop-dbus-idx)))
+(format #t "  laptop: restore at ~a, dbus --ensure at ~a~%" laptop-restore-idx
+        laptop-dbus-idx)
 
 ;; activation gexp 可编译（gexp->script）
 (test-assert "activation gexp compiles"
-             (let ((out (false-if-exception
-                         (gexp->script "machine-identity-activate"
-                                       (machine-identity-activation)))))
+             (let ((out (false-if-exception (gexp->script
+                                             "machine-identity-activate"
+                                             (machine-identity-activation)))))
                (and out #t)))
 
 (cleanup!)

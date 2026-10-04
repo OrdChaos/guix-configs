@@ -20,19 +20,27 @@
 
 (test-runner-current (test-runner-simple))
 
-(define %store (open-connection))
+(define %store
+  (open-connection))
 
 ;; 本轮测试明文标记（secret 内容本身，不出现在任何 store 产物中）
-(define %sentinel-system "GUIXCFG_SECRET_SENTINEL_SYSTEM_9f4e2b1a")
-(define %sentinel-user "GUIXCFG_SECRET_SENTINEL_USER_7c8d3e5f")
-(define %hash-marker "$6$MBShtaT")   ; user-password.hash 的 salt 前缀
+(define %sentinel-system
+  "GUIXCFG_SECRET_SENTINEL_SYSTEM_9f4e2b1a")
+(define %sentinel-user
+  "GUIXCFG_SECRET_SENTINEL_USER_7c8d3e5f")
+(define %hash-marker
+  "$6$MBShtaT")
+ ; user-password.hash 的 salt 前缀
 
 (define (file-text path)
-  (call-with-input-file path (lambda (p) (read-string p))))
+  (call-with-input-file path
+    (lambda (p)
+      (read-string p))))
 
 (define (build-text mval)
   (let ((drv (run-with-store %store mval)))
-    (build-derivations %store (list drv))
+    (build-derivations %store
+                       (list drv))
     (file-text (derivation->output-path drv))))
 
 (define (no-leak? text)
@@ -45,26 +53,26 @@
 ;; Synthetic declarations keep this mandatory check independent of full OS,
 ;; applications, and expensive kernel derivations.
 (define %test-secrets
-  (list (secret-decl
-         (name 'store-leakage-sentinel)
-         (scope 'system)
-         (domain 'login-critical)
-         (source (local-file "tests/fixtures/secrets/test-system.age"))
-         (target-name "store-leakage-sentinel"))))
+  (list (secret-decl (name 'store-leakage-sentinel)
+                     (scope 'system)
+                     (domain 'login-critical)
+                     (source (local-file
+                              "tests/fixtures/secrets/test-system.age"))
+                     (target-name "store-leakage-sentinel"))))
 
 (define deploy-text
-  (build-text
-   (gexp->file "leak-check-deploy"
-               (program-file-gexp
-                (secrets-deploy-program %test-secrets "user")))))
-(test-assert "secrets deploy script clean" (no-leak? deploy-text))
+  (build-text (gexp->file "leak-check-deploy"
+                          (program-file-gexp (secrets-deploy-program
+                                              %test-secrets "user")))))
+(test-assert "secrets deploy script clean"
+             (no-leak? deploy-text))
 
 (define verify-text
-  (build-text
-   (gexp->file "leak-check-verify"
-               (program-file-gexp
-                (account-databases-verify-program "user")))))
-(test-assert "account verify script clean" (no-leak? verify-text))
+  (build-text (gexp->file "leak-check-verify"
+                          (program-file-gexp (account-databases-verify-program
+                                              "user")))))
+(test-assert "account verify script clean"
+             (no-leak? verify-text))
 
 ;; Ciphertext itself may enter the store, but never its plaintext.
 ;;    （反面验证：ciphertext 在 closure 中是被允许的）。

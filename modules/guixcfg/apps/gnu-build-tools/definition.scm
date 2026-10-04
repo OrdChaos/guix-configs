@@ -15,17 +15,15 @@
   #:export (%gnu-build-tools))
 
 (define %gnu-build-tools
-  (application
-   (name 'gnu-build-tools)
-    (home-packages
-     (list gcc-toolchain
-           gnu-make
-           autoconf
-           automake
-           libtool
-           bison
-           flex
-           gnu-gettext
-           m4
-           pkg-config
-           texinfo))))
+  (application (name 'gnu-build-tools)
+               (home-packages (list gcc-toolchain
+                                    gnu-make
+                                    autoconf
+                                    automake
+                                    libtool
+                                    bison
+                                    flex
+                                    gnu-gettext
+                                    m4
+                                    pkg-config
+                                    texinfo))))

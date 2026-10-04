@@ -18,83 +18,88 @@
              (guix derivations)
              (gnu services)
              (gnu services shepherd)
-             (gnu system)          ; operating-system-services
-             (gnu system shadow)   ; user-group?
+             (gnu system) ;operating-system-services
+             (gnu system shadow) ;user-group?
              (guixcfg system mihomo service)
              (guixcfg system mihomo config)
-             (guixcfg system machine-state-persistence) ; rule 校验
-             (guixcfg security secrets) ; secret-decl-name（M13）
-             (guixcfg hosts vm)   ; %vm-os
+             (guixcfg system machine-state-persistence) ;rule 校验
+             (guixcfg security secrets) ;secret-decl-name（M13）
+             (guixcfg hosts vm) ;%vm-os
              (ice-9 textual-ports)
              (srfi srfi-1)
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
 
-(define %store (open-connection))
+(define %store
+  (open-connection))
 
 (define (template-text)
   "公开模板的 store 内容（local-file lower；与 test-niri-config
 同一模式）。"
-  (let ((out (run-with-store %store (lower-object %mihomo-template-file))))
-    (call-with-input-file
-     (if (string? out)
-       out
-       (begin
-        (build-derivations %store (list out))
-        (derivation->output-path out)))
-     get-string-all)))
+  (let ((out (run-with-store %store
+                             (lower-object %mihomo-template-file))))
+    (call-with-input-file (if (string? out) out
+                              (begin
+                                (build-derivations %store
+                                                   (list out))
+                                (derivation->output-path out)))
+      get-string-all)))
 
 ;; 最小模板片段（纯逻辑测试用；占位符恰好一次）。
 (define %mini-template
-  "proxy-providers:\n  airport:\n    url: \"@@MIHOMO_SUBSCRIPTION_URL@@\"\n")
+  "proxy-providers:
+  airport:
+    url: \"@@MIHOMO_SUBSCRIPTION_URL@@\"
+")
 
 (define (caught-error thunk)
   "THUNK 抛 'mihomo-config-error 时返回其消息，否则 #f。"
   (catch 'mihomo-config-error
-    (lambda () (thunk) #f)
-    (lambda (key msg) msg)))
+         (lambda ()
+           (thunk) #f)
+         (lambda (key msg)
+           msg)))
 
 (test-begin "mihomo")
 
 ;; ── M1：尾换行剥离（LF 与 CRLF 各一）────────────────────────
 (test-assert "M1: trailing LF stripped"
-             (string-contains (compose-mihomo-config
-                               %mini-template "https://a.invalid/x\n")
+             (string-contains (compose-mihomo-config %mini-template
+                                                     "https://a.invalid/x\n")
                               "url: \"https://a.invalid/x\""))
 (test-assert "M1: trailing CRLF stripped"
-             (string-contains (compose-mihomo-config
-                               %mini-template "https://a.invalid/x\r\n")
+             (string-contains (compose-mihomo-config %mini-template
+                                                     "https://a.invalid/x\r\n")
                               "url: \"https://a.invalid/x\""))
 
 ;; ── M2：剥离后残留 CR/LF/NUL → fail closed ──────────────────
 (test-assert "M2: CR after strip fails closed"
-             (caught-error
-              (lambda () (compose-mihomo-config %mini-template
-                                                "https://a.invalid\rb"))))
+             (caught-error (lambda ()
+                             (compose-mihomo-config %mini-template
+                                                    "https://a.invalid\rb"))))
 (test-assert "M2: double newline (only one strip) fails closed"
-             (caught-error
-              (lambda () (compose-mihomo-config %mini-template
-                                                "https://a.invalid/b\n\n"))))
+             (caught-error (lambda ()
+                             (compose-mihomo-config %mini-template
+                                                    "https://a.invalid/b\n\n"))))
 (test-assert "M2: NUL after strip fails closed"
-             (caught-error
-              (lambda () (compose-mihomo-config
-                          %mini-template
-                          (string-append "https://a.invalid"
-                                         (string #\nul) "b\n")))))
+             (caught-error (lambda ()
+                             (compose-mihomo-config %mini-template
+                                                    (string-append
+                                                     "https://a.invalid"
+                                                     (string #\nul) "b\n")))))
 
 ;; ── M3：占位符恰好一次 ──────────────────────────────────────
 (test-assert "M3: missing placeholder fails closed"
-             (caught-error
-              (lambda () (compose-mihomo-config "no placeholder here\n"
-                                                "https://a.invalid\n"))))
+             (caught-error (lambda ()
+                             (compose-mihomo-config "no placeholder here\n"
+                                                    "https://a.invalid\n"))))
 (test-assert "M3: duplicated placeholder fails closed"
-             (caught-error
-              (lambda ()
-                (compose-mihomo-config
-                 (string-append %mini-template
-                                "    x: \"@@MIHOMO_SUBSCRIPTION_URL@@\"\n")
-                 "https://a.invalid\n"))))
+             (caught-error (lambda ()
+                             (compose-mihomo-config (string-append
+                                                     %mini-template
+                                                     "    x: \"@@MIHOMO_SUBSCRIPTION_URL@@\"\n")
+                                                    "https://a.invalid\n"))))
 (test-assert "M3: exact placeholder succeeds"
              (string-contains (compose-mihomo-config %mini-template
                                                      "https://a.invalid\n")
@@ -102,12 +107,11 @@
 
 ;; ── M4：YAML 双引号转义 ─────────────────────────────────────
 (test-assert "M4: double quote escaped"
-             (string-contains (compose-mihomo-config
-                               %mini-template "https://a.invalid/?q=\"x\"\n")
-                              "q=\\\"x\\\""))
+             (string-contains (compose-mihomo-config %mini-template
+                               "https://a.invalid/?q=\"x\"\n") "q=\\\"x\\\""))
 (test-assert "M4: backslash escaped"
-             (string-contains (compose-mihomo-config
-                               %mini-template "https://a.invalid/a\\b\n")
+             (string-contains (compose-mihomo-config %mini-template
+                                                     "https://a.invalid/a\\b\n")
                               "a\\\\b"))
 
 ;; ── M5：count-substring ─────────────────────────────────────
@@ -118,36 +122,35 @@
 
 ;; ── M6：compose 不打印 secret（输出只含模板+替换）───────────
 (test-assert "M6: no secret in composition error messages"
-             (not (string-contains (or (caught-error
-                                        (lambda () (compose-mihomo-config
-                                                    "x\n" "SECRET_URL\n")))
-                                       "")
-                                   "SECRET_URL")))
+             (not (string-contains (or (caught-error (lambda ()
+                                                       (compose-mihomo-config
+                                                        "x\n" "SECRET_URL\n")))
+                                       "") "SECRET_URL")))
 
 ;; ── M14：nm-dnsmasq UID 占位符替换（可选参数）───────────────
 (test-assert "M14: uid placeholder substituted when uid is given"
-             (string-contains
-              (compose-mihomo-config
-               (string-append %mini-template
-                              "tun:\n  exclude-uid:\n"
-                              "    - @@MIHOMO_NM_DNSMASQ_UID@@\n")
-               "https://a.invalid/x\n" 985)
-              "- 985"))
+             (string-contains (compose-mihomo-config (string-append
+                                                      %mini-template
+                                                      "tun:\n  exclude-uid:\n"
+                                                      "    - @@MIHOMO_NM_DNSMASQ_UID@@\n")
+                                                     "https://a.invalid/x\n"
+                                                     985) "- 985"))
 (test-assert "M14: missing uid placeholder fails closed when uid is given"
-             (caught-error
-              (lambda () (compose-mihomo-config
-                          %mini-template "https://a.invalid/x\n" 985))))
+             (caught-error (lambda ()
+                             (compose-mihomo-config %mini-template
+                                                    "https://a.invalid/x\n"
+                                                    985))))
 (test-assert "M14: uid not required when omitted"
-             (string-contains (compose-mihomo-config
-                               %mini-template "https://a.invalid/x\n")
+             (string-contains (compose-mihomo-config %mini-template
+                                                     "https://a.invalid/x\n")
                               "https://a.invalid/x"))
 
 ;; ── M7：模板静态契约 ────────────────────────────────────────
 (test-assert "M7: both placeholders appear exactly once in template"
              (and (= (count-substring (template-text)
                                       %mihomo-subscription-placeholder) 1)
-                  (= (count-substring
-                      (template-text) %mihomo-nm-dnsmasq-uid-placeholder) 1)))
+                  (= (count-substring (template-text)
+                                      %mihomo-nm-dnsmasq-uid-placeholder) 1)))
 (test-assert "M7: no subscription URL value in public template"
              (and (string-contains (template-text)
                                    "url: \"@@MIHOMO_SUBSCRIPTION_URL@@\"")
@@ -168,9 +171,9 @@
 (test-assert "M7: tun exclude-uid references the nm-dnsmasq uid placeholder"
              (let ((text (template-text)))
                (and (string-contains text "exclude-uid:")
-                    (string-contains
-                     text
-                     (string-append "- " %mihomo-nm-dnsmasq-uid-placeholder)))))
+                    (string-contains text
+                                     (string-append "- "
+                                      %mihomo-nm-dnsmasq-uid-placeholder)))))
 (test-assert "M7: no default DNS hijack target"
              (not (string-contains (template-text) "0.0.0.0:53")))
 
@@ -195,7 +198,8 @@
 ;; ── M11：service graph ──────────────────────────────────────
 (define %mihomo-service-instance
   (find (lambda (svc)
-          (eq? 'mihomo (service-type-name (service-kind svc))))
+          (eq? 'mihomo
+               (service-type-name (service-kind svc))))
         (operating-system-services %vm-os)))
 
 (test-assert "M11: mihomo service present in %vm-os"
@@ -203,82 +207,82 @@
 
 (define (shepherd-service-with-provision name)
   (find (lambda (s)
-          (memq name (shepherd-service-provision s)))
-        (shepherd-configuration-services
-         (service-value
-          (fold-services (operating-system-services %vm-os)
-                         #:target-type shepherd-root-service-type)))))
+          (memq name
+                (shepherd-service-provision s)))
+        (shepherd-configuration-services (service-value (fold-services (operating-system-services
+                                                                        %vm-os)
+                                                         #:target-type
+                                                         shepherd-root-service-type)))))
 
 (define %mihomo-daemon
   (shepherd-service-with-provision 'mihomo))
 (define %mihomo-config-svc
   (shepherd-service-with-provision 'mihomo-config-ready))
 
-(test-assert "M11: mihomo daemon requires config-ready + networking (no smartdns)"
-             (let ((req (shepherd-service-requirement %mihomo-daemon)))
-               (and (memq 'mihomo-config-ready req)
-                    (memq 'networking req)
-                    (memq 'loopback req)
-                    ;; DNS is owned by mihomo itself (fake-ip + hijack) and by
-                    ;; NetworkManager dnsmasq; the old SmartDNS requirement is gone.
-                    (not (memq 'smartdns req)))))
+(test-assert
+ "M11: mihomo daemon requires config-ready + networking (no smartdns)"
+ (let ((req (shepherd-service-requirement %mihomo-daemon)))
+   (and (memq 'mihomo-config-ready req)
+        (memq 'networking req)
+        (memq 'loopback req)
+        ;; DNS is owned by mihomo itself (fake-ip + hijack) and by
+        ;; NetworkManager dnsmasq; the old SmartDNS requirement is gone.
+        (not (memq 'smartdns req)))))
 (test-assert "M11: materializer requires ordinary-secrets-ready"
              (memq 'ordinary-secrets-ready
                    (shepherd-service-requirement %mihomo-config-svc)))
 (test-assert "M11: materializer is one-shot"
              (shepherd-service-one-shot? %mihomo-config-svc))
 (test-assert "M11: daemon start uses -d data dir and -f runtime config"
-             (let ((sexp (object->string
-                          (gexp->approximate-sexp
-                           (shepherd-service-start %mihomo-daemon)))))
+             (let ((sexp (object->string (gexp->approximate-sexp (shepherd-service-start
+                                                                  %mihomo-daemon)))))
                (and (string-contains sexp "/var/lib/clash")
                     (string-contains sexp "-f")
                     (string-contains sexp "/run/mihomo/config.yaml"))))
 
 ;; ── M12：account / machine-state rule ───────────────────────
 (test-assert "M12: clash system group in folded accounts"
-             (let ((accounts (service-value
-                              (fold-services
-                               (operating-system-services %vm-os)
-                               #:target-type account-service-type))))
+             (let ((accounts (service-value (fold-services (operating-system-services
+                                                            %vm-os)
+                                             #:target-type
+                                             account-service-type))))
                (and (find (lambda (g)
                             (and (user-group? g)
-                                 (string=? "clash" (user-group-name g))
-                                 (user-group-system? g)))
-                          accounts)
-                    #t)))
+                                 (string=? "clash"
+                                           (user-group-name g))
+                                 (user-group-system? g))) accounts) #t)))
 (test-assert "M12: data dir machine-state rule is valid"
              (valid-machine-state-persistence-rule?
               %mihomo-data-persistence-rule))
 (test-assert "M12: data rule targets the whole /var/lib/clash data dir"
              (and (string=? (machine-state-persistence-rule-backing
-                             %mihomo-data-persistence-rule)
-                            "mihomo/clash")
+                             %mihomo-data-persistence-rule) "mihomo/clash")
                   (string=? (machine-state-persistence-rule-consumer
-                             %mihomo-data-persistence-rule)
-                            "/var/lib/clash")))
-(test-assert "M12: activation chmods the rule backing (no providers-only drift)"
-             ;; Regression: activation used to chmod a stale
-             ;; /persist/.../mihomo/providers path, leaving the real
-             ;; mihomo/clash backing at generic 0755.
-             (let ((source (call-with-input-file
-                            "modules/guixcfg/system/mihomo/service.scm"
-                            get-string-all)))
-               (and (string-contains source
-                                     "machine-state-persistence-rule-backing")
-                    (not (string-contains source "\"/mihomo/providers\"")))))
+                             %mihomo-data-persistence-rule) "/var/lib/clash")))
+(test-assert
+ "M12: activation chmods the rule backing (no providers-only drift)"
+ ;; Regression: activation used to chmod a stale
+ ;; /persist/.../mihomo/providers path, leaving the real
+ ;; mihomo/clash backing at generic 0755.
+ (let ((source (call-with-input-file "modules/guixcfg/system/mihomo/service.scm"
+                 get-string-all)))
+   (and (string-contains source "machine-state-persistence-rule-backing")
+        (not (string-contains source "\"/mihomo/providers\"")))))
 
 ;; ── M13：subscription secret 归 mihomo 模块（无 host 层）─────
 (test-assert "M13: subscription secret declared by the mihomo module"
              (let ((d (car %mihomo-secrets)))
-               (and (eq? 'mihomo-subscription (secret-decl-name d))
-                    (eq? 'system (secret-decl-scope d))
-                    (eq? 'ordinary (secret-decl-domain d))
+               (and (eq? 'mihomo-subscription
+                         (secret-decl-name d))
+                    (eq? 'system
+                         (secret-decl-scope d))
+                    (eq? 'ordinary
+                         (secret-decl-domain d))
                     (string=? "mihomo-subscription.url"
                               (secret-decl-target-name d))
-                    (string-contains
-                     (local-file-absolute-file-name (secret-decl-source d))
-                     "/mihomo/secrets/"))))
+                    (string-contains (local-file-absolute-file-name (secret-decl-source
+                                                                     d))
+                                     "/mihomo/secrets/"))))
 (test-assert "M13: runtime secret path matches the publisher's derivation"
              ;; %mihomo-secret-path is a literal in the closure-minimal config
              ;; module; guard it against drift from runtime-secret-target.

@@ -30,12 +30,11 @@
 ;;; 与缓存陈旧面）；bash 集成；修改 virelith 的 carapace 包。
 
 (define-module (guixcfg apps carapace definition)
-               #:use-module (guix records)
-               #:use-module (virelith packages carapace) ; carapace-bin
-               #:use-module (guixcfg apps model)
-               #:export (%carapace))
+  #:use-module (guix records)
+  #:use-module (virelith packages carapace) ;carapace-bin
+  #:use-module (guixcfg apps model)
+  #:export (%carapace))
 
 (define %carapace
-  (application
-   (name 'carapace)
-   (home-packages (list carapace-bin))))
+  (application (name 'carapace)
+               (home-packages (list carapace-bin))))

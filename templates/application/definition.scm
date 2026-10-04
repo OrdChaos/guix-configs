@@ -31,35 +31,34 @@
 ;;;   - 目录存在 != 应用启用：启用必须进 registry。
 
 (define-module (guixcfg apps app definition)
-               #:use-module (gnu services)             ; service
-               #:use-module (guix gexp)                ; local-file
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)       ; application
-               #:export (%app))
+  #:use-module (gnu services) ;service
+  #:use-module (guix gexp) ;local-file
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model) ;application
+  #:export (%app))
 
 (define %app
-  (application
-   (name 'app)                       ; symbol：registry 里唯一
-   ;; (home-packages (list ...))     ; 用户 profile 包（service 自动贡献的不要重复）
-   ;; (home-services (list ...))     ; home service 实例（官方 home-*-service-type）
-   ;; (system-services (list ...))   ; system service（仅确有必要；greetd/elogind/
-   ;;                                 ; accounts/SSH host keys/readiness/TPM/UKI/
-   ;;                                 ; Secure Boot 等 core infrastructure 不迁进 apps）
-   ;; (persistence (list ...))       ; <application-persistence-rule>
-   ;;                                 ;   (exposure 'bind-directory | 'bind-file；
-   ;;                                 ;    bind-file 只限【直写同一路径】的单文件
-   ;;                                 ;    状态，temp+rename 原子替换不适用——
-   ;;                                 ;    docs/architecture/persistence.md）；
-   ;;                                 ; 可选 seeds：首次初始状态（seed-once——
-   ;;                                 ; 写入后 repo 永久放弃该文件 ownership；
-   ;;                                 ; 仅 bind-directory；docs/architecture/persistence.md）：
-   ;;                                 ;   (seeds `(("settings.toml"
-   ;;                                 ;             ,(local-file "base-settings.toml"))))
-   ;; (secrets (list ...))           ; <secret-decl>（source = 本目录 secrets/ 的
-   ;;                                 ; file-like，如 (local-file "secrets/x.age")）
-   ;; (configuration-variants        ; 可选配置变体（application-owned）：
-   ;;  (list (application-configuration-variant
-   ;;         (name 'laptop)          ; logical identifier（host selection 用）
-   ;;         (files `(("foo/device.conf"    ; 完整 ~/.config 相对 target
-   ;;                   ,(local-file "variants/laptop.conf")))))))
-   ))
+  (application (name 'app) ;symbol：registry 里唯一
+               ;; (home-packages (list ...))     ; 用户 profile 包（service 自动贡献的不要重复）
+               ;; (home-services (list ...))     ; home service 实例（官方 home-*-service-type）
+               ;; (system-services (list ...))   ; system service（仅确有必要；greetd/elogind/
+               ;; ; accounts/SSH host keys/readiness/TPM/UKI/
+               ;; ; Secure Boot 等 core infrastructure 不迁进 apps）
+               ;; (persistence (list ...))       ; <application-persistence-rule>
+               ;; ;   (exposure 'bind-directory | 'bind-file；
+               ;; ;    bind-file 只限【直写同一路径】的单文件
+               ;; ;    状态，temp+rename 原子替换不适用——
+               ;; ;    docs/architecture/persistence.md）；
+               ;; ; 可选 seeds：首次初始状态（seed-once——
+               ;; ; 写入后 repo 永久放弃该文件 ownership；
+               ;; ; 仅 bind-directory；docs/architecture/persistence.md）：
+               ;; ;   (seeds `(("settings.toml"
+               ;; ;             ,(local-file "base-settings.toml"))))
+               ;; (secrets (list ...))           ; <secret-decl>（source = 本目录 secrets/ 的
+               ;; ; file-like，如 (local-file "secrets/x.age")）
+               ;; (configuration-variants        ; 可选配置变体（application-owned）：
+               ;; (list (application-configuration-variant
+               ;; (name 'laptop)          ; logical identifier（host selection 用）
+               ;; (files `(("foo/device.conf"    ; 完整 ~/.config 相对 target
+               ;; ,(local-file "variants/laptop.conf")))))))
+               ))

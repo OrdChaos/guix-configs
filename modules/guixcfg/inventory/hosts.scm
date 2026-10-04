@@ -4,11 +4,9 @@
 ;;; 已启动机器如何反查自己的 Host ID，供无参数 blue reconfigure 使用。
 
 (define-module (guixcfg inventory hosts)
-               #:use-module (srfi srfi-1)
-               #:export (%host-identity-table
-                         host-identity-table-valid?
-                         host-id-for-hostname
-                         host-name-for-id))
+  #:use-module (srfi srfi-1)
+  #:export (%host-identity-table host-identity-table-valid?
+                                 host-id-for-hostname host-name-for-id))
 
 (define %host-identity-table
   '(("lenovo-legion-y7000p" . "ordchaos-lenovo-legion-y7000p")
@@ -22,8 +20,7 @@
                      (string? (car entry))
                      (string? (cdr entry))
                      (positive? (string-length (car entry)))
-                     (positive? (string-length (cdr entry)))))
-              table)
+                     (positive? (string-length (cdr entry))))) table)
        (= (length table)
           (length (delete-duplicates (map car table) string=?)))
        (= (length table)
@@ -36,14 +33,12 @@
 (define (host-id-for-hostname hostname)
   "返回 HOSTNAME 精确对应的 Host ID；未知 hostname 返回 #f。"
   (and=> (find (lambda (entry)
-                 (string=? hostname (cdr entry)))
-               %host-identity-table)
-         car))
+                 (string=? hostname
+                           (cdr entry))) %host-identity-table) car))
 
 (define (host-name-for-id host-id)
   "返回 HOST-ID 对应的 hostname；未知 Host ID 立即失败。"
   (or (and=> (find (lambda (entry)
-                     (string=? host-id (car entry)))
-                   %host-identity-table)
-             cdr)
+                     (string=? host-id
+                               (car entry))) %host-identity-table) cdr)
       (error "host ID has no hostname identity:" host-id)))

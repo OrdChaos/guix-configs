@@ -27,13 +27,13 @@
 ;;; （read-string——已实测非 Guile core，AGENT.md §3 symbol audit）。
 
 (define-module (guixcfg utils seed-once)
-               #:use-module (guixcfg utils atomic-file) ; atomic-write-file!
-               #:use-module (ice-9 rdelim)              ; read-string
-               #:export (%seed-marker-suffix
-                         seed-once-file!))
+  #:use-module (guixcfg utils atomic-file) ;atomic-write-file!
+  #:use-module (ice-9 rdelim) ;read-string
+  #:export (%seed-marker-suffix seed-once-file!))
 
 ;; seed 生命周期 marker 后缀（每个 seed 目标一个 marker 文件）。
-(define %seed-marker-suffix ".seed-provided")
+(define %seed-marker-suffix
+  ".seed-provided")
 
 (define (seed-once-file! dest source marker)
   "seed-once 单文件状态机。
@@ -48,14 +48,20 @@ marker）/ 'already-seeded（marker 已存在，未做任何事）。"
      ;; 已有数据：完全保留，不比较不覆盖；补写 marker 使 seed 决策
      ;; 一次性（否则每次 activation 都告警，且用户删掉数据后会被
      ;; 意外重新 seed）。
-     (atomic-write-file! marker (lambda (port) #t))
+     (atomic-write-file! marker
+                         (lambda (port)
+                           #t))
      (format (current-error-port)
-             "seed-once: ~a exists, preserving it (seed skipped; marker ~a)~%"
-             dest marker)
+      "seed-once: ~a exists, preserving it (seed skipped; marker ~a)~%" dest
+      marker)
      'preserved)
-    (else
-     (let ((content (call-with-input-file source
-                                          (lambda (in) (read-string in)))))
-       (atomic-write-file! dest (lambda (port) (display content port))))
-     (atomic-write-file! marker (lambda (port) #t))
-     'seeded)))
+    (else (let ((content (call-with-input-file source
+                           (lambda (in)
+                             (read-string in)))))
+            (atomic-write-file! dest
+                                (lambda (port)
+                                  (display content port))))
+          (atomic-write-file! marker
+                              (lambda (port)
+                                #t))
+          'seeded)))

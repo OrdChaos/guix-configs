@@ -7,6 +7,5 @@
   #:export (%ninja))
 
 (define %ninja
-  (application
-   (name 'ninja)
-   (home-packages (list ninja))))
+  (application (name 'ninja)
+               (home-packages (list ninja))))

@@ -14,52 +14,50 @@
 (use-modules (guixcfg system sudo policy)
              (guixcfg hosts vm)
              (guixcfg hosts lenovo-legion-y7000p)
-             (gnu system)          ; operating-system-sudoers-file
-             (guix gexp)           ; lower-object
+             (gnu system) ;operating-system-sudoers-file
+             (guix gexp) ;lower-object
              (guix monads)
              (guix store)
-             (ice-9 rdelim)        ; read-string
-             (ice-9 textual-ports) ; get-string-all
+             (ice-9 rdelim) ;read-string
+             (ice-9 textual-ports) ;get-string-all
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
 
 (test-begin "sudo")
 
-(define %store (open-connection))
+(define %store
+  (open-connection))
 
 (define (lower-text file-like)
   "lower FILE-LIKE 并读 store 内容（test-mihomo 同款模式）。"
-  (call-with-input-file
-   (run-with-store %store (lower-object file-like))
-   get-string-all))
+  (call-with-input-file (run-with-store %store
+                                        (lower-object file-like))
+    get-string-all))
 
 ;; ── SU1：内容契约（读仓库源文件）───────────────────────────
 (define %sudoers-text
   (call-with-input-file "modules/guixcfg/system/sudo/sudoers"
-                        (lambda (p) (read-string p))))
+    (lambda (p)
+      (read-string p))))
 
 (test-assert "SU1: sudoers keeps the guix default rules (root + %wheel ALL)"
              (and (string-contains %sudoers-text "root ALL=(ALL) ALL")
                   (string-contains %sudoers-text "%wheel ALL=(ALL) ALL")))
 
 (test-assert "SU1: lecture = never (stateless root: lectured db is ephemeral)"
-             (string-contains %sudoers-text
-                              "Defaults lecture = never"))
+ (string-contains %sudoers-text "Defaults lecture = never"))
 
-(test-assert "SU1: passprompt is the bracketed zh prompt (%p = requester user)"
-             (and (string-contains %sudoers-text
-                                   "Defaults passprompt = ")
-                  (string-contains %sudoers-text
-                                   "[sudo] %p 的密码：")))
+(test-assert
+ "SU1: passprompt is the bracketed zh prompt (%p = requester user)"
+ (and (string-contains %sudoers-text "Defaults passprompt = ")
+      (string-contains %sudoers-text "[sudo] %p 的密码：")))
 
 ;; ── SU2：host 装配（lower 后读 store 内容）─────────────────
 (test-assert "SU2: both hosts assemble the repo sudoers file"
-             (let ((vm-s (lower-text
-                          (operating-system-sudoers-file %vm-os)))
-                   (lp-s (lower-text
-                          (operating-system-sudoers-file
-                           %lenovo-legion-y7000p-os))))
+             (let ((vm-s (lower-text (operating-system-sudoers-file %vm-os)))
+                   (lp-s (lower-text (operating-system-sudoers-file
+                                      %lenovo-legion-y7000p-os))))
                (and (string-contains vm-s "Defaults lecture = never")
                     (string-contains lp-s "Defaults lecture = never")
                     (string-contains vm-s "[sudo] %p 的密码：")

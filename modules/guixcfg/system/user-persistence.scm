@@ -17,33 +17,33 @@
 ;;; /persist，generation 更新后数据保留，未声明的 ephemeral 垃圾消失。
 
 (define-module (guixcfg system user-persistence)
-               #:use-module (gnu services)            ; simple-service
-               #:use-module (gnu system file-systems) ; file-system
-               #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
-               #:use-module (guixcfg utils home-path) ; ensure-home-parent-directories!
-               #:use-module (guixcfg system mount-metadata) ; %persistent-home-mount-options
-               #:use-module (guixcfg utils module-closure) ; guixcfg-module-select?
-               #:use-module (guix gexp)
-               #:use-module (guix modules)            ; source-module-closure
-               #:use-module (guix records)
-               #:export (<persistent-user-dir>
-                         persistent-user-dir
-                         make-persistent-user-dir
-                         persistent-user-dir?
-                         persistent-user-dir-backing
-                         persistent-user-dir-consumer
-                         %persistent-user-dirs
-                         user-persistence-file-systems
-                         user-persistence-activation
-                         user-persistence-service))
+  #:use-module (gnu services) ;simple-service
+  #:use-module (gnu system file-systems) ;file-system
+  #:use-module (guixcfg storage model) ;persist-mount-point（/persist 语义路径 authority）
+  #:use-module (guixcfg utils home-path) ;ensure-home-parent-directories!
+  #:use-module (guixcfg system mount-metadata) ;%persistent-home-mount-options
+  #:use-module (guixcfg utils module-closure) ;guixcfg-module-select?
+  #:use-module (guix gexp)
+  #:use-module (guix modules) ;source-module-closure
+  #:use-module (guix records)
+  #:export (<persistent-user-dir> persistent-user-dir
+                                  make-persistent-user-dir
+                                  persistent-user-dir?
+                                  persistent-user-dir-backing
+                                  persistent-user-dir-consumer
+                                  %persistent-user-dirs
+                                  user-persistence-file-systems
+                                  user-persistence-activation
+                                  user-persistence-service))
 
 ;; 用户数据持久化条目：backing = /persist/data-home/<user> 相对；
 ;; consumer = $HOME 相对。
-(define-record-type* <persistent-user-dir>
-                     persistent-user-dir make-persistent-user-dir
-                     persistent-user-dir?
-                     (backing persistent-user-dir-backing)    ; string
-                     (consumer persistent-user-dir-consumer)) ; string
+(define-record-type* <persistent-user-dir> persistent-user-dir
+                     make-persistent-user-dir
+  persistent-user-dir?
+  (backing persistent-user-dir-backing) ;string
+  (consumer persistent-user-dir-consumer))
+ ; string
 
 ;; 持久化用户数据（XDG user directories 全集，与 (guixcfg home xdg)
 ;; 的 %xdg-user-dirs-service 对应——一致性由 tests/test-user-persistence.scm
@@ -67,17 +67,27 @@
 ;; 2.86 glocalfile.c）。home trash 随 ephemeral /home 每 boot 重建
 ;; 是符合无状态系统语义的正确行为（docs/architecture/home.md）。
 (define %persistent-user-dirs
-  (list (persistent-user-dir (backing "Projects") (consumer "Projects"))
-        (persistent-user-dir (backing "Desktop") (consumer "Desktop"))
-        (persistent-user-dir (backing "Documents") (consumer "Documents"))
-        (persistent-user-dir (backing "Downloads") (consumer "Downloads"))
-        (persistent-user-dir (backing "Music") (consumer "Music"))
-        (persistent-user-dir (backing "Pictures") (consumer "Pictures"))
-        (persistent-user-dir (backing "Public") (consumer "Public"))
-        (persistent-user-dir (backing "Templates") (consumer "Templates"))
-        (persistent-user-dir (backing "Videos") (consumer "Videos"))
+  (list (persistent-user-dir (backing "Projects")
+                             (consumer "Projects"))
+        (persistent-user-dir (backing "Desktop")
+                             (consumer "Desktop"))
+        (persistent-user-dir (backing "Documents")
+                             (consumer "Documents"))
+        (persistent-user-dir (backing "Downloads")
+                             (consumer "Downloads"))
+        (persistent-user-dir (backing "Music")
+                             (consumer "Music"))
+        (persistent-user-dir (backing "Pictures")
+                             (consumer "Pictures"))
+        (persistent-user-dir (backing "Public")
+                             (consumer "Public"))
+        (persistent-user-dir (backing "Templates")
+                             (consumer "Templates"))
+        (persistent-user-dir (backing "Videos")
+                             (consumer "Videos"))
         ;; Guix channel checkout / profile cache（见上）。
-        (persistent-user-dir (backing "cache-guix") (consumer ".cache/guix"))))
+        (persistent-user-dir (backing "cache-guix")
+                             (consumer ".cache/guix"))))
 
 (define (user-persistence-file-systems user)
   "持久化用户数据的 bind mount 声明（/persist/data-home/USER/<backing>
@@ -87,19 +97,19 @@ options 带桌面集成 metadata（x-gvfs-hide,x-gvfs-trash——共享常量
 (guixcfg system mount-metadata)）：经 fstab 声明 + mount-metadata
 服务注入 /run/mount/utab，GVfs 据此隐藏实现性挂载并允许
 mount-local trash（docs/architecture/home.md）。"
-  (let ((persist-root (string-append (persist-mount-point "@persist-data-home") "/" user)))
+  (let ((persist-root (string-append (persist-mount-point "@persist-data-home")
+                                     "/" user)))
     (map (lambda (d)
            (file-system
-            (device (string-append persist-root "/"
-                                   (persistent-user-dir-backing d)))
-            (mount-point (string-append "/home/" user "/"
-                                        (persistent-user-dir-consumer d)))
-            (type "none")
-            (flags '(bind-mount))
-            (options %persistent-home-mount-options)
-            (create-mount-point? #t)
-            (check? #f)))
-         %persistent-user-dirs)))
+             (device (string-append persist-root "/"
+                                    (persistent-user-dir-backing d)))
+             (mount-point (string-append "/home/" user "/"
+                                         (persistent-user-dir-consumer d)))
+             (type "none")
+             (flags '(bind-mount))
+             (options %persistent-home-mount-options)
+             (create-mount-point? #t)
+             (check? #f))) %persistent-user-dirs)))
 
 (define (user-persistence-activation user)
   "activation gexp：确保 /persist/data-home/USER 与各 backing 存在且
@@ -124,36 +134,40 @@ home 的语义一致：0700 + 用户所有）。"
                               (persistent-user-dir-consumer d)))
                       %persistent-user-dirs))
         (persist-root (persist-mount-point "@persist-data-home")))
-    (with-imported-modules
-     (source-module-closure '((guix build utils)
-                              (guixcfg utils home-path))
-                            #:select? guixcfg-module-select?)
-     #~(begin
-        (use-modules (guix build utils)
-                     (guixcfg utils home-path))
-        (let* ((persist (string-append #$persist-root "/" #$user))
-               (home (string-append "/home/" #$user))
-               (uid (passwd:uid (getpw #$user)))
-               (gid (passwd:gid (getpw #$user))))
-          (mkdir-p persist)
-          (chown persist uid gid)
-          (for-each
-           (lambda (entry)
-             (let ((backing (car entry))
-                   (consumer (cadr entry)))
-               ;; persist 侧 backing（嵌套路径 mkdir-p 全建）
-               (let ((src (string-append persist "/" backing)))
-                 (mkdir-p src)
-                 (chown src uid gid))
-               ;; HOME 侧中间父目录 owner 归还 USER（共享原语；挂载点
-               ;; 本身由 file-systems 创建，bind 后无碍）。
-               (ensure-home-parent-directories! home consumer uid gid)))
-           '#$entries)
-          ;; /home/USER 恢复标准语义（见上）。mkdir-p 只补缺失目录，
-          ;; 不覆盖已存在的挂载点。
-          (mkdir-p home)
-          (chown home uid gid)
-          (chmod home #o700))))))
+    (with-imported-modules (source-module-closure '((guix build utils)
+                                                    (guixcfg utils home-path))
+                                                  #:select?
+                                                  guixcfg-module-select?)
+                           #~(begin
+                               (use-modules (guix build utils)
+                                            (guixcfg utils home-path))
+                               (let* ((persist (string-append #$persist-root
+                                                              "/"
+                                                              #$user))
+                                      (home (string-append "/home/"
+                                                           #$user))
+                                      (uid (passwd:uid (getpw #$user)))
+                                      (gid (passwd:gid (getpw #$user))))
+                                 (mkdir-p persist)
+                                 (chown persist uid gid)
+                                 (for-each (lambda (entry)
+                                             (let ((backing (car entry))
+                                                   (consumer (cadr entry)))
+                                               ;; persist 侧 backing（嵌套路径 mkdir-p 全建）
+                                               (let ((src (string-append
+                                                           persist "/" backing)))
+                                                 (mkdir-p src)
+                                                 (chown src uid gid))
+                                               ;; HOME 侧中间父目录 owner 归还 USER（共享原语；挂载点
+                                               ;; 本身由 file-systems 创建，bind 后无碍）。
+                                               (ensure-home-parent-directories!
+                                                home consumer uid gid)))
+                                           '#$entries)
+                                 ;; /home/USER 恢复标准语义（见上）。mkdir-p 只补缺失目录，
+                                 ;; 不覆盖已存在的挂载点。
+                                 (mkdir-p home)
+                                 (chown home uid gid)
+                                 (chmod home #o700))))))
 
 (define (user-persistence-service user)
   "把 selected user 持久化目录创建挂到系统 activation。"

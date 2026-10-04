@@ -125,82 +125,87 @@
 ;;; Exec 参数提供；portal 由 niri 会话提供。
 
 (define-module (guixcfg apps vscode definition)
-               #:use-module (gnu home services)      ; home-files-service-type
-               #:use-module (gnu packages guile-xyz) ; guile-lsp-server
-               #:use-module (gnu services)           ; simple-service
-               #:use-module (guix gexp)              ; local-file
-               #:use-module (guix records)
-               #:use-module (virelith packages vscode) ; vscode（自建 channel）
-               #:use-module (virelith packages vscode-extensions)
-               #:use-module (guixcfg apps vscode extensions)
-               #:use-module (guixcfg apps model)
-               #:use-module (guixcfg system application-persistence) ; rule
-               #:export (%vscode
-                         %vscode-desktop-entry))
+  #:use-module (gnu home services) ;home-files-service-type
+  #:use-module (gnu packages guile-xyz) ;guile-lsp-server
+  #:use-module (gnu services) ;simple-service
+  #:use-module (guix gexp) ;local-file
+  #:use-module (guix records)
+  #:use-module (virelith packages vscode) ;vscode（自建 channel）
+  #:use-module (virelith packages vscode-extensions)
+  #:use-module (guixcfg apps vscode extensions)
+  #:use-module (guixcfg apps model)
+  #:use-module (guixcfg system application-persistence) ;rule
+  #:export (%vscode %vscode-desktop-entry))
 
 ;; VS Code 的 XDG desktop entry（store 内实际构建产物
 ;; share/applications/ 核实）。纯数据常量：供统一 XDG 策略模块
 ;; 引用，不在此决定默认应用。
-(define %vscode-desktop-entry "vscode.desktop")
+(define %vscode-desktop-entry
+  "vscode.desktop")
 
 (define %vscode
-  (application
-   (name 'vscode)
-   ;; wrapper 包与裸 vscode 的 bin/code、desktop entry 同名——profile 中
-   ;; 两者并存会以 collision 报错，这是有意设计（防止桌面启动绕过
-   ;; --extensions-dir）。guile-lsp-server 为 rgherdt.scheme-lsp 的
-   ;; server：扩展经 hasbin 在 PATH 上查找（见 extensions.scm 头注释）。
-   (home-packages
-    (list (vscode-with-extensions vscode %vscode-extensions)
-          guile-lsp-server))
-   (home-services
-    (list (simple-service 'vscode-user-config
-                          home-files-service-type
-                          `((".config/Code/User/settings.json"
-                             ,(local-file "settings.json" "vscode-settings.json"))
-                            (".config/Code/User/keybindings.json"
-                             ,(local-file "keybindings.json"
-                                          "vscode-keybindings.json"))))
-          ;; ~/.vscode/argv.json 不在 XDG .config 下——同样走
-          ;; home-files（HOME dotfile 通道）。
-          (simple-service 'vscode-argv-json
-                          home-files-service-type
-                          `((".vscode/argv.json"
-                             ,(local-file "argv.json" "vscode-argv.json"))))))
-    (persistence
-     (list (application-persistence-rule
-            (name 'global-storage)
-           (backing "vscode/global-storage")
-           (consumer ".config/Code/User/globalStorage")
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))
-          (application-persistence-rule
-           (name 'workspace-storage)
-           (backing "vscode/workspace-storage")
-           (consumer ".config/Code/User/workspaceStorage")
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))
-          (application-persistence-rule
-           (name 'local-history)
-           (backing "vscode/local-history")
-           (consumer ".config/Code/User/History")
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))
-          ;; installed language-pack metadata：VS Code 早期 NLS 初始化
-          ;; 直接读它解析 locale；app 自己维护 + 直写同一路径（非
-          ;; temp+rename）→ 单文件 bind（file→file）。
-          (application-persistence-rule
-           (name 'language-packs)
-           (backing "vscode/languagepacks.json")
-           (consumer ".config/Code/languagepacks.json")
-           (exposure 'bind-file)
-           (lifecycle 'application-owned))
-          ;; NLS compiled cache：derived/rebuildable（clp/<hash>.
-          ;; <locale>/<commit>/；corrupted.info 自愈重建）。持久化
-          ;; 只为消除 cold-start regeneration，非不可丢失用户数据。
-          (application-persistence-rule
-           (name 'language-pack-cache)
-           (backing "vscode/clp")
-           (consumer ".config/Code/clp")
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))))))
+  (application (name 'vscode)
+               ;; wrapper 包与裸 vscode 的 bin/code、desktop entry 同名——profile 中
+               ;; 两者并存会以 collision 报错，这是有意设计（防止桌面启动绕过
+               ;; --extensions-dir）。guile-lsp-server 为 rgherdt.scheme-lsp 的
+               ;; server：扩展经 hasbin 在 PATH 上查找（见 extensions.scm 头注释）。
+               (home-packages (list (vscode-with-extensions vscode
+                                     %vscode-extensions) guile-lsp-server))
+               (home-services (list (simple-service 'vscode-user-config
+                                                    home-files-service-type
+                                                    `((".config/Code/User/settings.json" ,
+                                                       (local-file
+                                                        "settings.json"
+                                                        "vscode-settings.json"))
+                                                      (".config/Code/User/keybindings.json" ,
+                                                       (local-file
+                                                        "keybindings.json"
+                                                        "vscode-keybindings.json"))))
+                                    ;; ~/.vscode/argv.json 不在 XDG .config 下——同样走
+                                    ;; home-files（HOME dotfile 通道）。
+                                    (simple-service 'vscode-argv-json
+                                                    home-files-service-type
+                                                    `((".vscode/argv.json" ,(local-file
+                                                                             "argv.json"
+                                                                             "vscode-argv.json"))))))
+               (persistence (list (application-persistence-rule (name 'global-storage)
+                                                                (backing
+                                                                 "vscode/global-storage")
+                                                                (consumer
+                                                                 ".config/Code/User/globalStorage")
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))
+                                  (application-persistence-rule (name 'workspace-storage)
+                                                                (backing
+                                                                 "vscode/workspace-storage")
+                                                                (consumer
+                                                                 ".config/Code/User/workspaceStorage")
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))
+                                  (application-persistence-rule (name 'local-history)
+                                                                (backing
+                                                                 "vscode/local-history")
+                                                                (consumer
+                                                                 ".config/Code/User/History")
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))
+                                  ;; installed language-pack metadata：VS Code 早期 NLS 初始化
+                                  ;; 直接读它解析 locale；app 自己维护 + 直写同一路径（非
+                                  ;; temp+rename）→ 单文件 bind（file→file）。
+                                  (application-persistence-rule (name 'language-packs)
+                                                                (backing
+                                                                 "vscode/languagepacks.json")
+                                                                (consumer
+                                                                 ".config/Code/languagepacks.json")
+                                                                (exposure 'bind-file)
+                                                                (lifecycle 'application-owned))
+                                  ;; NLS compiled cache：derived/rebuildable（clp/<hash>.
+                                  ;; <locale>/<commit>/；corrupted.info 自愈重建）。持久化
+                                  ;; 只为消除 cold-start regeneration，非不可丢失用户数据。
+                                  (application-persistence-rule (name 'language-pack-cache)
+                                                                (backing
+                                                                 "vscode/clp")
+                                                                (consumer
+                                                                 ".config/Code/clp")
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))))))

@@ -29,14 +29,13 @@
 ;;; 之外的例外。
 
 (define-module (guixcfg flatpak applications thunderbird definition)
-               #:use-module (guixcfg flatpak model)
-               #:export (%flatpak-thunderbird))
+  #:use-module (guixcfg flatpak model)
+  #:export (%flatpak-thunderbird))
 
 (define %flatpak-thunderbird
-  (flatpak-application
-   (name 'thunderbird)
-   (id "org.mozilla.thunderbird_esr")
-   (remote 'flathub)
-   (branch "stable")
-   (update-policy 'track-branch)
-   (override-policy 'external)))
+  (flatpak-application (name 'thunderbird)
+                       (id "org.mozilla.thunderbird_esr")
+                       (remote 'flathub)
+                       (branch "stable")
+                       (update-policy 'track-branch)
+                       (override-policy 'external)))

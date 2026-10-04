@@ -23,27 +23,27 @@
 ;;; 修复；open-pipe*/invoke 在 initrd 内不可用）。
 
 (define-module (guixcfg boot tpm-unlock)
-               #:use-module (guixcfg boot device-resolver) ; resolve-system/esp-device
-               #:use-module (guixcfg boot layout)          ; %esp-tpm2-directory（ESP 布局 authority）
-               #:use-module (guixcfg storage model)        ; %luks-mapper-name
-               #:use-module (guixcfg security tpm2 tpm2-tools)
-               #:use-module (guixcfg utils spawn)          ; spawn-pipeline
-               #:use-module (guix build utils)             ; mkdir-p
-               #:use-module (guix build syscalls)          ; mount、umount、mknod
-               #:use-module (ice-9 ftw)                    ; scandir
-               #:use-module (ice-9 regex)                  ; string-match
-               #:use-module (ice-9 rdelim)                 ; read-line
-               #:use-module (srfi srfi-1)                  ; first
-               #:use-module (srfi srfi-11)                 ; let-values
-               #:use-module (srfi srfi-13)                 ; string-tokenize
-               #:export (tpm-unlock-in-initrd
-                         cmdline-option
-                         tpm-unlock-disabled-by-cmdline?))
+  #:use-module (guixcfg boot device-resolver) ;resolve-system/esp-device
+  #:use-module (guixcfg boot layout) ;%esp-tpm2-directory（ESP 布局 authority）
+  #:use-module (guixcfg storage model) ;%luks-mapper-name
+  #:use-module (guixcfg security tpm2 tpm2-tools)
+  #:use-module (guixcfg utils spawn) ;spawn-pipeline
+  #:use-module (guix build utils) ;mkdir-p
+  #:use-module (guix build syscalls) ;mount、umount、mknod
+  #:use-module (ice-9 ftw) ;scandir
+  #:use-module (ice-9 regex) ;string-match
+  #:use-module (ice-9 rdelim) ;read-line
+  #:use-module (srfi srfi-1) ;first
+  #:use-module (srfi srfi-11) ;let-values
+  #:use-module (srfi srfi-13) ;string-tokenize
+  #:export (tpm-unlock-in-initrd cmdline-option
+                                 tpm-unlock-disabled-by-cmdline?))
 
 ;; initrd 里 ESP 的临时挂载点；artifact 目录是 ESP 相对固定路径
 ;; （(guixcfg boot layout)；PCR7 不随 UKI slot 变化，enrollment 工具写，
 ;; 见 tools/tpm2-enroll.scm）。
-(define %esp-tpm-mount "/run/guixcfg-esp")
+(define %esp-tpm-mount
+  "/run/guixcfg-esp")
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; cmdline 解析（纯函数便于测试）
@@ -51,17 +51,23 @@
 (define (cmdline-option line name)
   "从 CMDLINE 字符串读 NAME=VALUE 选项的值；不存在返回 #f。"
   (and line
-       (let loop ((args (string-tokenize line)))
+       (let loop
+         ((args (string-tokenize line)))
          (cond
-           ((null? args) #f)
-           ((string-prefix? (string-append name "=") (car args))
-            (string-drop (car args) (+ 1 (string-length name))))
+           ((null? args)
+            #f)
+           ((string-prefix? (string-append name "=")
+                            (car args))
+            (string-drop (car args)
+                         (+ 1
+                            (string-length name))))
            (else (loop (cdr args)))))))
 
 (define (proc-cmdline)
   "读取 /proc/cmdline 内容（单行）；不可读返回 #f。"
-  (false-if-exception
-   (call-with-input-file "/proc/cmdline" (lambda (p) (read-line p)))))
+  (false-if-exception (call-with-input-file "/proc/cmdline"
+                        (lambda (p)
+                          (read-line p)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 设备发现：LUKS UUID authoritative（(guixcfg boot device-resolver)——
@@ -76,8 +82,10 @@
 或 guixcfg.tpm-unlock=0（显式禁用）→ 跳过 TPM 自动解锁。"
   (let ((raw-mode (cmdline-option line "rootmode"))
         (tpm-off (cmdline-option line "guixcfg.tpm-unlock")))
-    (or (and tpm-off (string=? tpm-off "0"))
-        (and raw-mode (string-prefix? "recovery" raw-mode)))))
+    (or (and tpm-off
+             (string=? tpm-off "0"))
+        (and raw-mode
+             (string-prefix? "recovery" raw-mode)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; initrd 解锁尝试
@@ -89,101 +97,140 @@ TPM2-BIN/CRYPTSETUP-BIN 为 store 中的可执行文件路径。LUKS-UUID-HEX
 为 config 侧嵌入的 system LUKS UUID（hex 字符串，16 字节，无连字符），
 UUID 是权威身份。"
   (catch #t
-    (lambda ()
-      ;; ── cmdline 门控：Recovery 与显式禁用都跳过
-      (when (tpm-unlock-disabled-by-cmdline? (proc-cmdline))
-        (throw 'tpm-skip "cmdline disabled (Recovery/explicit)"))
-      
-      ;; ── TPM 设备可用性（生产 /dev/tpmrm0）
-      (unless (file-exists? "/dev/tpmrm0")
-        (throw 'tpm-skip "no /dev/tpmrm0"))
-      
-      ;; ── 设备发现：PARTLABEL 固定事实（model.scm）
-      (let* ((system-part (resolve-system-device luks-uuid-hex))
-             (esp-part (resolve-esp-device system-part)))
-        (unless (and system-part esp-part)
-          (throw 'tpm-skip "system/esp partition not found"))
-        (format #t "TPM: system=~a esp=~a~%" system-part esp-part)
-        
-        ;; ── 挂 ESP，读机器级 tpm2/ 材料（固定路径，无 slot 概念）
-        (mkdir-p %esp-tpm-mount)
-        (mount esp-part %esp-tpm-mount "vfat" 0 "")
-        (dynamic-wind
-         (lambda () #t)
          (lambda ()
-           (let* ((tpm2-dir (string-append %esp-tpm-mount "/"
-                                           %esp-tpm2-directory))
-                  (seal-pub (string-append tpm2-dir "/seal.pub"))
-                  (seal-priv (string-append tpm2-dir "/seal.priv")))
-             (unless (and (file-exists? seal-pub) (file-exists? seal-priv))
-               (throw 'tpm-skip "ESP lacks tpm2 materials"))
-             (format #t "TPM: tpm2 materials ready, attempting automatic unlock~%")
-             
-             ;; ── unseal：重建 SRK → load sealed → policy session
-             ;;    （实际 PCR7）→ unseal stdout 管道直连 cryptsetup。
-             ;;    每步 catch 并归类（failure 阶段区分），boot console
-             ;;    只输出一行分类日志。
-             (let* ((workdir "/run/guixcfg/tpm2-initrd")
-                    (primary (string-append workdir "/primary.ctx"))
-                    (seal-ctx (string-append workdir "/seal.ctx"))
-                    (sess (string-append workdir "/policy.session.ctx")))
-               (mkdir-p workdir)
-               (catch #t
-                 (lambda ()
-                   (tpm2-createprimary! %tpm2-tools-tcti tpm2-bin #:out primary))
-                 (lambda (k . a) (throw 'tpm-fail "SRK creation failed")))
-               (catch #t
-                 (lambda ()
-                   (tpm2-load-sealed! %tpm2-tools-tcti tpm2-bin
-                                      primary seal-pub seal-priv
-                                      #:out seal-ctx))
-                 (lambda (k . a)
-                   (throw 'tpm-fail "sealed object load failed (invalid artifact or TPM state mismatch)")))
-               (tpm2-start-policy-session! %tpm2-tools-tcti tpm2-bin
-                                           #:out sess)
-               (tpm2-policy-pcr-session! %tpm2-tools-tcti tpm2-bin sess
-                                         #:pcr "sha256:7")
-               (catch #t
-                 (lambda ()
-                   ;; unseal stdout FD → pipe → cryptsetup stdin FD 直连
-                   ;; （spawn-pipeline，父进程只做 pipe/spawn/close/waitpid；
-                   ;; 明文不经 Scheme heap。with-tcti 让 tpm2_unseal 继承
-                   ;; TPM2TOOLS_TCTI；cryptsetup 不受该变量影响）。
-                   (with-tcti %tpm2-tools-tcti
-                              (lambda ()
-                                (let-values (((unseal-status crypt-status)
-                                              (spawn-pipeline
-                                               (string-append tpm2-bin "/tpm2_unseal")
-                                               "-c" seal-ctx
-                                               "-p" (string-append "session:" sess)
-                                               "--"
-                                               cryptsetup-bin "open" "--type" "luks"
-                                               "--key-file=-"
-                                               system-part
-                                               %luks-mapper-name)))
-                                            (unless (zero? crypt-status)
-                                              (throw 'tpm-fail "cryptsetup rejected credential"))
-                                            (unless (zero? unseal-status)
-                                              (throw 'tpm-fail "tpm2_unseal failed")))))
-                   (tpm2-flush-session! %tpm2-tools-tcti tpm2-bin sess)
-                   (format #t "TPM: LUKS auto-unlock succeeded~%")
-                   #t)
-                 (lambda (k . a)
-                   (if (eq? k 'tpm-fail)
-                     (apply throw k a)
-                     (throw 'tpm-fail "PCR policy mismatch or TPM command failure")))))))
-         (lambda ()
-           (false-if-exception (umount %esp-tpm-mount))))))
-    (lambda (key . args)
-      ;; boot console 保持短：只输出一行分类日志（skip vs failure +
-      ;; 原因/阶段），不打印 stack trace。
-      (cond
-        ((eq? key 'tpm-skip)
-         (format #t "TPM: skipped (~a); falling back to passphrase~%"
-                 (and (pair? args) (car args))))
-        ((eq? key 'tpm-fail)
-         (format #t "TPM: failed (~a); falling back to passphrase~%"
-                 (and (pair? args) (car args))))
-        (else
-         (format #t "TPM: failed (TPM command/unknown); falling back to passphrase~%")))
-      #f)))
+           ;; ── cmdline 门控：Recovery 与显式禁用都跳过
+           (when (tpm-unlock-disabled-by-cmdline? (proc-cmdline))
+             (throw 'tpm-skip "cmdline disabled (Recovery/explicit)"))
+
+           ;; ── TPM 设备可用性（生产 /dev/tpmrm0）
+           (unless (file-exists? "/dev/tpmrm0")
+             (throw 'tpm-skip "no /dev/tpmrm0"))
+
+           ;; ── 设备发现：PARTLABEL 固定事实（model.scm）
+           (let* ((system-part (resolve-system-device luks-uuid-hex))
+                  (esp-part (resolve-esp-device system-part)))
+             (unless (and system-part esp-part)
+               (throw 'tpm-skip "system/esp partition not found"))
+             (format #t "TPM: system=~a esp=~a~%" system-part esp-part)
+
+             ;; ── 挂 ESP，读机器级 tpm2/ 材料（固定路径，无 slot 概念）
+             (mkdir-p %esp-tpm-mount)
+             (mount esp-part %esp-tpm-mount "vfat" 0 "")
+             (dynamic-wind (lambda ()
+                             #t)
+                           (lambda ()
+                             (let* ((tpm2-dir (string-append %esp-tpm-mount
+                                               "/" %esp-tpm2-directory))
+                                    (seal-pub (string-append tpm2-dir
+                                                             "/seal.pub"))
+                                    (seal-priv (string-append tpm2-dir
+                                                              "/seal.priv")))
+                               (unless (and (file-exists? seal-pub)
+                                            (file-exists? seal-priv))
+                                 (throw 'tpm-skip "ESP lacks tpm2 materials"))
+                               (format #t
+                                "TPM: tpm2 materials ready, attempting automatic unlock~%")
+
+                               ;; ── unseal：重建 SRK → load sealed → policy session
+                               ;; （实际 PCR7）→ unseal stdout 管道直连 cryptsetup。
+                               ;; 每步 catch 并归类（failure 阶段区分），boot console
+                               ;; 只输出一行分类日志。
+                               (let* ((workdir "/run/guixcfg/tpm2-initrd")
+                                      (primary (string-append workdir
+                                                              "/primary.ctx"))
+                                      (seal-ctx (string-append workdir
+                                                               "/seal.ctx"))
+                                      (sess (string-append workdir
+                                             "/policy.session.ctx")))
+                                 (mkdir-p workdir)
+                                 (catch #t
+                                        (lambda ()
+                                          (tpm2-createprimary!
+                                           %tpm2-tools-tcti tpm2-bin
+                                           #:out primary))
+                                        (lambda (k . a)
+                                          (throw 'tpm-fail
+                                                 "SRK creation failed")))
+                                 (catch #t
+                                        (lambda ()
+                                          (tpm2-load-sealed! %tpm2-tools-tcti
+                                                             tpm2-bin
+                                                             primary
+                                                             seal-pub
+                                                             seal-priv
+                                                             #:out seal-ctx))
+                                        (lambda (k . a)
+                                          (throw 'tpm-fail
+                                           "sealed object load failed (invalid artifact or TPM state mismatch)")))
+                                 (tpm2-start-policy-session! %tpm2-tools-tcti
+                                                             tpm2-bin
+                                                             #:out sess)
+                                 (tpm2-policy-pcr-session! %tpm2-tools-tcti
+                                                           tpm2-bin sess
+                                                           #:pcr "sha256:7")
+                                 (catch #t
+                                        (lambda ()
+                                          ;; unseal stdout FD → pipe → cryptsetup stdin FD 直连
+                                          ;; （spawn-pipeline，父进程只做 pipe/spawn/close/waitpid；
+                                          ;; 明文不经 Scheme heap。with-tcti 让 tpm2_unseal 继承
+                                          ;; TPM2TOOLS_TCTI；cryptsetup 不受该变量影响）。
+                                          (with-tcti %tpm2-tools-tcti
+                                                     (lambda ()
+                                                       (let-values (((unseal-status
+                                                                      crypt-status)
+                                                                     (spawn-pipeline
+                                                                      (string-append
+                                                                       tpm2-bin
+                                                                       "/tpm2_unseal")
+                                                                      "-c"
+                                                                      seal-ctx
+                                                                      "-p"
+                                                                      (string-append
+                                                                       "session:"
+                                                                       sess)
+                                                                      "--"
+                                                                      cryptsetup-bin
+                                                                      "open"
+                                                                      "--type"
+                                                                      "luks"
+                                                                      "--key-file=-"
+                                                                      system-part
+                                                                      %luks-mapper-name)))
+                                                                   (unless (zero?
+                                                                            crypt-status)
+                                                                     (throw 'tpm-fail
+                                                                      "cryptsetup rejected credential"))
+                                                                   (unless (zero?
+                                                                            unseal-status)
+                                                                     (throw 'tpm-fail
+                                                                      "tpm2_unseal failed")))))
+                                          (tpm2-flush-session!
+                                           %tpm2-tools-tcti tpm2-bin sess)
+                                          (format #t
+                                           "TPM: LUKS auto-unlock succeeded~%")
+                                          #t)
+                                        (lambda (k . a)
+                                          (if (eq? k
+                                                   'tpm-fail)
+                                              (apply throw k a)
+                                              (throw 'tpm-fail
+                                               "PCR policy mismatch or TPM command failure")))))))
+                           (lambda ()
+                             (false-if-exception (umount %esp-tpm-mount))))))
+         (lambda (key . args)
+           ;; boot console 保持短：只输出一行分类日志（skip vs failure +
+           ;; 原因/阶段），不打印 stack trace。
+           (cond
+             ((eq? key
+                   'tpm-skip)
+              (format #t "TPM: skipped (~a); falling back to passphrase~%"
+                      (and (pair? args)
+                           (car args))))
+             ((eq? key
+                   'tpm-fail)
+              (format #t "TPM: failed (~a); falling back to passphrase~%"
+                      (and (pair? args)
+                           (car args))))
+             (else (format #t
+                    "TPM: failed (TPM command/unknown); falling back to passphrase~%")))
+           #f)))

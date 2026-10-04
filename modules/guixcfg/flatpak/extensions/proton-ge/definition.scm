@@ -16,13 +16,12 @@
 ;;; 同时只能装一个 GE 版本；回退需 pin commit。
 
 (define-module (guixcfg flatpak extensions proton-ge definition)
-               #:use-module (guixcfg flatpak model)
-               #:export (%flatpak-extension-proton-ge))
+  #:use-module (guixcfg flatpak model)
+  #:export (%flatpak-extension-proton-ge))
 
 (define %flatpak-extension-proton-ge
-  (flatpak-extension
-   (name 'proton-ge)
-   (id "com.valvesoftware.Steam.CompatibilityTool.Proton-GE")
-   (remote 'flathub)
-   (branch "stable")
-   (update-policy 'track-branch)))
+  (flatpak-extension (name 'proton-ge)
+                     (id "com.valvesoftware.Steam.CompatibilityTool.Proton-GE")
+                     (remote 'flathub)
+                     (branch "stable")
+                     (update-policy 'track-branch)))

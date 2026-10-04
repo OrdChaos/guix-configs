@@ -40,61 +40,77 @@
 ;;; binding=strong 锁定顺序不被系统 65-nonlatin 等规则重排。
 
 (define-module (guixcfg fonts fontconfig-policy)
-               #:use-module (srfi srfi-1)            ; delete、append-map
-               #:export (%sans-serif-families
-                         %serif-families
-                         %monospace-families
-                         alias-sxml
-                         family-chain-edit
-                         family-lang-edit
-                         %generic-alias-snippets
-                         %mi-sans-l3-lang-edit
-                         %cjk-lang-edits
-                         %script-lang-edits
-                         %fontconfig-snippets))
+  #:use-module (srfi srfi-1) ;delete、append-map
+  #:export (%sans-serif-families %serif-families
+                                 %monospace-families
+                                 alias-sxml
+                                 family-chain-edit
+                                 family-lang-edit
+                                 %generic-alias-snippets
+                                 %mi-sans-l3-lang-edit
+                                 %cjk-lang-edits
+                                 %script-lang-edits
+                                 %fontconfig-snippets))
 
 ;; generic family 主链（无 lang 时的默认顺序；SC 在 JP 前）。
 (define %sans-serif-families
   ;; MiSans 主（简体优先）→ L3（扩展字符补充）→ Noto Sans → CJK
   ;; SC→TC→JP→KR → Symbols → Emoji → Unifont（last resort）
-  '("MiSans" "MiSans L3" "Noto Sans"
-             "Noto Sans CJK SC" "Noto Sans CJK TC" "Noto Sans CJK JP"
-             "Noto Sans CJK KR"
-             "Noto Sans Symbols" "Noto Sans Symbols 2"
-             "Noto Color Emoji" "Unifont"))
+  '("MiSans" "MiSans L3"
+    "Noto Sans"
+    "Noto Sans CJK SC"
+    "Noto Sans CJK TC"
+    "Noto Sans CJK JP"
+    "Noto Sans CJK KR"
+    "Noto Sans Symbols"
+    "Noto Sans Symbols 2"
+    "Noto Color Emoji"
+    "Unifont"))
 
 (define %serif-families
   ;; Noto Serif → Noto Serif CJK SC→TC→JP→KR → Emoji → Unifont。
   ;; MiSans 是 sans，不进 serif 主链。
-  '("Noto Serif"
-    "Noto Serif CJK SC" "Noto Serif CJK TC" "Noto Serif CJK JP"
+  '("Noto Serif" "Noto Serif CJK SC"
+    "Noto Serif CJK TC"
+    "Noto Serif CJK JP"
     "Noto Serif CJK KR"
-    "Noto Color Emoji" "Unifont"))
+    "Noto Color Emoji"
+    "Unifont"))
 
 (define %monospace-families
   ;; Maple Mono Normal NL NF CN 主 → Noto Sans Mono → CJK SC→TC→JP→KR
-  ;;（复杂 script 缺字时正确显示优先于等宽）
+  ;; （复杂 script 缺字时正确显示优先于等宽）
   '("Maple Mono Normal NL NF CN" "Noto Sans Mono"
-                                 "Noto Sans CJK SC" "Noto Sans CJK TC" "Noto Sans CJK JP"
-                                 "Noto Sans CJK KR"
-                                 "Noto Sans Symbols" "Noto Sans Symbols 2"
-                                 "Noto Color Emoji" "Unifont"))
+    "Noto Sans CJK SC"
+    "Noto Sans CJK TC"
+    "Noto Sans CJK JP"
+    "Noto Sans CJK KR"
+    "Noto Sans Symbols"
+    "Noto Sans Symbols 2"
+    "Noto Color Emoji"
+    "Unifont"))
 
 (define (alias-sxml generic families)
   "SXML：generic family 的 alias 主链。"
   `(alias (@ (binding "strong"))
           (family ,generic)
-          (prefer ,@(map (lambda (f) (list 'family f)) families))))
+          (prefer ,@(map (lambda (f)
+                           (list 'family f)) families))))
 
 (define (family-chain-edit family chain)
   "SXML：将 FAMILY 的整个候选链替换为 CHAIN。CSS UI generic names
 （ui-sans-serif/system-ui/ui-monospace）已被上游 30-metric-aliases
 预先展开为具体字体；alias/prefer 只能追加，无法让项目首选字体胜出。"
   `(match (@ (target "pattern"))
-          (test (@ (qual "any") (name "family") (compare "eq"))
-                (string ,family))
-          (edit (@ (name "family") (mode "assign_replace") (binding "strong"))
-                ,@(map (lambda (f) (list 'string f)) chain))))
+     (test (@ (qual "any")
+              (name "family")
+              (compare "eq"))
+           (string ,family))
+     (edit (@ (name "family")
+              (mode "assign_replace")
+              (binding "strong"))
+           ,@(map (lambda (f)
+                    (list 'string f)) chain))))
 
 (define (family-lang-edit generic lang variant chain)
   "SXML：pattern 的 family=GENERIC 且 lang 包含 LANG 时，把整条
@@ -103,31 +119,45 @@ CHAIN 替换为 VARIANT 置首的版本（mode=assign_replace——实测
 列表尾部的 generic 残留会让变体落不到首位；assign_replace 删除
 全部 family 值后重建，变体稳定在首位）。"
   `(match (@ (target "pattern"))
-          (test (@ (name "family") (compare "eq")) (string ,generic))
-          (test (@ (name "lang") (compare "contains")) (string ,lang))
-          (edit (@ (name "family") (mode "assign_replace") (binding "strong"))
-                ,@(map (lambda (f) (list 'string f))
-                       (cons variant (delete variant chain))))))
+     (test (@ (name "family")
+              (compare "eq"))
+           (string ,generic))
+     (test (@ (name "lang")
+              (compare "contains"))
+           (string ,lang))
+     (edit (@ (name "family")
+              (mode "assign_replace")
+              (binding "strong"))
+           ,@(map (lambda (f)
+                    (list 'string f))
+                  (cons variant
+                        (delete variant chain))))))
 
 ;; lang-aware CJK edits：所有 Noto CJK variant 的 lang 覆盖同构
 ;; （fc-scan 实测 ja/ko/zh-cn/zh-hk/zh-mo/zh-sg/zh-tw 全同），原生
 ;; lang 无法区分 variant——必须显式指定。zh-cn/zh-sg 不需要
 ;; edit（默认主链已 SC 优先且 MiSans 处理简体优先）。
 (define %cjk-lang-edits
-  (append-map
-   (lambda (entry)
-     (let ((lang (first entry))
-           (sans (second entry))
-           (serif (third entry))
-           (mono (fourth entry)))
-       (list (family-lang-edit "sans-serif" lang sans %sans-serif-families)
-             (family-lang-edit "serif" lang serif %serif-families)
-             (family-lang-edit "monospace" lang mono %monospace-families))))
-   '(("ja" "Noto Sans CJK JP" "Noto Serif CJK JP" "Noto Sans CJK JP")
-     ("zh-tw" "Noto Sans CJK TC" "Noto Serif CJK TC" "Noto Sans CJK TC")
-     ("zh-hk" "Noto Sans CJK TC" "Noto Serif CJK TC" "Noto Sans CJK TC")
-     ("zh-mo" "Noto Sans CJK TC" "Noto Serif CJK TC" "Noto Sans CJK TC")
-     ("ko" "Noto Sans CJK KR" "Noto Serif CJK KR" "Noto Sans CJK KR"))))
+  (append-map (lambda (entry)
+                (let ((lang (first entry))
+                      (sans (second entry))
+                      (serif (third entry))
+                      (mono (fourth entry)))
+                  (list (family-lang-edit "sans-serif" lang sans
+                                          %sans-serif-families)
+                        (family-lang-edit "serif" lang serif %serif-families)
+                        (family-lang-edit "monospace" lang mono
+                                          %monospace-families))))
+              '(("ja" "Noto Sans CJK JP" "Noto Serif CJK JP"
+                 "Noto Sans CJK JP")
+                ("zh-tw" "Noto Sans CJK TC" "Noto Serif CJK TC"
+                 "Noto Sans CJK TC")
+                ("zh-hk" "Noto Sans CJK TC" "Noto Serif CJK TC"
+                 "Noto Sans CJK TC")
+                ("zh-mo" "Noto Sans CJK TC" "Noto Serif CJK TC"
+                 "Noto Sans CJK TC")
+                ("ko" "Noto Sans CJK KR" "Noto Serif CJK KR"
+                 "Noto Sans CJK KR"))))
 
 ;; script-aware edits（script 变体经 language matching 使用，不塞进
 ;; 全局候选列表）。注：fontconfig 会把会话默认 lang（LANG/LC_ALL）
@@ -140,27 +170,36 @@ CHAIN 替换为 VARIANT 置首的版本（mode=assign_replace——实测
 ;; serif ar 无 Noto Serif Arabic（font-google-noto 实测缺失）→
 ;; 用 Noto Sans Arabic（字形正确优先于衬线风格）。
 (define %script-lang-edits
-  (append-map
-   (lambda (entry)
-     (let ((lang (first entry))
-           (sans (second entry))
-           (serif (third entry))
-           (mono (fourth entry)))
-       (list (family-lang-edit "sans-serif" lang sans %sans-serif-families)
-             (family-lang-edit "serif" lang serif %serif-families)
-             (family-lang-edit "monospace" lang mono %monospace-families))))
-   '(("ar" "MiSans Arabic" "Noto Sans Arabic" "Noto Sans Arabic")
-     ("th" "MiSans Thai" "Noto Serif Thai" "Noto Sans Thai")
-     ("bo" "MiSans Tibetan" "Noto Serif Tibetan" "Noto Sans Tibetan")
-     ("my" "MiSans Myanmar" "Noto Serif Myanmar" "Noto Sans Myanmar")
-     ("km" "MiSans Khmer" "Noto Serif Khmer" "Noto Sans Khmer")
-     ("lo" "MiSans Lao" "Noto Serif Lao" "Noto Sans Lao")
-     ("hi" "MiSans Devanagari" "Noto Serif Devanagari" "Noto Sans Devanagari")
-     ("ne" "MiSans Devanagari" "Noto Serif Devanagari" "Noto Sans Devanagari")
-     ("mr" "MiSans Devanagari" "Noto Serif Devanagari" "Noto Sans Devanagari")
-     ("sa" "MiSans Devanagari" "Noto Serif Devanagari" "Noto Sans Devanagari")
-     ("gu" "MiSans Gujarati" "Noto Serif Gujarati" "Noto Sans Gujarati")
-     ("pa" "MiSans Gurmukhi" "Noto Serif Gurmukhi" "Noto Sans Gurmukhi"))))
+  (append-map (lambda (entry)
+                (let ((lang (first entry))
+                      (sans (second entry))
+                      (serif (third entry))
+                      (mono (fourth entry)))
+                  (list (family-lang-edit "sans-serif" lang sans
+                                          %sans-serif-families)
+                        (family-lang-edit "serif" lang serif %serif-families)
+                        (family-lang-edit "monospace" lang mono
+                                          %monospace-families))))
+              '(("ar" "MiSans Arabic" "Noto Sans Arabic" "Noto Sans Arabic")
+                ("th" "MiSans Thai" "Noto Serif Thai" "Noto Sans Thai")
+                ("bo" "MiSans Tibetan" "Noto Serif Tibetan"
+                 "Noto Sans Tibetan")
+                ("my" "MiSans Myanmar" "Noto Serif Myanmar"
+                 "Noto Sans Myanmar")
+                ("km" "MiSans Khmer" "Noto Serif Khmer" "Noto Sans Khmer")
+                ("lo" "MiSans Lao" "Noto Serif Lao" "Noto Sans Lao")
+                ("hi" "MiSans Devanagari" "Noto Serif Devanagari"
+                 "Noto Sans Devanagari")
+                ("ne" "MiSans Devanagari" "Noto Serif Devanagari"
+                 "Noto Sans Devanagari")
+                ("mr" "MiSans Devanagari" "Noto Serif Devanagari"
+                 "Noto Sans Devanagari")
+                ("sa" "MiSans Devanagari" "Noto Serif Devanagari"
+                 "Noto Sans Devanagari")
+                ("gu" "MiSans Gujarati" "Noto Serif Gujarati"
+                 "Noto Sans Gujarati")
+                ("pa" "MiSans Gurmukhi" "Noto Serif Gurmukhi"
+                 "Noto Sans Gurmukhi"))))
 
 ;; MiSans L3：lang 元数据为空（fc-scan 实测），扩展平面字符在有 lang
 ;; 的 pattern 里会因 lang 惩罚永远输给 MiSans 主字体——target=font
@@ -170,26 +209,39 @@ CHAIN 替换为 VARIANT 置首的版本（mode=assign_replace——实测
   ;; langset 子元素必须是 <string>（fcxml.c FcParseLangSet 只接受
   ;; FcVStackString；<lang> 是未知元素——2.16.0 实机警告验证）。
   '(match (@ (target "font"))
-          (test (@ (name "family") (compare "eq")) (string "MiSans L3"))
-          (edit (@ (name "lang") (mode "assign"))
-                (langset (string "zh-cn") (string "zh-sg") (string "zh-tw")
-                         (string "zh-hk") (string "zh-mo") (string "ja")
-                         (string "ko")))))
+     (test (@ (name "family")
+              (compare "eq"))
+           (string "MiSans L3"))
+     (edit (@ (name "lang")
+              (mode "assign"))
+           (langset (string "zh-cn")
+                    (string "zh-sg")
+                    (string "zh-tw")
+                    (string "zh-hk")
+                    (string "zh-mo")
+                    (string "ja")
+                    (string "ko")))))
 
 ;; generic family alias snippets（由 family 链数据生成）+ 固定别名
 (define %generic-alias-snippets
   (append (list (alias-sxml "sans-serif" %sans-serif-families)
                 (alias-sxml "serif" %serif-families)
                 (alias-sxml "monospace" %monospace-families))
-            ;; Chromium's OpenCode Web UI requests these CSS UI generic stacks.
-            ;; Replace rather than alias/prefer: upstream has already expanded
-            ;; them into concrete fonts by the time this user config is read.
-            (map (lambda (family) (family-chain-edit family %sans-serif-families))
-                 '("ui-sans-serif" "system-ui"))
-            (map (lambda (family) (family-chain-edit family %monospace-families))
-                 '("ui-monospace" "SFMono-Regular" "Menlo" "Monaco"
-                   "Consolas" "Liberation Mono" "Courier New"))
-           ;; emoji：显式别名（fc-match emoji 可用）
+          ;; Chromium's OpenCode Web UI requests these CSS UI generic stacks.
+          ;; Replace rather than alias/prefer: upstream has already expanded
+          ;; them into concrete fonts by the time this user config is read.
+          (map (lambda (family)
+                 (family-chain-edit family %sans-serif-families))
+               '("ui-sans-serif" "system-ui"))
+          (map (lambda (family)
+                 (family-chain-edit family %monospace-families))
+               '("ui-monospace" "SFMono-Regular"
+                 "Menlo"
+                 "Monaco"
+                 "Consolas"
+                 "Liberation Mono"
+                 "Courier New"))
+          ;; emoji：显式别名（fc-match emoji 可用）
           (list '(alias (@ (binding "strong"))
                         (family "emoji")
                         (prefer (family "Noto Color Emoji"))))))
@@ -199,6 +251,4 @@ CHAIN 替换为 VARIANT 置首的版本（mode=assign_replace——实测
 ;; ONLYOFFICE 兼容层自备其 dir 列表）。
 (define %fontconfig-snippets
   (append %generic-alias-snippets
-          (list %mi-sans-l3-lang-edit)
-          %cjk-lang-edits
-          %script-lang-edits))
+          (list %mi-sans-l3-lang-edit) %cjk-lang-edits %script-lang-edits))

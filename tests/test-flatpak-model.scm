@@ -9,7 +9,7 @@
 ;;; 全部纯数据——不触 flatpak CLI、不触网络。
 
 (use-modules (guixcfg flatpak model)
-             (guix gexp) ; plain-file
+             (guix gexp) ;plain-file
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -19,40 +19,37 @@
 
 ;; ── fixtures ───────────────────────────────────────────────
 (define %fp-remotes
-  (list (flatpak-remote
-         (name 'flathub)
-         (descriptor-url "https://dl.flathub.org/repo/flathub.flatpakrepo")
-         (repository-url "https://dl.flathub.org/repo/")
-         (comment "fixture"))
-        (flatpak-remote
-         (name 'internal)
-         (descriptor-url "https://example.invalid/repo/internal.flatpakrepo")
-         (repository-url "https://example.invalid/repo/"))))
+  (list (flatpak-remote (name 'flathub)
+                        (descriptor-url
+                         "https://dl.flathub.org/repo/flathub.flatpakrepo")
+                        (repository-url "https://dl.flathub.org/repo/")
+                        (comment "fixture"))
+        (flatpak-remote (name 'internal)
+                        (descriptor-url
+                         "https://example.invalid/repo/internal.flatpakrepo")
+                        (repository-url "https://example.invalid/repo/"))))
 
 (define %fp-commit
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 
 (define %fp-apps
-  (list (flatpak-application
-         (name 'wechat)
-         (id "com.tencent.WeChat")
-         (remote 'flathub)
-         (branch "stable"))
-        (flatpak-application
-         (name 'pinned)
-         (id "org.example.Pinned")
-         (remote 'flathub)
-         (branch "stable")
-         (update-policy (list 'flatpak-commit-pin %fp-commit)))
-        (flatpak-application
-         (name 'unselected)
-         (id "org.example.Unselected")
-         (remote 'flathub)
-         (branch "stable"))))
+  (list (flatpak-application (name 'wechat)
+                             (id "com.tencent.WeChat")
+                             (remote 'flathub)
+                             (branch "stable"))
+        (flatpak-application (name 'pinned)
+                             (id "org.example.Pinned")
+                             (remote 'flathub)
+                             (branch "stable")
+                             (update-policy (list 'flatpak-commit-pin
+                                                  %fp-commit)))
+        (flatpak-application (name 'unselected)
+                             (id "org.example.Unselected")
+                             (remote 'flathub)
+                             (branch "stable"))))
 
 ;; ── record 构造与 accessor ─────────────────────────────────
-(test-equal "application ref"
-            "com.tencent.WeChat//stable"
+(test-equal "application ref" "com.tencent.WeChat//stable"
             (flatpak-application-ref (car %fp-apps)))
 
 ;; ── app-id / branch / commit 校验 ──────────────────────────
@@ -97,20 +94,20 @@
 (test-assert "valid update-policy: track-branch"
              (valid-flatpak-update-policy? 'track-branch))
 (test-assert "valid update-policy: commit pin"
-             (valid-flatpak-update-policy?
-              (list 'flatpak-commit-pin %fp-commit)))
+             (valid-flatpak-update-policy? (list 'flatpak-commit-pin
+                                                 %fp-commit)))
 (test-assert "invalid update-policy: unknown symbol"
              (not (valid-flatpak-update-policy? 'magic)))
 (test-assert "invalid update-policy: pin with bad commit"
-             (not (valid-flatpak-update-policy?
-                   (list 'flatpak-commit-pin "nothex"))))
+             (not (valid-flatpak-update-policy? (list 'flatpak-commit-pin
+                                                      "nothex"))))
 (test-assert "invalid update-policy: pin wrong arity"
-             (not (valid-flatpak-update-policy?
-                   (list 'flatpak-commit-pin %fp-commit "extra"))))
-(test-equal "commit view: track-branch -> #f"
-            #f (flatpak-application-commit (car %fp-apps)))
-(test-equal "commit view: pinned -> hash"
-            %fp-commit (flatpak-application-commit (cadr %fp-apps)))
+             (not (valid-flatpak-update-policy? (list 'flatpak-commit-pin
+                                                      %fp-commit "extra"))))
+(test-equal "commit view: track-branch -> #f" #f
+            (flatpak-application-commit (car %fp-apps)))
+(test-equal "commit view: pinned -> hash" %fp-commit
+            (flatpak-application-commit (cadr %fp-apps)))
 (test-assert "pinned? view"
              (and (not (flatpak-application-pinned? (car %fp-apps)))
                   (flatpak-application-pinned? (cadr %fp-apps))))
@@ -119,149 +116,204 @@
 (test-assert "valid override-policy: external"
              (valid-flatpak-override-policy? 'external))
 (test-assert "valid override-policy: managed"
-             (valid-flatpak-override-policy?
-              (list 'managed-overrides
-                    (flatpak-override (sockets '("wayland"))))))
+             (valid-flatpak-override-policy? (list 'managed-overrides
+                                                   (flatpak-override (sockets '
+                                                                              ("wayland"))))))
 (test-assert "invalid override-policy: managed with non-override"
-             (not (valid-flatpak-override-policy?
-                   (list 'managed-overrides 42))))
+             (not (valid-flatpak-override-policy? (list 'managed-overrides 42))))
 (test-assert "invalid override-policy: unknown symbol"
              (not (valid-flatpak-override-policy? 'magic)))
-(test-equal "managed view: external -> #f"
-            #f (flatpak-application-managed-overrides (car %fp-apps)))
+(test-equal "managed view: external -> #f" #f
+            (flatpak-application-managed-overrides (car %fp-apps)))
 (test-equal "managed view: managed -> override record"
             '("wayland")
-            (flatpak-override-sockets
-             (flatpak-application-managed-overrides
-              (flatpak-application
-               (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-               (override-policy
-                (list 'managed-overrides
-                      (flatpak-override (sockets '("wayland")))))))))
+            (flatpak-override-sockets (flatpak-application-managed-overrides (flatpak-application
+                                                                              (name 'a)
+                                                                              
+                                                                              (id
+                                                                               "com.x.A")
+                                                                              
+                                                                              (remote 'flathub)
+                                                                              
+                                                                              (branch
+                                                                               "stable")
+                                                                              
+                                                                              (override-policy
+                                                                               (list 'managed-overrides
+                                                                                
+                                                                                (flatpak-override
+                                                                                 (sockets '
+                                                                                  ("wayland")))))))))
 
 ;; ── override 校验（record 内部字段）────────────────────────
 (test-assert "valid bus policy"
-             (valid-flatpak-application?
-              (flatpak-application
-               (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-               (override-policy
-                (list 'managed-overrides
-                      (flatpak-override
-                       (session-bus '("org.freedesktop.secrets=talk"))
-                       (system-bus '("org.freedesktop.UPower=own"))))))
-              '(flathub)))
+             (valid-flatpak-application? (flatpak-application (name 'a)
+                                                              (id "com.x.A")
+                                                              (remote 'flathub)
+                                                              (branch "stable")
+                                                              (override-policy
+                                                               (list 'managed-overrides
+                                                                     (flatpak-override
+                                                                      (session-bus '
+                                                                       ("org.freedesktop.secrets=talk"))
+                                                                      (system-bus '
+                                                                       ("org.freedesktop.UPower=own"))))))
+                                         '(flathub)))
 (test-assert "invalid bus policy: no assignment"
-             (not (valid-flatpak-application?
-                   (flatpak-application
-                    (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-                    (override-policy
-                     (list 'managed-overrides
-                           (flatpak-override
-                            (session-bus '("org.freedesktop.secrets"))))))
-                   '(flathub))))
+             (not (valid-flatpak-application? (flatpak-application (name 'a)
+                                                                   (id
+                                                                    "com.x.A")
+                                                                   (remote 'flathub)
+                                                                   (branch
+                                                                    "stable")
+                                                                   (override-policy
+                                                                    (list 'managed-overrides
+                                                                          (flatpak-override
+                                                                           (session-bus '
+                                                                            ("org.freedesktop.secrets"))))))
+                                              '(flathub))))
 (test-assert "invalid environment entry: no assignment"
-             (not (valid-flatpak-application?
-                   (flatpak-application
-                    (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-                    (override-policy
-                     (list 'managed-overrides
-                           (flatpak-override
-                            (environment '("NOVAR"))))))
-                   '(flathub))))
+             (not (valid-flatpak-application? (flatpak-application (name 'a)
+                                                                   (id
+                                                                    "com.x.A")
+                                                                   (remote 'flathub)
+                                                                   (branch
+                                                                    "stable")
+                                                                   (override-policy
+                                                                    (list 'managed-overrides
+                                                                          (flatpak-override
+                                                                           (environment '
+                                                                            ("NOVAR"))))))
+                                              '(flathub))))
 (test-assert "invalid environment entry: malformed variable name"
-             (not (valid-flatpak-application?
-                   (flatpak-application
-                    (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-                    (override-policy
-                     (list 'managed-overrides
-                           (flatpak-override
-                            (environment '("BAD KEY=value"))))))
-                   '(flathub))))
+             (not (valid-flatpak-application? (flatpak-application (name 'a)
+                                                                   (id
+                                                                    "com.x.A")
+                                                                   (remote 'flathub)
+                                                                   (branch
+                                                                    "stable")
+                                                                   (override-policy
+                                                                    (list 'managed-overrides
+                                                                          (flatpak-override
+                                                                           (environment '
+                                                                            ("BAD KEY=value"))))))
+                                              '(flathub))))
 
 ;; ── extra-persistence 校验 ─────────────────────────────────
 (test-assert "valid extra-persistence: empty"
-             (valid-flatpak-application?
-              (flatpak-application (name 'a) (id "com.x.A")
-                                   (remote 'flathub) (branch "stable"))
-              '(flathub)))
+             (valid-flatpak-application? (flatpak-application (name 'a)
+                                                              (id "com.x.A")
+                                                              (remote 'flathub)
+                                                              (branch "stable"))
+                                         '(flathub)))
 (test-assert "valid extra-persistence: pairs"
-             (valid-flatpak-application?
-              (flatpak-application
-               (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-               (extra-persistence '((".local/share/wechat" "wechat/share"))))
-              '(flathub)))
+             (valid-flatpak-application? (flatpak-application (name 'a)
+                                                              (id "com.x.A")
+                                                              (remote 'flathub)
+                                                              (branch "stable")
+                                                              (extra-persistence '
+                                                               ((".local/share/wechat"
+                                                                 "wechat/share"))))
+                                         '(flathub)))
 (test-assert "invalid extra-persistence: absolute consumer"
-             (not (valid-flatpak-application?
-                   (flatpak-application
-                    (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-                    (extra-persistence '(("/abs" "wechat/share"))))
-                   '(flathub))))
+             (not (valid-flatpak-application? (flatpak-application (name 'a)
+                                                                   (id
+                                                                    "com.x.A")
+                                                                   (remote 'flathub)
+                                                                   (branch
+                                                                    "stable")
+                                                                   (extra-persistence '
+                                                                    (("/abs"
+                                                                      "wechat/share"))))
+                                              '(flathub))))
 (test-assert "invalid extra-persistence: backing escape"
-             (not (valid-flatpak-application?
-                   (flatpak-application
-                    (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-                    (extra-persistence '((".local/share/wechat" "../x"))))
-                   '(flathub))))
+             (not (valid-flatpak-application? (flatpak-application (name 'a)
+                                                                   (id
+                                                                    "com.x.A")
+                                                                   (remote 'flathub)
+                                                                   (branch
+                                                                    "stable")
+                                                                   (extra-persistence '
+                                                                    ((".local/share/wechat"
+                                                                      "../x"))))
+                                              '(flathub))))
 
 ;; ── remote 校验 ────────────────────────────────────────────
 (test-assert "valid remote"
              (valid-flatpak-remote? (car %fp-remotes)))
 (test-assert "invalid remote: empty repository-url"
-             (not (valid-flatpak-remote?
-                   (flatpak-remote
-                    (name 'x)
-                    (descriptor-url "https://e/foo.flatpakrepo")
-                    (repository-url "")))))
+             (not (valid-flatpak-remote? (flatpak-remote (name 'x)
+                                                         (descriptor-url
+                                                          "https://e/foo.flatpakrepo")
+                                                         (repository-url "")))))
 (test-assert "invalid remote: empty descriptor-url"
-             (not (valid-flatpak-remote?
-                   (flatpak-remote
-                    (name 'x)
-                    (descriptor-url "")
-                    (repository-url "https://e/")))))
+             (not (valid-flatpak-remote? (flatpak-remote (name 'x)
+                                                         (descriptor-url "")
+                                                         (repository-url
+                                                          "https://e/")))))
 
 ;; ── application 校验（remote 已知性）───────────────────────
 (test-assert "valid application"
              (valid-flatpak-application? (car %fp-apps)
                                          (map flatpak-remote-name %fp-remotes)))
 (test-assert "invalid application: unknown remote"
-             (not (valid-flatpak-application? (car %fp-apps) '(other))))
+             (not (valid-flatpak-application? (car %fp-apps)
+                                              '(other))))
 (test-assert "invalid application: empty branch"
-             (not (valid-flatpak-application?
-                   (flatpak-application (name 'x) (id "com.x.X")
-                                        (remote 'flathub) (branch ""))
-                   '(flathub))))
+             (not (valid-flatpak-application? (flatpak-application (name 'x)
+                                                                   (id
+                                                                    "com.x.X")
+                                                                   (remote 'flathub)
+                                                                   (branch ""))
+                                              '(flathub))))
 (test-assert "invalid application: bad update-policy"
-             (not (valid-flatpak-application?
-                   (flatpak-application (name 'x) (id "com.x.X")
-                                        (remote 'flathub) (branch "stable")
-                                        (update-policy 'magic))
-                   '(flathub))))
+             (not (valid-flatpak-application? (flatpak-application (name 'x)
+                                                                   (id
+                                                                    "com.x.X")
+                                                                   (remote 'flathub)
+                                                                   (branch
+                                                                    "stable")
+                                                                   (update-policy 'magic))
+                                              '(flathub))))
 
 ;; ── desktop shadow 校验 ─────────────────────────────────────
 (define %desktop-fixture
   (plain-file "fixture.desktop" "[Desktop Entry]\nType=Application\n"))
 
 (test-assert "valid desktop shadow contribution"
-             (valid-flatpak-application?
-              (flatpak-application
-               (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-               (desktop-files
-                (list (list "com.x.A.desktop" %desktop-fixture))))
-              '(flathub)))
+             (valid-flatpak-application? (flatpak-application (name 'a)
+                                                              (id "com.x.A")
+                                                              (remote 'flathub)
+                                                              (branch "stable")
+                                                              (desktop-files (list
+                                                                              (list
+                                                                               "com.x.A.desktop"
+                                                                               %desktop-fixture))))
+                                         '(flathub)))
 (test-assert "desktop shadow rejects nested target"
-             (not (valid-flatpak-application?
-                   (flatpak-application
-                    (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-                    (desktop-files
-                     (list (list "nested/com.x.A.desktop" %desktop-fixture))))
-                   '(flathub))))
+             (not (valid-flatpak-application? (flatpak-application (name 'a)
+                                                                   (id
+                                                                    "com.x.A")
+                                                                   (remote 'flathub)
+                                                                   (branch
+                                                                    "stable")
+                                                                   (desktop-files
+                                                                    (list (list
+                                                                           "nested/com.x.A.desktop"
+                                                                           %desktop-fixture))))
+                                              '(flathub))))
 (test-assert "desktop shadow rejects non-file-like source"
-             (not (valid-flatpak-application?
-                   (flatpak-application
-                    (name 'a) (id "com.x.A") (remote 'flathub) (branch "stable")
-                    (desktop-files
-                     (list (list "com.x.A.desktop" "./mutable.desktop"))))
-                   '(flathub))))
+             (not (valid-flatpak-application? (flatpak-application (name 'a)
+                                                                   (id
+                                                                    "com.x.A")
+                                                                   (remote 'flathub)
+                                                                   (branch
+                                                                    "stable")
+                                                                   (desktop-files
+                                                                    (list (list
+                                                                           "com.x.A.desktop"
+                                                                           "./mutable.desktop"))))
+                                              '(flathub))))
 (test-assert "flatpak id requires three segments"
              (not (valid-flatpak-app-id? "org.App")))
 (test-assert "flatpak id rejects a digit-leading segment"
@@ -280,50 +332,72 @@
 (test-assert "valid catalog passes"
              (validate-flatpak-catalog! %fp-remotes %fp-apps))
 (test-error "catalog duplicate logical name" #t
-            (validate-flatpak-catalog!
-             %fp-remotes
-             (list (car %fp-apps)
-                   (flatpak-application (name 'wechat) (id "com.x.Other")
-                                        (remote 'flathub) (branch "stable")))))
+            (validate-flatpak-catalog! %fp-remotes
+                                       (list (car %fp-apps)
+                                             (flatpak-application (name 'wechat)
+                                                                  (id
+                                                                   "com.x.Other")
+                                                                  (remote 'flathub)
+                                                                  (branch
+                                                                   "stable")))))
 (test-error "catalog duplicate app-id" #t
-            (validate-flatpak-catalog!
-             %fp-remotes
-             (list (car %fp-apps)
-                   (flatpak-application (name 'other)
-                                        (id "com.tencent.WeChat")
-                                        (remote 'flathub) (branch "stable")))))
+            (validate-flatpak-catalog! %fp-remotes
+                                       (list (car %fp-apps)
+                                             (flatpak-application (name 'other)
+                                                                  (id
+                                                                   "com.tencent.WeChat")
+                                                                  (remote 'flathub)
+                                                                  (branch
+                                                                   "stable")))))
 (test-error "catalog duplicate remote name" #t
-            (validate-flatpak-catalog!
-             (list (flatpak-remote (name 'flathub)
-                                   (descriptor-url "https://a/foo.flatpakrepo")
-                                   (repository-url "https://a/"))
-                   (flatpak-remote (name 'flathub)
-                                   (descriptor-url "https://b/foo.flatpakrepo")
-                                   (repository-url "https://b/")))
-             %fp-apps))
+            (validate-flatpak-catalog! (list (flatpak-remote (name 'flathub)
+                                                             (descriptor-url
+                                                              "https://a/foo.flatpakrepo")
+                                                             (repository-url
+                                                              "https://a/"))
+                                             (flatpak-remote (name 'flathub)
+                                                             (descriptor-url
+                                                              "https://b/foo.flatpakrepo")
+                                                             (repository-url
+                                                              "https://b/")))
+                                       %fp-apps))
 (test-error "catalog invalid app" #t
-            (validate-flatpak-catalog!
-             %fp-remotes
-             (list (flatpak-application (name 'bad) (id "no-dot")
-                                        (remote 'flathub) (branch "stable")))))
+            (validate-flatpak-catalog! %fp-remotes
+                                       (list (flatpak-application (name 'bad)
+                                                                  (id "no-dot")
+                                                                  (remote 'flathub)
+                                                                  (branch
+                                                                   "stable")))))
 (test-error "catalog unknown remote reference" #t
-            (validate-flatpak-catalog!
-             %fp-remotes
-             (list (flatpak-application (name 'x) (id "com.x.X")
-                                        (remote 'nope) (branch "stable")))))
+            (validate-flatpak-catalog! %fp-remotes
+                                       (list (flatpak-application (name 'x)
+                                                                  (id
+                                                                   "com.x.X")
+                                                                  (remote 'nope)
+                                                                  (branch
+                                                                   "stable")))))
 (test-error "catalog duplicate desktop shadow target" #t
-            (validate-flatpak-catalog!
-             %fp-remotes
-             (list (flatpak-application
-                    (name 'one) (id "com.x.One")
-                    (remote 'flathub) (branch "stable")
-                    (desktop-files
-                     (list (list "shared.desktop" %desktop-fixture))))
-                   (flatpak-application
-                    (name 'two) (id "com.x.Two")
-                    (remote 'flathub) (branch "stable")
-                    (desktop-files
-                     (list (list "shared.desktop" %desktop-fixture)))))))
+            (validate-flatpak-catalog! %fp-remotes
+                                       (list (flatpak-application (name 'one)
+                                                                  (id
+                                                                   "com.x.One")
+                                                                  (remote 'flathub)
+                                                                  (branch
+                                                                   "stable")
+                                                                  (desktop-files
+                                                                   (list (list
+                                                                          "shared.desktop"
+                                                                          %desktop-fixture))))
+                                             (flatpak-application (name 'two)
+                                                                  (id
+                                                                   "com.x.Two")
+                                                                  (remote 'flathub)
+                                                                  (branch
+                                                                   "stable")
+                                                                  (desktop-files
+                                                                   (list (list
+                                                                          "shared.desktop"
+                                                                          %desktop-fixture)))))))
 
 (test-assert "valid selection passes"
              (validate-flatpak-selection! '(wechat) %fp-apps))
@@ -334,156 +408,189 @@
 
 ;; ── selection resolver ─────────────────────────────────────
 (test-equal "selection resolves in catalog order"
-            (list (car %fp-apps) (cadr %fp-apps))
+            (list (car %fp-apps)
+                  (cadr %fp-apps))
             (flatpak-select-applications '(pinned wechat) %fp-apps))
 (test-equal "selection empty -> empty"
-            '() (flatpak-select-applications '() %fp-apps))
+            '()
+            (flatpak-select-applications '() %fp-apps))
 (test-error "selection resolver unknown name" #t
             (flatpak-select-applications '(ghost) %fp-apps))
 
 ;; ── reconcile plan（纯函数，只增不删）──────────────────────
 (test-equal "plan: missing selected -> install"
-            (list (car %fp-apps) (cadr %fp-apps))
-            (flatpak-reconcile-plan
-             (flatpak-select-applications '(wechat pinned) %fp-apps)
-             '()))
+            (list (car %fp-apps)
+                  (cadr %fp-apps))
+            (flatpak-reconcile-plan (flatpak-select-applications '(wechat
+                                                                   pinned)
+                                                                 %fp-apps)
+                                    '()))
 (test-equal "plan: already installed -> no-op"
             '()
-            (flatpak-reconcile-plan
-             (flatpak-select-applications '(wechat pinned) %fp-apps)
-             '("com.tencent.WeChat//stable" "org.example.Pinned//stable")))
+            (flatpak-reconcile-plan (flatpak-select-applications '(wechat
+                                                                   pinned)
+                                                                 %fp-apps)
+                                    '("com.tencent.WeChat//stable"
+                                      "org.example.Pinned//stable")))
 (test-equal "plan: unmanaged installed app untouched"
             '("com.tencent.WeChat")
             (map flatpak-application-id
-                 (flatpak-reconcile-plan
-                  (flatpak-select-applications '(wechat) %fp-apps)
-                  '("org.other.Unmanaged//stable"
-                    "org.freedesktop.Platform//25.08"))))
+                 (flatpak-reconcile-plan (flatpak-select-applications '(wechat)
+                                          %fp-apps)
+                                         '("org.other.Unmanaged//stable"
+                                           "org.freedesktop.Platform//25.08"))))
 (test-equal "plan: runtime refs never enter comparison"
             '()
-            (flatpak-reconcile-plan
-             (flatpak-select-applications '() %fp-apps)
-             '("org.freedesktop.Platform//25.08"
-               "org.freedesktop.Platform.GL.default//25.08")))
+            (flatpak-reconcile-plan (flatpak-select-applications '() %fp-apps)
+                                    '("org.freedesktop.Platform//25.08"
+                                      "org.freedesktop.Platform.GL.default//25.08")))
 (test-equal "plan: unselected catalog app never planned"
             '()
             (map flatpak-application-id
-                 (flatpak-reconcile-plan
-                  (flatpak-select-applications '(wechat) %fp-apps)
-                  '("com.tencent.WeChat//stable"))))
+                 (flatpak-reconcile-plan (flatpak-select-applications '(wechat)
+                                          %fp-apps)
+                                         '("com.tencent.WeChat//stable"))))
 
 ;; ── override renderer（确定性 fixture）─────────────────────
 (test-equal "renderer deterministic complete-file"
-            "[Context]\nsockets=wayland;fallback-x11;\nfilesystems=xdg-download:ro;!host;\n\n[Environment]\nLC_ALL=zh_CN.UTF-8\n\n[Session Bus Policy]\norg.freedesktop.secrets=talk\n\n[System Bus Policy]\norg.freedesktop.UPower=talk\n"
-            (flatpak-render-override-file
-             (flatpak-override
-              (sockets '("wayland" "fallback-x11"))
-              (filesystems '("xdg-download:ro" "!host"))
-              (environment '("LC_ALL=zh_CN.UTF-8"))
-              (session-bus '("org.freedesktop.secrets=talk"))
-              (system-bus '("org.freedesktop.UPower=talk")))))
+            "[Context]
+sockets=wayland;fallback-x11;
+filesystems=xdg-download:ro;!host;
+
+[Environment]
+LC_ALL=zh_CN.UTF-8
+
+[Session Bus Policy]
+org.freedesktop.secrets=talk
+
+[System Bus Policy]
+org.freedesktop.UPower=talk
+"
+            (flatpak-render-override-file (flatpak-override (sockets '("wayland"
+                                                                       "fallback-x11"))
+                                                            (filesystems '("xdg-download:ro"
+                                                                           "!host"))
+                                                            (environment '("LC_ALL=zh_CN.UTF-8"))
+                                                            (session-bus '("org.freedesktop.secrets=talk"))
+                                                            (system-bus '("org.freedesktop.UPower=talk")))))
 (test-equal "renderer field order fixed (shared before sockets)"
-            "[Context]\nshared=network;\nsockets=wayland;\n"
-            (flatpak-render-override-file
-             (flatpak-override
-              (sockets '("wayland"))
-              (shared '("network")))))
+            "[Context]
+shared=network;
+sockets=wayland;
+"
+            (flatpak-render-override-file (flatpak-override (sockets '("wayland"))
+                                                            (shared '("network")))))
 (test-equal "renderer list order = declaration order"
             "[Context]\ndevices=dri;kvm;\n"
-            (flatpak-render-override-file
-             (flatpak-override (devices '("dri" "kvm")))))
+            (flatpak-render-override-file (flatpak-override (devices '("dri"
+                                                                       "kvm")))))
 (test-equal "renderer escapes backslash and semicolon"
             "[Context]\nfilesystems=a\\\\b;a\\;b;\n"
-            (flatpak-render-override-file
-             (flatpak-override (filesystems '("a\\b" "a;b")))))
+            (flatpak-render-override-file (flatpak-override (filesystems '("a\\b"
+                                                                           "a;b")))))
 (test-equal "renderer escapes GKeyFile environment scalar values"
-            "[Environment]\nPATH=C:\\\\tools;bin\nLEADING=\\svalue\n"
-            (flatpak-render-override-file
-             (flatpak-override
-              (environment '("PATH=C:\\tools;bin" "LEADING= value")))))
-(test-equal "renderer empty override -> empty string"
-            ""
+            "[Environment]
+PATH=C:\\\\tools;bin
+LEADING=\\svalue
+"
+            (flatpak-render-override-file (flatpak-override (environment '("PATH=C:\\tools;bin"
+                                                                           "LEADING= value")))))
+(test-equal "renderer empty override -> empty string" ""
             (flatpak-render-override-file (flatpak-override)))
-(test-equal "renderer session bus only"
-            "[Session Bus Policy]\norg.freedesktop.secrets=talk\n"
-            (flatpak-render-override-file
-             (flatpak-override
-              (session-bus '("org.freedesktop.secrets=talk")))))
+(test-equal "renderer session bus only" "[Session Bus Policy]
+org.freedesktop.secrets=talk
+"
+            (flatpak-render-override-file (flatpak-override (session-bus '("org.freedesktop.secrets=talk")))))
 
 ;; ── extension（auxiliary ref）───────────────────────────────
 (define %fp-ext
-  (flatpak-extension
-   (name 'layer)
-   (id "org.freedesktop.Platform.VulkanLayer.example")
-   (remote 'flathub)
-   (branch "25.08")))
+  (flatpak-extension (name 'layer)
+                     (id "org.freedesktop.Platform.VulkanLayer.example")
+                     (remote 'flathub)
+                     (branch "25.08")))
 
 (test-equal "extension ref is id//branch"
             "org.freedesktop.Platform.VulkanLayer.example//25.08"
             (flatpak-extension-ref %fp-ext))
 
 (test-assert "extension validates against known remotes"
-             (valid-flatpak-extension? %fp-ext '(flathub)))
+             (valid-flatpak-extension? %fp-ext
+                                       '(flathub)))
 
 (test-assert "extension rejects unknown remote"
-             (not (valid-flatpak-extension? %fp-ext '(other))))
+             (not (valid-flatpak-extension? %fp-ext
+                                            '(other))))
 
 (test-assert "extension rejects bad id"
-             (not (valid-flatpak-extension?
-                   (flatpak-extension
-                    (name 'bad) (id "not-a-dbus-id")
-                    (remote 'flathub) (branch "stable"))
-                   '(flathub))))
+             (not (valid-flatpak-extension? (flatpak-extension (name 'bad)
+                                                               (id
+                                                                "not-a-dbus-id")
+                                                               (remote 'flathub)
+                                                               (branch
+                                                                "stable"))
+                                            '(flathub))))
 
 (test-equal "select-extensions resolves in catalog order"
             '(a b)
             (map flatpak-extension-name
-                 (flatpak-select-extensions
-                  '(b a)
-                  (list (flatpak-extension
-                         (name 'a) (id "org.example.A")
-                         (remote 'flathub) (branch "1"))
-                        (flatpak-extension
-                         (name 'b) (id "org.example.B")
-                         (remote 'flathub) (branch "1"))))))
+                 (flatpak-select-extensions '(b a)
+                                            (list (flatpak-extension (name 'a)
+                                                                     (id
+                                                                      "org.example.A")
+                                                                     (remote 'flathub)
+                                                                     (branch
+                                                                      "1"))
+                                                  (flatpak-extension (name 'b)
+                                                                     (id
+                                                                      "org.example.B")
+                                                                     (remote 'flathub)
+                                                                     (branch
+                                                                      "1"))))))
 
 (test-assert "select-extensions rejects unknown names"
              (catch #t
-               (lambda ()
-                 (flatpak-select-extensions '(ghost) (list %fp-ext))
-                 #f)
-               (lambda _ #t)))
+                    (lambda ()
+                      (flatpak-select-extensions '(ghost)
+                                                 (list %fp-ext)) #f)
+                    (lambda _
+                      #t)))
 
 (define %fp-extension-remote
-  (list (flatpak-remote
-         (name 'flathub)
-         (descriptor-url "https://example.invalid/f.flatpakrepo")
-         (repository-url "https://example.invalid"))))
+  (list (flatpak-remote (name 'flathub)
+                        (descriptor-url
+                         "https://example.invalid/f.flatpakrepo")
+                        (repository-url "https://example.invalid"))))
 
 (test-assert "extension catalog permits one id on different ABI branches"
-             (validate-flatpak-extension-catalog!
-              %fp-extension-remote
-              (list %fp-ext
-                    (flatpak-extension
-                     (name 'next) (id "org.freedesktop.Platform.VulkanLayer.example")
-                     (remote 'flathub) (branch "26.08")))))
+             (validate-flatpak-extension-catalog! %fp-extension-remote
+                                                  (list %fp-ext
+                                                        (flatpak-extension (name 'next)
+                                                                           (id
+                                                                            "org.freedesktop.Platform.VulkanLayer.example")
+                                                                           (remote 'flathub)
+                                                                           (branch
+                                                                            "26.08")))))
 
-(test-error "extension catalog rejects duplicate full refs"
-            #t
-            (validate-flatpak-extension-catalog!
-             %fp-extension-remote
-             (list %fp-ext
-                   (flatpak-extension
-                    (name 'dup) (id "org.freedesktop.Platform.VulkanLayer.example")
-                    (remote 'flathub) (branch "25.08")))))
+(test-error "extension catalog rejects duplicate full refs" #t
+            (validate-flatpak-extension-catalog! %fp-extension-remote
+                                                 (list %fp-ext
+                                                       (flatpak-extension (name 'dup)
+                                                                          (id
+                                                                           "org.freedesktop.Platform.VulkanLayer.example")
+                                                                          (remote 'flathub)
+                                                                          (branch
+                                                                           "25.08")))))
 
 (test-assert "extension commit pins fail closed"
-             (not (valid-flatpak-extension?
-                   (flatpak-extension
-                    (name 'pinned) (id "org.example.PinnedExtension")
-                    (remote 'flathub) (branch "stable")
-                    (update-policy
-                     '(flatpak-commit-pin "0123456789abcdef")))
-                   '(flathub))))
+             (not (valid-flatpak-extension? (flatpak-extension (name 'pinned)
+                                                               (id
+                                                                "org.example.PinnedExtension")
+                                                               (remote 'flathub)
+                                                               (branch
+                                                                "stable")
+                                                               (update-policy '
+                                                                              (flatpak-commit-pin
+                                                                               "0123456789abcdef")))
+                                            '(flathub))))
 
 (test-end "flatpak-model")

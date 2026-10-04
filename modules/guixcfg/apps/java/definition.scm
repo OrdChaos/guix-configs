@@ -80,29 +80,45 @@
 ;;; 默认）。
 
 (define-module (guixcfg apps java definition)
-               #:use-module (gnu home services) ; home-files / home-environment-variables
-               #:use-module (gnu packages java) ; icedtea-8、openjdk17/21/24/25
-               #:use-module (gnu services)      ; simple-service
-               #:use-module (guix gexp)         ; gexp-input、program-file、ungexp
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:export (%java8 %java17 %java21 %java24 %java25
-                                %default-java %java-version-table
-                                java-command-program java-home-gexp
-                                %java))
+  #:use-module (gnu home services) ;home-files / home-environment-variables
+  #:use-module (gnu packages java) ;icedtea-8、openjdk17/21/24/25
+  #:use-module (gnu services) ;simple-service
+  #:use-module (guix gexp) ;gexp-input、program-file、ungexp
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:export (%java8 %java17
+                   %java21
+                   %java24
+                   %java25
+                   %default-java
+                   %java-version-table
+                   java-command-program
+                   java-home-gexp
+                   %java))
 
 ;; ── 版本事实源（major → JDK 包）─────────────────────────────
 ;; 全部 JDK（含 JRE 内容的 image 由 "jdk" output 承载；
 ;; 不声明纯 JRE 包——Minecraft/modding/Gradle 需要完整 JDK）。
-(define %java8 icedtea-8)  ; Java 8（IcedTea 3.19.0）
-(define %java17 openjdk17) ; 17.0.10
-(define %java21 openjdk21) ; 21.0.2
-(define %java24 openjdk24) ; 24.0.1
-(define %java25 openjdk25) ; 25.0.2
+(define %java8
+  icedtea-8)
+ ; Java 8（IcedTea 3.19.0）
+(define %java17
+  openjdk17)
+ ; 17.0.10
+(define %java21
+  openjdk21)
+ ; 21.0.2
+(define %java24
+  openjdk24)
+ ; 24.0.1
+(define %java25
+  openjdk25)
+ ; 25.0.2
 
 ;; 默认 Java：声明式选择。profile 的 java/javac 与 JAVA_HOME 都跟随
 ;; 这里；非默认版本 wrapper 与之无关。
-(define %default-java %java21)
+(define %default-java
+  %java21)
 
 ;; 全版本表（含默认版本）：脚本可以直接写显式版本（java21），不必依赖
 ;; PATH 顺序；默认版本的 java21 wrapper 与该版本的 profile java 同版本
@@ -121,43 +137,45 @@
 classpath 等）。file-append 在 build 期注入 store 路径 **并登记 store
 reference**（非默认 output 只会嵌入裸字符串、GC 回收后悬空——见文件头
 store reference 一节）。"
-  (program-file
-   (string-append "java" (number->string major))
-   #~(apply execl
-       #$(file-append jdk "/bin/java")
-       #$(string-append "java" (number->string major))
-       (cdr (command-line)))))
+  (program-file (string-append "java"
+                               (number->string major))
+                #~(apply execl
+                         #$(file-append jdk "/bin/java")
+                         #$(string-append "java"
+                                          (number->string major))
+                         (cdr (command-line)))))
 
 (define (java-home-gexp jdk)
   "默认 JDK 的 \"jdk\" output 目录（JAVA_HOME 值）——gexp，ungexp 的
 store 路径在 build 期展开。该 output 的 store reference 由 profile 的
 `(list %default-java \"jdk\")` manifest entry 提供（两者成对保留）。"
-  (gexp (ungexp (gexp-input jdk "jdk"))))
+  #~#$(gexp-input jdk "jdk"))
 
 (define %java
-  (application
-   (name 'java)
-   ;; 只装默认版本的 "jdk" output：java + javac + jmods/include 同时
-   ;; 可得，且与 JAVA_HOME 同一目录（profile 里不放第二个 JDK——
-   ;; 同名 output 冲突/first-wins，见文件头）。
-   (home-packages (list (list %default-java "jdk")))
-   (home-services
-    (list ;; 每个版本的稳定访问名（home-files；~/.local/bin 的 PATH
-     ;; 贡献归 apps/polkit-gnome）。
-          (simple-service
-           'java-version-wrappers
-           home-files-service-type
-           (map (lambda (entry)
-                  ;; 注意：home-files 条目是 **(target source) 两元素
-                  ;; list**（不是 dotted pair——symlink-manager 的
-                  ;; match 只接受 2 元素 list；env vars 才是 pair）。
-                  (list (string-append ".local/bin/java"
-                                       (number->string (car entry)))
-                        (java-command-program (car entry) (cdr entry))))
-                %java-version-table))
-          ;; JAVA_HOME = 默认 JDK 的 "jdk" output（声明值，非运行时
-          ;; 探测；额外版本不覆盖它）。
-          (simple-service
-           'java-home
-           home-environment-variables-service-type
-           `(("JAVA_HOME" . ,(java-home-gexp %default-java))))))))
+  (application (name 'java)
+               ;; 只装默认版本的 "jdk" output：java + javac + jmods/include 同时
+               ;; 可得，且与 JAVA_HOME 同一目录（profile 里不放第二个 JDK——
+               ;; 同名 output 冲突/first-wins，见文件头）。
+               (home-packages (list (list %default-java "jdk")))
+               (home-services (list ;每个版本的稳定访问名（home-files；~/.local/bin 的 PATH
+                                    ;; 贡献归 apps/polkit-gnome）。
+                                    (simple-service 'java-version-wrappers
+                                                    home-files-service-type
+                                                    (map (lambda (entry)
+                                                           ;; 注意：home-files 条目是 **(target source) 两元素
+                                                           ;; list**（不是 dotted pair——symlink-manager 的
+                                                           ;; match 只接受 2 元素 list；env vars 才是 pair）。
+                                                           (list (string-append
+                                                                  ".local/bin/java"
+                                                                  (number->string
+                                                                   (car entry)))
+                                                                 (java-command-program
+                                                                  (car entry)
+                                                                  (cdr entry))))
+                                                         %java-version-table))
+                                    ;; JAVA_HOME = 默认 JDK 的 "jdk" output（声明值，非运行时
+                                    ;; 探测；额外版本不覆盖它）。
+                                    (simple-service 'java-home
+                                     home-environment-variables-service-type
+                                     `(("JAVA_HOME" unquote
+                                        (java-home-gexp %default-java))))))))

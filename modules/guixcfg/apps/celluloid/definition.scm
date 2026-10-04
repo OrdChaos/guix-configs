@@ -24,18 +24,17 @@
 ;;; niri 会话提供。
 
 (define-module (guixcfg apps celluloid definition)
-               #:use-module (gnu packages video) ; celluloid
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:export (%celluloid
-                         %celluloid-desktop-entry))
+  #:use-module (gnu packages video) ;celluloid
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:export (%celluloid %celluloid-desktop-entry))
 
 ;; Celluloid 的 XDG desktop entry（store 内实际构建产物
 ;; share/applications/ 核实）。纯数据常量：供统一 XDG 策略模块
 ;; 引用，不在此决定默认应用。
-(define %celluloid-desktop-entry "io.github.celluloid_player.Celluloid.desktop")
+(define %celluloid-desktop-entry
+  "io.github.celluloid_player.Celluloid.desktop")
 
 (define %celluloid
-  (application
-   (name 'celluloid)
-   (home-packages (list celluloid))))
+  (application (name 'celluloid)
+               (home-packages (list celluloid))))

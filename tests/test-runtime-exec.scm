@@ -50,31 +50,32 @@
              (guix gexp)
              (guix derivations)
              (guix modules)
-             (guix build utils)         ; mkdir-p
+             (guix build utils) ;mkdir-p
              (gnu services)
              (gnu services shepherd)
              (guixcfg security secrets)
-             (guixcfg system accounts)    ; account-databases-activation/verify
-               (guixcfg system mihomo service) ; MC: mihomo-config-program
-             (guixcfg system application-persistence) ; AP1 activation ownership
-              (guixcfg system user-persistence) ; UP1 activation ownership
-              (guixcfg system machine-identity) ; MI1 machine-id projection
-              (guixcfg system ssh)         ; SSHK1 host-key generation
-              (guixcfg services ephemeral-root) ; EP: ephemeral-root-confirm-program
-              (guixcfg flatpak service)   ; FO1: flatpak-overrides-activation
-              (guixcfg apps niri definition)  ; NI1: %niri-session-wrapper
-             (guixcfg storage root-generation) ; EP: root-state、state->alist、read-state
-             (gnu system accounts)     ; user-account、user-group
+             (guixcfg system accounts) ;account-databases-activation/verify
+             (guixcfg system mihomo service) ;MC: mihomo-config-program
+             (guixcfg system application-persistence) ;AP1 activation ownership
+             (guixcfg system user-persistence) ;UP1 activation ownership
+             (guixcfg system machine-identity) ;MI1 machine-id projection
+             (guixcfg system ssh) ;SSHK1 host-key generation
+             (guixcfg services ephemeral-root) ;EP: ephemeral-root-confirm-program
+             (guixcfg flatpak service) ;FO1: flatpak-overrides-activation
+             (guixcfg apps niri definition) ;NI1: %niri-session-wrapper
+             (guixcfg storage root-generation) ;EP: root-state、state->alist、read-state
+             (gnu system accounts) ;user-account、user-group
              (guixcfg system readiness)
-             (guixcfg system session-gate) ; SG: gate close activation 真实执行
+             (guixcfg system session-gate) ;SG: gate close activation 真实执行
              (ice-9 rdelim)
              (ice-9 popen)
              (ice-9 textual-ports)
-             (ice-9 ftw)                ; scandir
-             (ice-9 regex)              ; string-match
-              (srfi srfi-1)
-              (srfi srfi-13)
-             ((rnrs base) #:select (let-values))  ; 只取 let-values（R6RS error 会覆盖 Guile 原生 error）
+             (ice-9 ftw) ;scandir
+             (ice-9 regex) ;string-match
+             (srfi srfi-1)
+             (srfi srfi-13)
+             ((rnrs base)
+              #:select (let-values)) ;只取 let-values（R6RS error 会覆盖 Guile 原生 error）
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -83,11 +84,14 @@
 
 ;; ── 基础设施 ────────────────────────────────────────────────
 ;; 构建 file-like → store 路径。
-(define %store (open-connection))
+(define %store
+  (open-connection))
 
 (define (build-thing thing)
-  (let ((drv (run-with-store %store (lower-object thing))))
-    (build-derivations %store (list drv))
+  (let ((drv (run-with-store %store
+                             (lower-object thing))))
+    (build-derivations %store
+                       (list drv))
     (derivation->output-path drv)))
 
 (define %guile
@@ -95,11 +99,13 @@
   ;; （从已构建 artifact 第一行提取）。
   (let* ((prog (build-thing (account-databases-verify-program "user")))
          (line (call-with-input-file prog
-                                     (lambda (p) (read-line p)))))
+                 (lambda (p)
+                   (read-line p)))))
     (and (string-prefix? "#!" line)
-          (car (string-split (substring line 2) #\space)))))
+         (car (string-split (substring line 2) #\space)))))
 
-(define %sandbox-directories '("etc" "persist" "home" "var" "proc" "run"))
+(define %sandbox-directories
+  '("etc" "persist" "home" "var" "proc" "run"))
 
 (define (sandbox-mounts root)
   "Return mounts that overlay all mutable absolute paths with ROOT's fake
@@ -109,56 +115,55 @@ read-only bind mount against bind-cloning from an unprivileged user namespace."
               (mkdir-p (string-append root "/" directory)))
             %sandbox-directories)
   ;; /run is last because it contains the host PATH used by `mount`.
-  (string-append
-   (string-join
-    (map (lambda (directory)
-           (string-append "mount --bind " root "/" directory
-                          " /" directory))
-         %sandbox-directories)
-    " && ")
-   " && "))
+  (string-append (string-join (map (lambda (directory)
+                                     (string-append "mount --bind "
+                                                    root
+                                                    "/"
+                                                    directory
+                                                    " /"
+                                                    directory))
+                                   %sandbox-directories) " && ") " && "))
 
 ;; 在隔离 root 里执行 PROGRAM（store 路径），返回 exit code。
 ;; FAKE-ROOT 含 etc/shadow 与 persist/... 的 fake 数据。
 (define (run-in-root program fake-root)
-  (let ((script
-          (string-append
-           "unshare --user --map-root-user --map-users=auto --map-groups=auto "
-           "--mount --pid --fork sh -c '"
-           (sandbox-mounts fake-root)
-           %guile
-            " --no-auto-compile " program
-          " >/dev/null 2>&1; "
-          "echo $?'")))
+  (let ((script (string-append
+                 "unshare --user --map-root-user --map-users=auto --map-groups=auto "
+                 "--mount --pid --fork sh -c '"
+                 (sandbox-mounts fake-root)
+                 %guile
+                 " --no-auto-compile "
+                 program
+                 " >/dev/null 2>&1; "
+                 "echo $?'")))
     (let* ((pipe (open-input-pipe script))
            (out (get-string-all pipe)))
-       (close-pipe pipe)
-       (string->number (string-trim-both out)))))
+      (close-pipe pipe)
+      (string->number (string-trim-both out)))))
 
 ;; Run an executable artifact through its shebang.  This preserves the
 ;; command-line contract used by NetworkManager dispatcher scripts.
 (define (run-executable-in-root program fake-root arguments)
-  (let ((script
-          (string-append
-           "unshare --user --map-root-user --map-users=auto --map-groups=auto "
-           "--mount --pid --fork sh -c '"
-           (sandbox-mounts fake-root)
-           program
-          (if (null? arguments)
-              ""
-              (string-append " " (string-join arguments " ")))
-          " >/dev/null 2>&1; "
-          "echo $?'")))
+  (let ((script (string-append
+                 "unshare --user --map-root-user --map-users=auto --map-groups=auto "
+                 "--mount --pid --fork sh -c '"
+                 (sandbox-mounts fake-root)
+                 program
+                 (if (null? arguments) ""
+                     (string-append " "
+                                    (string-join arguments " ")))
+                 " >/dev/null 2>&1; "
+                 "echo $?'")))
     (let* ((pipe (open-input-pipe script))
            (out (get-string-all pipe)))
       (close-pipe pipe)
       (string->number (string-trim-both out)))))
 
 ;; 构建 fake root：返回目录路径，内含 fake passwd/shadow/persist hash。
-(define (make-fake-root shadow-content hash-or-#f)
-  (let ((dir (string-append (or (getenv "TMPDIR") "/tmp")
-                            "/guixcfg-runtime-" (number->string (getpid))
-                            "-" (number->string (random 100000)))))
+(define (make-fake-root shadow-content #{hash-or-#f}#)
+  (let ((dir (string-append (or (getenv "TMPDIR") "/tmp") "/guixcfg-runtime-"
+                            (number->string (getpid)) "-"
+                            (number->string (random 100000)))))
     (mkdir dir)
     (mkdir (string-append dir "/etc"))
     (mkdir (string-append dir "/persist"))
@@ -167,22 +172,26 @@ read-only bind mount against bind-cloning from an unprivileged user namespace."
     (mkdir (string-append dir "/persist/system/accounts/user"))
     (mkdir (string-append dir "/gnu"))
     (call-with-output-file (string-append dir "/etc/shadow")
-                           (lambda (p) (display shadow-content p)))
+      (lambda (p)
+        (display shadow-content p)))
     (chmod (string-append dir "/etc/shadow") #o600)
     ;; fake passwd（getpw 需要；deploy 的 owner 解析）。
     (call-with-output-file (string-append dir "/etc/passwd")
-                           (lambda (p)
-                             (display "root:x:0:0:root:/root:/bin/bash\n\
-user:x:1000:1000:u:/home/user:/bin/bash\n" p)))
+      (lambda (p)
+        (display "root:x:0:0:root:/root:/bin/bash
+user:x:1000:1000:u:/home/user:/bin/bash
+" p)))
     (call-with-output-file (string-append dir "/etc/nsswitch.conf")
-                           (lambda (p) (display "passwd: files\ngroup: files\n" p)))
-    (when hash-or-#f
-      (call-with-output-file
-       (string-append dir "/persist/system/accounts/user/password.hash")
-       (lambda (p) (display hash-or-#f p)))
+      (lambda (p)
+        (display "passwd: files\ngroup: files\n" p)))
+    (when #{hash-or-#f}#
+      (call-with-output-file (string-append dir
+                              "/persist/system/accounts/user/password.hash")
+        (lambda (p)
+          (display #{hash-or-#f}# p)))
       (chmod (string-append dir "/persist/system/accounts/user/password.hash")
              #o600))
-     dir))
+    dir))
 
 ;; ── account databases projection：真实执行 ──────────────────
 ;; 测试 /etc/{passwd,group,shadow} 的单一 authoritative writer：
@@ -197,42 +206,76 @@ user:x:1000:1000:u:/home/user:/bin/bash\n" p)))
 ;;   A8 仓库只有一个 production shadow writer（静态断言，见下方）
 (define %acc-gexp
   ;; 与 boot 相同的 projection gexp（最小 accounts+groups）。
-  (let* ((root-acct (user-account (name "root") (uid 0) (group "root")
-                                  (comment "System administrator")
-                                  (home-directory "/root")))
-         (user-acct (user-account (name "user") (uid 1000) (group "users")
-                                  (supplementary-groups '("wheel"))
-                                  (comment "VM test user")
-                                  (home-directory "/home/user")))
-         (grp-root (user-group (name "root") (system? #t)))
-         (grp-users (user-group (name "users") (system? #t)))
-         (grp-wheel (user-group (name "wheel") (system? #t))))
-    (account-databases-activation
-     (list root-acct user-acct grp-root grp-users grp-wheel))))
+  (let* ((root-acct (user-account
+                      (name "root")
+                      (uid 0)
+                      (group "root")
+                      (comment "System administrator")
+                      (home-directory "/root")))
+         (user-acct (user-account
+                      (name "user")
+                      (uid 1000)
+                      (group "users")
+                      (supplementary-groups '("wheel"))
+                      (comment "VM test user")
+                      (home-directory "/home/user")))
+         (grp-root (user-group
+                     (name "root")
+                     (system? #t)))
+         (grp-users (user-group
+                      (name "users")
+                      (system? #t)))
+         (grp-wheel (user-group
+                      (name "wheel")
+                      (system? #t))))
+    (account-databases-activation (list root-acct user-acct grp-root grp-users
+                                        grp-wheel))))
 
 (define %acc-program
-  (build-thing
-   (program-file "acc-databases-test"
-                 (with-imported-modules (source-module-closure
-                                         '((gnu build accounts) (gnu system accounts)
-                                                                (guix build utils) (srfi srfi-1) (srfi srfi-11)))
-                                        #~(begin
-                                           (use-modules (gnu build accounts) (gnu system accounts)
-                                                        (guix build utils) (srfi srfi-1) (srfi srfi-11))
-                                           #$%acc-gexp)))))
+  (build-thing (program-file "acc-databases-test"
+                             (with-imported-modules (source-module-closure '((gnu
+                                                                              build
+                                                                              accounts)
+                                                                             (gnu
+                                                                              system
+                                                                              accounts)
+                                                                             (guix
+                                                                              build
+                                                                              utils)
+                                                                             (srfi
+                                                                              srfi-1)
+                                                                             (srfi
+                                                                              srfi-11)))
+                                                    #~(begin
+                                                        (use-modules (gnu
+                                                                      build
+                                                                      accounts)
+                                                                     (gnu
+                                                                      system
+                                                                      accounts)
+                                                                     (guix
+                                                                      build
+                                                                      utils)
+                                                                     (srfi
+                                                                      srfi-1)
+                                                                     (srfi
+                                                                      srfi-11))
+                                                        #$%acc-gexp)))))
 
-(define (run-acc shadow-content hash-or-#f)
+(define (run-acc shadow-content #{hash-or-#f}#)
   "在 fake root 上执行 account projection；返回 (exit . final-shadow)。"
-  (let ((root (make-fake-root shadow-content hash-or-#f)))
+  (let ((root (make-fake-root shadow-content #{hash-or-#f}#)))
     (let ((exit (run-in-root %acc-program root)))
       (cons exit
             (call-with-input-file (string-append root "/etc/shadow")
-                                  (lambda (p) (get-string-all p)))))))
+              (lambda (p)
+                (get-string-all p)))))))
 
 ;; A1+A2+A3：正常 credential → exit 0，三库正确，user shadow 行
 ;; 格式为 user:hash:lastchange:...（不是 hash 顶替 name 的坏行）。
 (let* ((res (run-acc "" "$6$salt$faketesthash\n"))
-       (exit (car res)) (out (cdr res)))
+       (exit (car res))
+       (out (cdr res)))
   (test-equal "A1 projection success exits 0" 0 exit)
   (test-assert "A1 user present in shadow as user:hash:..."
                (and (string-contains out "\nuser:$6$salt$faketesthash:")
@@ -245,19 +288,25 @@ user:x:1000:1000:u:/home/user:/bin/bash\n" p)))
 ;; A4：persistent hash 缺失 → 非零，三库不被写。
 (let* ((root (make-fake-root "" #f))
        (exit (run-in-root %acc-program root)))
-  (test-assert "A4 missing hash fails" (not (zero? exit)))
+  (test-assert "A4 missing hash fails"
+               (not (zero? exit)))
   (test-assert "A4 shadow not written (empty remains)"
-               (let ((s (call-with-input-file (string-append root "/etc/shadow")
-                                              (lambda (p) (get-string-all p)))))
+               (let ((s (call-with-input-file (string-append root
+                                                             "/etc/shadow")
+                          (lambda (p)
+                            (get-string-all p)))))
                  (string=? s ""))))
 
 ;; A5：malformed hash → 非零，库不被写。
 (let* ((root (make-fake-root "" "NOT-A-VALID-HASH\n"))
        (exit (run-in-root %acc-program root)))
-  (test-assert "A5 malformed hash fails" (not (zero? exit)))
+  (test-assert "A5 malformed hash fails"
+               (not (zero? exit)))
   (test-assert "A5 shadow not written"
-               (let ((s (call-with-input-file (string-append root "/etc/shadow")
-                                              (lambda (p) (get-string-all p)))))
+               (let ((s (call-with-input-file (string-append root
+                                                             "/etc/shadow")
+                          (lambda (p)
+                            (get-string-all p)))))
                  (string=? s ""))))
 
 ;; A7：最终 shadow 缺 user 时 account-state-ready 不 provision——
@@ -266,17 +315,17 @@ user:x:1000:1000:u:/home/user:/bin/bash\n" p)))
 (define %verify-program
   (build-thing (account-databases-verify-program "user")))
 
-(let* ((root (make-fake-root
-              "root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:u:/home/user:/bin/bash\n"
-              "$6$salt$faketesthash\n"))
+(let* ((root (make-fake-root "root:x:0:0:root:/root:/bin/bash
+user:x:1000:1000:u:/home/user:/bin/bash
+"
+                             "$6$salt$faketesthash\n"))
        ;; 模拟"shadow 缺 user"（旧 bug 的坏行形态：hash 顶替 name）
        (shadow-path (string-append root "/etc/shadow")))
   (call-with-output-file shadow-path
-                         (lambda (p)
-                           (display
-                            "root::20682::::::\n\
-$6$salt$faketesthash:!:20682::::::\n"
-                            p)))
+    (lambda (p)
+      (display "root::20682::::::
+$6$salt$faketesthash:!:20682::::::
+" p)))
   (chmod shadow-path #o600)
   (let ((exit (run-in-root %verify-program root)))
     (test-assert "A7 verify fails when shadow lacks user"
@@ -289,26 +338,40 @@ $6$salt$faketesthash:!:20682::::::\n"
 ;; rename 到 /etc/shadow）。
 (test-assert "A8 single production shadow writer"
              (let* ((base "modules/guixcfg")
-                    (subdirs '("security" "system" "services" "boot" "storage" "home"
-                                          "users" "utils" "hosts"))
-                    (files (append-map
-                            (lambda (sub)
-                              (let ((dir (string-append base "/" sub)))
-                                (filter (lambda (f)
-                                          (and (string-suffix? ".scm" f)
-                                               (not (member f '("." "..")))))
-                                        (map (lambda (f) (string-append dir "/" f))
-                                             (or (scandir dir) '())))))
-                            subdirs))
-                    (writers
-                     (filter (lambda (f)
-                               (let ((t (call-with-input-file f
-                                                              (lambda (p) (get-string-all p)))))
-                                 (or (string-contains t "write-shadow")
-                                     (and (string-contains t "rename-file")
-                                          (string-contains t "\"/etc/shadow\"")))))
-                             files)))
-               (and (= 1 (length writers))
+                    (subdirs '("security" "system"
+                               "services"
+                               "boot"
+                               "storage"
+                               "home"
+                               "users"
+                               "utils"
+                               "hosts"))
+                    (files (append-map (lambda (sub)
+                                         (let ((dir (string-append base "/"
+                                                                   sub)))
+                                           (filter (lambda (f)
+                                                     (and (string-suffix?
+                                                           ".scm" f)
+                                                          (not (member f
+                                                                       '("."
+                                                                         "..")))))
+                                                   (map (lambda (f)
+                                                          (string-append dir
+                                                                         "/" f))
+                                                        (or (scandir dir)
+                                                            '()))))) subdirs))
+                    (writers (filter (lambda (f)
+                                       (let ((t (call-with-input-file f
+                                                  (lambda (p)
+                                                    (get-string-all p)))))
+                                         (or (string-contains t "write-shadow")
+                                             (and (string-contains t
+                                                   "rename-file")
+                                                  (string-contains t
+                                                   "\"/etc/shadow\"")))))
+                                     files)))
+               (and (= 1
+                       (length writers))
                     (string-contains (car writers) "accounts.scm"))))
 
 ;; ── persistent-state-ready：真实执行 production start ────────
@@ -325,18 +388,17 @@ $6$salt$faketesthash:!:20682::::::\n"
 ;; 用 (apply … '()) 调用一次，exit 取返回值。start 展开后是纯 core
 ;; （and/file-exists?），外壳无需任何模块 import。
 (define %psr-program
-  (build-thing
-   (program-file
-    "psr-prod-start"
-    #~(begin
-       (exit (if (apply #$%psr-start-gexp '()) 0 1))))))
+  (build-thing (program-file "psr-prod-start"
+                             #~(begin
+                                 (exit (if (apply #$%psr-start-gexp
+                                                  '()) 0 1))))))
 
 (define (run-psr paths)
   "在 fake root 上执行 production start；PATHS 是要创建的路径列表。
 路径全部由 %persistent-state-paths 派生（R1 全建、R2 缺一个）。"
-  (let ((dir (string-append (or (getenv "TMPDIR") "/tmp")
-                            "/guixcfg-psr-" (number->string (getpid))
-                            "-" (number->string (random 100000)))))
+  (let ((dir (string-append (or (getenv "TMPDIR") "/tmp") "/guixcfg-psr-"
+                            (number->string (getpid)) "-"
+                            (number->string (random 100000)))))
     (mkdir-p dir)
     (mkdir-p (string-append dir "/gnu/store"))
     (for-each (lambda (p)
@@ -346,30 +408,32 @@ $6$salt$faketesthash:!:20682::::::\n"
                               (let ((cur (string-append (car acc) "/" part)))
                                 (mkdir-p cur)
                                 (set-car! acc cur)))
-                            (cdr parts))))
-              paths)
+                            (cdr parts)))) paths)
     (let* ((script (string-append
-                     "unshare --user --map-root-user --map-users=auto "
-                     "--map-groups=auto --mount --pid --fork sh -c '"
-                     (sandbox-mounts dir)
-                     %guile " --no-auto-compile " %psr-program
+                    "unshare --user --map-root-user --map-users=auto "
+                    "--map-groups=auto --mount --pid --fork sh -c '"
+                    (sandbox-mounts dir)
+                    %guile
+                    " --no-auto-compile "
+                    %psr-program
                     " 2>&1; echo $?'"))
            (pipe (open-input-pipe script))
            (all (get-string-all pipe)))
       (close-pipe pipe)
-      (let* ((lines (filter (lambda (l) (not (string-null? l)))
+      (let* ((lines (filter (lambda (l)
+                              (not (string-null? l)))
                             (string-split all #\newline)))
              (code (and (pair? lines)
                         (string->number (string-trim-both (car (reverse lines)))))))
         code))))
 
 ;; R1：全部 %persistent-state-paths 存在 → production start 成功。
-(test-equal "R1 production start succeeds with all paths"
-            0 (run-psr %persistent-state-paths))
+(test-equal "R1 production start succeeds with all paths" 0
+            (run-psr %persistent-state-paths))
 
 ;; R2：缺一个关键路径 → production start 失败。
-(test-equal "R2 production start fails on missing path"
-            1 (run-psr (cdr %persistent-state-paths)))
+(test-equal "R2 production start fails on missing path" 1
+            (run-psr (cdr %persistent-state-paths)))
 
 ;; R3：production start 可执行、无 unbound-variable（R1/R2 执行本身即证）。
 
@@ -386,22 +450,27 @@ $6$salt$faketesthash:!:20682::::::\n"
 ;; deploy artifact 的 age-bin 常量）。
 (define (find-age-bin)
   (let* ((prog (build-thing (secrets-deploy-program '() "user")))
-         (text (call-with-input-file prog (lambda (p) (get-string-all p))))
+         (text (call-with-input-file prog
+                 (lambda (p)
+                   (get-string-all p))))
          (m (string-match "/gnu/store/[a-z0-9]+-age-[0-9.]+/bin/age" text)))
-    (and m (match:substring m 0))))
+    (and m
+         (match:substring m 0))))
 
-(define %age-bin (find-age-bin))
+(define %age-bin
+  (find-age-bin))
 
 ;; 测试准备：生成 test identity + armor ciphertext（plaintext 是
 ;; 项目 runtime 测试 sentinel，非真实 secret）。
-(define %sentinel "GUIXCFG_RUNTIME_TEST_SECRET\n")
+(define %sentinel
+  "GUIXCFG_RUNTIME_TEST_SECRET\n")
 
 (define (make-test-secret-setup)
   "生成 age identity 与加密 sentinel 的 armor ciphertext；返回
 (key-path . cipher-path)。"
-  (let* ((dir (string-append (or (getenv "TMPDIR") "/tmp")
-                             "/guixcfg-age-" (number->string (getpid))
-                             "-" (number->string (random 100000))))
+  (let* ((dir (string-append (or (getenv "TMPDIR") "/tmp") "/guixcfg-age-"
+                             (number->string (getpid)) "-"
+                             (number->string (random 100000))))
          (key (string-append dir "/test.key"))
          (age-keygen (string-append (dirname %age-bin) "/age-keygen"))
          (plain (string-append dir "/plain.txt"))
@@ -409,65 +478,78 @@ $6$salt$faketesthash:!:20682::::::\n"
     (mkdir dir)
     ;; age-keygen -o key；用 age-keygen -y 从私钥导出 pubkey（age1…）
     (let ((p (open-input-pipe (string-append age-keygen " -o " key " 2>&1"))))
-      (get-string-all p) (close-pipe p))
+      (get-string-all p)
+      (close-pipe p))
     (let* ((p (open-input-pipe (string-append age-keygen " -y " key " 2>&1")))
            (all (get-string-all p)))
       (close-pipe p)
       (let ((pub (string-trim-right (string-trim-both all))))
         (unless (string-prefix? "age1" pub)
           (error "age-keygen -y produced no public key" pub))
-        (call-with-output-file plain (lambda (p) (display %sentinel p)))
-        (let ((p (open-input-pipe
-                  (string-append %age-bin " -a -r " pub " -o " cipher " " plain
-                                 " 2>&1"))))
-          (get-string-all p) (close-pipe p))))
+        (call-with-output-file plain
+          (lambda (p)
+            (display %sentinel p)))
+        (let ((p (open-input-pipe (string-append %age-bin
+                                                 " -a -r "
+                                                 pub
+                                                 " -o "
+                                                 cipher
+                                                 " "
+                                                 plain
+                                                 " 2>&1"))))
+          (get-string-all p)
+          (close-pipe p))))
     (cons key cipher)))
 
-(define %test-secret-setup (make-test-secret-setup))
-(define %test-key (car %test-secret-setup))
-(define %test-cipher (cdr %test-secret-setup))
+(define %test-secret-setup
+  (make-test-secret-setup))
+(define %test-key
+  (car %test-secret-setup))
+(define %test-cipher
+  (cdr %test-secret-setup))
 
 ;; 构建带 test secret 的 deploy artifact：ciphertext 用 local-file 引用
 ;; 测试期文件（随 artifact 进 closure，类似 production 的
 ;; %vm-test-secrets source）。
 (define %deploy-with-secret
-  (build-thing
-   (secrets-deploy-program
-    (list (secret-decl
-           (name 'runtime-test)
-           (scope 'system)
-           (domain 'login-critical)
-           ;; file-like contract（secret-decl-source = caller 解析的
-           ;; ciphertext source；ciphertext 随 closure 进 store）
-           (source (local-file %test-cipher "runtime-test.age"))
-           (target-name "runtime-test")
-           (owner-user "root")
-           (mode #o400)))
-    "user")))
+  (build-thing (secrets-deploy-program (list (secret-decl (name 'runtime-test)
+                                                          (scope 'system)
+                                                          (domain 'login-critical)
+                                                          ;; file-like contract（secret-decl-source = caller 解析的
+                                                          ;; ciphertext source；ciphertext 随 closure 进 store）
+                                                          (source (local-file
+                                                                   %test-cipher
+                                                                   "runtime-test.age"))
+                                                          (target-name
+                                                           "runtime-test")
+                                                          (owner-user "root")
+                                                          (mode 256))) "user")))
 
-(let* ((root (make-fake-root
-              "root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:u:/home/user:/bin/bash\n"
-              #f))
+(let* ((root (make-fake-root "root:x:0:0:root:/root:/bin/bash
+user:x:1000:1000:u:/home/user:/bin/bash
+" #f))
        ;; deploy 需要：identity 在 /persist/system/keys/age/identity、
        ;; /run 可写、store-dir/current-link 在 /run。
        (age-dir (string-append root "/persist/system/keys/age")))
   ;; 放置 test identity（rpath 由 make-fake-root 建好 /persist/.../user）
   (mkdir-p age-dir)
   (call-with-output-file (string-append age-dir "/identity")
-                         (lambda (p)
-                           (call-with-input-file %test-key
-                                                 (lambda (in)
-                                                   (display (get-string-all in) p)))))
+    (lambda (p)
+      (call-with-input-file %test-key
+        (lambda (in)
+          (display (get-string-all in) p)))))
   (chmod (string-append age-dir "/identity") #o600)
   ;; /run 挂载点：deploy 写 /run/guixcfg-secrets.d 与 /run/guixcfg-secrets
   (let* ((run-dir (string-append root "/run")))
     (mkdir run-dir)
     (chmod run-dir #o755))
   (let* ((script (string-append
-                   "unshare --user --map-root-user --map-users=auto "
-                   "--map-groups=auto --mount --pid --fork sh -c '"
-                   (sandbox-mounts root)
-                   %guile " --no-auto-compile " %deploy-with-secret
+                  "unshare --user --map-root-user --map-users=auto "
+                  "--map-groups=auto --mount --pid --fork sh -c '"
+                  (sandbox-mounts root)
+                  %guile
+                  " --no-auto-compile "
+                  %deploy-with-secret
                   " 2>&1'"))
          (pipe (open-input-pipe script))
          (all (get-string-all pipe)))
@@ -479,7 +561,8 @@ $6$salt$faketesthash:!:20682::::::\n"
                    (and (file-exists? d)
                         (let ((subs (filter (lambda (e)
                                               (string-match "^[0-9]+$" e))
-                                            (or (scandir d) '()))))
+                                            (or (scandir d)
+                                                '()))))
                           (pair? subs)))))
     (test-assert "deploy publishes decrypted secret with mode 0400"
                  (let* ((cur (string-append root "/run/guixcfg-secrets"))
@@ -487,46 +570,49 @@ $6$salt$faketesthash:!:20682::::::\n"
                         ;; deploy 的 symlink 目标是绝对 /run/guixcfg-secrets.d/<N>；
                         ;; 相对 fake root 即 root + (去前导 / 的目标)。
                         (rel (if (string-prefix? "/" resolved)
-                               (substring resolved 1)
-                               resolved))
-                        (secret (string-append root "/" rel "/system/runtime-test")))
+                                 (substring resolved 1) resolved))
+                        (secret (string-append root "/" rel
+                                               "/system/runtime-test")))
                    (and (file-exists? secret)
                         (string-contains (call-with-input-file secret
-                                                               (lambda (p) (get-string-all p)))
+                                           (lambda (p)
+                                             (get-string-all p)))
                                          "GUIXCFG_RUNTIME_TEST_SECRET"))))
     (test-assert "deploy sets 0400 mode"
-                 (let* ((cur (readlink (string-append root "/run/guixcfg-secrets")))
+                 (let* ((cur (readlink (string-append root
+                                                      "/run/guixcfg-secrets")))
                         (rel (if (string-prefix? "/" cur)
-                               (substring cur 1)
-                               cur))
-                        (secret (string-append root "/" rel "/system/runtime-test")))
+                                 (substring cur 1) cur))
+                        (secret (string-append root "/" rel
+                                               "/system/runtime-test")))
                    ;; 常规文件 + 0400：stat:mode = S_IFREG(0100000) | 0400。
                    ;; ownership 在 user namespace 下不可靠（namespace root 映射回宿主
                    ;; uid），这里只断言权限位；属主语义由 production 的 chown 0 0
                    ;; 保证（P1 之外，见 secrets.scm decrypt-into）。
-                   (eq? (stat:mode (stat secret)) #o100400)))))
+                   (eq? (stat:mode (stat secret)) 33024)))))
 
 ;; identity 缺失（fresh install 漏装阶段 5 的场景）：deploy 必须给出
 ;; 清晰错误（含 "identity missing"），而不是模糊失败后卡死
 ;; interactive-secrets-ready → login barrier。
-(let* ((root (make-fake-root
-              "root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:u:/home/user:/bin/bash\n"
-              #f))
+(let* ((root (make-fake-root "root:x:0:0:root:/root:/bin/bash
+user:x:1000:1000:u:/home/user:/bin/bash
+" #f))
        (run-dir (string-append root "/run")))
   (mkdir run-dir)
   (chmod run-dir #o755)
   (let* ((script (string-append
-                   "unshare --user --map-root-user --map-users=auto "
-                   "--map-groups=auto --mount --pid --fork sh -c '"
-                   (sandbox-mounts root)
-                   %guile " --no-auto-compile " %deploy-with-secret
+                  "unshare --user --map-root-user --map-users=auto "
+                  "--map-groups=auto --mount --pid --fork sh -c '"
+                  (sandbox-mounts root)
+                  %guile
+                  " --no-auto-compile "
+                  %deploy-with-secret
                   " 2>&1'"))
          (pipe (open-input-pipe script))
          (all (get-string-all pipe)))
     (close-pipe pipe)
     (test-assert "deploy without identity fails with clear error"
                  (string-contains all "identity missing"))))
-
 
 ;; ── readiness domain failure isolation（login-critical / ordinary）──
 ;; 两个 domain 各自独立 staging/generation/current root：
@@ -536,37 +622,40 @@ $6$salt$faketesthash:!:20682::::::\n"
 (define (fake-root-with-identity)
   "带 age identity 与 /run 的 fake root（deploy 需要：identity 在
 /persist/system/keys/age/identity、/run 可写）。"
-  (let* ((root (make-fake-root
-                "root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:u:/home/user:/bin/bash\n"
-                #f))
+  (let* ((root (make-fake-root "root:x:0:0:root:/root:/bin/bash
+user:x:1000:1000:u:/home/user:/bin/bash
+" #f))
          (age-dir (string-append root "/persist/system/keys/age")))
     (mkdir-p age-dir)
     (call-with-output-file (string-append age-dir "/identity")
-                           (lambda (p)
-                             (call-with-input-file %test-key
-                                                   (lambda (in)
-                                                     (display (get-string-all in) p)))))
+      (lambda (p)
+        (call-with-input-file %test-key
+          (lambda (in)
+            (display (get-string-all in) p)))))
     (chmod (string-append age-dir "/identity") #o600)
     (let ((run-dir (string-append root "/run")))
       (mkdir run-dir)
-      (chmod run-dir #o755))
-    root))
+      (chmod run-dir #o755)) root))
 
 (define (run-deploy-script root script)
   "在 fake root 里执行 deploy SCRIPT；返回 (values output exit-status)。
 exit-status 来自隔离 namespace 内 guile 的退出码（deploy 失败 = throw →
 非零；成功 = 0），经 echo 捕获。"
   (let* ((cmd (string-append
-                "unshare --user --map-root-user --map-users=auto "
-                "--map-groups=auto --mount --pid --fork sh -c '"
-                (sandbox-mounts root)
-                %guile " --no-auto-compile " script
+               "unshare --user --map-root-user --map-users=auto "
+               "--map-groups=auto --mount --pid --fork sh -c '"
+               (sandbox-mounts root)
+               %guile
+               " --no-auto-compile "
+               script
                "; echo EXIT=$? 2>&1'"))
          (pipe (open-input-pipe cmd))
          (all (get-string-all pipe)))
     (close-pipe pipe)
     (let ((m (string-match "EXIT=([0-9]+)" all)))
-      (values all (if m (string->number (match:substring m 1)) #f)))))
+      (values all
+              (if m
+                  (string->number (match:substring m 1)) #f)))))
 
 (define (current-link-valid? root link-path)
   "fake root 内 LINK-PATH symlink 存在且解析目标（隔离 namespace 内绝对路径）
@@ -576,118 +665,187 @@ host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析�
     (let ((link (false-if-exception (readlink p))))
       (and (string? link)
            (let ((rel (if (string-prefix? "/" link)
-                        (substring link 1)
-                        link)))
+                          (substring link 1) link)))
              (file-exists? (string-append root "/" rel)))))))
 
 (define (numeric-generations root store-dir)
   "fake root 内 STORE-DIR 下的数字 generation 目录列表。"
   (let ((d (string-append root store-dir)))
     (if (file-exists? d)
-      (filter (lambda (e) (string-match "^[0-9]+$" e))
-              (scandir d))
-      '())))
+        (filter (lambda (e)
+                  (string-match "^[0-9]+$" e))
+                (scandir d))
+        '())))
 
 (define (good-decl name domain)
-  (secret-decl (name name) (scope 'system) (domain domain)
-               (source (local-file %test-cipher (string-append (symbol->string name) ".age")))
-               (target-name (symbol->string name)) (owner-user "root") (mode #o400)))
+  (secret-decl (name name)
+               (scope 'system)
+               (domain domain)
+               (source (local-file %test-cipher
+                                   (string-append (symbol->string name) ".age")))
+               (target-name (symbol->string name))
+               (owner-user "root")
+               (mode 256)))
 
 (define %corrupt-cipher
-  (let ((p (string-append "/tmp/guixcfg-corrupt-" (number->string (getpid)) ".age")))
-    (call-with-output-file p (lambda (port) (display "corrupt-not-an-age-ciphertext" port)))
-    p))
+  (let ((p (string-append "/tmp/guixcfg-corrupt-"
+                          (number->string (getpid)) ".age")))
+    (call-with-output-file p
+      (lambda (port)
+        (display "corrupt-not-an-age-ciphertext" port))) p))
 
 (define (bad-decl name domain)
-  (secret-decl (name name) (scope 'system) (domain domain)
-               (source (local-file %corrupt-cipher (string-append (symbol->string name) ".age")))
-               (target-name (symbol->string name)) (owner-user "root") (mode #o400)))
+  (secret-decl (name name)
+               (scope 'system)
+               (domain domain)
+               (source (local-file %corrupt-cipher
+                                   (string-append (symbol->string name) ".age")))
+               (target-name (symbol->string name))
+               (owner-user "root")
+               (mode 256)))
 
 (define %iso-critical-good
-  (build-thing (secrets-deploy-program (list (good-decl 'iso-crit 'login-critical)) "user")))
+  (build-thing (secrets-deploy-program (list (good-decl 'iso-crit
+                                                        'login-critical))
+                                       "user")))
 (define %iso-critical-bad
-  (build-thing (secrets-deploy-program (list (bad-decl 'iso-crit 'login-critical)) "user")))
+  (build-thing (secrets-deploy-program (list (bad-decl 'iso-crit
+                                                       'login-critical))
+                                       "user")))
 (define %iso-ordinary-good
-  (build-thing (secrets-ordinary-deploy-program (list (good-decl 'iso-ord 'ordinary)) "user")))
+  (build-thing (secrets-ordinary-deploy-program (list (good-decl 'iso-ord
+                                                                 'ordinary))
+                                                "user")))
 (define %iso-ordinary-bad
-  (build-thing (secrets-ordinary-deploy-program (list (bad-decl 'iso-ord 'ordinary)) "user")))
+  (build-thing (secrets-ordinary-deploy-program (list (bad-decl 'iso-ord
+                                                                'ordinary))
+                                                "user")))
 
 (let ((root (fake-root-with-identity)))
-  (let-values (((out st) (run-deploy-script root %iso-critical-good)))
+  (let-values (((out st)
+                (run-deploy-script root %iso-critical-good)))
               (test-assert "ISOL-1: critical all-success exits 0"
-                           (and st (zero? st)))
+                           (and st
+                                (zero? st)))
               (test-assert "ISOL-1: critical generation published"
-                           (pair? (numeric-generations root "/run/guixcfg-secrets.d")))
+                           (pair? (numeric-generations root
+                                   "/run/guixcfg-secrets.d")))
               (test-assert "ISOL-1: critical current symlink present"
                            (current-link-valid? root "/run/guixcfg-secrets"))))
 
 (let ((root (fake-root-with-identity)))
-  (let-values (((out st) (run-deploy-script root %iso-critical-bad)))
+  (let-values (((out st)
+                (run-deploy-script root %iso-critical-bad)))
               (test-assert "ISOL-2: critical one-fails exits non-zero"
-                           (and st (not (zero? st))))
+                           (and st
+                                (not (zero? st))))
               (test-assert "ISOL-2: critical generation NOT published"
-                           (null? (numeric-generations root "/run/guixcfg-secrets.d")))
+                           (null? (numeric-generations root
+                                   "/run/guixcfg-secrets.d")))
               (test-assert "ISOL-2: critical current symlink absent"
-                           (not (file-exists? (string-append root "/run/guixcfg-secrets"))))))
+                           (not (file-exists? (string-append root
+                                               "/run/guixcfg-secrets"))))))
 
 (let ((root (fake-root-with-identity)))
-  (let-values (((out st) (run-deploy-script root %iso-ordinary-good)))
+  (let-values (((out st)
+                (run-deploy-script root %iso-ordinary-good)))
               (test-assert "ISOL-3: ordinary all-success exits 0"
-                           (and st (zero? st)))
-              (test-assert "ISOL-3: ordinary generation published at its own root"
-                           (pair? (numeric-generations root "/run/guixcfg-secrets-ordinary.d")))
+                           (and st
+                                (zero? st)))
+              (test-assert
+               "ISOL-3: ordinary generation published at its own root"
+               (pair? (numeric-generations root
+                                           "/run/guixcfg-secrets-ordinary.d")))
               (test-assert "ISOL-3: ordinary current symlink present"
-                           (current-link-valid? root "/run/guixcfg-secrets-ordinary"))))
+                           (current-link-valid? root
+                            "/run/guixcfg-secrets-ordinary"))))
 
 (let ((root (fake-root-with-identity)))
-  (let-values (((out st) (run-deploy-script root %iso-ordinary-bad)))
+  (let-values (((out st)
+                (run-deploy-script root %iso-ordinary-bad)))
               (test-assert "ISOL-4: ordinary one-fails exits non-zero"
-                           (and st (not (zero? st))))
+                           (and st
+                                (not (zero? st))))
               (test-assert "ISOL-4: ordinary generation NOT published"
-                           (null? (numeric-generations root "/run/guixcfg-secrets-ordinary.d")))
+                           (null? (numeric-generations root
+                                   "/run/guixcfg-secrets-ordinary.d")))
               (test-assert "ISOL-4: ordinary current symlink absent"
-                           (not (file-exists? (string-append root "/run/guixcfg-secrets-ordinary"))))))
+                           (not (file-exists? (string-append root
+                                               "/run/guixcfg-secrets-ordinary"))))))
 
 ;; ISOL-5：critical 失败不能被 ordinary 成功掩盖
 (let ((root (fake-root-with-identity)))
-  (let-values (((out1 st1) (run-deploy-script root %iso-critical-bad)))
-              (let-values (((out2 st2) (run-deploy-script root %iso-ordinary-good)))
-                          (test-assert "ISOL-5: critical fails while ordinary succeeds"
-                                       (and st1 (not (zero? st1)) st2 (zero? st2)))
-                          (test-assert "ISOL-5: critical generation still absent"
-                                       (null? (numeric-generations root "/run/guixcfg-secrets.d")))
+  (let-values (((out1 st1)
+                (run-deploy-script root %iso-critical-bad)))
+              (let-values (((out2 st2)
+                            (run-deploy-script root %iso-ordinary-good)))
+                          (test-assert
+                           "ISOL-5: critical fails while ordinary succeeds"
+                           (and st1
+                                (not (zero? st1)) st2
+                                (zero? st2)))
+                          (test-assert
+                           "ISOL-5: critical generation still absent"
+                           (null? (numeric-generations root
+                                   "/run/guixcfg-secrets.d")))
                           (test-assert "ISOL-5: critical symlink still absent"
-                                       (not (file-exists? (string-append root "/run/guixcfg-secrets"))))
+                           (not (file-exists? (string-append root
+                                               "/run/guixcfg-secrets"))))
                           (test-assert "ISOL-5: ordinary generation present"
-                                       (pair? (numeric-generations root "/run/guixcfg-secrets-ordinary.d"))))))
+                                       (pair? (numeric-generations root
+                                               "/run/guixcfg-secrets-ordinary.d"))))))
 
 ;; ISOL-6：ordinary 失败保留上一个已发布 generation（preserve-last-good）
 (let ((root (fake-root-with-identity)))
-  (let-values (((out1 st1) (run-deploy-script root %iso-ordinary-good)))
-              (let-values (((out2 st2) (run-deploy-script root %iso-ordinary-bad)))
-                          (test-assert "ISOL-6: first ordinary generation published, second fails"
-                                       (and st1 (zero? st1) st2 (not (zero? st2))))
-                          (test-assert "ISOL-6: exactly one ordinary generation retained"
-                                       (= 1 (length (numeric-generations root "/run/guixcfg-secrets-ordinary.d"))))
-                          (test-assert "ISOL-6: current symlink still points at the good generation"
-                                       (let ((link (readlink (string-append root "/run/guixcfg-secrets-ordinary"))))
-                                         (and (string-contains link "/run/guixcfg-secrets-ordinary.d/")
-                                              (file-exists? (string-append root "/" (if (string-prefix? "/" link)
-                                                                                      (substring link 1)
-                                                                                      link)))))))))
+  (let-values (((out1 st1)
+                (run-deploy-script root %iso-ordinary-good)))
+              (let-values (((out2 st2)
+                            (run-deploy-script root %iso-ordinary-bad)))
+                          (test-assert
+                           "ISOL-6: first ordinary generation published, second fails"
+                           (and st1
+                                (zero? st1) st2
+                                (not (zero? st2))))
+                          (test-assert
+                           "ISOL-6: exactly one ordinary generation retained"
+                           (= 1
+                              (length (numeric-generations root
+                                       "/run/guixcfg-secrets-ordinary.d"))))
+                          (test-assert
+                           "ISOL-6: current symlink still points at the good generation"
+                           (let ((link (readlink (string-append root
+                                                  "/run/guixcfg-secrets-ordinary"))))
+                             (and (string-contains link
+                                   "/run/guixcfg-secrets-ordinary.d/")
+                                  (file-exists? (string-append root "/"
+                                                               (if (string-prefix?
+                                                                    "/" link)
+                                                                   (substring
+                                                                    link 1)
+                                                                   link)))))))))
 
 ;; ISOL-7：两 domain 同时发布，roots/symlinks 互不冲突
 (let ((root (fake-root-with-identity)))
-  (let-values (((out1 st1) (run-deploy-script root %iso-critical-good)))
-              (let-values (((out2 st2) (run-deploy-script root %iso-ordinary-good)))
-                          (test-assert "ISOL-7: both domains publish successfully"
-                                       (and st1 (zero? st1) st2 (zero? st2)))
-                          (let ((crit (readlink (string-append root "/run/guixcfg-secrets")))
-                                (ord (readlink (string-append root "/run/guixcfg-secrets-ordinary"))))
-                            (test-assert "ISOL-7: each domain symlink points into its own store root"
-                                         (and (string-contains crit "/run/guixcfg-secrets.d/")
-                                              (string-contains ord "/run/guixcfg-secrets-ordinary.d/")
-                                              (not (string=? crit ord))))))))
+  (let-values (((out1 st1)
+                (run-deploy-script root %iso-critical-good)))
+              (let-values (((out2 st2)
+                            (run-deploy-script root %iso-ordinary-good)))
+                          (test-assert
+                           "ISOL-7: both domains publish successfully"
+                           (and st1
+                                (zero? st1) st2
+                                (zero? st2)))
+                          (let ((crit (readlink (string-append root
+                                                 "/run/guixcfg-secrets")))
+                                (ord (readlink (string-append root
+                                                "/run/guixcfg-secrets-ordinary"))))
+                            (test-assert
+                             "ISOL-7: each domain symlink points into its own store root"
+                             (and (string-contains crit
+                                                   "/run/guixcfg-secrets.d/")
+                                  (string-contains ord
+                                   "/run/guixcfg-secrets-ordinary.d/")
+                                  (not (string=? crit ord))))))))
 
 ;; ── AP1：application-persistence activation 的 consumer parent 全
 ;; 层级 ownership（boot 回归）────────────────────────────────
@@ -701,36 +859,45 @@ host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析�
 ;; PATH。这里真实执行 production activation gexp（fake root 内 uid
 ;; 1000 与 boot 同构），断言中间层与直接 parent 都归 USER。
 (define %app-persist-rule
-  (application-persistence-rule
-   (name 'synthetic-test)
-   (backing "synthetic-test/state")
-   (consumer ".local/state/mpv")       ; 与 mpv production rule 同深度
-   (exposure 'bind-directory)
-   (lifecycle 'application-owned)))
+  (application-persistence-rule (name 'synthetic-test)
+                                (backing "synthetic-test/state")
+                                (consumer ".local/state/mpv") ;与 mpv production rule 同深度
+                                (exposure 'bind-directory)
+                                (lifecycle 'application-owned)))
 
 (define %app-persist-program
-  (build-thing
-   (program-file
-    "app-persistence-activation-test"
-    (with-imported-modules (source-module-closure '((guix build utils)))
-                           #~(begin
-                              (use-modules (guix build utils))
-                              #$(application-persistence-activation
-                                 (list %app-persist-rule) "user")
-                              ;; 输出三层 uid：中间层 .local、直接
-                              ;; parent .local/state、backing。
-                              (format #t "~a ~a ~a~%"
-                                      (stat:uid (stat "/home/user/.local"))
-                                      (stat:uid (stat "/home/user/.local/state"))
-                                      (stat:uid (stat "/persist/data-app/synthetic-test/state"))))))))
+  (build-thing (program-file "app-persistence-activation-test"
+                             (with-imported-modules (source-module-closure '((guix
+                                                                              build
+                                                                              utils)))
+                                                    #~(begin
+                                                        (use-modules (guix
+                                                                      build
+                                                                      utils))
+                                                        #$(application-persistence-activation
+                                                           (list
+                                                            %app-persist-rule)
+                                                           "user")
+                                                        ;; 输出三层 uid：中间层 .local、直接
+                                                        ;; parent .local/state、backing。
+                                                        (format #t
+                                                                "~a ~a ~a~%"
+                                                                (stat:uid (stat
+                                                                           "/home/user/.local"))
+                                                                (stat:uid (stat
+                                                                           "/home/user/.local/state"))
+                                                                (stat:uid (stat
+                                                                           "/persist/data-app/synthetic-test/state"))))))))
 
 (let* ((root (make-fake-root "" #f))
        (script (string-append
-                 "unshare --user --map-root-user --map-users=auto "
-                 "--map-groups=auto --mount --pid --fork sh -c '"
-                 (sandbox-mounts root)
-                 %guile " --no-auto-compile "
-                %app-persist-program " 2>&1'"))
+                "unshare --user --map-root-user --map-users=auto "
+                "--map-groups=auto --mount --pid --fork sh -c '"
+                (sandbox-mounts root)
+                %guile
+                " --no-auto-compile "
+                %app-persist-program
+                " 2>&1'"))
        (pipe (open-input-pipe script))
        (all (get-string-all pipe)))
   (close-pipe pipe)
@@ -738,13 +905,16 @@ host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析�
   (test-assert "AP1 activation runs without unbound-variable"
                (not (string-contains all "Unbound variable")))
   (test-assert "AP1 consumer parent intermediates are user-owned"
-               (let* ((lines (filter (lambda (l) (not (string-null? l)))
+               (let* ((lines (filter (lambda (l)
+                                       (not (string-null? l)))
                                      (string-split all #\newline)))
                       (uids (and (pair? lines)
                                  (string-split (car (reverse lines)) #\space))))
                  (and uids
-                      (= 3 (length uids))
-                      (every (lambda (u) (string=? "1000" u)) uids)))))
+                      (= 3
+                         (length uids))
+                      (every (lambda (u)
+                               (string=? "1000" u)) uids)))))
 
 ;; ── UP1：user-persistence activation 真实执行 ────────────────
 ;; boot 关键：/home/USER 与各 backing owner 必须归 USER（AGENTS §12/§13；
@@ -757,73 +927,95 @@ host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析�
                  "unshare --user --map-root-user --map-users=auto "
                  "--map-groups=auto --mount --pid --fork sh -c '"
                  (sandbox-mounts fake-root)
-                 %guile " --no-auto-compile " program " 2>&1'")))
+                 %guile
+                 " --no-auto-compile "
+                 program
+                 " 2>&1'")))
     (let* ((pipe (open-input-pipe script))
            (out (get-string-all pipe)))
-      (close-pipe pipe)
-      out)))
+      (close-pipe pipe) out)))
 
 (define %user-persist-exec
-  (build-thing
-   (program-file
-    "user-persistence-activation-test"
-    (with-imported-modules (source-module-closure '((guix build utils)))
-      #~(begin
-         (use-modules (guix build utils))
-         #$(user-persistence-activation "user")
-         (format #t "home=~a persist=~a~%"
-                 (stat:uid (stat "/home/user"))
-                 (stat:uid (stat "/persist/data-home/user"))))))))
+  (build-thing (program-file "user-persistence-activation-test"
+                             (with-imported-modules (source-module-closure '((guix
+                                                                              build
+                                                                              utils)))
+                                                    #~(begin
+                                                        (use-modules (guix
+                                                                      build
+                                                                      utils))
+                                                        #$(user-persistence-activation
+                                                           "user")
+                                                        (format #t
+                                                         "home=~a persist=~a~%"
+                                                         (stat:uid (stat
+                                                                    "/home/user"))
+                                                         (stat:uid (stat
+                                                                    "/persist/data-home/user"))))))))
 
 (let* ((root (make-fake-root "" #f))
        (out (capture-in-root %user-persist-exec root)))
   (false-if-exception (delete-file-recursively root))
   (test-assert "UP1 user-persistence activation runs without unbound-variable"
-               (not (string-contains out "Unbound variable")))
+   (not (string-contains out "Unbound variable")))
   (test-assert "UP1 /home/user and data-home backing are user-owned"
                (string-contains out "home=1000 persist=1000")))
 
 ;; ── MI1：machine-identity activation 真实执行 ────────────────
 (define %machine-identity-exec
-  (build-thing
-   (program-file
-    "machine-identity-activation-test"
-    (with-imported-modules (source-module-closure '((guix build utils)))
-      #~(begin
-         (use-modules (guix build utils) (ice-9 rdelim))
-         #$(machine-identity-activation)
-         (format #t "canonical=~a etc=~a~%"
-                 (call-with-input-file #$%machine-id-path
-                   (lambda (p) (read-line p)))
-                 (call-with-input-file #$%etc-machine-id-path
-                   (lambda (p) (read-line p)))))))))
+  (build-thing (program-file "machine-identity-activation-test"
+                             (with-imported-modules (source-module-closure '((guix
+                                                                              build
+                                                                              utils)))
+                                                    #~(begin
+                                                        (use-modules (guix
+                                                                      build
+                                                                      utils)
+                                                                     (ice-9
+                                                                      rdelim))
+                                                        #$(machine-identity-activation)
+                                                        (format #t
+                                                         "canonical=~a etc=~a~%"
+                                                         (call-with-input-file #$%machine-id-path
+                                                           (lambda (p)
+                                                             (read-line p)))
+                                                         (call-with-input-file #$%etc-machine-id-path
+                                                           (lambda (p)
+                                                             (read-line p)))))))))
 
 (let* ((root (make-fake-root "" #f))
        (out (capture-in-root %machine-identity-exec root)))
   (false-if-exception (delete-file-recursively root))
   (test-assert "MI1 machine-identity activation runs without unbound-variable"
-               (not (string-contains out "Unbound variable")))
+   (not (string-contains out "Unbound variable")))
   (test-assert "MI1 canonical machine-id equals projected /etc/machine-id"
-               (let ((line (find (lambda (l) (string-prefix? "canonical=" l))
+               (let ((line (find (lambda (l)
+                                   (string-prefix? "canonical=" l))
                                  (string-split out #\newline))))
                  (and line
-                      (string-match "canonical=([0-9a-f]+) etc=\\1" line)
-                      #t))))
+                      (string-match "canonical=([0-9a-f]+) etc=\\1" line) #t))))
 
 ;; ── SSHK1：ssh-host-key activation 真实执行 ──────────────────
 (define %ssh-host-key-exec
-  (build-thing
-   (program-file
-    "ssh-host-key-activation-test"
-    (with-imported-modules (source-module-closure '((guix build utils)))
-      #~(begin
-         (use-modules (guix build utils))
-         #$(ssh-host-key-activation)
-         (let ((key "/persist/system/ssh/ssh_host_ed25519_key"))
-           (format #t "exist=~a priv=~a pub=~a~%"
-                   (file-exists? key)
-                   (stat:perms (stat key))
-                   (stat:perms (stat (string-append key ".pub"))))))))))
+  (build-thing (program-file "ssh-host-key-activation-test"
+                             (with-imported-modules (source-module-closure '((guix
+                                                                              build
+                                                                              utils)))
+                                                    #~(begin
+                                                        (use-modules (guix
+                                                                      build
+                                                                      utils))
+                                                        #$(ssh-host-key-activation)
+                                                        (let ((key
+                                                               "/persist/system/ssh/ssh_host_ed25519_key"))
+                                                          (format #t
+                                                           "exist=~a priv=~a pub=~a~%"
+                                                           (file-exists? key)
+                                                           (stat:perms (stat
+                                                                        key))
+                                                           (stat:perms (stat (string-append
+                                                                              key
+                                                                              ".pub"))))))))))
 
 (let* ((root (make-fake-root "" #f))
        (out (capture-in-root %ssh-host-key-exec root)))
@@ -845,105 +1037,135 @@ host 侧目标不存在会误报 #f）——用 readlink 读链接、再解析�
 ;;   - 经 consumer open/truncate/write/fsync/close（应用写路径）；
 ;;   - umount 后 backing 内容仍在（single-backing 不变量）。
 (define %bf-file-rule
-  (application-persistence-rule
-   (name 'bind-file-synthetic)
-   (backing "synthetic-bind-file/state.json")
-   (consumer ".config/synthetic-bind-file/state.json")
-   (exposure 'bind-file)
-   (lifecycle 'application-owned)))
+  (application-persistence-rule (name 'bind-file-synthetic)
+                                (backing "synthetic-bind-file/state.json")
+                                (consumer
+                                 ".config/synthetic-bind-file/state.json")
+                                (exposure 'bind-file)
+                                (lifecycle 'application-owned)))
 
 (define %bf-dir-rule
-  (application-persistence-rule
-   (name 'bind-dir-synthetic)
-   (backing "synthetic-bind-dir/state")
-   (consumer ".config/synthetic-bind-dir")
-   (exposure 'bind-directory)
-   (lifecycle 'application-owned)))
+  (application-persistence-rule (name 'bind-dir-synthetic)
+                                (backing "synthetic-bind-dir/state")
+                                (consumer ".config/synthetic-bind-dir")
+                                (exposure 'bind-directory)
+                                (lifecycle 'application-owned)))
 
 (define %bf-program
-  (build-thing
-   (program-file
-    "bind-file-activation-test"
-    (with-imported-modules (source-module-closure
-                            '((guix build utils)
-                              (guix build syscalls)   ; mount/umount
-                              (ice-9 rdelim)))        ; read-string
-                           #~(begin
-                              (use-modules (guix build utils)
-                                           (guix build syscalls)
-                                           (ice-9 rdelim))
-                              ;; Linux MS_BIND（guix build syscalls 不导出
-                              ;; MS_* 常量——<sys/mount.h> 固定值）。
-                              (define MS_BIND 4096)
-                              #$(application-persistence-activation
-                                 (list %bf-file-rule %bf-dir-rule) "user")
-                              (define backing "/persist/data-app/synthetic-bind-file/state.json")
-                              (define consumer "/home/user/.config/synthetic-bind-file/state.json")
-                              (define (kind-of p)
-                                (let ((t (stat:type (stat p))))
-                                  (cond ((eq? 'regular t) 'regular)
-                                    ((eq? 'directory t) 'directory)
-                                    (else 'other))))
-                              ;; 类型断言：file backing/consumer 都是
-                              ;; regular；consumer parent（activation 职责）
-                              ;; 与 bind-directory backing（mkdir-p 分支）
-                              ;; 是 directory。注意 bind-directory 的
-                              ;; consumer 叶子由 shepherd 的
-                              ;; create-mount-point? 在挂载时创建，activation
-                              ;; 不建——此处不断言它（生产语义）。
-                              (format #t "TYPES ~a ~a ~a ~a~%"
-                                      (kind-of backing)
-                                      (kind-of consumer)
-                                      (kind-of "/home/user/.config/synthetic-bind-file")
-                                      (kind-of "/persist/data-app/synthetic-bind-dir/state"))
-                              ;; 真实 file→file bind mount。
-                              (mount backing consumer "none" MS_BIND)
-                              ;; 应用写路径：open/truncate/write/fsync/close。
-                              (let ((p (open consumer
-                                             (logior O_WRONLY O_TRUNC))))
-                                (display "persisted-through-bind\n" p)
-                                (fsync p)
-                                (close p))
-                              (umount consumer)
-                              ;; single-backing：consumer 只是 projection，
-                              ;; 内容落在 canonical backing。
-                              (format #t "BACKING ~a~%"
-                                      (call-with-input-file backing
-                                                            read-string)))))))
+  (build-thing (program-file "bind-file-activation-test"
+                             (with-imported-modules (source-module-closure '((guix
+                                                                              build
+                                                                              utils)
+                                                                             (guix
+                                                                              build
+                                                                              syscalls) ;mount/umount
+                                                                             (ice-9
+                                                                              rdelim))) ;read-string
+                                                    #~(begin
+                                                        (use-modules (guix
+                                                                      build
+                                                                      utils)
+                                                                     (guix
+                                                                      build
+                                                                      syscalls)
+                                                                     (ice-9
+                                                                      rdelim))
+                                                        ;; Linux MS_BIND（guix build syscalls 不导出
+                                                        ;; MS_* 常量——<sys/mount.h> 固定值）。
+                                                        (define MS_BIND
+                                                          4096)
+                                                        #$(application-persistence-activation
+                                                           (list %bf-file-rule
+                                                            %bf-dir-rule)
+                                                           "user")
+                                                        (define backing
+                                                          "/persist/data-app/synthetic-bind-file/state.json")
+                                                        (define consumer
+                                                          "/home/user/.config/synthetic-bind-file/state.json")
+                                                        (define (kind-of p)
+                                                          (let ((t (stat:type (stat
+                                                                               p))))
+                                                            (cond
+                                                              ((eq? 'regular t)
+                                                               'regular)
+                                                              ((eq? 'directory
+                                                                    t)
+                                                               'directory)
+                                                              (else 'other))))
+                                                        ;; 类型断言：file backing/consumer 都是
+                                                        ;; regular；consumer parent（activation 职责）
+                                                        ;; 与 bind-directory backing（mkdir-p 分支）
+                                                        ;; 是 directory。注意 bind-directory 的
+                                                        ;; consumer 叶子由 shepherd 的
+                                                        ;; create-mount-point? 在挂载时创建，activation
+                                                        ;; 不建——此处不断言它（生产语义）。
+                                                        (format #t
+                                                         "TYPES ~a ~a ~a ~a~%"
+                                                         (kind-of backing)
+                                                         (kind-of consumer)
+                                                         (kind-of
+                                                          "/home/user/.config/synthetic-bind-file")
+                                                         (kind-of
+                                                          "/persist/data-app/synthetic-bind-dir/state"))
+                                                        ;; 真实 file→file bind mount。
+                                                        (mount backing
+                                                               consumer "none"
+                                                               MS_BIND)
+                                                        ;; 应用写路径：open/truncate/write/fsync/close。
+                                                        (let ((p (open
+                                                                  consumer
+                                                                  (logior
+                                                                   O_WRONLY
+                                                                   O_TRUNC))))
+                                                          (display
+                                                           "persisted-through-bind\n"
+                                                           p)
+                                                          (fsync p)
+                                                          (close p))
+                                                        (umount consumer)
+                                                        ;; single-backing：consumer 只是 projection，
+                                                        ;; 内容落在 canonical backing。
+                                                        (format #t
+                                                         "BACKING ~a~%"
+                                                         (call-with-input-file backing
+                                                           read-string)))))))
 
 (let* ((root (make-fake-root "" #f))
        (script (string-append
-                 "unshare --user --map-root-user --map-users=auto "
-                 "--map-groups=auto --mount --pid --fork sh -c '"
-                 (sandbox-mounts root)
-                 %guile " --no-auto-compile "
-                %bf-program " 2>&1'"))
+                "unshare --user --map-root-user --map-users=auto "
+                "--map-groups=auto --mount --pid --fork sh -c '"
+                (sandbox-mounts root)
+                %guile
+                " --no-auto-compile "
+                %bf-program
+                " 2>&1'"))
        (pipe (open-input-pipe script))
        (all (get-string-all pipe)))
   (close-pipe pipe)
   (false-if-exception (delete-file-recursively root))
   (test-assert "BF1 bind-file activation executes without unbound-variable"
                (not (string-contains all "Unbound variable")))
-  (test-assert "BF1 backing and consumer are regular files (not directories); \
-parents and bind-directory backing are directories"
-               (string-contains all
-                                "TYPES regular regular directory directory"))
+  (test-assert
+   "BF1 backing and consumer are regular files (not directories); parents and bind-directory backing are directories"
+   (string-contains all "TYPES regular regular directory directory"))
   (test-assert "BF1 write through consumer survives unmount (backing content)"
-               (string-contains all "BACKING persisted-through-bind")))
+   (string-contains all "BACKING persisted-through-bind")))
 
 ;; ── EP：ephemeral-root-confirm（登录期 last-good promote）──────
 ;; 确认时机从 shepherd user-processes（登录前）移到 greetd PAM
 ;; session open（成功图形登录后）。在 fake root 内真实执行 confirm
 ;; 程序（/run/current-system 与 var/guix/profiles/system-42-link 指向
 ;; 一个真实 store 路径，模拟当前系统 = generation 42）。
-(define %confirm-program (build-thing (ephemeral-root-confirm-program)))
+(define %confirm-program
+  (build-thing (ephemeral-root-confirm-program)))
 
 (define (make-ephemeral-root status)
   "fake root：/persist/system/root-generations/state.scm 含
 BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
   (let ((dir (string-append (or (getenv "TMPDIR") "/tmp")
-                            "/guixcfg-runtime-ep-" (number->string (getpid))
-                            "-" (number->string (random 100000)))))
+                            "/guixcfg-runtime-ep-"
+                            (number->string (getpid)) "-"
+                            (number->string (random 100000)))))
     (mkdir-p (string-append dir "/persist/system/root-generations"))
     (mkdir-p (string-append dir "/gnu/store"))
     (mkdir-p (string-append dir "/var/guix/profiles"))
@@ -952,27 +1174,33 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
     ;; cmdline（current-kernel-command-line 只 read）。
     (mkdir-p (string-append dir "/proc"))
     (call-with-output-file (string-append dir "/proc/cmdline")
-                           (lambda (p) (display "BOOT_IMAGE=/vmlinuz root=/dev/mapper/test rootmode=normal\n" p)))
-    (call-with-output-file
-     (string-append dir "/persist/system/root-generations/state.scm")
-     (lambda (p)
-       (write (state->alist (root-state (next-generation 2)
-                                        (current-generation 1)
-                                        (last-good-generation #f)
-                                        (boot-status status)))
-              p)
-       (newline p)))
-    (symlink %confirm-program (string-append dir "/run/current-system"))
+      (lambda (p)
+        (display "BOOT_IMAGE=/vmlinuz root=/dev/mapper/test rootmode=normal
+" p)))
+    (call-with-output-file (string-append dir
+                            "/persist/system/root-generations/state.scm")
+      (lambda (p)
+        (write (state->alist (root-state (next-generation 2)
+                                         (current-generation 1)
+                                         (last-good-generation #f)
+                                         (boot-status status))) p)
+        (newline p)))
+    (symlink %confirm-program
+             (string-append dir "/run/current-system"))
     (symlink %confirm-program
              (string-append dir "/var/guix/profiles/system-42-link"))
     dir))
 
 (define (run-confirm root pam-type)
   "fake root 内执行 confirm 程序（PAM_TYPE 按需注入），返回 exit code。"
-  (dynamic-wind
-   (lambda () (if pam-type (setenv "PAM_TYPE" pam-type) (unsetenv "PAM_TYPE")))
-   (lambda () (run-in-root %confirm-program root))
-   (lambda () (unsetenv "PAM_TYPE"))))
+  (dynamic-wind (lambda ()
+                  (if pam-type
+                      (setenv "PAM_TYPE" pam-type)
+                      (unsetenv "PAM_TYPE")))
+                (lambda ()
+                  (run-in-root %confirm-program root))
+                (lambda ()
+                  (unsetenv "PAM_TYPE"))))
 
 (define (ephemeral-state root)
   (read-state (string-append root "/persist/system/root-generations/state.scm")))
@@ -980,13 +1208,12 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
 (define (write-boot-state-file root generation)
   "写一份 v2 boot-state（last-good generation = GENERATION）。"
   (call-with-output-file (string-append root "/persist/system/boot-states.scm")
-                         (lambda (p)
-                           (write `((format-version . 2)
-                                    (last-good . ((generation . ,generation)
-                                                  (system . "/gnu/store/fake")
-                                                  (command-line . "root=/dev/fake"))))
-                                  p)
-                           (newline p))))
+    (lambda (p)
+      (write `((format-version . 2) (last-good (generation unquote generation)
+                                               (system . "/gnu/store/fake")
+                                               (command-line . "root=/dev/fake")))
+             p)
+      (newline p))))
 
 ;; EP1：无 PAM_TYPE（人工/测试调用）+ trying → root 轴确认 + Guix 轴
 ;; promote（无 candidate → artifact/menu 按其语义跳过，boot-state 与
@@ -995,12 +1222,14 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
        (code (run-confirm root #f))
        (state (ephemeral-state root)))
   (test-equal "EP1: confirm exits 0" 0 code)
-  (test-eq "EP1: root-state trying -> ok" 'ok (root-state-boot-status state))
+  (test-eq "EP1: root-state trying -> ok"
+           'ok
+           (root-state-boot-status state))
   (test-equal "EP1: last-good = current" 1
               (root-state-last-good-generation state))
   (test-assert "EP1: GC root written (Guix axis promoted)"
-               (file-exists?
-                (string-append root "/var/guix/gcroots/guixcfg/last-good-system")))
+               (file-exists? (string-append root
+                              "/var/guix/gcroots/guixcfg/last-good-system")))
   (false-if-exception (delete-file-recursively root)))
 
 ;; EP2：pam_exec 在 close_session 也会调用——门在程序内，不动状态。
@@ -1008,7 +1237,8 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
        (code (run-confirm root "close_session"))
        (state (ephemeral-state root)))
   (test-equal "EP2: close_session exits 0" 0 code)
-  (test-eq "EP2: close_session leaves state trying" 'trying
+  (test-eq "EP2: close_session leaves state trying"
+           'trying
            (root-state-boot-status state))
   (false-if-exception (delete-file-recursively root)))
 
@@ -1017,15 +1247,17 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
 (let* ((root (make-ephemeral-root 'ok))
        (bs (string-append root "/persist/system/boot-states.scm")))
   (write-boot-state-file root 42)
-  (let ((before (call-with-input-file bs (lambda (p) (read-string p))))
+  (let ((before (call-with-input-file bs
+                  (lambda (p)
+                    (read-string p))))
         (code (run-confirm root #f)))
     (test-equal "EP3: already last-good exits 0" 0 code)
-    (test-equal "EP3: boot-state untouched (idempotent skip)"
-                before
-                (call-with-input-file bs (lambda (p) (read-string p))))
+    (test-equal "EP3: boot-state untouched (idempotent skip)" before
+                (call-with-input-file bs
+                  (lambda (p)
+                    (read-string p))))
     (test-assert "EP3: no GC root created on skip"
-                 (not (file-exists?
-                       (string-append root "/var/guix/gcroots"))))
+                 (not (file-exists? (string-append root "/var/guix/gcroots"))))
     (false-if-exception (delete-file-recursively root))))
 
 ;; EP4：boot-state 过期（41 ≠ 当前 42）→ promote 执行：boot-state
@@ -1036,12 +1268,12 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
         (bs (string-append root "/persist/system/boot-states.scm")))
     (test-equal "EP4: stale last-good promotes, exits 0" 0 code)
     (test-assert "EP4: boot-state now records generation 42"
-                 (string-contains
-                  (call-with-input-file bs (lambda (p) (read-string p)))
-                  "(generation . 42)"))
+                 (string-contains (call-with-input-file bs
+                                    (lambda (p)
+                                      (read-string p))) "(generation . 42)"))
     (test-assert "EP4: GC root created"
-                 (file-exists?
-                  (string-append root "/var/guix/gcroots/guixcfg/last-good-system")))
+                 (file-exists? (string-append root
+                                "/var/guix/gcroots/guixcfg/last-good-system")))
     (false-if-exception (delete-file-recursively root))))
 
 ;; ── NI1：niri session wrapper（apps/niri，Guile 原生）真实执行 ──
@@ -1058,36 +1290,38 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
 (define (run-niri-wrapper fake-root)
   "在隔离 root 里执行 niri wrapper（清 XDG_*/HOME 环境保证确定性），
 返回 (exit-code . output)。"
-  (let ((script
-         (string-append
-          "timeout 60 unshare --user --map-root-user --map-users=auto "
-          "--map-groups=auto --mount --pid --fork sh -c '"
-           ;; env 必须包住整条链（只作用于 mount 会让宿主环境泄漏）；
-          ;; 内层用双引号，且 $? 必须转义（\\$?）——双引号内的字面
-           ;; $? 会在解析时被提前展开为 0（shell 语义，实测）。
-           "env -u XDG_SESSION_ID -u XDG_RUNTIME_DIR -u HOME sh -c \""
-           (sandbox-mounts fake-root)
-           %guile
-          " --no-auto-compile " %niri-wrapper-program
-          " 2>&1; echo EXIT:\\$?\"'")))
+  (let ((script (string-append
+                 "timeout 60 unshare --user --map-root-user --map-users=auto "
+                 "--map-groups=auto --mount --pid --fork sh -c '"
+                 ;; env 必须包住整条链（只作用于 mount 会让宿主环境泄漏）；
+                 ;; 内层用双引号，且 $? 必须转义（\\$?）——双引号内的字面
+                 ;; $? 会在解析时被提前展开为 0（shell 语义，实测）。
+                 "env -u XDG_SESSION_ID -u XDG_RUNTIME_DIR -u HOME sh -c \""
+                 (sandbox-mounts fake-root)
+                 %guile
+                 " --no-auto-compile "
+                 %niri-wrapper-program
+                 " 2>&1; echo EXIT:\\$?\"'")))
     (let* ((pipe (open-input-pipe script))
            (out (get-string-all pipe)))
       (close-pipe pipe)
       (let ((m (string-match "EXIT:([0-9]+)" out)))
-        (cons (and m (string->number (match:substring m 1)))
-              out)))))
+        (cons (and m
+                   (string->number (match:substring m 1))) out)))))
 
-(let* ((root (string-append (or (getenv "TMPDIR") "/tmp")
-                            "/guixcfg-niri-" (number->string (getpid))))
+(let* ((root (string-append (or (getenv "TMPDIR") "/tmp") "/guixcfg-niri-"
+                            (number->string (getpid))))
        (res (run-niri-wrapper root))
        (code (car res))
        (out (cdr res)))
   (test-assert "NI1: wrapper runs without unbound-variable"
                (not (string-contains out "Unbound variable")))
-  (test-assert "NI1: niri fails without seat/display (wrapper keeps non-zero exit)"
-               (and code (not (zero? code))))
+  (test-assert
+   "NI1: niri fails without seat/display (wrapper keeps non-zero exit)"
+   (and code
+        (not (zero? code))))
   (test-assert "NI1: wrapper logs XDG_SESSION_ID unset (no blind termination)"
-               (string-contains out "XDG_SESSION_ID unset"))
+   (string-contains out "XDG_SESSION_ID unset"))
   (false-if-exception (delete-file-recursively root)))
 
 ;; ── mihomo-config materializer：真实执行 ────────────────────
@@ -1101,35 +1335,36 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
 (define (make-mihomo-fake-root secret-content)
   "fake root：/run + secret 路径（parent 0700、文件 0400，模拟
 secrets ordinary deploy 的产物形态）。"
-  (let ((dir (string-append (or (getenv "TMPDIR") "/tmp")
-                            "/guixcfg-mihomo-" (number->string (getpid))
-                            "-" (number->string (random 100000)))))
+  (let ((dir (string-append (or (getenv "TMPDIR") "/tmp") "/guixcfg-mihomo-"
+                            (number->string (getpid)) "-"
+                            (number->string (random 100000)))))
     (mkdir dir)
     (let ((secret-dir (string-append dir
                                      "/run/guixcfg-secrets-ordinary/system")))
       (mkdir-p secret-dir)
       (chmod (string-append dir "/run/guixcfg-secrets-ordinary") #o700)
       (chmod (string-append dir "/run/guixcfg-secrets-ordinary/system") #o700)
-      (call-with-output-file (string-append secret-dir "/mihomo-subscription.url")
-                             (lambda (p) (display secret-content p)))
-      (chmod (string-append secret-dir "/mihomo-subscription.url") #o400))
-    dir))
+      (call-with-output-file (string-append secret-dir
+                                            "/mihomo-subscription.url")
+        (lambda (p)
+          (display secret-content p)))
+      (chmod (string-append secret-dir "/mihomo-subscription.url") #o400)) dir))
 
-(let* ((root (make-mihomo-fake-root
-              "https://example.invalid/sub?token=test\n"))
+(let* ((root (make-mihomo-fake-root "https://example.invalid/sub?token=test\n"))
        (code (run-in-root %mihomo-config-program root))
        (config (string-append root "/run/mihomo/config.yaml")))
   (test-assert "MC1: materializer executes without unbound-variable"
-               (and code (zero? code)))
+               (and code
+                    (zero? code)))
   (test-assert "MC1: composed config exists with substituted URL"
                (and (file-exists? config)
-                    (string-contains
-                     (call-with-input-file config get-string-all)
-                     "https://example.invalid/sub?token=test")))
+                    (string-contains (call-with-input-file config
+                                       get-string-all)
+                                     "https://example.invalid/sub?token=test")))
   (test-assert "MC1: runtime dir 0700, config 0600"
                (and (eq? (stat:mode (stat (string-append root "/run/mihomo")))
-                         #o40700)
-                    (eq? (stat:mode (stat config)) #o100600)))
+                         16832)
+                    (eq? (stat:mode (stat config)) 33152)))
   (false-if-exception (delete-file-recursively root)))
 
 (let* ((root (make-mihomo-fake-root
@@ -1137,19 +1372,20 @@ secrets ordinary deploy 的产物形态）。"
               "https://example.invalid/a\nb\n"))
        (code (run-in-root %mihomo-config-program root)))
   (test-assert "MC2: bad secret (embedded LF) fails closed, no config written"
-               (and code (not (zero? code))
-                    (not (file-exists?
-                          (string-append root "/run/mihomo/config.yaml")))))
+   (and code
+        (not (zero? code))
+        (not (file-exists? (string-append root "/run/mihomo/config.yaml")))))
   (false-if-exception (delete-file-recursively root)))
 
 (let* ((root (make-mihomo-fake-root "https://example.invalid/x\n"))
        (_ (delete-file (string-append root
-                                      "/run/guixcfg-secrets-ordinary/system/mihomo-subscription.url")))
+                        "/run/guixcfg-secrets-ordinary/system/mihomo-subscription.url")))
        (code (run-in-root %mihomo-config-program root)))
   (test-assert "MC3: missing secret file fails closed"
-               (and code (not (zero? code))
-                    (not (file-exists?
-                          (string-append root "/run/mihomo/config.yaml")))))
+               (and code
+                    (not (zero? code))
+                    (not (file-exists? (string-append root
+                                        "/run/mihomo/config.yaml")))))
   (false-if-exception (delete-file-recursively root)))
 
 ;; ── SG：session-gate 真实执行（production close activation）────
@@ -1158,37 +1394,36 @@ secrets ordinary deploy 的产物形态）。"
 ;; /run/guixcfg；同时 in-process 验证 runtime 契约过程 close!/open!
 ;; （reconfigure 事务的生产路径）。
 (define %gate-close-program
-  (build-thing
-   (program-file
-    "gate-close-activation-exec"
-    #~(begin
-       #$(session-gate-close-activation #:directory "/run/guixcfg")
-       (exit 0)))))
+  (build-thing (program-file "gate-close-activation-exec"
+                             #~(begin
+                                 #$(session-gate-close-activation #:directory
+                                    "/run/guixcfg")
+                                 (exit 0)))))
 
-(let* ((root (string-append (or (getenv "TMPDIR") "/tmp")
-                            "/guixcfg-gate-" (number->string (getpid))
-                            "-" (number->string (random 100000)))))
+(let* ((root (string-append (or (getenv "TMPDIR") "/tmp") "/guixcfg-gate-"
+                            (number->string (getpid)) "-"
+                            (number->string (random 100000)))))
   (mkdir root)
   (mkdir-p (string-append root "/gnu/store"))
   (let ((code (run-in-root %gate-close-program root)))
-    (test-equal "SG1: production close activation executes (exit 0)"
-                0 code)
+    (test-equal "SG1: production close activation executes (exit 0)" 0 code)
     (test-assert "SG1: gate file created inside isolated root"
                  (file-exists? (string-append root
-                                              "/run/guixcfg/session-not-ready")))
+                                "/run/guixcfg/session-not-ready")))
     (test-equal "SG1: gate content is the authority's boot close message"
                 %session-gate-close-message
                 (call-with-input-file (string-append root
-                                                     "/run/guixcfg/session-not-ready")
-                                      (lambda (p) (read-string p))))
-    (test-equal "SG1: gate directory is 0755"
-                #o755 (stat:perms (stat (string-append root "/run/guixcfg"))))
+                                       "/run/guixcfg/session-not-ready")
+                  (lambda (p)
+                    (read-string p))))
+    (test-equal "SG1: gate directory is 0755" 493
+                (stat:perms (stat (string-append root "/run/guixcfg"))))
     ;; open!/close!（runtime 契约，reconfigure 生产路径同款）：
     ;; 在另一个隔离目录上验证 close→open 幂等。
     (let ((dir2 (string-append (or (getenv "TMPDIR") "/tmp")
                                "/guixcfg-gate-runtime-"
-                               (number->string (getpid))
-                               "-" (number->string (random 100000)))))
+                               (number->string (getpid)) "-"
+                               (number->string (random 100000)))))
       (session-gate-close! #:directory dir2
                            #:message %session-gate-reconfigure-message)
       (test-assert "SG2: runtime close! creates directory and gate file"
@@ -1213,12 +1448,10 @@ secrets ordinary deploy 的产物形态）。"
 ;;   - manifest 完整落盘（activation 走完所有 override 写入）；
 ;;   - 无 .new 残留（atomic write 全部提交）。
 (define %flatpak-overrides-program
-  (build-thing
-   (program-file
-    "flatpak-overrides-activation-exec"
-    #~(begin
-       #$(service-value (flatpak-overrides-activation '()))
-       (exit 0)))))
+  (build-thing (program-file "flatpak-overrides-activation-exec"
+                             #~(begin
+                                 #$(service-value (flatpak-overrides-activation '()))
+                                 (exit 0)))))
 
 (let* ((root (make-fake-root "" #f))
        (code (run-in-root %flatpak-overrides-program root))
@@ -1228,8 +1461,8 @@ secrets ordinary deploy 的产物形态）。"
   (test-assert "FO1: managed override manifest is committed"
                (let ((manifest (string-append dir "/.guixcfg-managed")))
                  (and (file-exists? manifest)
-                      (positive? (string-length
-                                  (call-with-input-file manifest get-string-all))))))
+                      (positive? (string-length (call-with-input-file manifest
+                                                  get-string-all))))))
   (test-assert "FO1: no .new residue"
                (not (find (lambda (name)
                             (string-suffix? ".new" name))

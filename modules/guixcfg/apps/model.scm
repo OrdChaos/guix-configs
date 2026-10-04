@@ -19,50 +19,50 @@
 ;;; 显式 registry（(guixcfg apps registry)）；目录存在 != 应用启用。
 
 (define-module (guixcfg apps model)
-               #:use-module (guix records)
-               #:use-module (gnu services)       ; service-kind、service-value
-               #:use-module (srfi srfi-1)          ; append-map
-               #:export (<application>
-                         application make-application application?
-                         application-name
-                         application-home-packages
-                         application-home-services
-                         application-system-services
-                         application-persistence
-                         application-secrets
-                         application-configuration-variants
-                         application-gsettings
-                         <application-configuration-variant>
-                         application-configuration-variant
-                         make-application-configuration-variant
-                         application-configuration-variant?
-                         application-configuration-variant-name
-                         application-configuration-variant-files
-                         applications-home-packages
-                         applications-home-services
-                         applications-system-services
-                         applications-persistence
-                         applications-secrets
-                         applications-gsettings))
+  #:use-module (guix records)
+  #:use-module (gnu services) ;service-kind、service-value
+  #:use-module (srfi srfi-1) ;append-map
+  #:export (<application> application
+                          make-application
+                          application?
+                          application-name
+                          application-home-packages
+                          application-home-services
+                          application-system-services
+                          application-persistence
+                          application-secrets
+                          application-configuration-variants
+                          application-gsettings
+                          <application-configuration-variant>
+                          application-configuration-variant
+                          make-application-configuration-variant
+                          application-configuration-variant?
+                          application-configuration-variant-name
+                          application-configuration-variant-files
+                          applications-home-packages
+                          applications-home-services
+                          applications-system-services
+                          applications-persistence
+                          applications-secrets
+                          applications-gsettings))
 
 (define-record-type* <application> application make-application
-                     application?
-                     (name application-name)                    ; symbol
-                     (home-packages application-home-packages   ; list of package
-                                    (default '()))
-                     (home-services application-home-services   ; list of service
-                                    (default '()))
-                     (system-services application-system-services ; list of service
-                                      (default '()))
-                     (persistence application-persistence       ; list of <application-persistence-rule>
-                                  (default '()))
-                     (secrets application-secrets               ; list of <secret-decl>
-                              (default '()))
-                     (configuration-variants
-                      application-configuration-variants        ; list of <application-configuration-variant>
-                      (default '()))
-                     (gsettings application-gsettings            ; list of <gsettings-setting>（(guixcfg gsettings model)）
-                                (default '())))
+  application?
+  (name application-name) ;symbol
+  (home-packages application-home-packages ;list of package
+                 (default '()))
+  (home-services application-home-services ;list of service
+                 (default '()))
+  (system-services application-system-services ;list of service
+                   (default '()))
+  (persistence application-persistence ;list of <application-persistence-rule>
+               (default '()))
+  (secrets application-secrets ;list of <secret-decl>
+           (default '()))
+  (configuration-variants application-configuration-variants ;list of <application-configuration-variant>
+                          (default '()))
+  (gsettings application-gsettings ;list of <gsettings-setting>（(guixcfg gsettings model)）
+             (default '())))
 
 ;; 可选配置变体声明（application-owned）：NAME 是稳定 logical
 ;; identifier（如 'laptop）；FILES 是 (target source) 两元素列表
@@ -70,10 +70,12 @@
 ;; 无耦合），source 为 opaque file-like（原生格式，generic 层不
 ;; 解析）。
 (define-record-type* <application-configuration-variant>
-                     application-configuration-variant make-application-configuration-variant
-                     application-configuration-variant?
-                     (name application-configuration-variant-name)     ; symbol
-                     (files application-configuration-variant-files))  ; list of (target source)
+                     application-configuration-variant
+                     make-application-configuration-variant
+  application-configuration-variant?
+  (name application-configuration-variant-name) ;symbol
+  (files application-configuration-variant-files))
+ ; list of (target source)
 
 (define (applications-home-packages apps)
   "聚合 APPS 的全部 home packages。"
@@ -116,5 +118,4 @@ application definition 解析为 file-like）。"
   (append-map (lambda (app)
                 (map (lambda (setting)
                        (cons (application-name app) setting))
-                     (application-gsettings app)))
-              apps))
+                     (application-gsettings app))) apps))

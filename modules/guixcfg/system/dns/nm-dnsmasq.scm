@@ -22,46 +22,52 @@
 ;;; 分配器跳过，不会与其他系统账号冲突。
 
 (define-module (guixcfg system dns nm-dnsmasq)
-               #:use-module (gnu services)        ; simple-service
-               #:use-module (gnu system shadow)   ; account-service-type
-               #:use-module (gnu system accounts) ; user-account、user-group
-               #:use-module (guix gexp)           ; plain-file
-               #:export (%nm-dnsmasq-user
-                         %nm-dnsmasq-uid
-                         %nm-dnsmasq-gid
-                         %nm-dnsmasq-account
-                         %nm-dnsmasq-group
-                         %nm-dnsmasq-conf-file
-                         %nm-dnsmasq-conf-name
-                         %nm-dnsmasq-conf-content
-                         nm-dnsmasq-dnsmasq-configuration-files
-                         nm-dnsmasq-account-service))
+  #:use-module (gnu services) ;simple-service
+  #:use-module (gnu system shadow) ;account-service-type
+  #:use-module (gnu system accounts) ;user-account、user-group
+  #:use-module (guix gexp) ;plain-file
+  #:export (%nm-dnsmasq-user %nm-dnsmasq-uid
+                             %nm-dnsmasq-gid
+                             %nm-dnsmasq-account
+                             %nm-dnsmasq-group
+                             %nm-dnsmasq-conf-file
+                             %nm-dnsmasq-conf-name
+                             %nm-dnsmasq-conf-content
+                             nm-dnsmasq-dnsmasq-configuration-files
+                             nm-dnsmasq-account-service))
 
-(define %nm-dnsmasq-user "nm-dnsmasq")
+(define %nm-dnsmasq-user
+  "nm-dnsmasq")
 
 ;; 显式、稳定的系统 ID（100..999 段）。取 985：当前系统账号分配从
 ;; 999 递减（greeter 999、polkitd 998、guixbuilder 997..988、sshd
 ;; 987、messagebus 986），985 空闲；显式 UID 会被分配器跳过。
-(define %nm-dnsmasq-uid 985)
-(define %nm-dnsmasq-gid 985)
+(define %nm-dnsmasq-uid
+  985)
+(define %nm-dnsmasq-gid
+  985)
 
 (define %nm-dnsmasq-group
-  (user-group (name %nm-dnsmasq-user) (id %nm-dnsmasq-gid) (system? #t)))
+  (user-group
+    (name %nm-dnsmasq-user)
+    (id %nm-dnsmasq-gid)
+    (system? #t)))
 
 (define %nm-dnsmasq-account
   (user-account
-   (name %nm-dnsmasq-user)
-   (uid %nm-dnsmasq-uid)
-   (group %nm-dnsmasq-user)
-   (comment "NetworkManager dnsmasq resolver")
-   (home-directory "/var/empty")
-   (create-home-directory? #f)
-   (system? #t)))
+    (name %nm-dnsmasq-user)
+    (uid %nm-dnsmasq-uid)
+    (group %nm-dnsmasq-user)
+    (comment "NetworkManager dnsmasq resolver")
+    (home-directory "/var/empty")
+    (create-home-directory? #f)
+    (system? #t)))
 
 ;; dnsmasq 在 conf-dir 内会读取此文件并把工作进程降到该用户（NM 不传
 ;; --user，因此这里生效）。NM 以 root 启动 dnsmasq，绑定 127.0.0.1:53
 ;; 后再 drop 到 nm-dnsmasq。
-(define %nm-dnsmasq-conf-name "00-nm-dnsmasq-user.conf")
+(define %nm-dnsmasq-conf-name
+  "00-nm-dnsmasq-user.conf")
 
 (define %nm-dnsmasq-conf-content
   (string-append "user=" %nm-dnsmasq-user "\n"))

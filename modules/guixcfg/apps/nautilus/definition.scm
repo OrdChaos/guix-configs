@@ -51,26 +51,26 @@
 ;;; 无 persistence 规则（nautilus 状态属用户数据层）。
 
 (define-module (guixcfg apps nautilus definition)
-               #:use-module (gnu packages gnome) ; nautilus、gvfs
-               #:use-module (gnu packages glib)  ; gobject-introspection（cairo-1.0.typelib）
-               #:use-module (gnu packages python) ; python（site-packages 版本推导）
-               #:use-module (gnu home services) ; home-environment-variables-service-type、home-files-service-type
-               #:use-module (gnu services)     ; simple-service
-               #:use-module (guix gexp)        ; local-file、file-append
-               #:use-module (guix packages)    ; package-version
-               #:use-module (virelith packages nautilus) ; python-nautilus、nautilus-open-any-terminal
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:use-module (guixcfg gsettings model) ; gsettings-setting
-               #:use-module (guixcfg users user) ; %primary-user、user-profile-home-directory
-               #:use-module (srfi srfi-1)       ; take
-               #:export (%nautilus
-                         %nautilus-desktop-entry))
+  #:use-module (gnu packages gnome) ;nautilus、gvfs
+  #:use-module (gnu packages glib) ;gobject-introspection（cairo-1.0.typelib）
+  #:use-module (gnu packages python) ;python（site-packages 版本推导）
+  #:use-module (gnu home services) ;home-environment-variables-service-type、home-files-service-type
+  #:use-module (gnu services) ;simple-service
+  #:use-module (guix gexp) ;local-file、file-append
+  #:use-module (guix packages) ;package-version
+  #:use-module (virelith packages nautilus) ;python-nautilus、nautilus-open-any-terminal
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:use-module (guixcfg gsettings model) ;gsettings-setting
+  #:use-module (guixcfg users user) ;%primary-user、user-profile-home-directory
+  #:use-module (srfi srfi-1) ;take
+  #:export (%nautilus %nautilus-desktop-entry))
 
 ;; Nautilus 的 XDG desktop entry 名（pinned gnome 包 share/
 ;; applications/ 产物核实）。纯数据常量：供统一 XDG/default-apps
 ;; 策略模块引用（(guixcfg home xdg)），本模块不决定默认应用。
-(define %nautilus-desktop-entry "org.gnome.Nautilus.desktop")
+(define %nautilus-desktop-entry
+  "org.gnome.Nautilus.desktop")
 
 ;; loader 内嵌解释器的 site-packages 搜索路径：profile 下
 ;; lib/python<major.minor>/site-packages。版本号从 pinned python
@@ -78,13 +78,11 @@
 ;; nautilus.scm 的 (gnu packages python) python），与 profile 里
 ;; pygobject/gi 的安装目录一致，不写死 "3.12"。
 (define %nautilus-python-major-minor
-  (string-join (take (string-split (package-version python) #\.) 2)
-               "."))
+  (string-join (take (string-split (package-version python) #\.) 2) "."))
 
 (define %nautilus-python-path
   (string-append (user-profile-home-directory %primary-user)
-                 "/.guix-home/profile/lib/python"
-                 %nautilus-python-major-minor
+                 "/.guix-home/profile/lib/python" %nautilus-python-major-minor
                  "/site-packages"))
 
 ;; stub（遮蔽 Ghostty bundled 扩展）：必须是一个可干净
@@ -96,47 +94,42 @@
   (local-file "ghostty.py"))
 
 (define %nautilus
-  (application
-   (name 'nautilus)
-   ;; gvfs：trash 的 D-Bus activation 服务文件所在包（见上）。
-   ;; python-nautilus + nautilus-open-any-terminal：右键"打开终端"扩展
-   ;; （gtk/pygobject 经扩展的 propagated-inputs 随闭包进入 profile）。
-   ;; gobject-introspection：cairo-1.0.typelib 的携带者——guix 的
-   ;; cairo 不构建 introspection（无 typelib），而扩展经 gi 导入
-   ;; Gtk 3.0 时其 typelib 依赖 namespace cairo；缺失时扩展 import
-   ;; 静默失败、菜单不出现（2026-09 VM 实测 ImportError）。GI 的
-   ;; typelib 搜索（XDG_DATA_DIRS/../lib/girepository-1.0）经
-   ;; profile 合并即可命中。
-   (home-packages (list nautilus gvfs
-                        python-nautilus nautilus-open-any-terminal
-                        gobject-introspection))
-   ;; PYTHONPATH：loader 内嵌 python 发现 profile 里 gi 的唯一通道
-   ;; （见文件头 2026-09 断点记录）；stub 遮蔽 ghostty bundled 扩展
-   ;; 防重复菜单项（同记录）。
-   (home-services
-    (list (simple-service
-           'nautilus-python-env
-           home-environment-variables-service-type
-           (list (cons "PYTHONPATH" %nautilus-python-path)))
-          (simple-service
-           'nautilus-suppress-ghostty-extension
-           home-files-service-type
-           `((".local/share/nautilus-python/extensions/ghostty.py"
-              ,%ghostty-nautilus-extension-stub)))
-          ;; 菜单标签中文化（2026-09）：open-any 的 gettext 搜索列表
-          ;; 硬编码 ~/.local/share/locale 与 /usr/share/locale
-          ;; （源码 nautilus_open_any_terminal.py），profile 的
-          ;; share/locale 不在其中——符号链把包内 zh_CN .mo 暴露到
-          ;; ~/.local/share/locale（label "在此处打开Ghostty"）。
-          (simple-service
-           'nautilus-open-any-terminal-locale
-           home-files-service-type
-           `((".local/share/locale/zh_CN/LC_MESSAGES/nautilus-open-any-terminal.mo"
-              ,(file-append nautilus-open-any-terminal
-                            "/share/locale/zh_CN/LC_MESSAGES/nautilus-open-any-terminal.mo"))))))
-   ;; 扩展的终端选择：ghostty（本仓库唯一 terminal）。
-   (gsettings
-    (list (gsettings-setting
-           (schema "com.github.stunkymonkey.nautilus-open-any-terminal")
-           (key "terminal")
-           (value "'ghostty'"))))))
+  (application (name 'nautilus)
+               ;; gvfs：trash 的 D-Bus activation 服务文件所在包（见上）。
+               ;; python-nautilus + nautilus-open-any-terminal：右键"打开终端"扩展
+               ;; （gtk/pygobject 经扩展的 propagated-inputs 随闭包进入 profile）。
+               ;; gobject-introspection：cairo-1.0.typelib 的携带者——guix 的
+               ;; cairo 不构建 introspection（无 typelib），而扩展经 gi 导入
+               ;; Gtk 3.0 时其 typelib 依赖 namespace cairo；缺失时扩展 import
+               ;; 静默失败、菜单不出现（2026-09 VM 实测 ImportError）。GI 的
+               ;; typelib 搜索（XDG_DATA_DIRS/../lib/girepository-1.0）经
+               ;; profile 合并即可命中。
+               (home-packages (list nautilus gvfs python-nautilus
+                                    nautilus-open-any-terminal
+                                    gobject-introspection))
+               ;; PYTHONPATH：loader 内嵌 python 发现 profile 里 gi 的唯一通道
+               ;; （见文件头 2026-09 断点记录）；stub 遮蔽 ghostty bundled 扩展
+               ;; 防重复菜单项（同记录）。
+               (home-services (list (simple-service 'nautilus-python-env
+                                     home-environment-variables-service-type
+                                     (list (cons "PYTHONPATH"
+                                                 %nautilus-python-path)))
+                                    (simple-service 'nautilus-suppress-ghostty-extension
+                                                    home-files-service-type
+                                                    `((".local/share/nautilus-python/extensions/ghostty.py" ,%ghostty-nautilus-extension-stub)))
+                                    ;; 菜单标签中文化（2026-09）：open-any 的 gettext 搜索列表
+                                    ;; 硬编码 ~/.local/share/locale 与 /usr/share/locale
+                                    ;; （源码 nautilus_open_any_terminal.py），profile 的
+                                    ;; share/locale 不在其中——符号链把包内 zh_CN .mo 暴露到
+                                    ;; ~/.local/share/locale（label "在此处打开Ghostty"）。
+                                    (simple-service 'nautilus-open-any-terminal-locale
+                                                    home-files-service-type
+                                                    `((".local/share/locale/zh_CN/LC_MESSAGES/nautilus-open-any-terminal.mo" ,
+                                                       (file-append
+                                                        nautilus-open-any-terminal
+                                                        "/share/locale/zh_CN/LC_MESSAGES/nautilus-open-any-terminal.mo"))))))
+               ;; 扩展的终端选择：ghostty（本仓库唯一 terminal）。
+               (gsettings (list (gsettings-setting (schema
+                                                    "com.github.stunkymonkey.nautilus-open-any-terminal")
+                                                   (key "terminal")
+                                                   (value "'ghostty'"))))))

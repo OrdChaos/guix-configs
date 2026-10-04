@@ -23,14 +23,13 @@
 ;;; git 对象，无 secret；不引入 owner/mode 抽象。
 
 (define-module (guixcfg system guix-cache)
-               #:use-module (guixcfg system machine-state-persistence)
-               #:export (%guix-root-cache-persistence-rule))
+  #:use-module (guixcfg system machine-state-persistence)
+  #:export (%guix-root-cache-persistence-rule))
 
 ;; /persist/system/state/guix/root-cache → /root/.cache/guix
 ;; （root-owned machine state；consumer 是 root 侧 guix 运行期
 ;; 读取的默认缓存位置）。
 (define %guix-root-cache-persistence-rule
-  (machine-state-persistence-rule
-   (name 'guix-root-cache)
-   (backing "guix/root-cache")
-   (consumer "/root/.cache/guix")))
+  (machine-state-persistence-rule (name 'guix-root-cache)
+                                  (backing "guix/root-cache")
+                                  (consumer "/root/.cache/guix")))

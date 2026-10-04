@@ -22,26 +22,24 @@
 ;;; colocate（同目录 gpg-tty.bashrc）。
 
 (define-module (guixcfg apps bash definition)
-               #:use-module (gnu services)                 ; service
-               #:use-module (gnu home services shells)     ; home-bash-service-type
-               #:use-module (guix gexp)                    ; local-file
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:export (%bash))
+  #:use-module (gnu services) ;service
+  #:use-module (gnu home services shells) ;home-bash-service-type
+  #:use-module (guix gexp) ;local-file
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:export (%bash))
 
 (define %bash-gpg-tty-bashrc
   (local-file "gpg-tty.bashrc" "bashrc-gpg-tty"))
 
 (define %bash
-  (application
-   (name 'bash)
-   (home-services
-    (list (service home-bash-service-type
-                   (home-bash-configuration
-                    (guix-defaults? #f)   ; rc 由本 app 唯一拥有
-                    (environment-variables
-                     '(("EDITOR" . "nano")
-                       ("VISUAL" . "nano")
-                       ("PAGER" . "less")))
-                    (bashrc (list (local-file "bashrc" "bashrc")
-                                  %bash-gpg-tty-bashrc))))))))
+  (application (name 'bash)
+               (home-services (list (service home-bash-service-type
+                                             (home-bash-configuration
+                                              (guix-defaults? #f) ;rc 由本 app 唯一拥有
+                                              (environment-variables '(("EDITOR" . "nano")
+                                                                       ("VISUAL" . "nano")
+                                                                       ("PAGER" . "less")))
+                                              (bashrc (list (local-file
+                                                             "bashrc" "bashrc")
+                                                       %bash-gpg-tty-bashrc))))))))

@@ -17,12 +17,13 @@
              (guixcfg utils repository-source)
              (srfi srfi-64)
              (srfi srfi-1)
-             (srfi srfi-13)   ; string-contains
+             (srfi srfi-13) ;string-contains
              (srfi srfi-26))
 
 (test-runner-current (test-runner-simple))
 
-(define %root "/repo")
+(define %root
+  "/repo")
 
 (define (option-value argv opt)
   (and=> (member opt argv) cadr))
@@ -30,30 +31,37 @@
 (define (env-value argv var)
   "从 env(1) 前缀 argv 提取 VAR=... 的值。"
   (let ((prefix (string-append var "=")))
-    (and=> (find (lambda (x) (string-prefix? prefix x)) argv)
-           (cut substring <> (string-length prefix)))))
+    (and=> (find (lambda (x)
+                   (string-prefix? prefix x)) argv)
+           (cut substring <>
+                (string-length prefix)))))
 
 (define (no-shell-metacharacters? argv)
   "argv 不得是 shell-string 拼接：任何元素都不能包含 && / ; / |。"
   (not (any (lambda (x)
               (and (string-contains x "&&")
                    (or (string-contains x ";")
-                       (string-contains x "|"))))
-            argv)))
+                       (string-contains x "|")))) argv)))
 
 ;; guile error 的异常参数形态是 (key format-string irritants ...)；
 ;; 提取其中全部字符串做断言（不依赖 misc-error 的内部布局）。
 (define (exception-strings exn-args)
-  (let walk ((x exn-args))
-    (cond ((string? x) (list x))
-      ((pair? x) (append (walk (car x)) (walk (cdr x))))
+  (let walk
+    ((x exn-args))
+    (cond
+      ((string? x)
+       (list x))
+      ((pair? x)
+       (append (walk (car x))
+               (walk (cdr x))))
       (else '()))))
 
 (test-begin "deploy")
 
 ;; ---- host 枚举与校验 ----
 
-(define %fixture-dir "tests/fixtures/hosts-scan")
+(define %fixture-dir
+  "tests/fixtures/hosts-scan")
 
 (test-equal "fixture directory yields only real host files"
             '("lenovo-legion-y7000p" "vm")
@@ -73,12 +81,12 @@
              (host-identity-table-valid? %host-identity-table))
 
 (test-assert "duplicate Host IDs are rejected"
-             (not (host-identity-table-valid?
-                   '(("vm" . "host-a") ("vm" . "host-b")))))
+             (not (host-identity-table-valid? '(("vm" . "host-a")
+                                                ("vm" . "host-b")))))
 
 (test-assert "duplicate hostnames are rejected"
-             (not (host-identity-table-valid?
-                   '(("host-a" . "same") ("host-b" . "same")))))
+             (not (host-identity-table-valid? '(("host-a" . "same")
+                                                ("host-b" . "same")))))
 
 (test-assert "malformed host identity entries are rejected"
              (not (host-identity-table-valid? '(("vm" . "")))))
@@ -107,29 +115,32 @@
              (not (host-id? '("lenovo-legion-y7000p" "vm") "all")))
 
 ;; fail closed：unknown host 报错，绝不 fallback；错误信息列出可用 host。
-(test-assert "require-host-id fails closed on unknown host and lists known hosts"
-             (let ((msg (string-join
-                         (exception-strings
-                          (catch #t
-                            (lambda () (require-host-id '("lenovo-legion-y7000p" "vm") "server") '())
-                            (lambda (key . args) args)))
-                         " ")))
-               (and (string-contains msg "known hosts:")
-                    (string-contains msg "lenovo-legion-y7000p")
-                    (string-contains msg "vm")
-                    (string-contains msg "server"))))
+(test-assert
+ "require-host-id fails closed on unknown host and lists known hosts"
+ (let ((msg (string-join (exception-strings (catch #t
+                                                   (lambda ()
+                                                     (require-host-id '("lenovo-legion-y7000p"
+                                                                        "vm")
+                                                      "server")
+                                                     '())
+                                                   (lambda (key . args)
+                                                     args))) " ")))
+   (and (string-contains msg "known hosts:")
+        (string-contains msg "lenovo-legion-y7000p")
+        (string-contains msg "vm")
+        (string-contains msg "server"))))
 
 ;; ---- build-os ----
 
-(define build-argv (system-build-argv %root "vm"))
+(define build-argv
+  (system-build-argv %root "vm"))
 
 (test-assert "build-os uses pinned channels.lock.scm"
              (and (member "time-machine" build-argv)
                   (member "-C" build-argv)
                   (member "/repo/channels.lock.scm" build-argv)))
 
-(test-equal "build-os injects modules via GUILE_LOAD_PATH"
-            "/repo/modules"
+(test-equal "build-os injects modules via GUILE_LOAD_PATH" "/repo/modules"
             (env-value build-argv "GUILE_LOAD_PATH"))
 
 (test-assert "build-os never puts modules on the package search path (-L)"
@@ -146,7 +157,8 @@
              (not (member "--dry-run" build-argv)))
 
 (define build-dry-argv
-  (system-build-argv %root "lenovo-legion-y7000p" #:dry-run? #t))
+  (system-build-argv %root "lenovo-legion-y7000p"
+                     #:dry-run? #t))
 
 (test-assert "build-os dry-run maps to guix --dry-run"
              (and (member "--dry-run" build-dry-argv)
@@ -155,75 +167,124 @@
 
 ;; ---- reconfigure ----
 
-(define reconfigure-dry-argv (system-reconfigure-dry-run-argv %root "vm"))
+(define reconfigure-dry-argv
+  (system-reconfigure-dry-run-argv %root "vm"))
 
 (test-assert "reconfigure -n runs guix system reconfigure --dry-run"
              (let ((tail (cdr (member "--" reconfigure-dry-argv))))
-               (and (equal? (take tail 3) '("system" "reconfigure" "--dry-run"))
+               (and (equal? (take tail 3)
+                            '("system" "reconfigure" "--dry-run"))
                     (equal? "/repo/modules"
                             (env-value reconfigure-dry-argv "GUILE_LOAD_PATH"))
                     (not (member "-L" reconfigure-dry-argv)))))
 
-(test-assert "reconfigure -n never enters the privileged transaction (no sudo, no script)"
-             (and (not (member "sudo" reconfigure-dry-argv))
-                  (not (any (cut string-contains <> "reconfigure.sh") reconfigure-dry-argv))))
+(test-assert
+ "reconfigure -n never enters the privileged transaction (no sudo, no script)"
+ (and (not (member "sudo" reconfigure-dry-argv))
+      (not (any (cut string-contains <> "reconfigure.sh") reconfigure-dry-argv))))
 
-(test-equal "reconfigure privileged handoff: sudo runs the pinned transaction CLI"
-            '("sudo" "env" "GUILE_LOAD_PATH=/repo/modules"
-                     "GUILE_LOAD_COMPILED_PATH=/repo/modules"
-                     "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
-                     "repl" "/repo/tools/reconfigure-cli.scm" "--" "vm" "alice")
-            (reconfigure-privileged-argv "/repo" "vm" "alice"))
+(test-equal
+ "reconfigure privileged handoff: sudo runs the pinned transaction CLI"
+ '("sudo" "env"
+   "GUILE_LOAD_PATH=/repo/modules"
+   "GUILE_LOAD_COMPILED_PATH=/repo/modules"
+   "guix"
+   "time-machine"
+   "-C"
+   "/repo/channels.lock.scm"
+   "--"
+   "repl"
+   "/repo/tools/reconfigure-cli.scm"
+   "--"
+   "vm"
+   "alice")
+ (reconfigure-privileged-argv "/repo" "vm" "alice"))
 
 (test-assert "reconfigure privileged handoff never starts a root Blue process"
-             (let ((argv (reconfigure-privileged-argv "/repo" "vm" "alice")))
-               (and (not (member ".reconfigure-root" argv))
-                    (not (member "--store-directory=/run/guixcfg/.blue-store"
-                                 argv)))))
+ (let ((argv (reconfigure-privileged-argv "/repo" "vm" "alice")))
+   (and (not (member ".reconfigure-root" argv))
+        (not (member "--store-directory=/run/guixcfg/.blue-store" argv)))))
 
 (test-assert "privileged handoff argv has no shell metacharacters"
-             (no-shell-metacharacters?
-              (reconfigure-privileged-argv "/repo" "vm" "alice")))
+             (no-shell-metacharacters? (reconfigure-privileged-argv "/repo"
+                                                                    "vm"
+                                                                    "alice")))
 
 ;; ---- gc（system generation 回收）----
 
 (test-equal "gc privileged handoff: sudo runs the pinned gc CLI"
-            '("sudo" "env" "GUILE_LOAD_PATH=/repo/modules"
-                     "GUILE_LOAD_COMPILED_PATH=/repo/modules"
-                     "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
-                     "repl" "tools/gc-cli.scm" "--" "run" "vm")
-            (gc-privileged-argv "/repo" "vm" '()))
+            '("sudo" "env"
+              "GUILE_LOAD_PATH=/repo/modules"
+              "GUILE_LOAD_COMPILED_PATH=/repo/modules"
+              "guix"
+              "time-machine"
+              "-C"
+              "/repo/channels.lock.scm"
+              "--"
+              "repl"
+              "tools/gc-cli.scm"
+              "--"
+              "run"
+              "vm")
+            (gc-privileged-argv "/repo" "vm"
+                                '()))
 
 (test-equal "gc privileged handoff forwards explicit options"
-            '("sudo" "env" "GUILE_LOAD_PATH=/repo/modules"
-                     "GUILE_LOAD_COMPILED_PATH=/repo/modules"
-                     "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
-                     "repl" "tools/gc-cli.scm" "--" "run" "vm" "--keep" "2")
-            (gc-privileged-argv "/repo" "vm" '("--keep" "2")))
+            '("sudo" "env"
+              "GUILE_LOAD_PATH=/repo/modules"
+              "GUILE_LOAD_COMPILED_PATH=/repo/modules"
+              "guix"
+              "time-machine"
+              "-C"
+              "/repo/channels.lock.scm"
+              "--"
+              "repl"
+              "tools/gc-cli.scm"
+              "--"
+              "run"
+              "vm"
+              "--keep"
+              "2")
+            (gc-privileged-argv "/repo" "vm"
+                                '("--keep" "2")))
 
 (test-equal "gc-cli-argv runs the pinned gc tool with env-injected modules"
             '("env" "GUILE_LOAD_PATH=/repo/modules"
-                    "GUILE_LOAD_COMPILED_PATH=/repo/modules"
-                    "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
-                    "repl" "tools/gc-cli.scm" "--" "plan" "vm" "--delete" "0,3")
-            (gc-cli-argv %root "plan" "vm" '("--delete" "0,3")))
+              "GUILE_LOAD_COMPILED_PATH=/repo/modules"
+              "guix"
+              "time-machine"
+              "-C"
+              "/repo/channels.lock.scm"
+              "--"
+              "repl"
+              "tools/gc-cli.scm"
+              "--"
+              "plan"
+              "vm"
+              "--delete"
+              "0,3")
+            (gc-cli-argv %root "plan" "vm"
+                         '("--delete" "0,3")))
 
 (test-assert "gc argv has no shell metacharacters"
-             (and (no-shell-metacharacters?
-                   (gc-privileged-argv "/repo" "vm" '()))
-                  (no-shell-metacharacters?
-                   (gc-cli-argv %root "run" "vm" '("--keep" "3")))))
+             (and (no-shell-metacharacters? (gc-privileged-argv "/repo" "vm"
+                                                                '()))
+                  (no-shell-metacharacters? (gc-cli-argv %root "run" "vm"
+                                                         '("--keep" "3")))))
 
 (test-assert "system-reconfigure-argv (normal) has no --dry-run"
-             (not (member "--dry-run" (system-reconfigure-argv %root "vm"))))
+             (not (member "--dry-run"
+                          (system-reconfigure-argv %root "vm"))))
 
 (test-assert "reconfigure disables the default kexec preload (--no-kexec)"
-             (and (member "--no-kexec" (system-reconfigure-argv %root "vm"))
+             (and (member "--no-kexec"
+                          (system-reconfigure-argv %root "vm"))
                   (member "--no-kexec" reconfigure-dry-argv)))
 
 ;; ---- update ----
 
-(define update-argv (channel-lock-refresh-argv %root))
+(define update-argv
+  (channel-lock-refresh-argv %root))
 
 (test-assert "update resolves mutable channels.scm (not the lock)"
              (and (member "/repo/channels.scm" update-argv)
@@ -245,7 +306,8 @@
              (porcelain-output-clean? "  \n\t"))
 
 (test-assert "porcelain output: modified file is dirty"
-             (not (porcelain-output-clean? " M docs/architecture/graphics.md\n")))
+             (not (porcelain-output-clean?
+                                           " M docs/architecture/graphics.md\n")))
 
 (test-assert "porcelain output: untracked file is dirty"
              (not (porcelain-output-clean? "?? tests/test-x.scm\n")))
@@ -259,15 +321,20 @@
 ;; 此处应解析为 ok 且含 boot-critical fact；覆盖无效 override 的
 ;; invalid 收敛路径（GUIX_CONFIG_FACTS 指向缺失文件）。
 (test-assert "facts report ok under suite facts environment"
-             (eq? 'ok (car (facts-resolution-report))))
+             (eq? 'ok
+                  (car (facts-resolution-report))))
 
 (test-assert "facts report converges to invalid on missing override"
              (let ((saved (getenv "GUIX_CONFIG_FACTS")))
-               (dynamic-wind
-                (lambda () (setenv "GUIX_CONFIG_FACTS" "/tmp/guixcfg-no-such-facts.scm"))
-                (lambda () (eq? 'invalid (car (facts-resolution-report))))
-                (lambda ()
-                  (if saved (setenv "GUIX_CONFIG_FACTS" saved)
-                    (unsetenv "GUIX_CONFIG_FACTS"))))))
+               (dynamic-wind (lambda ()
+                               (setenv "GUIX_CONFIG_FACTS"
+                                       "/tmp/guixcfg-no-such-facts.scm"))
+                             (lambda ()
+                               (eq? 'invalid
+                                    (car (facts-resolution-report))))
+                             (lambda ()
+                               (if saved
+                                   (setenv "GUIX_CONFIG_FACTS" saved)
+                                   (unsetenv "GUIX_CONFIG_FACTS"))))))
 
 (test-end)

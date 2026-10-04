@@ -24,22 +24,21 @@
 ;;; 不在本模块接线。
 
 (define-module (guixcfg home assets)
-               #:use-module (gnu home services) ; home-files-service-type
-               #:use-module (gnu services)      ; simple-service
-               #:use-module (guixcfg utils repository-source) ; repository-file
-               #:export (%avatar-home-path
-                         %wallpaper-home-path
-                         %user-assets-service))
+  #:use-module (gnu home services) ;home-files-service-type
+  #:use-module (gnu services) ;simple-service
+  #:use-module (guixcfg utils repository-source) ;repository-file
+  #:export (%avatar-home-path %wallpaper-home-path %user-assets-service))
 
 ;; 稳定目标路径事实（HOME 相对）：消费者引用这些常量，不复制字符串。
-(define %avatar-home-path ".local/share/avatars/avatar.png")
-(define %wallpaper-home-path ".local/share/backgrounds/wallpaper.jpg")
+(define %avatar-home-path
+  ".local/share/avatars/avatar.png")
+(define %wallpaper-home-path
+  ".local/share/backgrounds/wallpaper.jpg")
 
 ;; 仓库派生资源投影：source 经 repository-file（repo-root 相对 →
 ;; store），target 为 HOME 相对路径（home-files 同一通道）。
 (define %user-assets-service
-  (simple-service 'user-assets
-                  home-files-service-type
+  (simple-service 'user-assets home-files-service-type
                   `((,%avatar-home-path ,(repository-file "assets/avatar.png"))
-                    (,%wallpaper-home-path
-                     ,(repository-file "assets/wallpaper.jpg")))))
+                    (,%wallpaper-home-path ,(repository-file
+                                             "assets/wallpaper.jpg")))))

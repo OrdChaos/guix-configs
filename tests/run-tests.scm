@@ -11,38 +11,45 @@
 ;; repl 不会自动带上 channel 模块路径。
 (add-to-load-path (string-append (getcwd) "/modules"))
 
-(use-modules (guix channels)     ; channel-name、channel-commit（解析 lock）
+(use-modules (guix channels) ;channel-name、channel-commit（解析 lock）
              (srfi srfi-1)
              (srfi srfi-13)
-             (ice-9 ftw)         ; scandir
+             (ice-9 ftw) ;scandir
              (srfi srfi-64))
 
 (define (channel-store-dir name)
   ;; store 中 pinned channel 源（channel 内容是内容寻址的：
   ;; channels.lock.scm 锁定的 commit 对应唯一 store 路径）。缺失时
   ;; 明确报错（先跑一次 time-machine 下载 channel 源）。
-  (let* ((lock (eval (call-with-input-file "channels.lock.scm" read)
+  (let* ((lock (eval (call-with-input-file "channels.lock.scm"
+                       read)
                      (current-module)))
-         (commit (channel-commit
-                  (find (lambda (ch) (eq? (channel-name ch) name))
-                        lock)))
+         (commit (channel-commit (find (lambda (ch)
+                                         (eq? (channel-name ch) name)) lock)))
          ;; store 中 channel 源目录名用 7 字符短 hash。
          (short (substring commit 0 7))
          (hits (scandir "/gnu/store"
                         (lambda (dir)
                           (string-contains dir
-                                           (string-append "-" (symbol->string name)
+                                           (string-append "-"
+                                                          (symbol->string name)
                                                           "-" short))))))
     (if (pair? hits)
-      (string-append "/gnu/store/" (car hits))
-      (error "channel source not in store; run time-machine first"
-             name commit))))
+        (string-append "/gnu/store/"
+                       (car hits))
+        (error "channel source not in store; run time-machine first" name
+               commit))))
 
-(define %nonguix-store-dir (channel-store-dir 'nonguix))
-(define %virelith-store-dir (channel-store-dir 'virelith))
-(define %rosenthal-store-dir (channel-store-dir 'rosenthal))
-(define %bluebox-store-dir (channel-store-dir 'bluebox))
-(define %rust-toolchain-store-dir (channel-store-dir 'guix-rust-toolchain))
+(define %nonguix-store-dir
+  (channel-store-dir 'nonguix))
+(define %virelith-store-dir
+  (channel-store-dir 'virelith))
+(define %rosenthal-store-dir
+  (channel-store-dir 'rosenthal))
+(define %bluebox-store-dir
+  (channel-store-dir 'bluebox))
+(define %rust-toolchain-store-dir
+  (channel-store-dir 'guix-rust-toolchain))
 
 (add-to-load-path %nonguix-store-dir)
 (add-to-load-path %virelith-store-dir)
@@ -53,31 +60,36 @@
 ;; Repository-local .go files are developer cache, not test inputs. Loading
 ;; stale or interrupted ccache objects can split Guix record identities.
 (set! %load-compiled-path
-  (filter (lambda (path)
-            (not (string-contains path "/.cache/guile/ccache/")))
-          %load-compiled-path))
+      (filter (lambda (path)
+                (not (string-contains path "/.cache/guile/ccache/")))
+              %load-compiled-path))
 
 (primitive-load "tests/manifest.scm")
 
-(define %test-arguments (cdr (program-arguments)))
+(define %test-arguments
+  (cdr (program-arguments)))
 
-(unless (and (every (lambda (arg) (member arg '("--apps" "--all")))
-                    %test-arguments)
+(unless (and (every (lambda (arg)
+                      (member arg
+                              '("--apps" "--all"))) %test-arguments)
              (<= (length %test-arguments) 1))
   (error "usage: tests/run-tests.scm [--apps|--all]" %test-arguments))
 
 (define %test-mode
-  (cond ((member "--all" %test-arguments) 'all)
-    ((member "--apps" %test-arguments) 'apps)
+  (cond
+    ((member "--all" %test-arguments)
+     'all)
+    ((member "--apps" %test-arguments)
+     'apps)
     (else 'core)))
 
 (define %discovered-test-files
-  (sort (map (lambda (name) (string-append "tests/" name))
+  (sort (map (lambda (name)
+               (string-append "tests/" name))
              (scandir "tests"
                       (lambda (name)
                         (and (string-prefix? "test-" name)
-                             (string-suffix? ".scm" name)))))
-        string<?))
+                             (string-suffix? ".scm" name))))) string<?))
 
 (define %classified-test-files
   (sort (append %core-test-files %app-test-files) string<?))
@@ -101,34 +113,42 @@
                  (number->string (getpid)) ".scm"))
 
 (call-with-output-file %test-facts-file
-                       (lambda (port)
-                         (write '((luks-uuid . "00000000-0000-0000-0000-000000000000")) port)
-                         (newline port)))
+  (lambda (port)
+    (write '((luks-uuid . "00000000-0000-0000-0000-000000000000")) port)
+    (newline port)))
 
 ;; 每个测试文件都调用 (test-runner-current (test-runner-simple))，把
 ;; 当前 runner 换成自己的新 runner——最后的 runner 只反映最后一个
 ;; 文件，直接看 (test-runner-current) 会让前面套件的失败被掩盖。
 ;; 这里在每个文件加载后立刻摘取其 runner 的计数，累计判定退出码。
-(define %fail-total 0)
-(define %xfail-total 0)
+(define %fail-total
+  0)
+(define %xfail-total
+  0)
 
 (define (run-file file)
   (primitive-load file)
   (let ((r (test-runner-current)))
-    (set! %fail-total (+ %fail-total (test-runner-fail-count r)))
-    (set! %xfail-total (+ %xfail-total (test-runner-xfail-count r)))))
+    (set! %fail-total
+          (+ %fail-total
+             (test-runner-fail-count r)))
+    (set! %xfail-total
+          (+ %xfail-total
+             (test-runner-xfail-count r)))))
 
-(dynamic-wind
- (lambda () (setenv "GUIX_CONFIG_FACTS" %test-facts-file))
- (lambda ()
-   (for-each run-file
-             (case %test-mode
-               ((apps) %app-test-files)
-               ((all) (append %core-test-files %app-test-files))
-               (else %core-test-files))))
- (lambda ()
-   (unsetenv "GUIX_CONFIG_FACTS")
-   (when (file-exists? %test-facts-file)
-     (delete-file %test-facts-file))))
+(dynamic-wind (lambda ()
+                (setenv "GUIX_CONFIG_FACTS" %test-facts-file))
+              (lambda ()
+                (for-each run-file
+                          (case %test-mode
+                            ((apps)
+                             %app-test-files)
+                            ((all)
+                             (append %core-test-files %app-test-files))
+                            (else %core-test-files))))
+              (lambda ()
+                (unsetenv "GUIX_CONFIG_FACTS")
+                (when (file-exists? %test-facts-file)
+                  (delete-file %test-facts-file))))
 
 (exit (zero? (+ %fail-total %xfail-total)))

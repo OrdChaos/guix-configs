@@ -37,23 +37,25 @@
 ;;; VM closure 无 NVIDIA）由 system build + closure 检查完成，不在
 ;;; 本文件（纯 Scheme 测试不触发构建）。
 
-(use-modules ((guixcfg hosts lenovo-legion-y7000p) #:prefix host:)
-             ((guixcfg hosts vm) #:prefix vm:)
+(use-modules ((guixcfg hosts lenovo-legion-y7000p)
+              #:prefix host:)
+             ((guixcfg hosts vm)
+              #:prefix vm:)
              (guixcfg system graphics nvidia)
              (guixcfg system kernel-platform)
-             (guix packages)              ; package、package-name、package-inputs
-             (gnu packages base)          ; hello
-             (gnu packages gl)            ; mesa
-             (gnu system)                 ; operating-system-*
-             (gnu bootloader)             ; bootloader-configuration
-             (gnu bootloader grub)        ; grub-bootloader
-             (gnu system file-systems)    ; %base-file-systems
-             (gnu services)               ; service-kind、service-value
-             (nongnu services nvidia)     ; nvidia-service-type、nvidia-configuration-*
-             (nongnu packages nvidia)     ; nvda-new-feature、nvidia-module-open-new-feature、
-             ; nvidia-firmware-new-feature
-             (srfi srfi-1)                ; find、member、list-index
-             (srfi srfi-13)               ; string-prefix?
+             (guix packages) ;package、package-name、package-inputs
+             (gnu packages base) ;hello
+             (gnu packages gl) ;mesa
+             (gnu system) ;operating-system-*
+             (gnu bootloader) ;bootloader-configuration
+             (gnu bootloader grub) ;grub-bootloader
+             (gnu system file-systems) ;%base-file-systems
+             (gnu services) ;service-kind、service-value
+             (nongnu services nvidia) ;nvidia-service-type、nvidia-configuration-*
+             (nongnu packages nvidia) ;nvda-new-feature、nvidia-module-open-new-feature、
+             ;; nvidia-firmware-new-feature
+             (srfi srfi-1) ;find、member、list-index
+             (srfi srfi-13) ;string-prefix?
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -61,34 +63,34 @@
 ;; probe app：依赖 Mesa 的应用，验证 adapter 不污染 Intel closure（N5）。
 (define nvidia-probe-app
   (package
-   (inherit hello)
-   (name "nvidia-probe-app")
-   (inputs (list mesa))))
+    (inherit hello)
+    (name "nvidia-probe-app")
+    (inputs (list mesa))))
 
 ;; probe：最小 OS，用于 adapter 语义测试（不依赖 host 组装）。
 ;; pinned Guix 的 operating-system 要求 bootloader/file-systems 字段。
 (define probe-os
   (operating-system
-   (host-name "nvidia-probe")
-   (bootloader (bootloader-configuration
-                (bootloader grub-bootloader)
-                (targets '("/dev/null"))))
-   (file-systems %base-file-systems)
-   (kernel %kernel)
-   (kernel-arguments '("probe.arg=1"))
-   (packages (list mesa nvidia-probe-app))))
+    (host-name "nvidia-probe")
+    (bootloader (bootloader-configuration
+                  (bootloader grub-bootloader)
+                  (targets '("/dev/null"))))
+    (file-systems %base-file-systems)
+    (kernel %kernel)
+    (kernel-arguments '("probe.arg=1"))
+    (packages (list mesa nvidia-probe-app))))
 
 (test-begin "nvidia")
 
 ;; ── N1：disabled = identity ─────────────────────────────────
-(test-eq "N1: transformation is identity when disabled"
-         probe-os
-         (nvidia-system-transformation probe-os #:enabled? #f))
+(test-eq "N1: transformation is identity when disabled" probe-os
+         (nvidia-system-transformation probe-os
+                                       #:enabled? #f))
 
 ;; ── N2：kernel authority 保留 ───────────────────────────────
-(test-assert "N2: laptop %vm-os still selects %kernel (NVIDIA never replaces the kernel)"
-             (eq? (operating-system-kernel host:%lenovo-legion-y7000p-os)
-                  %kernel))
+(test-assert
+ "N2: laptop %vm-os still selects %kernel (NVIDIA never replaces the kernel)"
+ (eq? (operating-system-kernel host:%lenovo-legion-y7000p-os) %kernel))
 
 (test-assert "N2: transformed probe OS still selects %kernel"
              (let ((t (nvidia-system-transformation probe-os)))
@@ -98,28 +100,30 @@
              (eq? (operating-system-initrd host:%lenovo-legion-y7000p-os)
                   microcode-ephemeral-initrd))
 
-(test-assert "N2: laptop OS firmware field stays generic linux-firmware (NVIDIA firmware comes via nvidia-service-type)"
-             (every (lambda (f)
-                      (not (string-contains (package-name f) "nvidia")))
-                    (operating-system-firmware
-                     host:%lenovo-legion-y7000p-os)))
+(test-assert
+ "N2: laptop OS firmware field stays generic linux-firmware (NVIDIA firmware comes via nvidia-service-type)"
+ (every (lambda (f)
+          (not (string-contains (package-name f) "nvidia")))
+        (operating-system-firmware host:%lenovo-legion-y7000p-os)))
 
 ;; ── N3：kernel arguments ────────────────────────────────────
-(test-assert "N3: transformation blacklists nouveau and nova, and enables DRM KMS"
-             (let ((args (operating-system-user-kernel-arguments
-                          (nvidia-system-transformation probe-os))))
-               (and (member "modprobe.blacklist=nouveau" args)
-                    (member "modprobe.blacklist=nova_core,nova_drm" args)
-                    (member "nvidia_drm.modeset=1" args))))
+(test-assert
+ "N3: transformation blacklists nouveau and nova, and enables DRM KMS"
+ (let ((args (operating-system-user-kernel-arguments (nvidia-system-transformation
+                                                      probe-os))))
+   (and (member "modprobe.blacklist=nouveau" args)
+        (member "modprobe.blacklist=nova_core,nova_drm" args)
+        (member "nvidia_drm.modeset=1" args))))
 
-(test-assert "N3: user kernel arguments preserved, nvidia arguments come first"
-             (let ((args (operating-system-user-kernel-arguments
-                          (nvidia-system-transformation probe-os))))
-               (and (member "probe.arg=1" args)
-                    (< (list-index (lambda (a) (equal? a "nvidia_drm.modeset=1"))
-                                   args)
-                       (list-index (lambda (a) (equal? a "probe.arg=1"))
-                                   args)))))
+(test-assert
+ "N3: user kernel arguments preserved, nvidia arguments come first"
+ (let ((args (operating-system-user-kernel-arguments (nvidia-system-transformation
+                                                      probe-os))))
+   (and (member "probe.arg=1" args)
+        (< (list-index (lambda (a)
+                         (equal? a "nvidia_drm.modeset=1")) args)
+           (list-index (lambda (a)
+                         (equal? a "probe.arg=1")) args)))))
 
 (test-assert "N3: laptop %vm-os carries the nvidia kernel arguments"
              (let ((args (operating-system-user-kernel-arguments
@@ -159,49 +163,46 @@
              ;; new-feature/beta 分支使用带分支后缀的模块名，
              ;; 与 production 分支的 "nvidia-module-open" 不同）。
              (and laptop-nvidia-service
-                  (string=? (package-name
-                             (nvidia-configuration-module
-                              (service-value laptop-nvidia-service)))
-                            (package-name
-                             nvidia-module-open-new-feature))))
+                  (string=? (package-name (nvidia-configuration-module (service-value
+                                                                        laptop-nvidia-service)))
+                            (package-name nvidia-module-open-new-feature))))
 
 (test-assert "N4: driver is nvda and firmware is the branch firmware"
              (and laptop-nvidia-service
-                  (string=? (package-name
-                             (nvidia-configuration-driver
-                              (service-value laptop-nvidia-service)))
+                  (string=? (package-name (nvidia-configuration-driver (service-value
+                                                                        laptop-nvidia-service)))
                             "nvda")
-                  (string=? (package-name
-                             (nvidia-configuration-firmware
-                              (service-value laptop-nvidia-service)))
-                            (package-name
-                             nvidia-firmware-new-feature))))
+                  (string=? (package-name (nvidia-configuration-firmware (service-value
+                                                                          laptop-nvidia-service)))
+                            (package-name nvidia-firmware-new-feature))))
 
 (test-assert "N4: dynamic boost enabled (powerd #t) and no Xorg settings"
              (and laptop-nvidia-service
-                  (eq? (nvidia-configuration-powerd
-                        (service-value laptop-nvidia-service))
+                  (eq? (nvidia-configuration-powerd (service-value
+                                                     laptop-nvidia-service))
                        #t)
-                  (not (nvidia-configuration-settings
-                        (service-value laptop-nvidia-service)))))
+                  (not (nvidia-configuration-settings (service-value
+                                                       laptop-nvidia-service)))))
 
 ;; ── N5：hybrid Intel + NVIDIA closure ───────────────────────
-(test-assert "N5: Mesa dependency of an Intel desktop package remains unchanged"
-              (let* ((t (nvidia-system-transformation probe-os))
-                     (app (find (lambda (p)
-                                  (string=? (package-name p)
-                                           "nvidia-probe-app"))
-                               (operating-system-packages t)))
-                    (inputs (and app (package-inputs app)))
-                    ;; package-inputs 元素是 (label package) list
-                    (input (and (pair? inputs)
-                                (let ((f (car inputs)))
-                                  (if (package? f) f (cadr f)))))
-                     (repl (and input (package-replacement input))))
-                (and (eq? app nvidia-probe-app)
-                     input
-                     (eq? input mesa)
-                     (not repl))))
+(test-assert
+ "N5: Mesa dependency of an Intel desktop package remains unchanged"
+ (let* ((t (nvidia-system-transformation probe-os))
+        (app (find (lambda (p)
+                     (string=? (package-name p) "nvidia-probe-app"))
+                   (operating-system-packages t)))
+        (inputs (and app
+                     (package-inputs app)))
+        ;; package-inputs 元素是 (label package) list
+        (input (and (pair? inputs)
+                    (let ((f (car inputs)))
+                      (if (package? f) f
+                          (cadr f)))))
+        (repl (and input
+                   (package-replacement input))))
+   (and (eq? app nvidia-probe-app) input
+        (eq? input mesa)
+        (not repl))))
 
 (test-assert "N5: Intel Raptor Lake-P GPU has a udev hwdb name"
              (find (lambda (s)
@@ -236,12 +237,12 @@
 ;;       版本一致性断言同时覆盖未来 lock 升级：任何 branch 内漂移
 ;;       （如 610 → 615）在三者同步的情况下保持通过。
 
-(test-assert "N9: laptop service driver derives from %nvidia-driver (version match)"
-             (and laptop-nvidia-service
-                  (string=? (package-version
-                             (nvidia-configuration-driver
-                              (service-value laptop-nvidia-service)))
-                            (package-version %nvidia-driver))))
+(test-assert
+ "N9: laptop service driver derives from %nvidia-driver (version match)"
+ (and laptop-nvidia-service
+      (string=? (package-version (nvidia-configuration-driver (service-value
+                                                               laptop-nvidia-service)))
+                (package-version %nvidia-driver))))
 
 (test-assert "N10: userspace / open module / firmware are version-consistent"
              ;; nvda 的 version 字段被 nonguix 有意截断为
@@ -251,12 +252,12 @@
              ;; pinned nvidia-source-new-feature（610.57.04）——
              ;; 三者同源即同版本，transformation 的配套 mapping 生效。
              (and laptop-nvidia-service
-                  (let ((driver (nvidia-configuration-driver
-                                 (service-value laptop-nvidia-service)))
-                        (module (nvidia-configuration-module
-                                 (service-value laptop-nvidia-service)))
-                        (firmware (nvidia-configuration-firmware
-                                   (service-value laptop-nvidia-service))))
+                  (let ((driver (nvidia-configuration-driver (service-value
+                                                              laptop-nvidia-service)))
+                        (module (nvidia-configuration-module (service-value
+                                                              laptop-nvidia-service)))
+                        (firmware (nvidia-configuration-firmware (service-value
+                                                                  laptop-nvidia-service))))
                     (and (string=? (package-name module)
                                    (package-name
                                     nvidia-module-open-new-feature))
@@ -268,7 +269,6 @@
                                          (package-version
                                           nvidia-driver-new-feature))))))
 
-
 ;; ── N11：pure-Wayland modeset 设备节点 ───────────────────────
 ;; 不变式：纯 Wayland 主机没有 Xorg DDX，pinned nonguix 的
 ;; 90-nvidia.rules 只建 nvidia0/nvidiactl/uvm，从不建
@@ -279,12 +279,11 @@
 (define nvidia-modeset-rule-contents
   (@@ (guixcfg system graphics nvidia) %nvidia-modeset-udev-rule-contents))
 
-(test-assert "N11: modeset rule matches the NVIDIA DRM device and runs nvidia-modprobe -m"
-             (and (string-contains nvidia-modeset-rule-contents "0x10de")
-                  (string-contains nvidia-modeset-rule-contents
-                                   "DRIVER==\"nvidia\"")
-                  (string-contains nvidia-modeset-rule-contents
-                                   "nvidia-modprobe -m")))
+(test-assert
+ "N11: modeset rule matches the NVIDIA DRM device and runs nvidia-modprobe -m"
+ (and (string-contains nvidia-modeset-rule-contents "0x10de")
+      (string-contains nvidia-modeset-rule-contents "DRIVER==\"nvidia\"")
+      (string-contains nvidia-modeset-rule-contents "nvidia-modprobe -m")))
 
 (test-assert "N11: laptop %vm-os includes the modeset udev rule service"
              (find (lambda (s)

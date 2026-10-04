@@ -24,18 +24,17 @@
 ;;; niri 会话提供。
 
 (define-module (guixcfg apps gnome-characters definition)
-               #:use-module (gnu packages gnome) ; gnome-characters
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:export (%gnome-characters
-                         %gnome-characters-desktop-entry))
+  #:use-module (gnu packages gnome) ;gnome-characters
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:export (%gnome-characters %gnome-characters-desktop-entry))
 
 ;; GNOME Characters 的 XDG desktop entry（store 内实际构建产物
 ;; share/applications/ 核实）。纯数据常量：供统一 XDG 策略模块
 ;; 引用，不在此决定默认应用。
-(define %gnome-characters-desktop-entry "org.gnome.Characters.desktop")
+(define %gnome-characters-desktop-entry
+  "org.gnome.Characters.desktop")
 
 (define %gnome-characters
-  (application
-   (name 'gnome-characters)
-   (home-packages (list gnome-characters))))
+  (application (name 'gnome-characters)
+               (home-packages (list gnome-characters))))

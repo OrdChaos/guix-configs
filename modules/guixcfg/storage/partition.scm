@@ -5,13 +5,11 @@
 ;;; 对应 docs/operations/installation.md、docs/architecture/storage.md（磁盘布局）。
 
 (define-module (guixcfg storage partition)
-               #:use-module (guixcfg storage model)
-               #:use-module (guixcfg storage device) ; target-partition-path
-               #:use-module (guix build utils)  ; invoke（失败即抛异常，配合 install.scm 的失败即停）
-               #:use-module (ice-9 format)
-               #:export (execute-wipe
-                         execute-partition
-                         execute-wait-udev))
+  #:use-module (guixcfg storage model)
+  #:use-module (guixcfg storage device) ;target-partition-path
+  #:use-module (guix build utils) ;invoke（失败即抛异常，配合 install.scm 的失败即停）
+  #:use-module (ice-9 format)
+  #:export (execute-wipe execute-partition execute-wait-udev))
 
 (define (execute-wipe device)
   "清除磁盘上的旧分区表和签名（sgdisk --zap-all 同时清掉 GPT 主备两头和 PMBR）。"
@@ -21,8 +19,10 @@
   "一次性创建 GPT + ESP + 加密系统分区。
 ESP：1 号分区，大小来自 host policy（2–4 GiB），类型 EF00；
 系统分区：2 号分区，占用剩余全部空间，类型 8309（Linux LUKS）。"
-  (let ((esp-mib (quotient esp-size-bytes (* 1024 1024))))
-    (invoke "sgdisk" "--clear"
+  (let ((esp-mib (quotient esp-size-bytes
+                           (* 1024 1024))))
+    (invoke "sgdisk"
+            "--clear"
             (format #f "--new=1:0:+~aMiB" esp-mib)
             (format #f "--typecode=1:~a" %esp-gpt-typecode)
             (format #f "--change-name=1:~a" %esp-partlabel)
@@ -35,7 +35,8 @@ ESP：1 号分区，大小来自 host policy（2–4 GiB），类型 EF00；
   "等待 udev 暴露已确认目标盘的分区节点。"
   (invoke "udevadm" "settle" "--timeout=15")
   (let ((deadline (+ (current-time) 15)))
-    (let loop ()
+    (let loop
+      ()
       (unless (and (false-if-exception (target-partition-path device 1))
                    (false-if-exception (target-partition-path device 2)))
         (when (> (current-time) deadline)

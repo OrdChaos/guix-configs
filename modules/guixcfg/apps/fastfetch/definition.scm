@@ -8,12 +8,11 @@
 ;;; 探测无意义。
 
 (define-module (guixcfg apps fastfetch definition)
-               #:use-module (gnu packages admin) ; fastfetch-minimal
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:export (%fastfetch))
+  #:use-module (gnu packages admin) ;fastfetch-minimal
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:export (%fastfetch))
 
 (define %fastfetch
-  (application
-   (name 'fastfetch)
-   (home-packages (list fastfetch-minimal))))
+  (application (name 'fastfetch)
+               (home-packages (list fastfetch-minimal))))

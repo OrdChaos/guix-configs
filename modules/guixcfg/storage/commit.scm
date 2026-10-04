@@ -20,16 +20,15 @@
 ;;;   会让 TARGET 视图失效（实测 bug），因此绝不再 delete。
 
 (define-module (guixcfg storage commit)
-               #:use-module (guixcfg storage model)
-               #:use-module (guixcfg storage root-generation)
-               #:use-module (guixcfg storage subvolume)
-               #:use-module (guixcfg storage device)
-               #:use-module (guixcfg boot layout)  ; ESP/部署脚本路径固定事实
-               #:use-module (guix build utils)  ; mkdir-p、delete-file-recursively
-               #:use-module (srfi srfi-13)  ; string-contains
-               #:use-module (ice-9 format)
-               #:export (commit-state
-                         commit-root-generation))
+  #:use-module (guixcfg storage model)
+  #:use-module (guixcfg storage root-generation)
+  #:use-module (guixcfg storage subvolume)
+  #:use-module (guixcfg storage device)
+  #:use-module (guixcfg boot layout) ;ESP/部署脚本路径固定事实
+  #:use-module (guix build utils) ;mkdir-p、delete-file-recursively
+  #:use-module (srfi srfi-13) ;string-contains
+  #:use-module (ice-9 format)
+  #:export (commit-state commit-root-generation))
 
 (define (top-path name)
   (string-append %btrfs-top-mount "/" name))
@@ -53,9 +52,13 @@
   (let ((root0 (top-path (root-generation-name 0)))
         (installing (top-path %root-installing-name)))
     (cond
-      ((and (file-exists? root0) (file-exists? (state-path))) 'committed)
-      ((file-exists? root0) 'interrupted-after-rename)
-      ((file-exists? installing) 'not-committed)
+      ((and (file-exists? root0)
+            (file-exists? (state-path)))
+       'committed)
+      ((file-exists? root0)
+       'interrupted-after-rename)
+      ((file-exists? installing)
+       'not-committed)
       (else 'unknown))))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -65,14 +68,15 @@
   "TARGET 是安装目标挂载点（通常 /mnt）。"
   (unless (zero? (getuid))
     (error "commit-root requires root privileges"))
-  
+
   ;; TARGET 必须挂着 btrfs subvolume（@root-installing 或中断恢复时的
   ;; @root-0——具体由 commit-state 分支校验）。
   (let ((source (first-command-line "findmnt" "-no" "SOURCE" target)))
-    (unless (and source (string-contains source "[/@"))
+    (unless (and source
+                 (string-contains source "[/@"))
       (error "target is not mounted from a btrfs subvolume; cannot commit"
              target source)))
-  
+
   ;; system init 应已完成：/etc 已由 init 生成。
   (unless (file-exists? (string-append target "/etc"))
     (error "target has no /etc; guix system init has not been run" target)))
@@ -87,18 +91,21 @@
   (let ((src (string-append (top-path %root-installing-name) "/var/guix"))
         (dst (top-path "@persist-var-guix")))
     (if (file-exists? (string-append dst "/db"))
-      (begin
-       ;; 上次中断已收养：确保 src 仍是空挂载点目录（不重复 cp）
-       (unless (file-exists? src) (mkdir-p src))
-       (format #t "(/var/guix already adopted; skipping)~%"))
-      (begin
-       (unless (file-exists? (string-append src "/db"))
-         (error "init did not create /var/guix/db; adoption aborted" src))
-       ;; 跨子卷不能 rename，复制后删除（内容只有 db 和少量链接，很小）。
-       (invoke "cp" "-a" (string-append src "/.") (string-append dst "/"))
-       (delete-file-recursively src)
-       (mkdir-p src)          ; 留空目录作运行时挂载点
-       (format #t "/var/guix adopted into @persist-var-guix~%")))))
+        (begin
+          ;; 上次中断已收养：确保 src 仍是空挂载点目录（不重复 cp）
+          (unless (file-exists? src)
+            (mkdir-p src))
+          (format #t "(/var/guix already adopted; skipping)~%"))
+        (begin
+          (unless (file-exists? (string-append src "/db"))
+            (error "init did not create /var/guix/db; adoption aborted" src))
+          ;; 跨子卷不能 rename，复制后删除（内容只有 db 和少量链接，很小）。
+          (invoke "cp" "-a"
+                  (string-append src "/.")
+                  (string-append dst "/"))
+          (delete-file-recursively src)
+          (mkdir-p src) ;留空目录作运行时挂载点
+          (format #t "/var/guix adopted into @persist-var-guix~%")))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; template publish：只读候选快照 → 原子改名发布。
@@ -110,17 +117,24 @@
 只读 @root-template。失败时 SOURCE 不动、TARGET 仍可用。"
   (let ((source (top-path source-name)))
     (when (file-exists? (top-path %root-template-name))
-      (invoke "btrfs" "subvolume" "delete" (top-path %root-template-name)))
+      (invoke "btrfs" "subvolume" "delete"
+              (top-path %root-template-name)))
     (false-if-exception (delete-file (top-path (template-new-name))))
-    (invoke "btrfs" "subvolume" "snapshot" "-r"
-            source (top-path (template-new-name)))
+    (invoke "btrfs"
+            "subvolume"
+            "snapshot"
+            "-r"
+            source
+            (top-path (template-new-name)))
     (unless (file-exists? (top-path (template-new-name)))
       (error "template snapshot verification failed; aborting commit"))
-    (rename-file (top-path (template-new-name)) (top-path %root-template-name))
+    (rename-file (top-path (template-new-name))
+                 (top-path %root-template-name))
     ;; template 永远 readonly（决定性不变式）
     (let ((ro (first-command-line "btrfs" "property" "get"
                                   (top-path %root-template-name) "ro")))
-      (unless (and ro (string-contains ro "ro=true"))
+      (unless (and ro
+                   (string-contains ro "ro=true"))
         (error "template is not read-only; aborting" ro)))
     (format #t "published read-only template ~a~%" %root-template-name)))
 
@@ -139,11 +153,12 @@
 ;;; TARGET 不变式检查（rename 后立即做；失败即回滚，不写 state 不 deploy）。
 
 (define (verify-target! target)
-  (for-each
-   (lambda (d)
-     (unless (file-exists? (string-append target "/" d))
-       (error "TARGET missing directory after commit; aborting (state not written, no deploy)" d target)))
-   '("etc" "gnu" "persist" "boot"))
+  (for-each (lambda (d)
+              (unless (file-exists? (string-append target "/" d))
+                (error
+                 "TARGET missing directory after commit; aborting (state not written, no deploy)"
+                 d target)))
+            '("etc" "gnu" "persist" "boot"))
   (format #t "TARGET integrity checks passed (etc/gnu/persist/boot)~%"))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -155,14 +170,14 @@
   (let ((deploy (string-append target %uki-deploy-script-path)))
     (cond
       ((file-exists? deploy)
-       (invoke deploy target %esp-mount-point)   ; ESP 固定挂载点（boot/layout）
+       (invoke deploy target %esp-mount-point) ;ESP 固定挂载点（boot/layout）
        (format #t "deploy-uki executed (~a)~%" deploy))
       ((file-exists? (string-append target %esp-mount-point "/limine.conf"))
-       (error "UKI bootloader deployed (ESP has limine.conf) but deploy-uki script is missing"
-              deploy))
-      (else
-       (format #t "(no deploy-uki: non-UKI bootloader is expected; skipping deploy refresh; \
-check manually on non-GRUB hosts)~%")))))
+       (error
+        "UKI bootloader deployed (ESP has limine.conf) but deploy-uki script is missing"
+        deploy))
+      (else (format #t
+             "(no deploy-uki: non-UKI bootloader is expected; skipping deploy refresh; check manually on non-GRUB hosts)~%")))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 初始状态写入（commit record，最后写——deploy 成功后才宣布提交）。
@@ -173,7 +188,8 @@ check manually on non-GRUB hosts)~%")))))
          (state (initial-state (current-time))))
     (mkdir-p dir)
     (write-state! (state-file-path persist-system) state)
-    (format #t "initial state: ~s~%" (state->alist state))))
+    (format #t "initial state: ~s~%"
+            (state->alist state))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 失败恢复：rename 已发生时回滚（Btrfs rename 可逆——决定性实验），
@@ -184,15 +200,15 @@ check manually on non-GRUB hosts)~%")))))
   "尽力回滚：@root-0 → @root-installing + 清理 template/.new。"
   (let ((root0 (top-path (root-generation-name 0)))
         (installing (top-path %root-installing-name)))
-    (when (and (file-exists? root0) (not (file-exists? installing)))
-      (false-if-exception
-       (rename-file root0 installing))
-      (format #t "rolled back: ~a -> ~a~%" (root-generation-name 0)
-              %root-installing-name)))
-  (false-if-exception
-   (invoke "btrfs" "subvolume" "delete" (top-path %root-template-name)))
-  (false-if-exception
-   (invoke "btrfs" "subvolume" "delete" (top-path (template-new-name)))))
+    (when (and (file-exists? root0)
+               (not (file-exists? installing)))
+      (false-if-exception (rename-file root0 installing))
+      (format #t "rolled back: ~a -> ~a~%"
+              (root-generation-name 0) %root-installing-name)))
+  (false-if-exception (invoke "btrfs" "subvolume" "delete"
+                              (top-path %root-template-name)))
+  (false-if-exception (invoke "btrfs" "subvolume" "delete"
+                              (top-path (template-new-name)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 提交本体（docs/architecture/storage.md）：
@@ -206,53 +222,66 @@ check manually on non-GRUB hosts)~%")))))
   (preflight-commit! target)
   (execute-mount-top)
   (catch #t
-    (lambda ()
-      (case (commit-state)
-        ((committed)
-         (format #t "installation already committed (@root-0 and state present); no-op~%")
-         (execute-unmount-top)
-         'committed)
-        ((unknown)
-         (error "unexpected state: neither @root-installing nor @root-0 exists; inspect top level manually"))
-        (else
-         (if (eq? (commit-state) 'interrupted-after-rename)
-           (begin
-            ;; 上次在 rename 后、state 前中断：恢复完成剩余步骤。
-            ;; 此时 TARGET 挂着 @root-0（挂载跟随 rename）。
-            (format #t "previous commit was interrupted after rename; resuming remaining steps~%")
-            (unless (file-exists? (top-path %root-template-name))
-              (publish-template! (root-generation-name 0))))
-           (begin
-            ;; 正常路径：确认 TARGET 挂的是 @root-installing
-            (let ((source (first-command-line "findmnt" "-no" "SOURCE" target)))
-              (unless (and source (string-contains source %root-installing-name))
-                (error "target is not mounted from the installing root (@root-installing)" target source)))
-            ;; 1. 收养 /var/guix（必须在快照之前：模板应含空的 /var/guix
-            ;;    挂载点，而子卷应含 init 写入的注册内容）
-            (adopt-var-guix!)
-            ;; 2. 发布只读模板（失败时 source 不动）
-            (publish-template! %root-installing-name)
-            ;; 3. rename 安装期 root 为 generation 0（不再 snapshot+delete）
-            (commit-generation-zero!)))
-         ;; 4. 验证 TARGET 仍完整（rename 后不变式）
-         (verify-target! target)
-         ;; 5. deploy UKI（rename 后 TARGET 视图保持，deploy 可执行）
-         (deploy-uki! target)
-         ;; 6. state 最后写（commit record）
-         (write-initial-state!)
-         (execute-unmount-top)
-         (format #t "~%Install-time commit complete. You may umount -R ~a and reboot; \
-first boot will use @root-0 (state first-boot).~%" target)
-         'committed)))
-    (lambda (key . args)
-      ;; 失败：回滚（rename 已发生则还原）并清理残留，然后报告。
-      (catch #t
-        (lambda () (rollback-commit!))
-        (lambda _ #t))
-      (catch #t
-        (lambda () (execute-unmount-top))
-        (lambda _ #t))
-      (format (current-error-port)
-              "~%commit failed; rolled back to a rerunnable state (@root-installing remains).~%error: ~s ~s~%"
-              key args)
-      (exit 1))))
+         (lambda ()
+           (case (commit-state)
+             ((committed)
+              (format #t
+               "installation already committed (@root-0 and state present); no-op~%")
+              (execute-unmount-top)
+              'committed)
+             ((unknown)
+              (error
+               "unexpected state: neither @root-installing nor @root-0 exists; inspect top level manually"))
+             (else (if (eq? (commit-state)
+                            'interrupted-after-rename)
+                       (begin
+                         ;; 上次在 rename 后、state 前中断：恢复完成剩余步骤。
+                         ;; 此时 TARGET 挂着 @root-0（挂载跟随 rename）。
+                         (format #t
+                          "previous commit was interrupted after rename; resuming remaining steps~%")
+                         (unless (file-exists? (top-path %root-template-name))
+                           (publish-template! (root-generation-name 0))))
+                       (begin
+                         ;; 正常路径：确认 TARGET 挂的是 @root-installing
+                         (let ((source (first-command-line "findmnt" "-no"
+                                                           "SOURCE" target)))
+                           (unless (and source
+                                        (string-contains source
+                                         %root-installing-name))
+                             (error
+                              "target is not mounted from the installing root (@root-installing)"
+                              target source)))
+                         ;; 1. 收养 /var/guix（必须在快照之前：模板应含空的 /var/guix
+                         ;; 挂载点，而子卷应含 init 写入的注册内容）
+                         (adopt-var-guix!)
+                         ;; 2. 发布只读模板（失败时 source 不动）
+                         (publish-template! %root-installing-name)
+                         ;; 3. rename 安装期 root 为 generation 0（不再 snapshot+delete）
+                         (commit-generation-zero!)))
+                   ;; 4. 验证 TARGET 仍完整（rename 后不变式）
+                   (verify-target! target)
+                   ;; 5. deploy UKI（rename 后 TARGET 视图保持，deploy 可执行）
+                   (deploy-uki! target)
+                   ;; 6. state 最后写（commit record）
+                   (write-initial-state!)
+                   (execute-unmount-top)
+                   (format #t
+                    "~%Install-time commit complete. You may umount -R ~a and reboot; first boot will use @root-0 (state first-boot).~%"
+                    target)
+                   'committed)))
+         (lambda (key . args)
+           ;; 失败：回滚（rename 已发生则还原）并清理残留，然后报告。
+           (catch #t
+                  (lambda ()
+                    (rollback-commit!))
+                  (lambda _
+                    #t))
+           (catch #t
+                  (lambda ()
+                    (execute-unmount-top))
+                  (lambda _
+                    #t))
+           (format (current-error-port)
+            "~%commit failed; rolled back to a rerunnable state (@root-installing remains).~%error: ~s ~s~%"
+            key args)
+           (exit 1))))

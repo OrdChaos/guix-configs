@@ -4,52 +4,64 @@
 ;;; 对应 docs/architecture/storage.md（存储安装器安全要求）。
 
 (define-module (guixcfg storage validate)
-               #:use-module (guixcfg storage model)
-               #:use-module (guix records)  ; define-record-type*
-               #:use-module (srfi srfi-1)   ; filter-map
-               #:export (;; 设备事实
-                         <device-facts>
-                         device-facts make-device-facts device-facts?
-                         device-facts-path
-                         device-facts-by-id
-                         device-facts-type
-                         device-facts-partition?
-                         device-facts-mounted?
-                         device-facts-system-disk?
-                         device-facts-live-media?
-                         device-facts-size
-                         ;; 校验结果
-                         <check-failure>
-                         check-failure make-check-failure check-failure?
-                         check-failure-name check-failure-message
-                         ;; 校验入口
-                         validate-target validate-policy))
+  #:use-module (guixcfg storage model)
+  #:use-module (guix records) ;define-record-type*
+  #:use-module (srfi srfi-1) ;filter-map
+  #:export ( ;设备事实
+             <device-facts>
+            device-facts
+            make-device-facts
+            device-facts?
+            device-facts-path
+            device-facts-by-id
+            device-facts-type
+            device-facts-partition?
+            device-facts-mounted?
+            device-facts-system-disk?
+            device-facts-live-media?
+            device-facts-size
+            ;; 校验结果
+            <check-failure>
+            check-failure
+            make-check-failure
+            check-failure?
+            check-failure-name
+            check-failure-message
+            ;; 校验入口
+            validate-target
+            validate-policy))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 设备事实：对一块候选目标盘的探测结果。
 ;;; 安装器在真实系统上用 lsblk/udev 填充；测试里直接手工构造。
 ;;; 布尔字段默认 #f：构造时只需写出“为真”的项。
 
-(define-record-type* <device-facts>
-                     device-facts make-device-facts
-                     device-facts?
-                     (path         device-facts-path)                          ; 如 "/dev/vda"
-                     (by-id        device-facts-by-id        (default #f))     ; /dev/disk/by-id/... 或 #f
-                     (type         device-facts-type         (default #f))     ; lsblk TYPE；目标必须明确为 disk
-                     (partition?   device-facts-partition?   (default #f))     ; 是分区而非整块盘？
-                     (mounted?     device-facts-mounted?     (default #f))     ; 自身或任一子分区已挂载？
-                     (system-disk? device-facts-system-disk? (default #f))     ; 是当前正在运行的系统盘？
-                     (live-media?  device-facts-live-media?  (default #f))     ; 是 LiveCD 介质？
-                     (size         device-facts-size         (default 0)))     ; 容量（字节）
+(define-record-type* <device-facts> device-facts make-device-facts
+  device-facts?
+  (path device-facts-path) ;如 "/dev/vda"
+  (by-id device-facts-by-id
+         (default #f)) ;/dev/disk/by-id/... 或 #f
+  (type device-facts-type
+        (default #f)) ;lsblk TYPE；目标必须明确为 disk
+  (partition? device-facts-partition?
+              (default #f)) ;是分区而非整块盘？
+  (mounted? device-facts-mounted?
+            (default #f)) ;自身或任一子分区已挂载？
+  (system-disk? device-facts-system-disk?
+                (default #f)) ;是当前正在运行的系统盘？
+  (live-media? device-facts-live-media?
+               (default #f)) ;是 LiveCD 介质？
+  (size device-facts-size
+        (default 0)))
+ ; 容量（字节）
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 校验失败：哪条规则失败 + 给人看的原因。
 
-(define-record-type* <check-failure>
-                     check-failure make-check-failure
-                     check-failure?
-                     (name    check-failure-name)
-                     (message check-failure-message))
+(define-record-type* <check-failure> check-failure make-check-failure
+  check-failure?
+  (name check-failure-name)
+  (message check-failure-message))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 目标设备校验（docs/architecture/storage.md的清单）。
@@ -61,55 +73,65 @@
    ;; 每条规则：(规则名 通过谓词 失败原因)。谓词返回 #f 即失败。
    (lambda (rule)
      (let ((name (car rule))
-           (ok?  (cadr rule))
-           (msg  (caddr rule)))
+           (ok? (cadr rule))
+           (msg (caddr rule)))
        (and (not (ok? facts))
-            (check-failure (name name) (message msg)))))
-   (list
-    (list 'resolvable-by-id
-          (lambda (f) (device-facts-by-id f))
+            (check-failure (name name)
+                           (message msg)))))
+   (list (list 'resolvable-by-id
+          (lambda (f)
+            (device-facts-by-id f))
           "Cannot resolve /dev/disk/by-id or by-path symlink; device cannot be reliably identified")
-    (list 'whole-disk
-          (lambda (f) (equal? "disk" (device-facts-type f)))
+         (list 'whole-disk
+          (lambda (f)
+            (equal? "disk"
+                    (device-facts-type f)))
           "Target is not positively identified by lsblk as TYPE=disk; refusing to proceed")
-    (list 'not-mounted
-          (lambda (f) (not (device-facts-mounted? f)))
+         (list 'not-mounted
+          (lambda (f)
+            (not (device-facts-mounted? f)))
           "Target device or one of its partitions is mounted; refusing to proceed")
-    (list 'not-system-disk
-          (lambda (f) (not (device-facts-system-disk? f)))
+         (list 'not-system-disk
+          (lambda (f)
+            (not (device-facts-system-disk? f)))
           "Target is the currently running system disk; refusing to proceed")
-    (list 'not-live-media
-          (lambda (f) (not (device-facts-live-media? f)))
-          "Target is the LiveCD medium; refusing to proceed")
-    (list 'sufficient-size
-          (lambda (f) (>= (device-facts-size f)
-                          (host-storage-policy-min-disk-size policy)))
-          "Target device capacity is below the host policy minimum"))))
+         (list 'not-live-media
+               (lambda (f)
+                 (not (device-facts-live-media? f)))
+               "Target is the LiveCD medium; refusing to proceed")
+         (list 'sufficient-size
+               (lambda (f)
+                 (>= (device-facts-size f)
+                     (host-storage-policy-min-disk-size policy)))
+               "Target device capacity is below the host policy minimum"))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; Policy 自校验：在生成任何计划之前，先保证 policy 本身没写错。
 
 (define (validate-policy policy)
   "校验 POLICY 自身是否合法。返回失败列表；空列表表示通过。"
-  (filter-map
-   (lambda (rule)
-     (and (not ((cadr rule) policy))
-          (check-failure (name (car rule)) (message (caddr rule)))))
-   (list
-    (list 'esp-size-in-range
-          (lambda (p) (<= %esp-min-size
-                          (host-storage-policy-esp-size p)
-                          %esp-max-size))
-          "ESP size is outside the 2-4 GiB policy range")
-    (list 'swapfile-positive
-          (lambda (p) (> (host-storage-policy-swapfile-size p) 0))
-          "Swapfile size must be positive")
-    (list 'keep-at-least-two
-          (lambda (p) (>= (host-storage-policy-keep-root-generations p) 2))
-          "At least 2 root generations must be kept (current + last-good)")
-    (list 'disk-fits-layout
-          (lambda (p) (> (host-storage-policy-min-disk-size p)
-                         (+ (host-storage-policy-esp-size p)
-                            (host-storage-policy-swapfile-size p)
-                            (gib 10))))
-          "Disk minimum cannot fit ESP + swapfile + minimal system (10 GiB headroom)"))))
+  (filter-map (lambda (rule)
+                (and (not ((cadr rule)
+                           policy))
+                     (check-failure (name (car rule))
+                                    (message (caddr rule)))))
+              (list (list 'esp-size-in-range
+                          (lambda (p)
+                            (<= %esp-min-size
+                                (host-storage-policy-esp-size p) %esp-max-size))
+                          "ESP size is outside the 2-4 GiB policy range")
+                    (list 'swapfile-positive
+                          (lambda (p)
+                            (> (host-storage-policy-swapfile-size p) 0))
+                          "Swapfile size must be positive")
+                    (list 'keep-at-least-two
+                     (lambda (p)
+                       (>= (host-storage-policy-keep-root-generations p) 2))
+                     "At least 2 root generations must be kept (current + last-good)")
+                    (list 'disk-fits-layout
+                     (lambda (p)
+                       (> (host-storage-policy-min-disk-size p)
+                          (+ (host-storage-policy-esp-size p)
+                             (host-storage-policy-swapfile-size p)
+                             (gib 10))))
+                     "Disk minimum cannot fit ESP + swapfile + minimal system (10 GiB headroom)"))))

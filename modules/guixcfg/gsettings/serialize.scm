@@ -17,11 +17,10 @@
 ;;; 不直接落文件——dconf load 是唯一 mutation 后端。
 
 (define-module (guixcfg gsettings serialize)
-               #:use-module (guixcfg gsettings model)
-               #:use-module (srfi srfi-1)   ; every
-               #:use-module (srfi srfi-13)  ; string-split、string-join、string-null?
-               #:export (gsettings-schema->dconf-path
-                         serialize-gsettings-keyfile))
+  #:use-module (guixcfg gsettings model)
+  #:use-module (srfi srfi-1) ;every
+  #:use-module (srfi srfi-13) ;string-split、string-join、string-null?
+  #:export (gsettings-schema->dconf-path serialize-gsettings-keyfile))
 
 (define (gsettings-schema->dconf-path schema)
   "GSettings schema id → dconf path（'.' → '/'）。"
@@ -31,39 +30,33 @@
   "SETTINGS（<gsettings-setting> 列表，须已排序）→ keyfile 行列表
   （'[path]' 组头 + 'key=value'）。"
   (if (null? settings)
-    '()
-    (let loop ((remaining settings)
-               (current-schema (gsettings-setting-schema (car settings)))
-               (current-lines '())
-               (acc '()))
-      (if (null? remaining)
-        (reverse (cons (cons (string-append
-                              "["
-                              (gsettings-schema->dconf-path current-schema)
-                              "]")
-                             (reverse current-lines))
-                       acc))
-        (let* ((setting (car remaining))
-               (schema (gsettings-setting-schema setting)))
-          (if (string=? schema current-schema)
-            (loop (cdr remaining)
-                  current-schema
-                  (cons (string-append (gsettings-setting-key setting)
-                                       "="
-                                       (gsettings-setting-value setting))
-                        current-lines)
-                  acc)
-            (loop (cdr remaining)
-                  schema
-                  (list (string-append (gsettings-setting-key setting)
-                                       "="
-                                       (gsettings-setting-value setting)))
-                  (cons (cons (string-append
-                               "["
-                               (gsettings-schema->dconf-path current-schema)
-                               "]")
-                              (reverse current-lines))
-                        acc))))))))
+      '()
+      (let loop
+        ((remaining settings)
+         (current-schema (gsettings-setting-schema (car settings)))
+         (current-lines '())
+         (acc '()))
+        (if (null? remaining)
+            (reverse (cons (cons (string-append "["
+                                                (gsettings-schema->dconf-path
+                                                 current-schema) "]")
+                                 (reverse current-lines)) acc))
+            (let* ((setting (car remaining))
+                   (schema (gsettings-setting-schema setting)))
+              (if (string=? schema current-schema)
+                  (loop (cdr remaining) current-schema
+                        (cons (string-append (gsettings-setting-key setting)
+                                             "="
+                                             (gsettings-setting-value setting))
+                              current-lines) acc)
+                  (loop (cdr remaining) schema
+                        (list (string-append (gsettings-setting-key setting)
+                                             "="
+                                             (gsettings-setting-value setting)))
+                        (cons (cons (string-append "["
+                                                   (gsettings-schema->dconf-path
+                                                    current-schema) "]")
+                                    (reverse current-lines)) acc))))))))
 
 (define (serialize-gsettings-keyfile settings)
   "SETTINGS（<gsettings-setting> 列表）→ dconf keyfile 文本（确定性：
@@ -76,11 +69,9 @@
                               (and (string=? sa sb)
                                    (string< (gsettings-setting-key a)
                                             (gsettings-setting-key b)))))))))
-    (if (null? sorted)
-      ""
-      (let ((sections
-             (map (lambda (group)
-                    (string-append (car group) "\n"
-                                   (string-join (cdr group) "\n")))
-                  (gsettings-keyfile-lines sorted))))
-        (string-append (string-join sections "\n") "\n")))))
+    (if (null? sorted) ""
+        (let ((sections (map (lambda (group)
+                               (string-append (car group) "\n"
+                                              (string-join (cdr group) "\n")))
+                             (gsettings-keyfile-lines sorted))))
+          (string-append (string-join sections "\n") "\n")))))

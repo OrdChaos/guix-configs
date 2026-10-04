@@ -8,63 +8,63 @@
 ;;;   applications-secrets
 
 (define-module (guixcfg apps registry)
-               #:use-module (srfi srfi-1)             ; delete-duplicates
-               #:use-module (guixcfg apps model)
-               #:use-module (guixcfg apps bash definition)
-               #:use-module (guixcfg apps fastfetch definition)
-               #:use-module (guixcfg apps git definition)
-               #:use-module (guixcfg apps dbus definition)
-               #:use-module (guixcfg apps niri definition)
-               #:use-module (guixcfg apps noctalia definition)
-               #:use-module (guixcfg apps pipewire definition)
-               #:use-module (guixcfg apps ghostty definition)
-               #:use-module (guixcfg apps nautilus definition)
-               #:use-module (guixcfg apps wl-clipboard definition)
-               #:use-module (guixcfg apps polkit-gnome definition)
-               #:use-module (guixcfg apps ripgrep definition)
-               #:use-module (guixcfg apps fd definition)
-               #:use-module (guixcfg apps tree definition)
-               #:use-module (guixcfg apps jq definition)
-               #:use-module (guixcfg apps curl definition)
-               #:use-module (guixcfg apps wget definition)
-               #:use-module (guixcfg apps zip definition)
-               #:use-module (guixcfg apps less definition)
-               #:use-module (guixcfg apps file definition)
-                #:use-module (guixcfg apps mesa-utils definition)
-                #:use-module (guixcfg apps gnu-build-tools definition)
-                #:use-module (guixcfg apps clang definition)
-                #:use-module (guixcfg apps qemu definition)
-                #:use-module (guixcfg apps cmake definition)
-                #:use-module (guixcfg apps ninja definition)
-                #:use-module (guixcfg apps gdb definition)
-                #:use-module (guixcfg apps strace definition)
-                #:use-module (guixcfg apps nodejs definition)
-               #:use-module (guixcfg apps java definition)
-               #:use-module (guixcfg apps rust definition)
-               #:use-module (guixcfg apps gnome-keyring definition)
-               #:use-module (guixcfg apps mpv definition)
-               #:use-module (guixcfg apps google-chrome-stable definition)
-               #:use-module (guixcfg apps gnupg definition)
-               #:use-module (guixcfg apps seahorse definition)
-               #:use-module (guixcfg apps ssh definition)
-               #:use-module (guixcfg apps fcitx5 definition)
-               #:use-module (guixcfg apps gtk definition)
-               #:use-module (guixcfg apps amberol definition)
-               #:use-module (guixcfg apps celluloid definition)
-               #:use-module (guixcfg apps loupe definition)
-               #:use-module (guixcfg apps gnome-text-editor definition)
-               #:use-module (guixcfg apps gnome-characters definition)
-               #:use-module (guixcfg apps mission-center definition)
-               #:use-module (guixcfg apps vscode definition)
-               #:use-module (guixcfg apps onlyoffice definition)
-               #:use-module (guixcfg apps nushell definition)
-               #:use-module (guixcfg apps carapace definition)
-               #:use-module (guixcfg apps opencode definition)
-               #:use-module (guixcfg apps starship definition)
-                #:use-module (guixcfg apps blue definition)
-                #:use-module (guixcfg apps xdg-utils definition)
-               #:use-module (guixcfg apps prismlauncher definition)
-               #:export (%applications))
+  #:use-module (srfi srfi-1) ;delete-duplicates
+  #:use-module (guixcfg apps model)
+  #:use-module (guixcfg apps bash definition)
+  #:use-module (guixcfg apps fastfetch definition)
+  #:use-module (guixcfg apps git definition)
+  #:use-module (guixcfg apps dbus definition)
+  #:use-module (guixcfg apps niri definition)
+  #:use-module (guixcfg apps noctalia definition)
+  #:use-module (guixcfg apps pipewire definition)
+  #:use-module (guixcfg apps ghostty definition)
+  #:use-module (guixcfg apps nautilus definition)
+  #:use-module (guixcfg apps wl-clipboard definition)
+  #:use-module (guixcfg apps polkit-gnome definition)
+  #:use-module (guixcfg apps ripgrep definition)
+  #:use-module (guixcfg apps fd definition)
+  #:use-module (guixcfg apps tree definition)
+  #:use-module (guixcfg apps jq definition)
+  #:use-module (guixcfg apps curl definition)
+  #:use-module (guixcfg apps wget definition)
+  #:use-module (guixcfg apps zip definition)
+  #:use-module (guixcfg apps less definition)
+  #:use-module (guixcfg apps file definition)
+  #:use-module (guixcfg apps mesa-utils definition)
+  #:use-module (guixcfg apps gnu-build-tools definition)
+  #:use-module (guixcfg apps clang definition)
+  #:use-module (guixcfg apps qemu definition)
+  #:use-module (guixcfg apps cmake definition)
+  #:use-module (guixcfg apps ninja definition)
+  #:use-module (guixcfg apps gdb definition)
+  #:use-module (guixcfg apps strace definition)
+  #:use-module (guixcfg apps nodejs definition)
+  #:use-module (guixcfg apps java definition)
+  #:use-module (guixcfg apps rust definition)
+  #:use-module (guixcfg apps gnome-keyring definition)
+  #:use-module (guixcfg apps mpv definition)
+  #:use-module (guixcfg apps google-chrome-stable definition)
+  #:use-module (guixcfg apps gnupg definition)
+  #:use-module (guixcfg apps seahorse definition)
+  #:use-module (guixcfg apps ssh definition)
+  #:use-module (guixcfg apps fcitx5 definition)
+  #:use-module (guixcfg apps gtk definition)
+  #:use-module (guixcfg apps amberol definition)
+  #:use-module (guixcfg apps celluloid definition)
+  #:use-module (guixcfg apps loupe definition)
+  #:use-module (guixcfg apps gnome-text-editor definition)
+  #:use-module (guixcfg apps gnome-characters definition)
+  #:use-module (guixcfg apps mission-center definition)
+  #:use-module (guixcfg apps vscode definition)
+  #:use-module (guixcfg apps onlyoffice definition)
+  #:use-module (guixcfg apps nushell definition)
+  #:use-module (guixcfg apps carapace definition)
+  #:use-module (guixcfg apps opencode definition)
+  #:use-module (guixcfg apps starship definition)
+  #:use-module (guixcfg apps blue definition)
+  #:use-module (guixcfg apps xdg-utils definition)
+  #:use-module (guixcfg apps prismlauncher definition)
+  #:export (%applications))
 
 (define %applications
   ;; 桌面/会话生命周期（官方 Home services 贡献其 profile 包，
@@ -87,16 +87,16 @@
         %wget
         %zip
         %less
-         %file
-         %mesa-utils
-         %gnu-build-tools
-         %clang
-         %qemu
-         %cmake
-         %ninja
-         %gdb
-         %strace
-         %nodejs
+        %file
+        %mesa-utils
+        %gnu-build-tools
+        %clang
+        %qemu
+        %cmake
+        %ninja
+        %gdb
+        %strace
+        %nodejs
         %java
         %rust
         %fastfetch
@@ -119,13 +119,14 @@
         %nushell
         %carapace
         %opencode
-         %starship
-         %blue
-         %xdg-utils
-         %prismlauncher))
+        %starship
+        %blue
+        %xdg-utils
+        %prismlauncher))
 
 ;; 完整性检查：启用集合的名字必须唯一（fail fast，加载即报错）。
-(define %application-names (map application-name %applications))
+(define %application-names
+  (map application-name %applications))
 (unless (= (length %application-names)
            (length (delete-duplicates %application-names)))
   (error "duplicate application name in registry" %application-names))

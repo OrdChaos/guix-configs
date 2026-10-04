@@ -21,14 +21,13 @@
 ;;; 无需在此声明）；extra-persistence 只声明默认之外的例外。
 
 (define-module (guixcfg flatpak applications qq definition)
-               #:use-module (guixcfg flatpak model)
-               #:export (%flatpak-qq))
+  #:use-module (guixcfg flatpak model)
+  #:export (%flatpak-qq))
 
 (define %flatpak-qq
-  (flatpak-application
-   (name 'qq)
-   (id "com.qq.QQ")
-   (remote 'flathub)
-   (branch "stable")
-   (update-policy 'track-branch)
-   (override-policy 'external)))
+  (flatpak-application (name 'qq)
+                       (id "com.qq.QQ")
+                       (remote 'flathub)
+                       (branch "stable")
+                       (update-policy 'track-branch)
+                       (override-policy 'external)))

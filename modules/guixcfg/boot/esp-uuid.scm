@@ -12,46 +12,51 @@
 ;;; activation 运行时读取，绝不经 #$ 嵌入。
 
 (define-module (guixcfg boot esp-uuid)
-               #:use-module (gnu services)          ; simple-service
-               #:use-module (gnu services base)     ; activation-service-type
-               #:use-module (guix gexp)             ; with-imported-modules
-               #:use-module (guix modules)          ; source-module-closure
-               #:use-module (guixcfg boot layout)   ; %esp-mount-point、%esp-luks-uuid-file
-               #:use-module (guixcfg system machine-facts) ; %default-machine-facts-path
-               #:export (esp-luks-uuid-service))
+  #:use-module (gnu services) ;simple-service
+  #:use-module (gnu services base) ;activation-service-type
+  #:use-module (guix gexp) ;with-imported-modules
+  #:use-module (guix modules) ;source-module-closure
+  #:use-module (guixcfg boot layout) ;%esp-mount-point、%esp-luks-uuid-file
+  #:use-module (guixcfg system machine-facts) ;%default-machine-facts-path
+  #:export (esp-luks-uuid-service))
 
 (define (esp-luks-uuid-activation)
   ;; boot activation 可能早于 /efi 挂载（ESP 非 needed-for-boot）——
   ;; 彼时 initrd 已用过该文件，无需补写；无 facts（Live installer）
   ;; 同样跳过。reconfigure 时 /efi 已挂载、facts 存在 → 幂等补写。
-  (with-imported-modules (source-module-closure
-                          '((guixcfg boot device-resolver)))
+  (with-imported-modules (source-module-closure '((guixcfg boot
+                                                           device-resolver)))
                          #~(begin
-                            (use-modules (guixcfg boot device-resolver)  ; normalize-luks-uuid
-                                         (ice-9 rdelim))                  ; read-line
-                            (let ((facts-path #$%default-machine-facts-path)
-                                  (esp-file (string-append #$%esp-mount-point "/"
-                                                           #$%esp-luks-uuid-file)))
-                              (when (and (file-exists? facts-path)
-                                         (file-exists? (dirname esp-file)))
-                                (let* ((facts (call-with-input-file facts-path read))
-                                       (uuid (assq-ref facts 'luks-uuid)))
-                                  (when uuid
-                                    (let ((normalized
-                                           (or (normalize-luks-uuid uuid)
-                                               (error "esp-luks-uuid: invalid LUKS UUID \
-in machine facts" uuid))))
-                                      (unless (and (file-exists? esp-file)
-                                                   (equal? normalized
-                                                           (call-with-input-file esp-file
-                                                                                 read-line)))
-                                        (call-with-output-file esp-file
-                                                               (lambda (port)
-                                                                 (display normalized port)
-                                                                 (newline port)))
-                                        (format #t "esp-luks-uuid: wrote ~a~%" esp-file))))))))))
+                             (use-modules (guixcfg boot device-resolver) ;normalize-luks-uuid
+                                          (ice-9 rdelim)) ;read-line
+                             (let ((facts-path #$%default-machine-facts-path)
+                                   (esp-file (string-append #$%esp-mount-point
+                                                            "/"
+                                                            #$%esp-luks-uuid-file)))
+                               (when (and (file-exists? facts-path)
+                                          (file-exists? (dirname esp-file)))
+                                 (let* ((facts (call-with-input-file facts-path
+                                                 read))
+                                        (uuid (assq-ref facts
+                                                        'luks-uuid)))
+                                   (when uuid
+                                     (let ((normalized (or (normalize-luks-uuid
+                                                            uuid)
+                                                           (error
+                                                            "esp-luks-uuid: invalid LUKS UUID in machine facts"
+                                                            uuid))))
+                                       (unless (and (file-exists? esp-file)
+                                                    (equal? normalized
+                                                            (call-with-input-file esp-file
+                                                              read-line)))
+                                         (call-with-output-file esp-file
+                                           (lambda (port)
+                                             (display normalized port)
+                                             (newline port)))
+                                         (format #t
+                                                 "esp-luks-uuid: wrote ~a~%"
+                                                 esp-file))))))))))
 
 (define esp-luks-uuid-service
-  (simple-service 'esp-luks-uuid
-                  activation-service-type
+  (simple-service 'esp-luks-uuid activation-service-type
                   (esp-luks-uuid-activation)))

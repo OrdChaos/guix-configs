@@ -9,12 +9,12 @@
              (guix monads)
              (guix derivations)
              (guix gexp)
-             (guixcfg fonts fontconfig-policy) ; %fontconfig-snippets（接口）
-             (guixcfg home fonts)         ; %fontconfig-service（消费方 1）
-             (gnu services)               ; service-value
-             (ice-9 rdelim)               ; read-string
+             (guixcfg fonts fontconfig-policy) ;%fontconfig-snippets（接口）
+             (guixcfg home fonts) ;%fontconfig-service（消费方 1）
+             (gnu services) ;service-value
+             (ice-9 rdelim) ;read-string
              (srfi srfi-1)
-             (srfi srfi-13)               ; string-contains
+             (srfi srfi-13) ;string-contains
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -25,30 +25,35 @@
              (and (pair? %fontconfig-snippets)
                   (every list? %fontconfig-snippets)))
 
-
 ;; ONLYOFFICE 专属 fontconfig 文件（消费方 2）：内联策略 + 无 include。
-(define %store (open-connection))
+(define %store
+  (open-connection))
 
 (define %oo-fonts-conf
   (let ((drv (run-with-store %store
-                             (lower-object (@@ (guixcfg apps onlyoffice definition)
-                                             onlyoffice-fontconfig-file)))))
-    (build-derivations %store (list drv))
+                             (lower-object (@@ (guixcfg apps onlyoffice
+                                                        definition)
+                                               onlyoffice-fontconfig-file)))))
+    (build-derivations %store
+                       (list drv))
     (derivation->output-path drv)))
 
-(define %oo-content (call-with-input-file %oo-fonts-conf read-string))
+(define %oo-content
+  (call-with-input-file %oo-fonts-conf
+    read-string))
 
 (define %oo-adapter
   (let ((drv (run-with-store %store
-                             (lower-object
-                              (@@ (guixcfg apps onlyoffice definition)
-                                  onlyoffice-adapter)))))
-    (build-derivations %store (list drv))
+                             (lower-object (@@ (guixcfg apps onlyoffice
+                                                        definition)
+                                               onlyoffice-adapter)))))
+    (build-derivations %store
+                       (list drv))
     (derivation->output-path drv)))
 
 (define %oo-wrapper
-  (call-with-input-file
-      (string-append %oo-adapter "/bin/onlyoffice-desktopeditors")
+  (call-with-input-file (string-append %oo-adapter
+                                       "/bin/onlyoffice-desktopeditors")
     read-string))
 
 (test-assert "onlyoffice config inlines the shared sans-serif policy"
@@ -57,25 +62,27 @@
 (test-assert "onlyoffice config inlines the shared monospace policy"
              (and (string-contains %oo-content "<family>monospace</family>")
                   (string-contains %oo-content
-                                   "<family>Maple Mono Normal NL NF CN</family>")))
+                   "<family>Maple Mono Normal NL NF CN</family>")))
 (test-assert "CSS UI generic names replace upstream concrete fallback chains"
-             (and (string-contains %oo-content "<string>ui-sans-serif</string>")
+             (and (string-contains %oo-content
+                                   "<string>ui-sans-serif</string>")
                   (string-contains %oo-content "<string>ui-monospace</string>")
                   (string-contains %oo-content "mode=\"assign_replace\"")))
 (test-assert "onlyoffice config has the same dir set as the virelith default"
              (and (string-contains %oo-content "font-dejavu")
                   (string-contains %oo-content "prefix=\"xdg\"")
                   (string-contains %oo-content "~/.fonts")))
-(test-assert "onlyoffice config contains no include (inlining is the contract)"
-             (not (string-contains %oo-content "<include")))
+(test-assert
+ "onlyoffice config contains no include (inlining is the contract)"
+ (not (string-contains %oo-content "<include")))
 
 ;; 规范化 match（"sans serif"→"sans-serif" 等）：Qt 原生弹窗的默认
 ;; family 是带空格写法，缺了这些规则会退化 fallback（2026-08-31 实证
 ;; 弹窗落 Maple Mono）。兼容层私有，不进共享策略。
 (test-assert "onlyoffice config carries the family-name normalization matches"
-              (and (string-contains %oo-content "<string>sans serif</string>")
-                   (string-contains %oo-content "<string>mono</string>")
-                   (string-contains %oo-content "<string>system ui</string>")))
+ (and (string-contains %oo-content "<string>sans serif</string>")
+      (string-contains %oo-content "<string>mono</string>")
+      (string-contains %oo-content "<string>system ui</string>")))
 
 (test-assert "ONLYOFFICE wrapper requests the GNOME/Nautilus portal chooser"
              (and (string-contains %oo-wrapper "--xdg-desktop-portal=default")

@@ -58,18 +58,17 @@
 ;;; conf.avail / 停止 reset-dirs / CEF 停止清洗渲染进程环境。
 
 (define-module (guixcfg home fonts)
-               #:use-module (gnu home services fontutils) ; home-fontconfig-service-type
-               #:use-module (gnu home services) ; home-files-service-type
-               #:use-module (gnu services)      ; service、simple-service
-               #:use-module (guix gexp)         ; file-append
-               #:use-module (guix packages)     ; package-name
-               #:use-module (gnu packages fontutils) ; fontconfig（工具包，农场结构性跳过）
-               #:use-module (guixcfg fonts model)  ; %fonts（re-export）
-               #:use-module (guixcfg fonts fontconfig-policy) ; %fontconfig-snippets
-               #:use-module (srfi srfi-1)       ; append-map、delete
-               #:export (%fontconfig-service
-                         %home-fonts-xdg-link-service)
-               #:re-export (%fonts))
+  #:use-module (gnu home services fontutils) ;home-fontconfig-service-type
+  #:use-module (gnu home services) ;home-files-service-type
+  #:use-module (gnu services) ;service、simple-service
+  #:use-module (guix gexp) ;file-append
+  #:use-module (guix packages) ;package-name
+  #:use-module (gnu packages fontutils) ;fontconfig（工具包，农场结构性跳过）
+  #:use-module (guixcfg fonts model) ;%fonts（re-export）
+  #:use-module (guixcfg fonts fontconfig-policy) ;%fontconfig-snippets
+  #:use-module (srfi srfi-1) ;append-map、delete
+  #:export (%fontconfig-service %home-fonts-xdg-link-service)
+  #:re-export (%fonts))
 
 ;; ── 字体集合（shared fact）─────────────────────────────────
 ;; %fonts 由 (guixcfg fonts model) 提供并在此 re-export（single
@@ -81,12 +80,10 @@
 ;; 已全部上提到中立事实层 (guixcfg fonts fontconfig-policy)——本
 ;; 模块只消费。目录不进 snippets（由 essential 默认值提供）。
 
-
 ;; 经 native extension 贡献到 canonical home-fontconfig 实例
 ;; （essential services 已实例化；AGENT.md §15 同款模式）。
 (define %fontconfig-service
-  (simple-service 'guixcfg-fontconfig
-                  home-fontconfig-service-type
+  (simple-service 'guixcfg-fontconfig home-fontconfig-service-type
                   %fontconfig-snippets))
 
 ;; ── XDG 字体链接农场（头部诊断链）──────────────────────────
@@ -94,8 +91,7 @@
 ;; 的目录链接（fontconfig 跟随子目录 symlink）。fontconfig 是
 ;; 工具包（无 share/fonts），结构性跳过。
 (define %home-fonts-xdg-link-service
-  (simple-service 'home-fonts-xdg-links
-                  home-files-service-type
+  (simple-service 'home-fonts-xdg-links home-files-service-type
                   (map (lambda (pkg)
                          (list (string-append ".local/share/fonts/"
                                               (package-name pkg))

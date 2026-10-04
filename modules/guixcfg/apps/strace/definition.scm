@@ -7,6 +7,5 @@
   #:export (%strace))
 
 (define %strace
-  (application
-   (name 'strace)
-   (home-packages (list strace))))
+  (application (name 'strace)
+               (home-packages (list strace))))

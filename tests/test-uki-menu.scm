@@ -11,7 +11,7 @@
 ;;; 测试的是 limine-config-text（部署脚本实际使用的纯函数）的真实
 ;;; 文本输出，不是源码里的构造器数量。
 
-(use-modules (guixcfg boot limine-menu) ; limine-config-text
+(use-modules (guixcfg boot limine-menu) ;limine-config-text
              (ice-9 rdelim)
              (srfi srfi-13)
              (srfi srfi-64))
@@ -21,39 +21,50 @@
 (define (config-entries text)
   "解析 Limine 配置文本中的用户启动项：'/' 开头的非缩进行。
 返回 (label . 条目行) 列表。"
-  (let loop ((lines (call-with-input-string text
-                                            (lambda (p)
-                                              (let l ((acc '()))
-                                                (let ((line (read-line p)))
-                                                  (if (eof-object? line)
-                                                    (reverse acc)
-                                                    (l (cons line acc))))))))
-             (acc '()))
+  (let loop
+    ((lines (call-with-input-string text
+                                    (lambda (p)
+                                      (let l
+                                        ((acc '()))
+                                        (let ((line (read-line p)))
+                                          (if (eof-object? line)
+                                              (reverse acc)
+                                              (l (cons line acc))))))))
+     (acc '()))
     (if (null? lines)
-      (reverse acc)
-      (let ((line (car lines)))
-        (if (and (string-prefix? "/" line)
-                 (not (string-prefix? "//" line)))
-          (loop (cdr lines) (cons line acc))
-          (loop (cdr lines) acc))))))
+        (reverse acc)
+        (let ((line (car lines)))
+          (if (and (string-prefix? "/" line)
+                   (not (string-prefix? "//" line)))
+              (loop (cdr lines)
+                    (cons line acc))
+              (loop (cdr lines) acc))))))
 
 (define (entry-image-path text label)
   "返回 LABEL 条目（'/LABEL' 起始段）的 image_path 行；无则 #f。"
-  (let loop ((lines (call-with-input-string text
-                                            (lambda (p)
-                                              (let l ((acc '()))
-                                                (let ((line (read-line p)))
-                                                  (if (eof-object? line)
-                                                    (reverse acc)
-                                                    (l (cons line acc))))))))
-             (in-entry? #f))
+  (let loop
+    ((lines (call-with-input-string text
+                                    (lambda (p)
+                                      (let l
+                                        ((acc '()))
+                                        (let ((line (read-line p)))
+                                          (if (eof-object? line)
+                                              (reverse acc)
+                                              (l (cons line acc))))))))
+     (in-entry? #f))
     (cond
-      ((null? lines) #f)
-      ((and (string-prefix? "/" (car lines))
-            (not (string-prefix? "//" (car lines))))
+      ((null? lines)
+       #f)
+      ((and (string-prefix? "/"
+                            (car lines))
+            (not (string-prefix? "//"
+                                 (car lines))))
        (loop (cdr lines)
-             (string=? (car lines) (string-append "/" label))))
-      ((and in-entry? (string-prefix? "    image_path:" (car lines)))
+             (string=? (car lines)
+                       (string-append "/" label))))
+      ((and in-entry?
+            (string-prefix? "    image_path:"
+                            (car lines)))
        (car lines))
       (else (loop (cdr lines) in-entry?)))))
 
@@ -62,7 +73,8 @@
 ;; ── T1/T2：Normal + Recovery 恰好两项，无历史项 ────────────
 (test-assert "T1: config has exactly the Normal entry when Recovery absent"
              (let ((text (limine-config-text "A" #f)))
-               (equal? '("/GNU Guix") (config-entries text))))
+               (equal? '("/GNU Guix")
+                       (config-entries text))))
 
 (test-assert "T1: config has exactly Normal + Recovery when Recovery present"
              (let ((text (limine-config-text "A" #t)))

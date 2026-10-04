@@ -28,18 +28,18 @@
 ;;; 运行时改写它们，generic GSettings 声明同一键即 fail。
 
 (define-module (guixcfg gsettings model)
-               #:use-module (guix records)
-               #:use-module (srfi srfi-1)  ; every、delete-duplicates、filter
-               #:export (<gsettings-setting>
-                         gsettings-setting make-gsettings-setting
-                         gsettings-setting?
-                         gsettings-setting-schema
-                         gsettings-setting-key
-                         gsettings-setting-value
-                         valid-gsettings-setting?
-                         validate-gsettings-ownership!
-                         %appearance-owned-gsettings-keys
-                         gsettings-desired-state))
+  #:use-module (guix records)
+  #:use-module (srfi srfi-1) ;every、delete-duplicates、filter
+  #:export (<gsettings-setting> gsettings-setting
+                                make-gsettings-setting
+                                gsettings-setting?
+                                gsettings-setting-schema
+                                gsettings-setting-key
+                                gsettings-setting-value
+                                valid-gsettings-setting?
+                                validate-gsettings-ownership!
+                                %appearance-owned-gsettings-keys
+                                gsettings-desired-state))
 
 ;;; ── appearance 保留域 ──────────────────────────────────────
 ;;; 与 apps/gtk/definition.scm 的 %appearance-sync 逐键对应
@@ -56,15 +56,17 @@
 
 ;;; ── record ────────────────────────────────────────────────
 
-(define-record-type* <gsettings-setting>
-                     gsettings-setting make-gsettings-setting
-                     gsettings-setting?
-                     (schema gsettings-setting-schema)  ; string：GSettings schema id（如 org.gnome.TextEditor）
-                     (key gsettings-setting-key)        ; string：schema 内的键名
-                     (value gsettings-setting-value))   ; string：GVariant 文本表示（如 "true" / "'Adwaita'"）
+(define-record-type* <gsettings-setting> gsettings-setting
+                     make-gsettings-setting
+  gsettings-setting?
+  (schema gsettings-setting-schema) ;string：GSettings schema id（如 org.gnome.TextEditor）
+  (key gsettings-setting-key) ;string：schema 内的键名
+  (value gsettings-setting-value))
+ ; string：GVariant 文本表示（如 "true" / "'Adwaita'"）
 
 (define (non-empty-string? s)
-  (and (string? s) (> (string-length s) 0)))
+  (and (string? s)
+       (> (string-length s) 0)))
 
 (define (valid-gsettings-setting? setting)
   "SETTING 是结构合法的 <gsettings-setting>：schema/key/value 均为
@@ -98,18 +100,21 @@
                                    (string< (gsettings-setting-key (cdr a))
                                             (gsettings-setting-key (cdr b))))))))))
     (if (null? sorted)
-      '()
-      (let loop ((remaining (cdr sorted))
-                 (current (list (car sorted)))
-                 (acc '()))
-        (if (null? remaining)
-          (reverse (cons current acc))
-          (let ((next (car remaining)))
-            (if (equal? (schema-key-id (cdar current))
-                        (schema-key-id (cdr next)))
-              (loop (cdr remaining) (cons next current) acc)
-              (loop (cdr remaining) (list next)
-                    (cons current acc)))))))))
+        '()
+        (let loop
+          ((remaining (cdr sorted))
+           (current (list (car sorted)))
+           (acc '()))
+          (if (null? remaining)
+              (reverse (cons current acc))
+              (let ((next (car remaining)))
+                (if (equal? (schema-key-id (cdar current))
+                            (schema-key-id (cdr next)))
+                    (loop (cdr remaining)
+                          (cons next current) acc)
+                    (loop (cdr remaining)
+                          (list next)
+                          (cons current acc)))))))))
 
 (define (validate-gsettings-ownership! contributions)
   "CONTRIBUTIONS（(owner . setting) pairs）的 ownership 校验：
@@ -122,8 +127,8 @@
   (for-each (lambda (entry)
               (unless (valid-gsettings-setting? (cdr entry))
                 (error "invalid gsettings setting declared by application"
-                       (car entry) (cdr entry))))
-            contributions)
+                       (car entry)
+                       (cdr entry)))) contributions)
   (for-each (lambda (group)
               (when (> (length group) 1)
                 (let ((setting (cdar group))
@@ -137,14 +142,13 @@
   (for-each (lambda (reserved)
               (let ((hits (filter (lambda (entry)
                                     (equal? (schema-key-id (cdr entry))
-                                            reserved))
-                                  contributions)))
+                                            reserved)) contributions)))
                 (unless (null? hits)
-                  (error "gsettings key is owned by appearance-sync (dynamic desktop appearance)"
-                         (string-append (car reserved) " / " (cdr reserved))
-                         (map car hits)))))
-            %appearance-owned-gsettings-keys)
-  #t)
+                  (error
+                   "gsettings key is owned by appearance-sync (dynamic desktop appearance)"
+                   (string-append (car reserved) " / "
+                                  (cdr reserved))
+                   (map car hits))))) %appearance-owned-gsettings-keys) #t)
 
 (define (gsettings-desired-state contributions)
   "CONTRIBUTIONS（(owner . setting) pairs）→ desired state 视图：

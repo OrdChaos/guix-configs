@@ -26,18 +26,25 @@
 ;;; kdl，无法插值——按注释交叉引用（值变更需同步两边）。
 
 (define-module (guixcfg home appearance)
-               #:export (%appearance-gtk-theme-light
-                         %appearance-gtk-theme-dark
-                         %appearance-icon-theme
-                         %appearance-cursor-theme
-                         %appearance-cursor-size
-                         %appearance-ui-font
-                         %appearance-default-mode))
+  #:export (%appearance-gtk-theme-light %appearance-gtk-theme-dark
+                                        %appearance-icon-theme
+                                        %appearance-cursor-theme
+                                        %appearance-cursor-size
+                                        %appearance-ui-font
+                                        %appearance-default-mode))
 
-(define %appearance-gtk-theme-light "adw-gtk3")
-(define %appearance-gtk-theme-dark "adw-gtk3-dark")
-(define %appearance-icon-theme "Fluent-light")
-(define %appearance-cursor-theme "Fluent-dark-cursors")
-(define %appearance-cursor-size 24)
-(define %appearance-ui-font "Sans Serif 11")
-(define %appearance-default-mode 'light)  ; 'light | 'dark
+(define %appearance-gtk-theme-light
+  "adw-gtk3")
+(define %appearance-gtk-theme-dark
+  "adw-gtk3-dark")
+(define %appearance-icon-theme
+  "Fluent-light")
+(define %appearance-cursor-theme
+  "Fluent-dark-cursors")
+(define %appearance-cursor-size
+  24)
+(define %appearance-ui-font
+  "Sans Serif 11")
+(define %appearance-default-mode
+  'light)
+ ; 'light | 'dark

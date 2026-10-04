@@ -24,17 +24,16 @@
 ;;;   （account-databases-verify）在验证最终 shadow 后才 provision。
 
 (define-module (guixcfg system accounts)
-               #:use-module (gnu services)              ; simple-service
-               #:use-module (gnu services shepherd)     ; shepherd-service、shepherd-root-service-type
-               #:use-module (gnu system accounts)       ; user-account、user-group、sexp->*
-               #:use-module (guix gexp)
-               #:use-module (guix modules)              ; source-module-closure
-               #:use-module (guixcfg security age)   ; %account-credentials-dir（单一 authority）
-               #:use-module (srfi srfi-1)
-               #:export (account-databases-activation
-                         account-databases-service
-                         account-databases-verify-program
-                         account-databases-verify-service))
+  #:use-module (gnu services) ;simple-service
+  #:use-module (gnu services shepherd) ;shepherd-service、shepherd-root-service-type
+  #:use-module (gnu system accounts) ;user-account、user-group、sexp->*
+  #:use-module (guix gexp)
+  #:use-module (guix modules) ;source-module-closure
+  #:use-module (guixcfg security age) ;%account-credentials-dir（单一 authority）
+  #:use-module (srfi srfi-1)
+  #:export (account-databases-activation account-databases-service
+                                         account-databases-verify-program
+                                         account-databases-verify-service))
 
 ;; 序列化：与 (gnu system shadow) 的 account-activation 完全一致（那些
 ;; helper 未导出，这里复刻）。sexp->user-account/sexp->user-group 由
@@ -47,15 +46,15 @@
 
 (define (user-account->gexp account)
   #~`(#$(user-account-name account)
-       #$(user-account-uid account)
-       #$(user-account-group account)
-       #$(user-account-supplementary-groups account)
-       #$(user-account-comment account)
-       #$(user-account-home-directory account)
-       #$(user-account-create-home-directory? account)
-       ,#$(user-account-shell account)             ; 这是 gexp（file-append）
-       #$(user-account-password account)
-       #$(user-account-system? account)))
+      #$(user-account-uid account)
+      #$(user-account-group account)
+      #$(user-account-supplementary-groups account)
+      #$(user-account-comment account)
+      #$(user-account-home-directory account)
+      #$(user-account-create-home-directory? account)
+      ,#$(user-account-shell account) ;这是 gexp（file-append）
+      #$(user-account-password account)
+      #$(user-account-system? account)))
 
 ;;; credential verifier 路径（persistent canonical backing，root 0600）。
 ;;; 单一 authority：(guixcfg security age) 的 %account-credentials-dir
@@ -98,139 +97,167 @@ needed and the FFI-dependent flock path is bypassed entirely.
   (define credential-user-names
     (filter-map (lambda (u)
                   (and (not (user-account-system? u))
-                       (not (string=? "root" (user-account-name u)))
-                       (user-account-name u)))
-                accounts))
+                       (not (string=? "root"
+                                      (user-account-name u)))
+                       (user-account-name u))) accounts))
   ;; name -> verifier-path 的关联列表（evaluator-side 嵌入 gexp）。
   (define credential-assoc
-    (map (lambda (name) (cons name (user-credential-path name)))
-         credential-user-names))
-  
-  (with-imported-modules (source-module-closure
-                          '((gnu build accounts)
-                            (gnu system accounts)
-                            (guix build utils)
-                            (srfi srfi-1)       ; delete-duplicates、member、filter
-                            (srfi srfi-11)      ; let*-values（与 runtime use-modules 一一对应）
-                            (srfi srfi-13)      ; string-trim-both
-                            (ice-9 rdelim)      ; read-string（与 runtime use-modules 对应）
-                            (ice-9 regex)))     ; string-match
+    (map (lambda (name)
+           (cons name
+                 (user-credential-path name))) credential-user-names))
+
+  (with-imported-modules (source-module-closure '((gnu build accounts)
+                                                  (gnu system accounts)
+                                                  (guix build utils)
+                                                  (srfi srfi-1) ;delete-duplicates、member、filter
+                                                  (srfi srfi-11) ;let*-values（与 runtime use-modules 一一对应）
+                                                  (srfi srfi-13) ;string-trim-both
+                                                  (ice-9 rdelim) ;read-string（与 runtime use-modules 对应）
+                                                  (ice-9 regex))) ;string-match
                          #~(begin
-                            (use-modules (gnu build accounts)     ; user+group-databases、write-*
-                                         (gnu system accounts)    ; sexp->user-account、user-account-*
-                                         (guix build utils)       ; mkdir-p
-                                         (srfi srfi-1)            ; delete-duplicates、member
-                                         (srfi srfi-11)          ; let*-values
-                                         (srfi srfi-13)          ; string-trim-both
-                                         (ice-9 rdelim)          ; read-string
-                                         (ice-9 regex))          ; string-match
-                            
-                            (define users
-                              (map sexp->user-account (list #$@user-specs)))
-                            (define user-groups
-                              (map sexp->user-group (list #$@group-specs)))
-                            
-                            ;; 读 persistent credential verifier；任何缺失/非法 fail closed。
-                            (define (read-credential-hash path)
-                              (unless (file-exists? path)
-                                (error "persistent credential missing" path))
-                              (let ((hash (string-trim-both
-                                           (string-trim-right
-                                            (call-with-input-file path
-                                                                  (lambda (p)
-                                                                    (read-string p)))
-                                            #\newline))))
-                                (unless (string-match #$%password-hash-regex hash)
-                                  (error "persistent credential malformed" path))
-                                hash))
-                            
-                            ;; 在 shadow entries 中注入 persistent credential。
-                            (define (inject-credentials entries)
-                              (map (lambda (entry)
-                                     (let ((cred (assoc (shadow-entry-name entry)
-                                                        '#$credential-assoc)))
-                                       (if cred
-                                         (shadow-entry
-                                          (inherit entry)
-                                          (password (read-credential-hash (cdr cred))))
-                                         entry)))
-                                   entries))
-                            
-                            ;; 最终验证：从写好的 /etc/shadow 文本解析每个目标 user 的
-                            ;; password 字段，与 persistent verifier 比对（非 empty/!/locked）。
-                            ;; shadow-entry-password 访问器未从 (gnu build accounts) 导出，
-                            ;; 故直接读最终文件验证（也更贴近"验证最终 shadow"语义）。
-                            (define (verify-projection)
-                              (let ((shadow-text
-                                     (call-with-input-file "/etc/shadow"
-                                                           (lambda (p) (read-string p)))))
-                                (for-each
-                                 (lambda (name)
-                                   (let* ((line (find (lambda (l)
-                                                        (let ((fields (string-split l #\:)))
-                                                          (and (pair? fields)
-                                                               (string=? (car fields)
-                                                                         name))))
-                                                      (string-split shadow-text #\newline)))
-                                          (fields (and line (string-split line #\:))))
-                                     (unless (and fields (pair? (cdr fields)))
-                                       (error "account projection missing user" name))
-                                     (let ((hash (cadr fields)))
-                                       (unless (and hash
-                                                    (not (string=? hash ""))
-                                                    (not (string=? hash "!"))
-                                                    (string=? hash
-                                                              (read-credential-hash
-                                                               (assoc-ref
-                                                                '#$credential-assoc name))))
-                                         (error "account projection credential mismatch"
-                                                name)))))
-                                 '#$credential-user-names)))
-                            
-                            ;; /var/lib 是系统账号 home 的前置目录（上游在锁外创建）。
-                            (mkdir-p "/var/lib")
-                            
-                            ;; 纯 Scheme 重建三个数据库（原子写：mkstemp! + rename，
-                            ;; 无 FFI）。user+group-databases 读当前文件保留 stateful
-                            ;; 位（UID/GID/password/shell），重复运行幂等。
-                            (let*-values (((group-entries passwd-entries shadow-entries)
-                                           (user+group-databases users user-groups)))
-                                         (let ((shadow-entries*
-                                                (inject-credentials shadow-entries)))
-                                           (write-group group-entries)
-                                           (write-passwd passwd-entries)
-                                           (write-shadow shadow-entries*)
-                                           (verify-projection)))
-                            
-                            ;; system account 的 home（如 /var/empty、/var/run/sshd、
-                            ;; /run/dbus）：上游在锁块之后创建，锁失败时也被跳过，
-                            ;; 这里补上。
-                            (for-each
-                             (lambda (user)
-                               (when (and (user-account-system? user)
-                                          (user-account-create-home-directory? user))
-                                 (let* ((home (user-account-home-directory user))
-                                        (pwd  (getpwnam (user-account-name user))))
-                                   (mkdir-p home)
-                                   (chown home (passwd:uid pwd) (passwd:gid pwd))
-                                   (chmod home #o700))))
-                             (filter (lambda (user)
-                                       (and (user-account-system? user)
-                                            (user-account-create-home-directory? user)))
-                                     users))
-                            
-                            ;; 共享 home（被多个 system account 使用，如 /var/empty）
-                            ;; 转成 root-owned 只读，与上游一致。
-                            (for-each (lambda (directory)
-                                        (chown directory 0 0)
-                                        (chmod directory #o555))
-                                      (delete-duplicates
-                                       (filter-map (lambda (user)
-                                                     (and (user-account-system? user)
-                                                          (user-account-home-directory user)))
-                                                   users)))
-                            
-                            #t)))
+                             (use-modules (gnu build accounts) ;user+group-databases、write-*
+                                          (gnu system accounts) ;sexp->user-account、user-account-*
+                                          (guix build utils) ;mkdir-p
+                                          (srfi srfi-1) ;delete-duplicates、member
+                                          (srfi srfi-11) ;let*-values
+                                          (srfi srfi-13) ;string-trim-both
+                                          (ice-9 rdelim) ;read-string
+                                          (ice-9 regex)) ;string-match
+                             
+                             (define users
+                               (map sexp->user-account
+                                    (list #$@user-specs)))
+                             (define user-groups
+                               (map sexp->user-group
+                                    (list #$@group-specs)))
+
+                             ;; 读 persistent credential verifier；任何缺失/非法 fail closed。
+                             (define (read-credential-hash path)
+                               (unless (file-exists? path)
+                                 (error "persistent credential missing" path))
+                               (let ((hash (string-trim-both (string-trim-right (call-with-input-file path
+                                                                                  (lambda 
+                                                                                          (p)
+                                                                                    
+                                                                                    (read-string
+                                                                                     p)))
+                                                              #\newline))))
+                                 (unless (string-match #$%password-hash-regex
+                                                       hash)
+                                   (error "persistent credential malformed"
+                                          path)) hash))
+
+                             ;; 在 shadow entries 中注入 persistent credential。
+                             (define (inject-credentials entries)
+                               (map (lambda (entry)
+                                      (let ((cred (assoc (shadow-entry-name
+                                                          entry)
+                                                         '#$credential-assoc)))
+                                        (if cred
+                                            (shadow-entry (inherit entry)
+                                                          (password (read-credential-hash
+                                                                     (cdr cred))))
+                                            entry))) entries))
+
+                             ;; 最终验证：从写好的 /etc/shadow 文本解析每个目标 user 的
+                             ;; password 字段，与 persistent verifier 比对（非 empty/!/locked）。
+                             ;; shadow-entry-password 访问器未从 (gnu build accounts) 导出，
+                             ;; 故直接读最终文件验证（也更贴近"验证最终 shadow"语义）。
+                             (define (verify-projection)
+                               (let ((shadow-text (call-with-input-file "/etc/shadow"
+                                                    (lambda (p)
+                                                      (read-string p)))))
+                                 (for-each (lambda (name)
+                                             (let* ((line (find (lambda (l)
+                                                                  (let ((fields
+                                                                         (string-split
+                                                                          l
+                                                                          #\:)))
+                                                                    (and (pair?
+                                                                          fields)
+                                                                         (string=?
+                                                                          (car
+                                                                           fields)
+                                                                          name))))
+                                                                (string-split
+                                                                 shadow-text
+                                                                 #\newline)))
+                                                    (fields (and line
+                                                                 (string-split
+                                                                  line #\:))))
+                                               (unless (and fields
+                                                            (pair? (cdr fields)))
+                                                 (error
+                                                  "account projection missing user"
+                                                  name))
+                                               (let ((hash (cadr fields)))
+                                                 (unless (and hash
+                                                              (not (string=?
+                                                                    hash ""))
+                                                              (not (string=?
+                                                                    hash "!"))
+                                                              (string=? hash
+                                                                        (read-credential-hash
+                                                                         (assoc-ref '#$credential-assoc
+                                                                          name))))
+                                                   (error
+                                                    "account projection credential mismatch"
+                                                    name)))))
+                                           '#$credential-user-names)))
+
+                             ;; /var/lib 是系统账号 home 的前置目录（上游在锁外创建）。
+                             (mkdir-p "/var/lib")
+
+                             ;; 纯 Scheme 重建三个数据库（原子写：mkstemp! + rename，
+                             ;; 无 FFI）。user+group-databases 读当前文件保留 stateful
+                             ;; 位（UID/GID/password/shell），重复运行幂等。
+                             (let*-values (((group-entries passwd-entries
+                                                           shadow-entries)
+                                            (user+group-databases users
+                                                                  user-groups)))
+                                          (let ((shadow-entries* (inject-credentials
+                                                                  shadow-entries)))
+                                            (write-group group-entries)
+                                            (write-passwd passwd-entries)
+                                            (write-shadow shadow-entries*)
+                                            (verify-projection)))
+
+                             ;; system account 的 home（如 /var/empty、/var/run/sshd、
+                             ;; /run/dbus）：上游在锁块之后创建，锁失败时也被跳过，
+                             ;; 这里补上。
+                             (for-each (lambda (user)
+                                         (when (and (user-account-system? user)
+                                                    (user-account-create-home-directory?
+                                                     user))
+                                           (let* ((home (user-account-home-directory
+                                                         user))
+                                                  (pwd (getpwnam (user-account-name
+                                                                  user))))
+                                             (mkdir-p home)
+                                             (chown home
+                                                    (passwd:uid pwd)
+                                                    (passwd:gid pwd))
+                                             (chmod home #o700))))
+                                       (filter (lambda (user)
+                                                 (and (user-account-system?
+                                                       user)
+                                                      (user-account-create-home-directory?
+                                                       user))) users))
+
+                             ;; 共享 home（被多个 system account 使用，如 /var/empty）
+                             ;; 转成 root-owned 只读，与上游一致。
+                             (for-each (lambda (directory)
+                                         (chown directory 0 0)
+                                         (chmod directory #o555))
+                                       (delete-duplicates (filter-map (lambda 
+                                                                              (user)
+                                                                        (and (user-account-system?
+                                                                              user)
+                                                                             (user-account-home-directory
+                                                                              user)))
+                                                                      users)))
+
+                             #t)))
 
 (define (account-databases-service accounts+groups)
   "Wire ACCOUNTS+GROUPS projection into the activation script.  Runs during
@@ -238,8 +265,7 @@ activation (before shepherd), guaranteeing /etc/passwd|group|shadow are
 correct regardless of whether the upstream account activation step failed
 at its flock.  This is the single authoritative writer for the account
 databases."
-  (simple-service 'guixcfg-account-databases
-                  activation-service-type
+  (simple-service 'guixcfg-account-databases activation-service-type
                   (account-databases-activation accounts+groups)))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -250,69 +276,94 @@ databases."
   "生成只读验证程序：确认 /etc/shadow 中 USER 存在、password 字段 ==
 persistent verifier 且非 empty/!/locked。任何失败 exit 非零 →
 account-state-ready 不 provision（fail-closed）。"
-  (program-file
-   "guixcfg-account-databases-verify"
-   (with-imported-modules (source-module-closure '((guix build utils)
-                                                   (srfi srfi-13)))
-                          #~(begin
-                             (use-modules (guix build utils) (ice-9 rdelim) (srfi srfi-13)
-                                          (ice-9 regex))
-                             (define user #$user)
-                             (define hash-path
-                               (string-append #$(%account-credentials-dir)
-                                              "/" user "/password.hash"))
-                             (define (valid-hash? s)
-                               (and (string-match #$%password-hash-regex s)
-                                    #t))
-                             ;; core `any`（generated program 只 import 显式模块）。
-                             (define (shadow-line user lines)
-                               (let loop ((lines lines))
-                                 (and (pair? lines)
-                                      (let* ((line (car lines))
-                                             (fields (string-split line #\:)))
-                                        (if (and (pair? fields)
-                                                 (string=? (car fields) user))
-                                          line
-                                          (loop (cdr lines)))))))
-                             (unless (file-exists? hash-path)
-                               (error "persistent credential missing" hash-path))
-                             (let* ((hash (string-trim-right
-                                           (call-with-input-file hash-path
-                                                                 (lambda (p) (read-string p)))
-                                           #\newline))
-                                    (shadow (call-with-input-file "/etc/shadow"
-                                                                  (lambda (p) (read-string p))))
-                                    (line (shadow-line user
-                                                       (string-split shadow #\newline))))
-                               (unless (valid-hash? hash)
-                                 (error "persistent credential malformed" user))
-                               (unless line
-                                 (error "target user missing from /etc/shadow" user))
-                               (let ((fields (string-split line #\:)))
-                                 (unless (and (pair? (cdr fields))
-                                              (string=? (cadr fields) hash)
-                                              (not (string=? (cadr fields) ""))
-                                              (not (string=? (cadr fields) "!")))
-                                   (error "shadow credential does not match verifier" user)))
-                               #t)))))
+  (program-file "guixcfg-account-databases-verify"
+                (with-imported-modules (source-module-closure '((guix build
+                                                                      utils)
+                                                                (srfi srfi-13)))
+                                       #~(begin
+                                           (use-modules (guix build utils)
+                                                        (ice-9 rdelim)
+                                                        (srfi srfi-13)
+                                                        (ice-9 regex))
+                                           (define user
+                                             #$user)
+                                           (define hash-path
+                                             (string-append #$(%account-credentials-dir)
+                                                            "/" user
+                                                            "/password.hash"))
+                                           (define (valid-hash? s)
+                                             (and (string-match #$%password-hash-regex
+                                                                s) #t))
+                                           ;; core `any`（generated program 只 import 显式模块）。
+                                           (define (shadow-line user lines)
+                                             (let loop
+                                               ((lines lines))
+                                               (and (pair? lines)
+                                                    (let* ((line (car lines))
+                                                           (fields (string-split
+                                                                    line #\:)))
+                                                      (if (and (pair? fields)
+                                                               (string=? (car
+                                                                          fields)
+                                                                         user))
+                                                          line
+                                                          (loop (cdr lines)))))))
+                                           (unless (file-exists? hash-path)
+                                             (error
+                                              "persistent credential missing"
+                                              hash-path))
+                                           (let* ((hash (string-trim-right (call-with-input-file hash-path
+                                                                             (lambda 
+                                                                                     (p)
+                                                                               
+                                                                               (read-string
+                                                                                p)))
+                                                                           #\newline))
+                                                  (shadow (call-with-input-file "/etc/shadow"
+                                                            (lambda (p)
+                                                              (read-string p))))
+                                                  (line (shadow-line user
+                                                                     (string-split
+                                                                      shadow
+                                                                      #\newline))))
+                                             (unless (valid-hash? hash)
+                                               (error
+                                                "persistent credential malformed"
+                                                user))
+                                             (unless line
+                                               (error
+                                                "target user missing from /etc/shadow"
+                                                user))
+                                             (let ((fields (string-split line
+                                                                         #\:)))
+                                               (unless (and (pair? (cdr fields))
+                                                            (string=? (cadr
+                                                                       fields)
+                                                                      hash)
+                                                            (not (string=? (cadr
+                                                                            fields)
+                                                                           ""))
+                                                            (not (string=? (cadr
+                                                                            fields)
+                                                                  "!")))
+                                                 (error
+                                                  "shadow credential does not match verifier"
+                                                  user))) #t)))))
 
 (define (account-databases-verify-service user)
   "boot 时验证 account databases projection 已完成且 credential 正确；
 成功才 provision account-state-ready。只读——绝不写 /etc/shadow。"
   (simple-service 'guixcfg-account-databases-verify shepherd-root-service-type
-                  (list (shepherd-service
-                         (provision '(guixcfg-account-databases-verify
-                                      account-state-ready))
-                         (requirement '(persistent-state-ready
-                                        file-systems user-homes))
-                         (one-shot? #t)
-                         (respawn? #f) ; 一次性语义，不 respawn
-                         (documentation
-                          "Verify the account databases projection (user \
-present in /etc/shadow with the persistent credential); provides \
-account-state-ready.")
-                         (start #~(lambda ()
-                                    (zero? (system*
-                                            #$(account-databases-verify-program
-                                               user)))))
-                         (stop #~(const #f))))))
+                  (list (shepherd-service (provision '(guixcfg-account-databases-verify
+                                                       account-state-ready))
+                                          (requirement '(persistent-state-ready
+                                                         file-systems
+                                                         user-homes))
+                                          (one-shot? #t)
+                                          (respawn? #f) ;一次性语义，不 respawn
+                                          (documentation
+                                           "Verify the account databases projection (user present in /etc/shadow with the persistent credential); provides account-state-ready.")
+                                          (start #~(lambda ()
+                                                     (zero? (system* #$(account-databases-verify-program
+                                                                        user)))))
+                                          (stop #~(const #f))))))

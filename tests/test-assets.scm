@@ -12,14 +12,14 @@
 ;;;
 ;;; 网络：无。构建仅两个 local-file + 空 profile home derivation。
 
-(use-modules (guix store)        ; open-connection
-             (guix monads)       ; run-with-store
-             (guix gexp)         ; lower-object、local-file?
-             (guix derivations)  ; derivation->output-path、derivation?
-             (gnu home)          ; home-environment
-             (gnu home services) ; home-files-service-type
-             (gnu services)      ; service-kind、service-type-name、service-value
-             (ice-9 binary-ports) ; get-bytevector-n
+(use-modules (guix store) ;open-connection
+             (guix monads) ;run-with-store
+             (guix gexp) ;lower-object、local-file?
+             (guix derivations) ;derivation->output-path、derivation?
+             (gnu home) ;home-environment
+             (gnu home services) ;home-files-service-type
+             (gnu services) ;service-kind、service-type-name、service-value
+             (ice-9 binary-ports) ;get-bytevector-n
              (srfi srfi-1)
              (srfi srfi-64)
              (guixcfg home assets)
@@ -34,68 +34,79 @@
 ;; ── 2. 服务组装进 %guix-home ───────────────────────────────
 (define %assets-svc
   (find (lambda (s)
-          (eq? 'user-assets (service-type-name (service-kind s))))
+          (eq? 'user-assets
+               (service-type-name (service-kind s))))
         (home-environment-services %guix-home)))
 
 (test-assert "user-assets service composed into %guix-home" %assets-svc)
 
-
 (test-assert "both sources are file-likes"
-             (every local-file? (map cadr (service-value %assets-svc))))
+             (every local-file?
+                    (map cadr
+                         (service-value %assets-svc))))
 
 (define (source-of target)
-  (cadr (assoc target (service-value %assets-svc))))
+  (cadr (assoc target
+               (service-value %assets-svc))))
 
 ;; ── 3. 素材物化进 store（真实内容）────────────────────────
-(define %store (open-connection))
+(define %store
+  (open-connection))
 
 (define (materialize-file file-like)
   "local-file 的 lowering 直接把内容 intern 进 store（返回立即可读
   的 store 路径字符串，与 test-appearance 的 lower-text 同款）；对
   derivation 形态（防御性）仍走 build。"
-  (let ((item (run-with-store %store (lower-object file-like))))
+  (let ((item (run-with-store %store
+                              (lower-object file-like))))
     (if (derivation? item)
-      (begin
-       (build-derivations %store (list item))
-       (derivation->output-path item))
-      item)))
+        (begin
+          (build-derivations %store
+                             (list item))
+          (derivation->output-path item)) item)))
 
 (define (read-bytes path n)
   (call-with-input-file path
-                        (lambda (port) (get-bytevector-n port n))))
+    (lambda (port)
+      (get-bytevector-n port n))))
 
-(define %avatar-out (materialize-file (source-of %avatar-home-path)))
-(define %wallpaper-out (materialize-file (source-of %wallpaper-home-path)))
+(define %avatar-out
+  (materialize-file (source-of %avatar-home-path)))
+(define %wallpaper-out
+  (materialize-file (source-of %wallpaper-home-path)))
 
 (test-assert "avatar materializes into the store"
              (file-exists? %avatar-out))
 (test-assert "avatar is a real PNG (magic bytes)"
-             (equal? (read-bytes %avatar-out 8)
-                     #vu8(#x89 #x50 #x4E #x47 #x0D #x0A #x1A #x0A)))
+             (equal? (read-bytes %avatar-out 8) #vu8(137 80 78 71 13 10 26 10)))
 
 (test-assert "wallpaper materializes into the store"
              (file-exists? %wallpaper-out))
 (test-assert "wallpaper is a real JPEG (magic bytes)"
-             (equal? (read-bytes %wallpaper-out 3)
-                     #vu8(#xFF #xD8 #xFF)))
+             (equal? (read-bytes %wallpaper-out 3) #vu8(255 216 255)))
 
 ;; ── 4. Home generation closure 携带资源 ────────────────────
 ;; 最小组合 home（只含资源服务）：构建后 files/ 下必须出现两条目
 ;; ——home activation 的 symlink-manager 把这些条目链接进 $HOME。
 (define %assets-only-home
   (home-environment
-   (packages '())
-   (services (list %user-assets-service))))
+    (packages '())
+    (services
+     (list %user-assets-service))))
 
-(define %home-drv (run-with-store %store (lower-object %assets-only-home)))
-(build-derivations %store (list %home-drv))
-(define %home-out (derivation->output-path %home-drv))
+(define %home-drv
+  (run-with-store %store
+                  (lower-object %assets-only-home)))
+(build-derivations %store
+                   (list %home-drv))
+(define %home-out
+  (derivation->output-path %home-drv))
 
 (test-assert "home generation files tree contains avatar entry"
-             (file-exists?
-              (string-append %home-out "/files/" %avatar-home-path)))
+             (file-exists? (string-append %home-out "/files/"
+                                          %avatar-home-path)))
 (test-assert "home generation files tree contains wallpaper entry"
-             (file-exists?
-              (string-append %home-out "/files/" %wallpaper-home-path)))
+             (file-exists? (string-append %home-out "/files/"
+                                          %wallpaper-home-path)))
 
 (test-end "assets")

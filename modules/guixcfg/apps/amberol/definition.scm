@@ -19,18 +19,17 @@
 ;;; niri 会话提供。
 
 (define-module (guixcfg apps amberol definition)
-               #:use-module (gnu packages gnome-circle) ; amberol
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:export (%amberol
-                         %amberol-desktop-entry))
+  #:use-module (gnu packages gnome-circle) ;amberol
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:export (%amberol %amberol-desktop-entry))
 
 ;; Amberol 的 XDG desktop entry（store 内实际构建产物
 ;; share/applications/ 核实）。纯数据常量：供统一 XDG 策略模块
 ;; 引用，不在此决定默认应用。
-(define %amberol-desktop-entry "io.bassi.Amberol.desktop")
+(define %amberol-desktop-entry
+  "io.bassi.Amberol.desktop")
 
 (define %amberol
-  (application
-   (name 'amberol)
-   (home-packages (list amberol))))
+  (application (name 'amberol)
+               (home-packages (list amberol))))

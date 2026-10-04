@@ -17,28 +17,31 @@
 ;;; 不持久化整个 .local/state（公共 root 禁止整体持久化）。
 
 (define-module (guixcfg apps mpv definition)
-               #:use-module (gnu packages video)      ; mpv
-               #:use-module (gnu home services)      ; home-files-service-type
-               #:use-module (gnu services)           ; service
-               #:use-module (guix gexp)              ; local-file
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:use-module (guixcfg system application-persistence)
-               #:export (%mpv))
+  #:use-module (gnu packages video) ;mpv
+  #:use-module (gnu home services) ;home-files-service-type
+  #:use-module (gnu services) ;service
+  #:use-module (guix gexp) ;local-file
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:use-module (guixcfg system application-persistence)
+  #:export (%mpv))
 
 (define %mpv
-  (application
-   (name 'mpv)
-   (home-packages (list mpv))
-   (home-services
-    (list (simple-service 'mpv-config
-                          home-files-service-type
-                          `((".config/mpv/mpv.conf" ,(local-file "mpv.conf" "mpv-mpv.conf"))
-                            (".config/mpv/input.conf" ,(local-file "input.conf" "mpv-input.conf"))))))
-   (persistence
-    (list (application-persistence-rule
-           (name 'state)
-           (backing "mpv/state")          ; backing root 相对（persistence.md）
-           (consumer ".local/state/mpv")  ; HOME 相对（app-private state dir）
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))))))
+  (application (name 'mpv)
+               (home-packages (list mpv))
+               (home-services (list (simple-service 'mpv-config
+                                                    home-files-service-type
+                                                    `((".config/mpv/mpv.conf" ,
+                                                       (local-file "mpv.conf"
+                                                        "mpv-mpv.conf"))
+                                                      (".config/mpv/input.conf" ,
+                                                       (local-file
+                                                        "input.conf"
+                                                        "mpv-input.conf"))))))
+               (persistence (list (application-persistence-rule (name 'state)
+                                                                (backing
+                                                                 "mpv/state") ;backing root 相对（persistence.md）
+                                                                (consumer
+                                                                 ".local/state/mpv") ;HOME 相对（app-private state dir）
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))))))

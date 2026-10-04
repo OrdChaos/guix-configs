@@ -11,9 +11,11 @@
 (test-begin "repository-hygiene")
 
 (define (read-file path)
-  (call-with-input-file path get-string-all))
+  (call-with-input-file path
+    get-string-all))
 
-(define blueprint (read-file "blueprint.scm"))
+(define blueprint
+  (read-file "blueprint.scm"))
 (define command-table
   (or (string-contains blueprint "(commands (list")
       (error "blueprint command table not found")))
@@ -35,66 +37,70 @@
              ;; unless the capture parses as a channel list.
              (and (string-contains blueprint "#:error (current-error-port)")
                   (string-contains blueprint
-                                   "not a channel list; channels.lock.scm left unchanged")))
+                   "not a channel list; channels.lock.scm left unchanged")))
 
 (test-assert "blueprint lazy-loads the user-only Flatpak dependency graph"
              (let* ((imports-end (or (string-contains blueprint
                                                       "(primitive-load")
-                                     (error "blueprint import boundary not found")))
+                                     (error
+                                      "blueprint import boundary not found")))
                     (eager-imports (substring blueprint 0 imports-end)))
                (and (not (string-contains eager-imports
                                           "(guixcfg flatpak reconcile)"))
                     (not (string-contains eager-imports
                                           "(guixcfg flatpak registry)"))
-                    (string-contains blueprint
-                                     "tools/flatpak.scm"))))
+                    (string-contains blueprint "tools/flatpak.scm"))))
 
 (define (tracked-files)
   (let* ((port (open-pipe* OPEN_READ "git" "ls-files"))
-         (files (let loop ((acc '()))
+         (files (let loop
+                  ((acc '()))
                   (let ((line (read-line port)))
-                    (if (eof-object? line) (reverse acc)
-                      (loop (cons line acc))))))
+                    (if (eof-object? line)
+                        (reverse acc)
+                        (loop (cons line acc))))))
          (status (close-pipe port)))
     (unless (zero? status)
-      (error "git ls-files failed" status))
-    files))
+      (error "git ls-files failed" status)) files))
 
 (define %private-key-markers
-  (map (lambda (parts) (string-join parts ""))
-       '(("AGE-" "SECRET-KEY-") ("BEGIN OPENSSH " "PRIVATE KEY")
-                                ("BEGIN RSA " "PRIVATE KEY") ("BEGIN EC " "PRIVATE KEY")
-                                ("BEGIN DSA " "PRIVATE KEY")
-                                ("BEGIN PGP " "PRIVATE KEY BLOCK"))))
+  (map (lambda (parts)
+         (string-join parts ""))
+       '(("AGE-" "SECRET-KEY-")
+         ("BEGIN OPENSSH " "PRIVATE KEY")
+         ("BEGIN RSA " "PRIVATE KEY")
+         ("BEGIN EC " "PRIVATE KEY")
+         ("BEGIN DSA " "PRIVATE KEY")
+         ("BEGIN PGP " "PRIVATE KEY BLOCK"))))
 
-(define %tracked (tracked-files))
+(define %tracked
+  (tracked-files))
 (define %tracked-secret-files
-  (filter (lambda (path) (string-contains path "/secrets/")) %tracked))
+  (filter (lambda (path)
+            (string-contains path "/secrets/")) %tracked))
 
-(test-assert "tracked secret inventory contains only encrypted/public material"
-             (every (lambda (path)
-                      (or (string-suffix? ".age" path)
-                          (string-suffix? ".agepub" path)))
-                    %tracked-secret-files))
+(test-assert
+ "tracked secret inventory contains only encrypted/public material"
+ (every (lambda (path)
+          (or (string-suffix? ".age" path)
+              (string-suffix? ".agepub" path))) %tracked-secret-files))
 
 (test-assert "tracked age files use armored age ciphertext"
              (every (lambda (path)
                       (or (not (string-suffix? ".age" path))
                           (string-prefix? "-----BEGIN AGE ENCRYPTED FILE-----"
-                                          (read-file path))))
-                    %tracked-secret-files))
+                           (read-file path)))) %tracked-secret-files))
 
 (test-assert "tracked files contain no private-key markers"
              (every (lambda (path)
                       (or (not (file-exists? path))
                           (let ((content (false-if-exception (read-file path))))
                             (or (not content)
-                                (not (any
-                                      (lambda (line)
-                                        (any (lambda (marker)
-                                               (string-prefix? marker line))
-                                             %private-key-markers))
-                                      (string-split content #\newline)))))))
+                                (not (any (lambda (line)
+                                            (any (lambda (marker)
+                                                   (string-prefix? marker line))
+                                                 %private-key-markers))
+                                          (string-split content #\newline)))))))
                     %tracked))
 
 (test-end "repository-hygiene")

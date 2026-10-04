@@ -15,16 +15,18 @@
 ;;; dbus / polkit 的 accessor 未 export，经 @@ 取私有绑定（仓库既有
 ;;; 模式，见 test-nvidia.scm）。
 
-(use-modules ((guixcfg hosts lenovo-legion-y7000p) #:prefix host:)
-             ((guixcfg hosts vm) #:prefix vm:)
+(use-modules ((guixcfg hosts lenovo-legion-y7000p)
+              #:prefix host:)
+             ((guixcfg hosts vm)
+              #:prefix vm:)
              (guixcfg system power)
-             (virelith packages tlp)             ; tlp-with-pd
-             (gnu services)                      ; service-kind、service-value、simple-service 等
-             (gnu services dbus)                 ; dbus-root-service-type、polkit-service-type
-             (gnu services pm)                   ; tlp-service-type、power-profiles-daemon-service-type
-             (gnu services shepherd)             ; shepherd-service?
-             (gnu system)                        ; operating-system-user-services
-             (srfi srfi-1)                       ; find、any
+             (virelith packages tlp) ;tlp-with-pd
+             (gnu services) ;service-kind、service-value、simple-service 等
+             (gnu services dbus) ;dbus-root-service-type、polkit-service-type
+             (gnu services pm) ;tlp-service-type、power-profiles-daemon-service-type
+             (gnu services shepherd) ;shepherd-service?
+             (gnu system) ;operating-system-user-services
+             (srfi srfi-1) ;find、any
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -53,29 +55,25 @@
              (eq? (tlp-configuration-tlp %laptop-tlp-configuration)
                   tlp-with-pd))
 
-(test-equal "P1: EPP on AC releases performance"
-            "performance"
+(test-equal "P1: EPP on AC releases performance" "performance"
             (tlp-configuration-cpu-energy-perf-policy-on-ac
              %laptop-tlp-configuration))
 
-(test-equal "P1: EPP on battery is balance_power"
-            "balance_power"
+(test-equal "P1: EPP on battery is balance_power" "balance_power"
             (tlp-configuration-cpu-energy-perf-policy-on-bat
              %laptop-tlp-configuration))
 
-(test-equal "P1: turbo boost disabled on battery"
-            #f
+(test-equal "P1: turbo boost disabled on battery" #f
             (tlp-configuration-cpu-boost-on-bat? %laptop-tlp-configuration))
 
 (test-equal "P1: TLP manages the NVMe disk (record default is sda-only)"
             '("nvme0n1" "sda")
             (tlp-configuration-disks-devices %laptop-tlp-configuration))
 
-(test-equal "P1: AC runtime PM remains auto so TLP does not defeat NVIDIA RTD3"
-            "auto"
-            (tlp-configuration-runtime-pm-on-ac %laptop-tlp-configuration))
-(test-equal "P1: battery runtime PM remains auto"
-            "auto"
+(test-equal
+ "P1: AC runtime PM remains auto so TLP does not defeat NVIDIA RTD3" "auto"
+ (tlp-configuration-runtime-pm-on-ac %laptop-tlp-configuration))
+(test-equal "P1: battery runtime PM remains auto" "auto"
             (tlp-configuration-runtime-pm-on-bat %laptop-tlp-configuration))
 (test-assert "P1: NVIDIA is not excluded from TLP runtime PM"
              (not (member "nvidia"
@@ -84,7 +82,9 @@
 
 ;; ── P2：tlp-pd shepherd 服务语义 ────────────────────────────
 (define %tlp-pd-service
-  (find (lambda (s) (eq? (service-type-name (service-kind s)) 'tlp-pd))
+  (find (lambda (s)
+          (eq? (service-type-name (service-kind s))
+               'tlp-pd))
         (operating-system-user-services host:%lenovo-legion-y7000p-os)))
 
 (test-assert "P2: laptop OS carries the tlp-pd shepherd service"
@@ -93,8 +93,10 @@
 (test-assert "P2: tlp-pd starts after dbus-system and provisions tlp-pd"
              (let ((svc (car (service-value %tlp-pd-service))))
                (and (shepherd-service? svc)
-                    (memq 'tlp-pd (shepherd-service-provision svc))
-                    (memq 'dbus-system (shepherd-service-requirement svc)))))
+                    (memq 'tlp-pd
+                          (shepherd-service-provision svc))
+                    (memq 'dbus-system
+                          (shepherd-service-requirement svc)))))
 
 ;; ── P3：simple-service 接线 ─────────────────────────────────
 (define (service-extends? svc target-type)
@@ -103,7 +105,8 @@
        (service-type-extensions (service-kind svc))))
 
 (define (service-by-name name)
-  (find (lambda (s) (eq? (service-type-name (service-kind s)) name))
+  (find (lambda (s)
+          (eq? (service-type-name (service-kind s)) name))
         %laptop-power-services))
 
 (test-assert "P3: tlp-pd extends shepherd-root-service-type"
@@ -118,7 +121,8 @@
 
 ;; ── P4：host gating ─────────────────────────────────────────
 (define (has-kind? os kind)
-  (any (lambda (s) (eq? (service-kind s) kind))
+  (any (lambda (s)
+         (eq? (service-kind s) kind))
        (operating-system-user-services os)))
 
 (test-assert "P4: laptop OS contains tlp-service-type"
@@ -138,7 +142,8 @@
              (find (lambda (s)
                      (eq? (service-type-name (service-kind s))
                           'power-profile-sync-udev-rules))
-                   (operating-system-user-services host:%lenovo-legion-y7000p-os)))
+                   (operating-system-user-services
+                    host:%lenovo-legion-y7000p-os)))
 
 (test-assert "P6: VM OS has no platform-profile sync rule (laptop-only)"
              (not (find (lambda (s)

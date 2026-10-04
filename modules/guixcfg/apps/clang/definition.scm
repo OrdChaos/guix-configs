@@ -7,6 +7,5 @@
   #:export (%clang))
 
 (define %clang
-  (application
-   (name 'clang)
-   (home-packages (list clang-toolchain))))
+  (application (name 'clang)
+               (home-packages (list clang-toolchain))))

@@ -3,12 +3,11 @@
 ;;; 2026-09 加入）。
 
 (define-module (guixcfg apps mesa-utils definition)
-               #:use-module (gnu packages gl) ; mesa-utils
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:export (%mesa-utils))
+  #:use-module (gnu packages gl) ;mesa-utils
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:export (%mesa-utils))
 
 (define %mesa-utils
-  (application
-   (name 'mesa-utils)
-   (home-packages (list mesa-utils))))
+  (application (name 'mesa-utils)
+               (home-packages (list mesa-utils))))

@@ -13,15 +13,17 @@
 ;;; kernel driver/firmware（btusb/btintel + linux-firmware ibt-*）属内核
 ;;; 平台层，不在本测试范围（driver 是否存在由内核 config/firmware 决定）。
 
-(use-modules ((guixcfg hosts lenovo-legion-y7000p) #:prefix host:)
-             ((guixcfg hosts vm) #:prefix vm:)
+(use-modules ((guixcfg hosts lenovo-legion-y7000p)
+              #:prefix host:)
+             ((guixcfg hosts vm)
+              #:prefix vm:)
              (guixcfg system bluetooth)
              (guixcfg system machine-state-persistence)
-             (gnu services)                  ; service-kind、service-value
-             (gnu services desktop)          ; bluetooth-service-type
-             (gnu system)                    ; operating-system-file-systems
-             (gnu system file-systems)       ; file-system-mount-point 等
-             (srfi srfi-1)                   ; find、any
+             (gnu services) ;service-kind、service-value
+             (gnu services desktop) ;bluetooth-service-type
+             (gnu system) ;operating-system-file-systems
+             (gnu system file-systems) ;file-system-mount-point 等
+             (srfi srfi-1) ;find、any
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -30,7 +32,8 @@
   (@@ (gnu services desktop) bluetooth-configuration-auto-enable?))
 
 (define laptop-bluetooth-service
-  (find (lambda (s) (eq? (service-kind s) bluetooth-service-type))
+  (find (lambda (s)
+          (eq? (service-kind s) bluetooth-service-type))
         (operating-system-user-services host:%lenovo-legion-y7000p-os)))
 
 (test-begin "bluetooth")
@@ -41,13 +44,14 @@
 
 (test-assert "B1: BlueZ does not auto-enable the controller (default off)"
              (and laptop-bluetooth-service
-                  (eq? (bluetooth-configuration-auto-enable?
-                        (service-value laptop-bluetooth-service))
+                  (eq? (bluetooth-configuration-auto-enable? (service-value
+                                                              laptop-bluetooth-service))
                        #f)))
 
 ;; ── B2：VM gating ──────────────────────────────────────────
 (test-assert "B2: VM OS has no bluetooth-service-type (zero BlueZ closure)"
-             (not (find (lambda (s) (eq? (service-kind s) bluetooth-service-type))
+             (not (find (lambda (s)
+                          (eq? (service-kind s) bluetooth-service-type))
                         (operating-system-user-services vm:%vm-os))))
 
 ;; ── B3：pairing-state 持久化规则 ───────────────────────────
@@ -55,25 +59,26 @@
              (and (valid-machine-state-persistence-rule?
                    %laptop-bluetooth-persistence-rule)
                   (string=? (machine-state-persistence-rule-backing
-                             %laptop-bluetooth-persistence-rule)
-                            "bluetooth")
+                             %laptop-bluetooth-persistence-rule) "bluetooth")
                   (string=? (machine-state-persistence-rule-consumer
                              %laptop-bluetooth-persistence-rule)
                             "/var/lib/bluetooth")))
 
 ;; ── B4：rule 产生的 bind file-system ───────────────────────
 (define bluetooth-bind-file-systems
-  (machine-state-persistence-file-systems
-   (list %laptop-bluetooth-persistence-rule)))
+  (machine-state-persistence-file-systems (list
+                                           %laptop-bluetooth-persistence-rule)))
 
 (test-assert "B4: rule yields one bind mount from the machine-state root"
              (let ((fs (car bluetooth-bind-file-systems)))
-               (and (= 1 (length bluetooth-bind-file-systems))
+               (and (= 1
+                       (length bluetooth-bind-file-systems))
                     (string=? (file-system-mount-point fs)
                               "/var/lib/bluetooth")
                     (string=? (file-system-device fs)
                               (string-append %machine-state-root "/bluetooth"))
-                    (memq 'bind-mount (file-system-flags fs))
+                    (memq 'bind-mount
+                          (file-system-flags fs))
                     (file-system-create-mount-point? fs))))
 
 ;; ── B5：laptop OS file-systems 实际包含该绑定 ──────────────
@@ -81,6 +86,7 @@
              (find (lambda (fs)
                      (string=? (file-system-mount-point fs)
                                "/var/lib/bluetooth"))
-                   (operating-system-file-systems host:%lenovo-legion-y7000p-os)))
+                   (operating-system-file-systems
+                    host:%lenovo-legion-y7000p-os)))
 
 (test-end "bluetooth")

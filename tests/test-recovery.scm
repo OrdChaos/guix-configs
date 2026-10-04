@@ -3,7 +3,7 @@
 
 (use-modules (guixcfg boot recovery)
              (guix build utils)
-             (rnrs io ports)            ; get-string-all
+             (rnrs io ports) ;get-string-all
              (srfi srfi-64))
 
 ;; group 外的测试段（R3/fail-closed/match）需要显式 runner。
@@ -15,43 +15,62 @@
 (test-begin "recovery")
 
 (let ((dir (mkdtemp "/tmp/guixcfg-recovery-XXXXXX")))
-  (dynamic-wind
-   (lambda () #t)
-   (lambda ()
-     ;; candidate 元数据：缺失 / 格式合法
-     (test-equal "returns #f without candidate"
-                 #f (candidate-meta dir))
-     (let ((meta-dir (string-append dir "/EFI/Guix")))
-       (mkdir-p meta-dir)
-       (call-with-output-file (string-append meta-dir "/candidate.scm")
-                              (lambda (port)
-                                (write '((system . "/gnu/store/abc-system") (slot . "B")) port)
-                                (newline port)))
-       (let ((meta (candidate-meta dir)))
-         (test-equal "candidate system identity"
-                     "/gnu/store/abc-system" (assq-ref meta 'system))
-         (test-equal "candidate slot" "B" (assq-ref meta 'slot))))
-     
-     ;; limine.conf 追加 Recovery 入口（指向稳定路径，原子替换）
-     (let ((conf (string-append dir "/limine.conf")))
-       (call-with-output-file conf
-                              (lambda (port)
-                                (display "timeout: 3\n\n/GNU Guix\n    protocol: efi_chainload\n    image_path: boot():/EFI/Guix/A/CURRENT.EFI\n" port)))
-       (add-recovery-menu-entry! dir)
-       (let ((content (call-with-input-file conf get-string-all)))
-         (test-assert "appends Recovery entry first time"
-                      (string-contains content "image_path: boot():/EFI/Guix/RECOVERY.EFI")))
-       ;; 幂等：再次调用不重复追加
-       (add-recovery-menu-entry! dir)
-       (let ((content (call-with-input-file conf get-string-all)))
-         (test-equal "idempotent (no duplicate entries)"
-                     1
-                     (let loop ((count 0) (pos 0))
-                       (let ((i (string-contains content
-                                                 "RECOVERY.EFI" pos)))
-                         (if i (loop (1+ count) (+ i 1)) count)))))))
-   (lambda ()
-     (delete-file-recursively dir))))
+  (dynamic-wind (lambda ()
+                  #t)
+                (lambda ()
+                  ;; candidate 元数据：缺失 / 格式合法
+                  (test-equal "returns #f without candidate" #f
+                              (candidate-meta dir))
+                  (let ((meta-dir (string-append dir "/EFI/Guix")))
+                    (mkdir-p meta-dir)
+                    (call-with-output-file (string-append meta-dir
+                                                          "/candidate.scm")
+                      (lambda (port)
+                        (write '((system . "/gnu/store/abc-system")
+                                 (slot . "B")) port)
+                        (newline port)))
+                    (let ((meta (candidate-meta dir)))
+                      (test-equal "candidate system identity"
+                                  "/gnu/store/abc-system"
+                                  (assq-ref meta
+                                            'system))
+                      (test-equal "candidate slot" "B"
+                                  (assq-ref meta
+                                            'slot))))
+
+                  ;; limine.conf 追加 Recovery 入口（指向稳定路径，原子替换）
+                  (let ((conf (string-append dir "/limine.conf")))
+                    (call-with-output-file conf
+                      (lambda (port)
+                        (display
+                         "timeout: 3
+
+/GNU Guix
+    protocol: efi_chainload
+    image_path: boot():/EFI/Guix/A/CURRENT.EFI
+" port)))
+                    (add-recovery-menu-entry! dir)
+                    (let ((content (call-with-input-file conf
+                                     get-string-all)))
+                      (test-assert "appends Recovery entry first time"
+                                   (string-contains content
+                                    "image_path: boot():/EFI/Guix/RECOVERY.EFI")))
+                    ;; 幂等：再次调用不重复追加
+                    (add-recovery-menu-entry! dir)
+                    (let ((content (call-with-input-file conf
+                                     get-string-all)))
+                      (test-equal "idempotent (no duplicate entries)" 1
+                                  (let loop
+                                    ((count 0)
+                                     (pos 0))
+                                    (let ((i (string-contains content
+                                                              "RECOVERY.EFI"
+                                                              pos)))
+                                      (if i
+                                          (loop (1+ count)
+                                                (+ i 1)) count)))))))
+                (lambda ()
+                  (delete-file-recursively dir))))
 
 (test-end)
 
@@ -63,36 +82,51 @@
                                  (number->string (getpid))))
       (gc-root (string-append "/tmp/guixcfg-recovery-r3-gc-"
                               (number->string (getpid)))))
-  (dynamic-wind
-   (lambda () #t)
-   (lambda ()
-     (mkdir-p (string-append dir "/EFI/Guix/A"))
-     (call-with-output-file (string-append dir "/EFI/Guix/A/RECOVERY.EFI")
-                            (lambda (p) (display "slot-uki" p)))
-     ;; slot 与生产一致写字符串（部署脚本只写 "A"/"B"）
-     (call-with-output-file (string-append dir "/EFI/Guix/candidate.scm")
-                            (lambda (p)
-                              (write '((system . "/gnu/store/FAKE-SYSTEM") (slot . "A")) p)
-                              (newline p)))
-     ;; candidate.system（FAKE）与 current（REAL）不一致 → 拒绝 promote
-     ;; artifact；GC root 与 boot-state 仍记录 REAL（当前系统确认）。
-     (promote-recovery! dir 1 "console=ttyS0"
-                        #:current-system "/gnu/store/REAL-CURRENT"
-                        #:boot-states-path boot-state
-                        #:gc-root gc-root)
-     (test-assert "identity mismatch refuses artifact promote (R3)"
-                  (not (file-exists? (string-append dir "/EFI/Guix/RECOVERY.EFI"))))
-     (test-assert "identity mismatch: GC root protects current system"
-                  (string=? "/gnu/store/REAL-CURRENT"
-                            (readlink (string-append gc-root "/last-good-system"))))
-     (let ((state (call-with-input-file boot-state read)))
-       (test-equal "identity mismatch: boot-state records current system"
-                   "/gnu/store/REAL-CURRENT"
-                   (assq-ref (assq-ref state 'last-good) 'system))))
-   (lambda ()
-     (delete-file-recursively dir)
-     (false-if-exception (delete-file boot-state))
-     (false-if-exception (delete-file-recursively gc-root)))))
+  (dynamic-wind (lambda ()
+                  #t)
+                (lambda ()
+                  (mkdir-p (string-append dir "/EFI/Guix/A"))
+                  (call-with-output-file (string-append dir
+                                          "/EFI/Guix/A/RECOVERY.EFI")
+                    (lambda (p)
+                      (display "slot-uki" p)))
+                  ;; slot 与生产一致写字符串（部署脚本只写 "A"/"B"）
+                  (call-with-output-file (string-append dir
+                                          "/EFI/Guix/candidate.scm")
+                    (lambda (p)
+                      (write '((system . "/gnu/store/FAKE-SYSTEM")
+                               (slot . "A")) p)
+                      (newline p)))
+                  ;; candidate.system（FAKE）与 current（REAL）不一致 → 拒绝 promote
+                  ;; artifact；GC root 与 boot-state 仍记录 REAL（当前系统确认）。
+                  (promote-recovery! dir
+                                     1
+                                     "console=ttyS0"
+                                     #:current-system
+                                     "/gnu/store/REAL-CURRENT"
+                                     #:boot-states-path boot-state
+                                     #:gc-root gc-root)
+                  (test-assert
+                   "identity mismatch refuses artifact promote (R3)"
+                   (not (file-exists? (string-append dir
+                                                     "/EFI/Guix/RECOVERY.EFI"))))
+                  (test-assert
+                   "identity mismatch: GC root protects current system"
+                   (string=? "/gnu/store/REAL-CURRENT"
+                             (readlink (string-append gc-root
+                                                      "/last-good-system"))))
+                  (let ((state (call-with-input-file boot-state
+                                 read)))
+                    (test-equal
+                     "identity mismatch: boot-state records current system"
+                     "/gnu/store/REAL-CURRENT"
+                     (assq-ref (assq-ref state
+                                         'last-good)
+                               'system))))
+                (lambda ()
+                  (delete-file-recursively dir)
+                  (false-if-exception (delete-file boot-state))
+                  (false-if-exception (delete-file-recursively gc-root)))))
 
 ;; ── promote-recovery! fail-closed ──────────────
 ;; /run/current-system 无法解析为有效 identity → 中止整个 confirm：
@@ -102,39 +136,50 @@
                                  (number->string (getpid))))
       (gc-root (string-append "/tmp/guixcfg-recovery-fc-gc-"
                               (number->string (getpid)))))
-  (dynamic-wind
-   (lambda () #t)
-   (lambda ()
-     (mkdir-p (string-append dir "/EFI/Guix/A"))
-     (call-with-output-file (string-append dir "/EFI/Guix/A/RECOVERY.EFI")
-                            (lambda (p) (display "slot-uki" p)))
-     (call-with-output-file (string-append dir "/EFI/Guix/candidate.scm")
-                            (lambda (p)
-                              (write '((system . "/gnu/store/CANDIDATE") (slot . "A")) p)
-                              (newline p)))
-     (let ((err (catch #t
-                  (lambda ()
-                    (promote-recovery! dir 1 "console=ttyS0"
-                                       #:current-system #f
-                                       #:boot-states-path boot-state
-                                       #:gc-root gc-root)
-                    #f)
-                  (lambda (k . a)
-                    (let ((msg (call-with-output-string
-                                (lambda (p) (write a p)))))
-                      (string-contains msg "cannot resolve"))))))
-       (test-assert "unresolvable identity -> fail-closed abort (throws)" err)
-       (test-assert "fail-closed: boot-state not written"
-                    (not (file-exists? boot-state)))
-       (test-assert "fail-closed: GC root not created"
-                    (not (file-exists?
-                          (string-append gc-root "/last-good-system"))))
-       (test-assert "fail-closed: artifact not promoted"
-                    (not (file-exists? (string-append dir "/EFI/Guix/RECOVERY.EFI"))))))
-   (lambda ()
-     (delete-file-recursively dir)
-     (false-if-exception (delete-file boot-state))
-     (false-if-exception (delete-file-recursively gc-root)))))
+  (dynamic-wind (lambda ()
+                  #t)
+                (lambda ()
+                  (mkdir-p (string-append dir "/EFI/Guix/A"))
+                  (call-with-output-file (string-append dir
+                                          "/EFI/Guix/A/RECOVERY.EFI")
+                    (lambda (p)
+                      (display "slot-uki" p)))
+                  (call-with-output-file (string-append dir
+                                          "/EFI/Guix/candidate.scm")
+                    (lambda (p)
+                      (write '((system . "/gnu/store/CANDIDATE") (slot . "A"))
+                             p)
+                      (newline p)))
+                  (let ((err (catch #t
+                                    (lambda ()
+                                      (promote-recovery! dir
+                                                         1
+                                                         "console=ttyS0"
+                                                         #:current-system #f
+                                                         #:boot-states-path
+                                                         boot-state
+                                                         #:gc-root gc-root) #f)
+                                    (lambda (k . a)
+                                      (let ((msg (call-with-output-string (lambda 
+                                                                                  (p)
+                                                                            (write
+                                                                             a
+                                                                             p)))))
+                                        (string-contains msg "cannot resolve"))))))
+                    (test-assert
+                     "unresolvable identity -> fail-closed abort (throws)" err)
+                    (test-assert "fail-closed: boot-state not written"
+                                 (not (file-exists? boot-state)))
+                    (test-assert "fail-closed: GC root not created"
+                                 (not (file-exists? (string-append gc-root
+                                                     "/last-good-system"))))
+                    (test-assert "fail-closed: artifact not promoted"
+                                 (not (file-exists? (string-append dir
+                                                     "/EFI/Guix/RECOVERY.EFI"))))))
+                (lambda ()
+                  (delete-file-recursively dir)
+                  (false-if-exception (delete-file boot-state))
+                  (false-if-exception (delete-file-recursively gc-root)))))
 
 ;; ── promote-recovery!：identity match 完整 promote ────
 (let ((dir (mkdtemp "/tmp/guixcfg-recovery-ok-XXXXXX"))
@@ -142,37 +187,53 @@
                                  (number->string (getpid))))
       (gc-root (string-append "/tmp/guixcfg-recovery-ok-gc-"
                               (number->string (getpid)))))
-  (dynamic-wind
-   (lambda () #t)
-   (lambda ()
-     (mkdir-p (string-append dir "/EFI/Guix/A"))
-     (call-with-output-file (string-append dir "/EFI/Guix/A/RECOVERY.EFI")
-                            (lambda (p) (display "slot-uki" p)))
-     (call-with-output-file (string-append dir "/EFI/Guix/candidate.scm")
-                            (lambda (p)
-                              (write '((system . "/gnu/store/MATCH-SYSTEM") (slot . "A")) p)
-                              (newline p)))
-     (call-with-output-file (string-append dir "/limine.conf")
-                            (lambda (p) (display "timeout: 3\n" p)))
-     (promote-recovery! dir 1 "console=ttyS0"
-                        #:current-system "/gnu/store/MATCH-SYSTEM"
-                        #:boot-states-path boot-state
-                        #:gc-root gc-root)
-     (test-assert "identity match: artifact promoted to stable path"
-                  (file-exists? (string-append dir "/EFI/Guix/RECOVERY.EFI")))
-     (test-assert "identity match: limine entry added"
-                  (string-contains
-                   (call-with-input-file (string-append dir "/limine.conf")
-                                         get-string-all)
-                   "RECOVERY.EFI"))
-     (test-assert "identity match: GC root points at confirmed system"
-                  (string=? "/gnu/store/MATCH-SYSTEM"
-                            (readlink (string-append gc-root "/last-good-system"))))
-     (let ((state (call-with-input-file boot-state read)))
-       (test-equal "identity match: boot-state records confirmed system"
-                   "/gnu/store/MATCH-SYSTEM"
-                   (assq-ref (assq-ref state 'last-good) 'system))))
-   (lambda ()
-     (delete-file-recursively dir)
-     (false-if-exception (delete-file boot-state))
-     (false-if-exception (delete-file-recursively gc-root)))))
+  (dynamic-wind (lambda ()
+                  #t)
+                (lambda ()
+                  (mkdir-p (string-append dir "/EFI/Guix/A"))
+                  (call-with-output-file (string-append dir
+                                          "/EFI/Guix/A/RECOVERY.EFI")
+                    (lambda (p)
+                      (display "slot-uki" p)))
+                  (call-with-output-file (string-append dir
+                                          "/EFI/Guix/candidate.scm")
+                    (lambda (p)
+                      (write '((system . "/gnu/store/MATCH-SYSTEM")
+                               (slot . "A")) p)
+                      (newline p)))
+                  (call-with-output-file (string-append dir "/limine.conf")
+                    (lambda (p)
+                      (display "timeout: 3\n" p)))
+                  (promote-recovery! dir
+                                     1
+                                     "console=ttyS0"
+                                     #:current-system
+                                     "/gnu/store/MATCH-SYSTEM"
+                                     #:boot-states-path boot-state
+                                     #:gc-root gc-root)
+                  (test-assert
+                   "identity match: artifact promoted to stable path"
+                   (file-exists? (string-append dir "/EFI/Guix/RECOVERY.EFI")))
+                  (test-assert "identity match: limine entry added"
+                               (string-contains (call-with-input-file (string-append
+                                                                       dir
+                                                                       "/limine.conf")
+                                                  get-string-all)
+                                                "RECOVERY.EFI"))
+                  (test-assert
+                   "identity match: GC root points at confirmed system"
+                   (string=? "/gnu/store/MATCH-SYSTEM"
+                             (readlink (string-append gc-root
+                                                      "/last-good-system"))))
+                  (let ((state (call-with-input-file boot-state
+                                 read)))
+                    (test-equal
+                     "identity match: boot-state records confirmed system"
+                     "/gnu/store/MATCH-SYSTEM"
+                     (assq-ref (assq-ref state
+                                         'last-good)
+                               'system))))
+                (lambda ()
+                  (delete-file-recursively dir)
+                  (false-if-exception (delete-file boot-state))
+                  (false-if-exception (delete-file-recursively gc-root)))))

@@ -23,18 +23,19 @@
 ;;; fail-fast 校验（validate-flatpak-*!），加应用/extension 不应要求
 ;;; 改本测试。
 
-(use-modules (gnu services)          ; service-kind
-             (gnu services base)     ; udev-service-type、activation-service-type
-             (srfi srfi-1)           ; find
-             (srfi srfi-13)          ; string-prefix?
-             (srfi srfi-26)          ; cut
+(use-modules (gnu services) ;service-kind
+             (gnu services base) ;udev-service-type、activation-service-type
+             (srfi srfi-1) ;find
+             (srfi srfi-13) ;string-prefix?
+             (srfi srfi-26) ;cut
              (srfi srfi-64)
-             (ice-9 rdelim)          ; read-string
+             (ice-9 rdelim) ;read-string
              (guixcfg flatpak model)
              (guixcfg flatpak registry)
              (guixcfg flatpak applications steam definition)
              (guixcfg system gaming)
-             (guixcfg system graphics nvidia)) ; %prime-offload-environment-strings
+             (guixcfg system graphics nvidia))
+ ; %prime-offload-environment-strings
 
 (test-runner-current (test-runner-simple))
 
@@ -67,9 +68,7 @@
 (define %steam-overrides
   (flatpak-application-managed-overrides %flatpak-steam))
 
-(test-assert "steam override is managed"
-             %steam-overrides)
-
+(test-assert "steam override is managed" %steam-overrides)
 
 (test-equal "steam base override is hardware-neutral (no NVIDIA env)"
             '()
@@ -82,82 +81,80 @@
                     (not (string-contains text "[Environment]")))))
 
 (define %steam-desktop-shadow
-  (call-with-input-file
-   "modules/guixcfg/flatpak/applications/steam/com.valvesoftware.Steam.desktop"
-   (lambda (port) (read-string port))))
+  (call-with-input-file "modules/guixcfg/flatpak/applications/steam/com.valvesoftware.Steam.desktop"
+    (lambda (port)
+      (read-string port))))
 
 (test-equal "steam owns one complete desktop shadow"
             '("com.valvesoftware.Steam.desktop")
-            (map car (flatpak-application-desktop-files %flatpak-steam)))
+            (map car
+                 (flatpak-application-desktop-files %flatpak-steam)))
 (test-assert "steam desktop shadow keeps the Flatpak launch contract"
              (and (string-contains %steam-desktop-shadow
                                    "X-Flatpak=com.valvesoftware.Steam")
                   (string-contains %steam-desktop-shadow
                                    "--command=/app/bin/steam")
                   (string-contains %steam-desktop-shadow
-                                   "MimeType=x-scheme-handler/steam;x-scheme-handler/steamlink;")
+                   "MimeType=x-scheme-handler/steam;x-scheme-handler/steamlink;")
                   (string-contains %steam-desktop-shadow
-                                   "Actions=Store;Community;Library;Servers;Screenshots;News;Settings;BigPicture;Friends;")))
+                   "Actions=Store;Community;Library;Servers;Screenshots;News;Settings;BigPicture;Friends;")))
 (test-assert "steam desktop shadow has one unambiguous main category"
              (and (string-contains %steam-desktop-shadow "Categories=Game;\n")
                   (not (string-contains %steam-desktop-shadow
-                                        "Categories=Network;FileTransfer;Game;"))))
+                        "Categories=Network;FileTransfer;Game;"))))
 
 ;; ── NVIDIA adapter → managed override overlay ───────────────
 
 (define %prime-overlayed-steam
-  (flatpak-application-with-environment
-   %flatpak-steam
-   (cdr (assq 'steam %flatpak-prime-environment-overrides))))
+  (flatpak-application-with-environment %flatpak-steam
+                                        (cdr (assq 'steam
+                                              %flatpak-prime-environment-overrides))))
 
 (test-assert "NVIDIA adapter leaves steam games library intact"
              (equal? (list %steam-games-library-path)
-                     (flatpak-override-filesystems
-                      (flatpak-application-managed-overrides
-                       %prime-overlayed-steam))))
+                     (flatpak-override-filesystems (flatpak-application-managed-overrides
+                                                    %prime-overlayed-steam))))
 
 (test-assert "PRIME variables render in Flatpak Environment section"
-             (let ((text (flatpak-render-override-file
-                          (flatpak-application-managed-overrides
-                           %prime-overlayed-steam))))
+             (let ((text (flatpak-render-override-file (flatpak-application-managed-overrides
+                                                        %prime-overlayed-steam))))
                (and (string-contains text "[Environment]")
                     (not (string-contains text "environment=")))))
 
 (test-assert "overlay on external app fails closed"
              (catch #t
-               (lambda ()
-                 (flatpak-applications-with-environments
-                  '((qq . ("FOO=bar")))
-                  %flatpak-applications)
-                 #f)
-               (lambda (key . args)
-                 (and (eq? key 'misc-error)
-                      (any (cut string-contains <> "non-managed")
-                           (map object->string args))))))
+                    (lambda ()
+                      (flatpak-applications-with-environments '((qq "FOO=bar"))
+                       %flatpak-applications) #f)
+                    (lambda (key . args)
+                      (and (eq? key
+                                'misc-error)
+                           (any (cut string-contains <> "non-managed")
+                                (map object->string args))))))
 
 (test-assert "overlay with duplicate variables fails closed"
              (catch #t
-               (lambda ()
-                 (flatpak-application-with-environment
-                  %prime-overlayed-steam
-                  '("__GLX_VENDOR_LIBRARY_NAME=mesa"))
-                 #f)
-               (lambda (key . args)
-                 (and (eq? key 'misc-error)
-                      (any (cut string-contains <> "duplicate")
-                           (map object->string args))))))
+                    (lambda ()
+                      (flatpak-application-with-environment
+                       %prime-overlayed-steam
+                       '("__GLX_VENDOR_LIBRARY_NAME=mesa")) #f)
+                    (lambda (key . args)
+                      (and (eq? key
+                                'misc-error)
+                           (any (cut string-contains <> "duplicate")
+                                (map object->string args))))))
 
 (test-assert "overlay with unknown target fails closed"
              (catch #t
-               (lambda ()
-                 (flatpak-applications-with-environments
-                  '((typo . ("FOO=bar")))
-                  %flatpak-applications)
-                 #f)
-               (lambda (key . args)
-                 (and (eq? key 'misc-error)
-                      (any (cut string-contains <> "unknown")
-                           (map object->string args))))))
+                    (lambda ()
+                      (flatpak-applications-with-environments '((typo
+                                                                 "FOO=bar"))
+                       %flatpak-applications) #f)
+                    (lambda (key . args)
+                      (and (eq? key
+                                'misc-error)
+                           (any (cut string-contains <> "unknown")
+                                (map object->string args))))))
 
 ;; ── NVIDIA env projection：单一 authority ───────────────────
 

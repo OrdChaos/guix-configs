@@ -19,21 +19,18 @@
 ;;; 无 per-remote 代码分支。
 
 (define-module (guixcfg flatpak registry)
-               #:use-module (guixcfg flatpak model)
-               #:use-module (guixcfg flatpak applications qq definition)
-               #:use-module (guixcfg flatpak applications wechat definition)
-               #:use-module (guixcfg flatpak applications aagl definition)
-               #:use-module (guixcfg flatpak applications steam definition)
-               #:use-module (guixcfg flatpak applications telegram definition)
-               #:use-module (guixcfg flatpak applications discord definition)
-               #:use-module (guixcfg flatpak applications thunderbird definition)
-               #:use-module (guixcfg flatpak extensions gamescope definition)
-               #:use-module (guixcfg flatpak extensions proton-ge definition)
-               #:export (%flatpak-remotes
-                         %flatpak-applications
-                         %flatpak-selection
-                         %flatpak-extensions
-                         %flatpak-extension-selection))
+  #:use-module (guixcfg flatpak model)
+  #:use-module (guixcfg flatpak applications qq definition)
+  #:use-module (guixcfg flatpak applications wechat definition)
+  #:use-module (guixcfg flatpak applications aagl definition)
+  #:use-module (guixcfg flatpak applications steam definition)
+  #:use-module (guixcfg flatpak applications telegram definition)
+  #:use-module (guixcfg flatpak applications discord definition)
+  #:use-module (guixcfg flatpak applications thunderbird definition)
+  #:use-module (guixcfg flatpak extensions gamescope definition)
+  #:use-module (guixcfg flatpak extensions proton-ge definition)
+  #:export (%flatpak-remotes %flatpak-applications %flatpak-selection
+                             %flatpak-extensions %flatpak-extension-selection))
 
 ;; Remote 声明（identity / bootstrap authority / transport 分离）：
 ;;   identity   = 'flathub
@@ -48,11 +45,11 @@
 ;; `blue flatpak remote-replace <name>`（显式）；换 trust
 ;; authority = 改 descriptor-url。drift 检查只针对 transport。
 (define %flatpak-remotes
-  (list (flatpak-remote
-         (name 'flathub)
-         (descriptor-url "https://dl.flathub.org/repo/flathub.flatpakrepo")
-         (repository-url "https://mirror.sjtu.edu.cn/flathub")
-         (comment "Flathub via SJTU mirror"))))
+  (list (flatpak-remote (name 'flathub)
+                        (descriptor-url
+                         "https://dl.flathub.org/repo/flathub.flatpakrepo")
+                        (repository-url "https://mirror.sjtu.edu.cn/flathub")
+                        (comment "Flathub via SJTU mirror"))))
 
 ;; Catalog：已知 Flatpak 应用（纯聚合——定义在 applications/ 下）。
 (define %flatpak-applications
@@ -70,17 +67,22 @@
 ;; 追加 environment adapter（如 NVIDIA PRIME），见
 ;; docs/architecture/flatpak.md（driver overlays）。
 (define %flatpak-selection
-  '(qq wechat aagl steam telegram discord thunderbird))
+  '(qq wechat
+       aagl
+       steam
+       telegram
+       discord
+       thunderbird))
 
 ;; Catalog：已知 extension（auxiliary ref；定义在 extensions/ 下）。
 (define %flatpak-extensions
-  (list %flatpak-extension-gamescope
-        %flatpak-extension-proton-ge))
+  (list %flatpak-extension-gamescope %flatpak-extension-proton-ge))
 
 ;; Extension selection 缺省：全局用户能力。gamescope / proton-ge 不是
 ;; 硬件驱动；真正的 NVIDIA GL/GL32 extension 由 Flatpak 依据 active
 ;; GL driver 自动匹配，不进入本 selection。
-(define %flatpak-extension-selection '(gamescope proton-ge))
+(define %flatpak-extension-selection
+  '(gamescope proton-ge))
 
 ;; fail-fast（模块加载即校验；apps/registry.scm 同款）。
 (validate-flatpak-catalog! %flatpak-remotes %flatpak-applications)

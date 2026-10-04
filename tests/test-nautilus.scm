@@ -12,13 +12,13 @@
 
 (use-modules (guixcfg apps model)
              (guixcfg apps registry)
-             (guixcfg gsettings model) ; gsettings-setting-*
-             (guixcfg users user)      ; %primary-user、user-profile-home-directory
-             (gnu packages python)     ; python（版本推导）
-             (guix packages)           ; package-version
-             (gnu home services)       ; home-environment-variables-service-type
-             (gnu services)            ; service-kind、service-value、service-type-extensions、service-extension-target
-             (ice-9 rdelim)            ; read-string
+             (guixcfg gsettings model) ;gsettings-setting-*
+             (guixcfg users user) ;%primary-user、user-profile-home-directory
+             (gnu packages python) ;python（版本推导）
+             (guix packages) ;package-version
+             (gnu home services) ;home-environment-variables-service-type
+             (gnu services) ;service-kind、service-value、service-type-extensions、service-extension-target
+             (ice-9 rdelim) ;read-string
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -27,9 +27,12 @@
 (test-begin "nautilus")
 
 (define (app-by-name name)
-  (find (lambda (a) (eq? name (application-name a))) %applications))
+  (find (lambda (a)
+          (eq? name
+               (application-name a))) %applications))
 
-(define %nautilus-app (app-by-name 'nautilus))
+(define %nautilus-app
+  (app-by-name 'nautilus))
 
 ;; simple-service 的 kind 是包装 type（extension 指向真实 target）——
 ;; 按 extension target 识别贡献类别（test-gnupg 同款模式）。
@@ -43,36 +46,38 @@
                       (application-home-services app))))
 
 (define (expected-python-major-minor)
-  (string-join (take (string-split (package-version python) #\.) 2)
-               "."))
+  (string-join (take (string-split (package-version python) #\.) 2) "."))
 
 ;; ── NA2：PYTHONPATH（版本推导，不写死）──────────────────────
-(test-assert "NA2: session PYTHONPATH points at the profile site-packages \
-of the pinned python major.minor"
-             (let* ((vars (env-vars %nautilus-app))
-                    (entry (assoc "PYTHONPATH" vars))
-                    (expected (string-append
-                               (user-profile-home-directory %primary-user)
-                               "/.guix-home/profile/lib/python"
-                               (expected-python-major-minor)
-                               "/site-packages")))
-               (and entry
-                    (= 1 (length vars))
-                    (string=? expected (cdr entry)))))
+(test-assert
+ "NA2: session PYTHONPATH points at the profile site-packages of the pinned python major.minor"
+ (let* ((vars (env-vars %nautilus-app))
+        (entry (assoc "PYTHONPATH" vars))
+        (expected (string-append (user-profile-home-directory %primary-user)
+                                 "/.guix-home/profile/lib/python"
+                                 (expected-python-major-minor)
+                                 "/site-packages")))
+   (and entry
+        (= 1
+           (length vars))
+        (string=? expected
+                  (cdr entry)))))
 
 (test-assert "NA2: python version is derived, not hardcoded"
-             (let ((s (call-with-input-file
-                       "modules/guixcfg/apps/nautilus/definition.scm"
-                       (lambda (p) (read-string p)))))
+             (let ((s (call-with-input-file "modules/guixcfg/apps/nautilus/definition.scm"
+                        (lambda (p)
+                          (read-string p)))))
                (and (string-contains s "(package-version python)")
                     (not (string-contains s "python3.12")))))
 
 ;; ── NA3：terminal 选择 gsettings ───────────────────────────
 (test-assert "NA3: terminal gsettings is ghostty (single terminal fact)"
              (let ((gs (application-gsettings %nautilus-app)))
-               (and (= 1 (length gs))
-                    (string=? "com.github.stunkymonkey.nautilus-open-any-terminal"
-                              (gsettings-setting-schema (car gs)))
+               (and (= 1
+                       (length gs))
+                    (string=?
+                     "com.github.stunkymonkey.nautilus-open-any-terminal"
+                     (gsettings-setting-schema (car gs)))
                     (string=? "terminal"
                               (gsettings-setting-key (car gs)))
                     (string=? "'ghostty'"
@@ -84,25 +89,26 @@ of the pinned python major.minor"
 ;; 重复。nautilus-python 先扫 ~/.local/share 且按 basename 走模块
 ;; 缓存，仓库 stub 遮蔽之；不采用 patch ghostty 包（zig 重建代价）。
 (test-assert "NA4: repo stub shadows the Ghostty nautilus extension"
-             (let* ((files
-                     (append-map service-value
-                                 (filter
-                                  (lambda (s)
-                                    (any (lambda (ext)
-                                           (eq? home-files-service-type
-                                                (service-extension-target ext)))
-                                         (service-type-extensions
-                                          (service-kind s))))
-                                  (application-home-services %nautilus-app))))
+             (let* ((files (append-map service-value
+                                       (filter (lambda (s)
+                                                 (any (lambda (ext)
+                                                        (eq?
+                                                         home-files-service-type
+                                                         (service-extension-target
+                                                          ext)))
+                                                      (service-type-extensions
+                                                       (service-kind s))))
+                                               (application-home-services
+                                                %nautilus-app))))
                     (entry (assoc
                             ".local/share/nautilus-python/extensions/ghostty.py"
                             files))
-                    (stub (call-with-input-file
-                           "modules/guixcfg/apps/nautilus/ghostty.py"
-                           (lambda (p) (read-string p))))
-                    (s (call-with-input-file
-                        "modules/guixcfg/apps/nautilus/definition.scm"
-                        (lambda (p) (read-string p)))))
+                    (stub (call-with-input-file "modules/guixcfg/apps/nautilus/ghostty.py"
+                            (lambda (p)
+                              (read-string p))))
+                    (s (call-with-input-file "modules/guixcfg/apps/nautilus/definition.scm"
+                         (lambda (p)
+                           (read-string p)))))
                (and entry
                     ;; 内容独立为 colocate 文件（local-file）——
                     ;; 断言直接读仓库源文件。
@@ -114,16 +120,17 @@ of the pinned python major.minor"
 ;; locale（源码硬编码）——profile 的 share/locale 不可见；符号链
 ;; 把包内 zh_CN .mo 暴露到 ~/.local/share/locale。
 (test-assert "NA5: zh_CN locale symlink exposes the translated menu label"
-             (let* ((files
-                     (append-map service-value
-                                 (filter
-                                  (lambda (s)
-                                    (any (lambda (ext)
-                                           (eq? home-files-service-type
-                                                (service-extension-target ext)))
-                                         (service-type-extensions
-                                          (service-kind s))))
-                                  (application-home-services %nautilus-app))))
+             (let* ((files (append-map service-value
+                                       (filter (lambda (s)
+                                                 (any (lambda (ext)
+                                                        (eq?
+                                                         home-files-service-type
+                                                         (service-extension-target
+                                                          ext)))
+                                                      (service-type-extensions
+                                                       (service-kind s))))
+                                               (application-home-services
+                                                %nautilus-app))))
                     (entry (assoc
                             ".local/share/locale/zh_CN/LC_MESSAGES/nautilus-open-any-terminal.mo"
                             files)))

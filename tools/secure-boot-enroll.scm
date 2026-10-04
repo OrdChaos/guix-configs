@@ -22,13 +22,13 @@
 ;; guix repl 不提供 -L，这里显式把 modules/ 加入 load path（从仓库根目录运行）。
 (add-to-load-path (string-append (getcwd) "/modules"))
 
-(use-modules (guixcfg storage model)     ; persist-mount-point（/persist 语义路径 authority）
+(use-modules (guixcfg storage model) ;persist-mount-point（/persist 语义路径 authority）
              (guixcfg security certificates)
-             (guix packages)          ; package-derivation（构建证书包）
+             (guix packages) ;package-derivation（构建证书包）
              (guix store)
              (guix monads)
-             (guix gexp)              ; lower-object、file-append?
-             (guix derivations)     ; derivation->output-path
+             (guix gexp) ;lower-object、file-append?
+             (guix derivations) ;derivation->output-path
              (ice-9 format)
              (ice-9 match)
              (ice-9 popen)
@@ -38,23 +38,18 @@
 
 (define %default-keydir
   (string-append (persist-mount-point "@persist-system") "/keys/secure-boot"))
-(define %ms-owner-guid "77fa9abd-0359-4d32-bd60-28f4e78f784b")  ; Microsoft
+(define %ms-owner-guid
+  "77fa9abd-0359-4d32-bd60-28f4e78f784b")
+ ; Microsoft
 
 ;; keygen 必须完整产出这六个文件；缺任何一个都不能构建 keystore。
 (define %required-key-files
-  '("PK.key"
-    "PK.crt"
-    "KEK.key"
-    "KEK.crt"
-    "db.key"
-    "db.crt"))
+  '("PK.key" "PK.crt" "KEK.key" "KEK.crt" "db.key" "db.crt"))
 
 (define (missing-key-files keydir)
-  (filter
-   (lambda (name)
-     (not (file-exists?
-           (string-append keydir "/" name))))
-   %required-key-files))
+  (filter (lambda (name)
+            (not (file-exists? (string-append keydir "/" name))))
+          %required-key-files))
 
 (define (mkdir-p dir)
   (unless (file-exists? dir)
@@ -66,8 +61,8 @@
     (error "command failed" args)))
 
 (define (command-output . args)
-  (string-trim-right
-   (call-with-port (apply open-pipe* OPEN_READ args) get-string-all)))
+  (string-trim-right (call-with-port (apply open-pipe* OPEN_READ args)
+                                     get-string-all)))
 
 (define (esl-of crt out guid)
   "把 PEM 证书转成 EFI Signature List。"
@@ -75,16 +70,25 @@
 
 (define (pem-of-der der out)
   "DER 证书转 PEM（origin 里的微软证书是 DER 格式）。"
-  (run "openssl" "x509" "-inform" "DER" "-in" der
-       "-outform" "PEM" "-out" out))
+  (run "openssl"
+       "x509"
+       "-inform"
+       "DER"
+       "-in"
+       der
+       "-outform"
+       "PEM"
+       "-out"
+       out))
 
 (define (firmware-esl var out)
   "读固件默认变量（如 dbDefault），成功且非空返回 #t，否则 #f。"
   (catch #t
-    (lambda ()
-      (run "efi-readvar" "-v" var "-o" out)
-      (> (stat:size (stat out)) 0))
-    (lambda _ #f)))
+         (lambda ()
+           (run "efi-readvar" "-v" var "-o" out)
+           (> (stat:size (stat out)) 0))
+         (lambda _
+           #f)))
 
 (define (cert-store-paths certs)
   "把 vendor 证书的 source（file-append 进包内文件）materialize 为
@@ -97,110 +101,134 @@ derivation），路径 = output + suffix，这里显式拼接。"
          (items (map (lambda (src)
                        (unless (file-append? src)
                          (error "vendor certificate source is not file-append"
-                                src))
-                       (cons src (package-derivation store
-                                                     (file-append-base src)
-                                                     #:graft? #f)))
-                     sources)))
-    (build-things store (map (compose derivation-file-name cdr) items))
+                          src))
+                       (cons src
+                             (package-derivation store
+                                                 (file-append-base src)
+                                                 #:graft? #f))) sources)))
+    (build-things store
+                  (map (compose derivation-file-name cdr) items))
     (map (lambda (item)
            (string-append (derivation->output-path (cdr item))
-                          (string-concatenate
-                           (file-append-suffix (car item)))))
+                          (string-concatenate (file-append-suffix (car item)))))
          items)))
 
-(define (build-variable! keydir work keystore guid var sign-key certs)
+(define (build-variable! keydir
+                         work
+                         keystore
+                         guid
+                         var
+                         sign-key
+                         certs)
   "合并 我们 + vendor + 固件默认值，签名产出 VAR.auth 到 keystore。
 VAR 是字符串 \"KEK\" 或 \"db\"，SIGN-KEY 是签名者名（\"PK\"/\"KEK\"）。"
   (let ((pieces
          ;; 1. 我们自己的
          (cons (begin
-                (esl-of (string-append keydir "/" var ".crt")
-                        (string-append work "/" var "-ours.esl")
-                        guid)
-                (string-append work "/" var "-ours.esl"))
+                 (esl-of (string-append keydir "/" var ".crt")
+                         (string-append work "/" var "-ours.esl") guid)
+                 (string-append work "/" var "-ours.esl"))
                ;; 2. vendor 的微软证书（DER → PEM → ESL）
-               (append
-                (map (lambda (der)
-                       (let ((pem (string-append work "/"
-                                                 (basename der) ".pem"))
-                             (esl (string-append work "/"
-                                                 (basename der) ".esl")))
-                         (pem-of-der der pem)
-                         (esl-of pem esl %ms-owner-guid)
-                         esl))
-                     (cert-store-paths certs))
-                ;; 3. 固件默认值（本来就是 ESL 内容）
-                (let ((out (string-append work "/" var "-firmware.esl")))
-                  (if (firmware-esl (if (string=? var "KEK")
-                                      "KEKDefault"
-                                      "dbDefault")
-                                    out)
-                    (list out)
-                    '()))))))
+               (append (map (lambda (der)
+                              (let ((pem (string-append work "/"
+                                                        (basename der) ".pem"))
+                                    (esl (string-append work "/"
+                                                        (basename der) ".esl")))
+                                (pem-of-der der pem)
+                                (esl-of pem esl %ms-owner-guid) esl))
+                            (cert-store-paths certs))
+                       ;; 3. 固件默认值（本来就是 ESL 内容）
+                       (let ((out (string-append work "/" var "-firmware.esl")))
+                         (if (firmware-esl (if (string=? var "KEK")
+                                               "KEKDefault" "dbDefault") out)
+                             (list out)
+                             '()))))))
     (let ((combined (string-append work "/" var ".esl")))
       ;; ESL 即列表，直接拼接
       (call-with-output-file combined
-                             (lambda (port)
-                               (for-each
-                                (lambda (piece)
-                                  (call-with-input-file piece
-                                                        (lambda (in) (sendfile port in (stat:size (stat in))))))
-                                pieces)))
+        (lambda (port)
+          (for-each (lambda (piece)
+                      (call-with-input-file piece
+                        (lambda (in)
+                          (sendfile port in
+                                    (stat:size (stat in)))))) pieces)))
       (mkdir-p (string-append keystore "/" var))
-      (run "sign-efi-sig-list" "-g" guid
-           "-k" (string-append keydir "/" sign-key ".key")
-           "-c" (string-append keydir "/" sign-key ".crt")
-           var combined
-           (string-append keystore "/" var "/" var ".auth"))
-      (format #t "~a.auth generated (with ~a certificate entries)~%"
-              var (length pieces)))))
+      (run "sign-efi-sig-list"
+           "-g"
+           guid
+           "-k"
+           (string-append keydir "/" sign-key ".key")
+           "-c"
+           (string-append keydir "/" sign-key ".crt")
+           var
+           combined
+           (string-append keystore
+                          "/"
+                          var
+                          "/"
+                          var
+                          ".auth"))
+      (format #t "~a.auth generated (with ~a certificate entries)~%" var
+              (length pieces)))))
 
 (define (main args)
   (let* ((keydir (match (cdr args)
-                        (() %default-keydir)
-                        ((dir) dir)
-                        (_ (format (current-error-port)
-                                   "Usage: secure-boot-enroll [keydir]~%")
-                           (exit 1))))
+                   (() %default-keydir)
+                   ((dir)
+                    dir)
+                   (_ (format (current-error-port)
+                              "Usage: secure-boot-enroll [keydir]~%")
+                      (exit 1))))
          (work (string-append keydir "/keystore/.work"))
          (keystore (string-append keydir "/keystore")))
     (let ((missing (missing-key-files keydir)))
       (unless (null? missing)
-        (format (current-error-port)
-                "Secure Boot key set is incomplete:~%")
-        (for-each
-         (lambda (name)
-           (format (current-error-port)
-                   "  missing ~a/~a~%"
-                   keydir name))
-         missing)
+        (format (current-error-port) "Secure Boot key set is incomplete:~%")
+        (for-each (lambda (name)
+                    (format (current-error-port) "  missing ~a/~a~%" keydir
+                            name)) missing)
         (format (current-error-port)
                 "Please run tools/secure-boot-keygen.scm first.~%")
         (exit 1)))
     (mkdir-p work)
-    
+
     (let ((guid (command-output "uuidgen")))
       ;; ── PK：只有我们自己 ──
       (esl-of (string-append keydir "/PK.crt")
               (string-append work "/PK.esl") guid)
       (mkdir-p (string-append keystore "/PK"))
-      (run "sign-efi-sig-list" "-g" guid
-           "-k" (string-append keydir "/PK.key")
-           "-c" (string-append keydir "/PK.crt")
-           "PK" (string-append work "/PK.esl")
+      (run "sign-efi-sig-list"
+           "-g"
+           guid
+           "-k"
+           (string-append keydir "/PK.key")
+           "-c"
+           (string-append keydir "/PK.crt")
+           "PK"
+           (string-append work "/PK.esl")
            (string-append keystore "/PK/PK.auth"))
-      
+
       ;; ── KEK 与 db：我们 + 微软 + 固件默认值 ──
-      (build-variable! keydir work keystore guid "KEK" "PK"
+      (build-variable! keydir
+                       work
+                       keystore
+                       guid
+                       "KEK"
+                       "PK"
                        (vendor-certificates-for 'KEK))
-      (build-variable! keydir work keystore guid "db" "KEK"
+      (build-variable! keydir
+                       work
+                       keystore
+                       guid
+                       "db"
+                       "KEK"
                        (vendor-certificates-for 'db)))
-    
-    (format #t "~%keystore ready: ~a~%~
+
+    (format #t
+     "~%keystore ready: ~a~%~
                Enrollment (PK written last; writing it enables Secure Boot):~%~
                ~%  sbkeysync --keystore ~a --verbose~%~
                ~%  sbkeysync --keystore ~a --verbose --pk~%"
-            keystore keystore keystore)))
+     keystore keystore keystore)))
 
 (main (command-line))

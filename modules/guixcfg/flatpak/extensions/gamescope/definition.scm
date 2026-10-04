@@ -22,13 +22,12 @@
 ;;;     issue #483）——launch options 不用 --steam。
 
 (define-module (guixcfg flatpak extensions gamescope definition)
-               #:use-module (guixcfg flatpak model)
-               #:export (%flatpak-extension-gamescope))
+  #:use-module (guixcfg flatpak model)
+  #:export (%flatpak-extension-gamescope))
 
 (define %flatpak-extension-gamescope
-  (flatpak-extension
-   (name 'gamescope)
-   (id "org.freedesktop.Platform.VulkanLayer.gamescope")
-   (remote 'flathub)
-   (branch "25.08")
-   (update-policy 'track-branch)))
+  (flatpak-extension (name 'gamescope)
+                     (id "org.freedesktop.Platform.VulkanLayer.gamescope")
+                     (remote 'flathub)
+                     (branch "25.08")
+                     (update-policy 'track-branch)))

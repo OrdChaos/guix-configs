@@ -14,12 +14,13 @@
 ;;;        下、create-mount-point? #t）；
 ;;;   GC3  laptop OS 的 file-systems 实际含该绑定（common 接线）。
 
-(use-modules ((guixcfg hosts lenovo-legion-y7000p) #:prefix host:)
+(use-modules ((guixcfg hosts lenovo-legion-y7000p)
+              #:prefix host:)
              (guixcfg system guix-cache)
              (guixcfg system machine-state-persistence)
-             (gnu system)                    ; operating-system-file-systems
-             (gnu system file-systems)       ; file-system-mount-point 等
-             (srfi srfi-1)                   ; find
+             (gnu system) ;operating-system-file-systems
+             (gnu system file-systems) ;file-system-mount-point 等
+             (srfi srfi-1) ;find
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -39,18 +40,19 @@
 
 ;; ── GC2：rule 产生的 bind file-system ──────────────────────
 (define guix-cache-bind-file-systems
-  (machine-state-persistence-file-systems
-   (list %guix-root-cache-persistence-rule)))
+  (machine-state-persistence-file-systems (list
+                                           %guix-root-cache-persistence-rule)))
 
 (test-assert "GC2: rule yields one bind mount from the machine-state root"
              (let ((fs (car guix-cache-bind-file-systems)))
-               (and (= 1 (length guix-cache-bind-file-systems))
-                    (string=? (file-system-mount-point fs)
-                              "/root/.cache/guix")
+               (and (= 1
+                       (length guix-cache-bind-file-systems))
+                    (string=? (file-system-mount-point fs) "/root/.cache/guix")
                     (string=? (file-system-device fs)
                               (string-append %machine-state-root
                                              "/guix/root-cache"))
-                    (memq 'bind-mount (file-system-flags fs))
+                    (memq 'bind-mount
+                          (file-system-flags fs))
                     (file-system-create-mount-point? fs))))
 
 ;; ── GC3：laptop OS file-systems 实际包含该绑定 ─────────────
@@ -58,6 +60,7 @@
              (find (lambda (fs)
                      (string=? (file-system-mount-point fs)
                                "/root/.cache/guix"))
-                   (operating-system-file-systems host:%lenovo-legion-y7000p-os)))
+                   (operating-system-file-systems
+                    host:%lenovo-legion-y7000p-os)))
 
 (test-end "guix-cache")

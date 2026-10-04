@@ -21,20 +21,18 @@
 ;;;                             self-upgrade（= 当前仓库 lock 的 Blue）
 
 (define-module (guixcfg apps blue definition)
-               #:use-module (bluebox packages blue) ; blue（pinned bluebox）
-               #:use-module (guix packages)
-               #:use-module (guix transformations)
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:export (%blue))
+  #:use-module (bluebox packages blue) ;blue（pinned bluebox）
+  #:use-module (guix packages)
+  #:use-module (guix transformations)
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:export (%blue))
 
 (define blue-compatible
-  ((options->transformation
-    '((with-input . "guile=guile@3.0.11")
-      (without-tests . "blue")))
+  ((options->transformation '((with-input . "guile=guile@3.0.11")
+                              (without-tests . "blue")))
    blue))
 
 (define %blue
-  (application
-   (name 'blue)
-   (home-packages (list blue-compatible))))
+  (application (name 'blue)
+               (home-packages (list blue-compatible))))

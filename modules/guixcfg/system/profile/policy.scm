@@ -28,11 +28,10 @@
 ;;;   影响以 VM 验收实测为准（2026-09）。
 
 (define-module (guixcfg system profile policy)
-               #:use-module (gnu services) ; etc-service-type
-               #:use-module (guix gexp)    ; local-file
-               #:use-module (srfi srfi-1)  ; remove
-               #:export (%system-profile
-                         system-profile-etc-entries))
+  #:use-module (gnu services) ;etc-service-type
+  #:use-module (guix gexp) ;local-file
+  #:use-module (srfi srfi-1) ;remove
+  #:export (%system-profile system-profile-etc-entries))
 
 (define %system-profile
   (local-file "profile" "system-profile"))
@@ -41,6 +40,6 @@
   "etc-service-type 的 value 变换：移除上游 'profile 条目，追加
   本仓库拥有的 /etc/profile（删除 guix-home loop 条目，见文件头）。"
   (append (remove (lambda (entry)
-                    (string=? "profile" (car entry)))
-                  entries)
+                    (string=? "profile"
+                              (car entry))) entries)
           `(("profile" ,%system-profile))))

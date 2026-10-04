@@ -47,18 +47,18 @@
 ;;; niri 会话提供。
 
 (define-module (guixcfg apps gnome-text-editor definition)
-               #:use-module (gnu packages gnome) ; gnome-text-editor
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:use-module (guixcfg gsettings model) ; gsettings-setting
-               #:use-module (guixcfg system application-persistence) ; rule
-               #:export (%gnome-text-editor
-                         %gnome-text-editor-desktop-entry))
+  #:use-module (gnu packages gnome) ;gnome-text-editor
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:use-module (guixcfg gsettings model) ;gsettings-setting
+  #:use-module (guixcfg system application-persistence) ;rule
+  #:export (%gnome-text-editor %gnome-text-editor-desktop-entry))
 
 ;; GNOME Text Editor 的 XDG desktop entry（store 内实际构建产物
 ;; share/applications/ 核实）。纯数据常量：供统一 XDG 策略模块
 ;; 引用，不在此决定默认应用。
-(define %gnome-text-editor-desktop-entry "org.gnome.TextEditor.desktop")
+(define %gnome-text-editor-desktop-entry
+  "org.gnome.TextEditor.desktop")
 
 ;; 静态编辑偏好（org.gnome.TextEditor，pinned 48.3 schema 实测）：
 ;;   custom-font          string  'Monospace 11'
@@ -72,44 +72,36 @@
 ;; 未保存草稿经 application-data 持久化恢复（见上），不依赖
 ;; session 恢复机制。
 (define %gnome-text-editor-gsettings
-  (list (gsettings-setting
-         (schema "org.gnome.TextEditor")
-         (key "custom-font")
-         (value "'Monospace 11'"))
-        (gsettings-setting
-         (schema "org.gnome.TextEditor")
-         (key "highlight-current-line")
-         (value "true"))
-        (gsettings-setting
-         (schema "org.gnome.TextEditor")
-         (key "indent-style")
-         (value "'space'"))
-        (gsettings-setting
-         (schema "org.gnome.TextEditor")
-         (key "show-line-numbers")
-         (value "true"))
-        (gsettings-setting
-         (schema "org.gnome.TextEditor")
-         (key "show-right-margin")
-         (value "false"))
-        (gsettings-setting
-         (schema "org.gnome.TextEditor")
-         (key "style-scheme")
-         (value "'Adwaita'"))
-        (gsettings-setting
-         (schema "org.gnome.TextEditor")
-         (key "use-system-font")
-         (value "false"))))
+  (list (gsettings-setting (schema "org.gnome.TextEditor")
+                           (key "custom-font")
+                           (value "'Monospace 11'"))
+        (gsettings-setting (schema "org.gnome.TextEditor")
+                           (key "highlight-current-line")
+                           (value "true"))
+        (gsettings-setting (schema "org.gnome.TextEditor")
+                           (key "indent-style")
+                           (value "'space'"))
+        (gsettings-setting (schema "org.gnome.TextEditor")
+                           (key "show-line-numbers")
+                           (value "true"))
+        (gsettings-setting (schema "org.gnome.TextEditor")
+                           (key "show-right-margin")
+                           (value "false"))
+        (gsettings-setting (schema "org.gnome.TextEditor")
+                           (key "style-scheme")
+                           (value "'Adwaita'"))
+        (gsettings-setting (schema "org.gnome.TextEditor")
+                           (key "use-system-font")
+                           (value "false"))))
 
 (define %gnome-text-editor
-  (application
-   (name 'gnome-text-editor)
-   (home-packages (list gnome-text-editor))
-   (persistence
-    (list (application-persistence-rule
-           (name 'app-data)
-           (backing "gnome-text-editor/app-data") ; backing root 相对（persistence.md）
-           (consumer ".local/share/gnome-text-editor") ; HOME 相对（application data 目录）
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))))
-   (gsettings %gnome-text-editor-gsettings)))
+  (application (name 'gnome-text-editor)
+               (home-packages (list gnome-text-editor))
+               (persistence (list (application-persistence-rule (name 'app-data)
+                                                                (backing
+                                                                 "gnome-text-editor/app-data") ;backing root 相对（persistence.md）
+                                                                (consumer
+                                                                 ".local/share/gnome-text-editor") ;HOME 相对（application data 目录）
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))))
+               (gsettings %gnome-text-editor-gsettings)))

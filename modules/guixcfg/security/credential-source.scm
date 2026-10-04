@@ -16,11 +16,10 @@
 ;;;     不进 argv/environment/log/store（docs/architecture/secrets.md）。
 
 (define-module (guixcfg security credential-source)
-               #:use-module (guixcfg security age)        ; make-age-secret-reader
-               #:use-module (guixcfg storage install)     ; read-luks-passphrase!
-               #:use-module (ice-9 match)
-               #:export (%luks-recovery-secret-rel
-                         resolve-luks-passphrase-source))
+  #:use-module (guixcfg security age) ;make-age-secret-reader
+  #:use-module (guixcfg storage install) ;read-luks-passphrase!
+  #:use-module (ice-9 match)
+  #:export (%luks-recovery-secret-rel resolve-luks-passphrase-source))
 
 ;; 仓库内相对路径（repo 根为 cwd；disk-install / tpm2-enroll 都从
 ;; repo 根运行）。age-encrypted LUKS recovery secret，--luks-secret
@@ -39,17 +38,19 @@
   plaintext 只存在于进程内存与 /run 0600 中转文件（age.scm），
   不进 argv/env/log/store。"
   (cond
-    ((eq? source 'luks-secret)
+    ((eq? source
+          'luks-secret)
      ;; fail-closed：两个 identity 都缺失时在进入任何 TPM/LUKS
      ;; mutation 前失败。livecd（安装/替换）→ runtime S（secrets
      ;; unlock）；已装系统 → installed S（/persist，日常可用）。
      (unless (or (runtime-identity-present?)
                  (file-exists? (%installed-identity-path)))
-       (error "no stable identity (runtime or installed); run 'secrets unlock' first (livecd) or verify /persist/system/keys/age/identity"))
+       (error
+        "no stable identity (runtime or installed); run 'secrets unlock' first (livecd) or verify /persist/system/keys/age/identity"))
      (make-age-secret-reader (%luks-recovery-secret-rel)))
-    ((eq? source 'interactive)
+    ((eq? source
+          'interactive)
      read-luks-passphrase!)
     ((procedure? source)
      source)
-    (else
-     (error "unknown LUKS passphrase source" source))))
+    (else (error "unknown LUKS passphrase source" source))))

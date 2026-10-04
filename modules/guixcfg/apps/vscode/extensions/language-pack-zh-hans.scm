@@ -6,13 +6,16 @@
 ;;; vscode 大版本时回头核对这里。
 
 (define-module (guixcfg apps vscode extensions language-pack-zh-hans)
-  #:use-module (guix packages)          ; base32
-  #:use-module ((guix licenses) #:prefix license:)
+  #:use-module (guix packages) ;base32
+  #:use-module ((guix licenses)
+                #:prefix license:)
   #:use-module (virelith packages vscode-extensions)
   #:export (vscode-extension-language-pack-zh-hans))
 
 (define-public vscode-extension-language-pack-zh-hans
-  (vscode-marketplace-extension
-   "MS-CEINTL" "vscode-language-pack-zh-hans" "1.131.2026090407"
-   (base32 "10zg2zz3235gpyd3fmnvy3pzw8il7h13x3zzva5riixh36vz55qb")
-   #:license license:expat))
+  (vscode-marketplace-extension "MS-CEINTL"
+                                "vscode-language-pack-zh-hans"
+                                "1.131.2026090407"
+                                (base32
+                                 "10zg2zz3235gpyd3fmnvy3pzw8il7h13x3zzva5riixh36vz55qb")
+                                #:license license:expat))

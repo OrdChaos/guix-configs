@@ -31,13 +31,13 @@
 ;;; 框架重写时只需修改本文件，UKI 核心不动。
 
 (define-module (guixcfg boot uki-bootloader)
-               #:use-module (guixcfg boot uki)
-               #:use-module (guixcfg boot layout)  ; %uki-deploy-script-path
-               #:use-module (gnu bootloader)
-               #:use-module (guix gexp)
-               #:use-module (guix records)
-               #:use-module (ice-9 regex)   ; string-match（gnu.system= 解析）
-               #:export (uki-bootloader))
+  #:use-module (guixcfg boot uki)
+  #:use-module (guixcfg boot layout) ;%uki-deploy-script-path
+  #:use-module (gnu bootloader)
+  #:use-module (guix gexp)
+  #:use-module (guix records)
+  #:use-module (ice-9 regex) ;string-match（gnu.system= 解析）
+  #:export (uki-bootloader))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 1. menu-entry → boot-plan
@@ -48,42 +48,43 @@
   ;; （不能从 kernel 路径 dirname 推导——布局依赖，实测 bug）。
   ;; 注意：guix 注入的 kernel-arguments 是 gexp（配置期非字符串），
   ;; 所以 system 是延迟 gexp（部署脚本内对求值后的 cmdline 解析）。
-  (boot-plan
-   (kernel (menu-entry-linux entry))
-   (initrd (menu-entry-initrd entry))
-   (cmdline #~(string-join (list #$@(menu-entry-linux-arguments entry)) " "))
-   (system #~(let ((m (string-match "gnu\\.system=([^ ]+)"
-                                    (string-join (list #$@(menu-entry-linux-arguments entry))
-                                                 " "))))
-               (and m (match:substring m 1))))))
+  (boot-plan (kernel (menu-entry-linux entry))
+             (initrd (menu-entry-initrd entry))
+             (cmdline #~(string-join (list #$@(menu-entry-linux-arguments
+                                               entry)) " "))
+             (system #~(let ((m (string-match "gnu\\.system=([^ ]+)"
+                                              (string-join (list #$@(menu-entry-linux-arguments
+                                                                     entry))
+                                                           " "))))
+                         (and m
+                              (match:substring m 1))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 2–3. 框架调用约定：generator 与 installer
 
 (define* (uki-configuration-file config entries
-                                 #:key (old-entries '())
-                                 #:allow-other-keys)
-         "框架的 configuration-file-generator：当前 generation 转成 Boot Plan，
+                                 #:key (old-entries '()) #:allow-other-keys)
+  "框架的 configuration-file-generator：当前 generation 转成 Boot Plan，
 生成部署脚本。框架的 old-entries 有意忽略——Last Good/Recovery 不由
 Guix 框架的 profile 历史提供：Recovery candidate 由部署脚本从【当前
 deployment】构建，经用户态 confirm（(guixcfg boot recovery)）验证
 identity 后才 promote 为正式 Recovery（部署成功 ≠ 启动成功）。"
-         (make-uki-deploy-program (menu-entry->boot-plan (car entries))))
+  (make-uki-deploy-program (menu-entry->boot-plan (car entries))))
 
 (define install-uki
   ;; 框架的 installer 调用约定：(package target mount-point)。
   #~(lambda (bootloader target mount-point)
       (when target
-        (invoke (string-append mount-point #$%uki-deploy-script-path)
-                mount-point target))))
+        (invoke (string-append mount-point
+                               #$%uki-deploy-script-path) mount-point target))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 4. <bootloader> 记录
 
 (define uki-bootloader
-  (bootloader
-   (name 'uki)
-   (package (@ (rosenthal packages bootloaders) ukify))  ; 占位（未使用）
-   (installer install-uki)
-   (configuration-file %uki-deploy-script-path)
-   (configuration-file-generator uki-configuration-file)))
+  (bootloader (name 'uki)
+              (package
+                (@ (rosenthal packages bootloaders) ukify)) ;占位（未使用）
+              (installer install-uki)
+              (configuration-file %uki-deploy-script-path)
+              (configuration-file-generator uki-configuration-file)))

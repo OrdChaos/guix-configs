@@ -2,34 +2,34 @@
 ;;; 服务自己依赖的软件由 service 直接引用，不放在这里。
 
 (define-module (guixcfg system packages)
-               #:use-module (gnu system)                     ; %base-packages
-               #:use-module (gnu packages linux)             ; btrfs-progs（当前 master 在此导出）
-               #:use-module (gnu packages cryptsetup)        ; cryptsetup
-               #:use-module (gnu packages golang-crypto)     ; age
-               #:use-module (gnu packages package-management) ; flatpak
-               #:use-module (gnu packages efi)               ; efitools/sbsigntools（blue enroll 固件注册）
-               #:use-module (guixcfg fonts model)           ; %fonts（shared fact；Flatpak sandbox 字体投影）
-               #:export (%system-packages))
+  #:use-module (gnu system) ;%base-packages
+  #:use-module (gnu packages linux) ;btrfs-progs（当前 master 在此导出）
+  #:use-module (gnu packages cryptsetup) ;cryptsetup
+  #:use-module (gnu packages golang-crypto) ;age
+  #:use-module (gnu packages package-management) ;flatpak
+  #:use-module (gnu packages efi) ;efitools/sbsigntools（blue enroll 固件注册）
+  #:use-module (guixcfg fonts model) ;%fonts（shared fact；Flatpak sandbox 字体投影）
+  #:export (%system-packages))
 
 (define %system-packages
-  (append (list btrfs-progs       ; 子卷/快照管理（恢复时必需）
-                cryptsetup        ; LUKS 维护（恢复时必需）
-                ntfs-3g           ; NTFS 读写（udisks 只使用系统 profile
-                ; 里的 mount 工具——可移动 NTFS 介质的用户态驱动与
-                ; ntfsfix 等修复工具；内核 ntfs3 之外的必要补充，
-                ; Guix 手册（udisks-service-type））
-                age               ; secrets 解密（guixcfg-secrets-deploy
-                ; 的运行时依赖；account projection 只
-                ; 读 persistent hash，不调 age）
-                flatpak           ; Flatpak executable（overview.md 软件
-                ; 分类：system 提供 executable，一切
-                ; installation 走 --user scope；
-                ; docs/architecture/flatpak.md）
-                 sbsigntools        ; sbsign：UKI signing runtime
-                 efitools)          ; efi-updatevar：Setup Mode enrollment
-           ; 固件注册执行器（目标系统离线可用——不依赖
-          ; LiveCD manifest / channel fetch；
-          ; docs/architecture/boot.md（Secure Boot））
+  (append (list btrfs-progs ;子卷/快照管理（恢复时必需）
+                cryptsetup ;LUKS 维护（恢复时必需）
+                ntfs-3g ;NTFS 读写（udisks 只使用系统 profile
+                ;; 里的 mount 工具——可移动 NTFS 介质的用户态驱动与
+                ;; ntfsfix 等修复工具；内核 ntfs3 之外的必要补充，
+                ;; Guix 手册（udisks-service-type））
+                age ;secrets 解密（guixcfg-secrets-deploy
+                ;; 的运行时依赖；account projection 只
+                ;; 读 persistent hash，不调 age）
+                flatpak ;Flatpak executable（overview.md 软件
+                ;; 分类：system 提供 executable，一切
+                ;; installation 走 --user scope；
+                ;; docs/architecture/flatpak.md）
+                sbsigntools ;sbsign：UKI signing runtime
+                efitools) ;efi-updatevar：Setup Mode enrollment
+          ;; 固件注册执行器（目标系统离线可用——不依赖
+          ;; LiveCD manifest / channel fetch；
+          ;; docs/architecture/boot.md（Secure Boot））
           ;; 字体投影：pinned Guix flatpak 的 flatpak-fix-fonts-icons.patch
           ;; 只把 /run/current-system/profile/share/fonts 暴露进 sandbox
           ;; （Home profile 字体不可见）。同一份 (guixcfg fonts model) 事实、

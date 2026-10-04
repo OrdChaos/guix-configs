@@ -28,58 +28,56 @@
 ;;; FHS）；设默认应用；为无状态应用造 persistence rule。
 
 (define-module (guixcfg apps mission-center definition)
-                #:use-module (guix records)
-                #:use-module (guix packages)           ; package、package-source、origin
-                #:use-module (guix gexp)                ; local-file、#~ / #$
-                #:use-module (guix utils)               ; substitute-keyword-arguments
-                #:use-module (nongnu packages nvidia)   ; nvda-new-feature
-               #:use-module (guixcfg apps model)          ; application
-               #:use-module (guixcfg gsettings model)     ; gsettings-setting
-               #:use-module ((virelith packages mission-center)
-                             #:prefix virelith:)
-               #:export (%mission-center
-                         %mission-center-desktop-entry))
+  #:use-module (guix records)
+  #:use-module (guix packages) ;package、package-source、origin
+  #:use-module (guix gexp) ;local-file、#~ / #$
+  #:use-module (guix utils) ;substitute-keyword-arguments
+  #:use-module (nongnu packages nvidia) ;nvda-new-feature
+  #:use-module (guixcfg apps model) ;application
+  #:use-module (guixcfg gsettings model) ;gsettings-setting
+  #:use-module ((virelith packages mission-center)
+                #:prefix virelith:)
+  #:export (%mission-center %mission-center-desktop-entry))
 
 ;; Mission Center 的 XDG desktop entry（包内 data/ 实际构建产物
 ;; share/applications/ 核实）。纯数据常量：供统一 XDG 策略模块引用，
 ;; 不在此决定默认应用。
-(define %mission-center-desktop-entry "io.missioncenter.MissionCenter.desktop")
+(define %mission-center-desktop-entry
+  "io.missioncenter.MissionCenter.desktop")
 
 ;; v1.2.0 receives a variable number of GPU metric series.  It only allocated
 ;; one Dataset initially, then indexed the additional readings and aborted.
 ;; Keep this small source fix local until the pinned channel includes it.
 (define %mission-center-package
   (package
-   (inherit virelith:mission-center)
-   (source
-    (origin
-     (inherit (package-source virelith:mission-center))
-     (patches
-       (list (local-file "mission-center-dataset-count.patch"
-                         "mission-center-dataset-count.patch")))))))
+    (inherit virelith:mission-center)
+    (source
+     (origin
+       (inherit (package-source virelith:mission-center))
+       (patches (list (local-file "mission-center-dataset-count.patch"
+                                  "mission-center-dataset-count.patch")))))))
 
 ;; Magpie's NVIDIA collector dlopens libnvidia-ml.so at runtime.  The upstream
 ;; wrapper contains Mesa/Vulkan but not NVML, so declare the driver input and
 ;; expose only its library directory to this monitoring process.
 (define %mission-center-package/with-nvml
-  (package/inherit
-   %mission-center-package
-   (inputs
-    `(("nvda" ,nvda-new-feature)
-      ,@(package-inputs %mission-center-package)))
-   (arguments
-    (substitute-keyword-arguments (package-arguments %mission-center-package)
-      ((#:phases phases)
-       #~(modify-phases #$phases
-           (add-after 'wrap-runtime-paths 'add-nvidia-nvml-runtime
-             (lambda _
-               (for-each
-                (lambda (program)
-                  (wrap-program (string-append #$output "/bin/" program)
-                    `("LD_LIBRARY_PATH" ":" prefix
-                      (,(string-append #$(this-package-input "nvda")
-                                        "/lib")))))
-                  '("missioncenter" "missioncenter-magpie"))))))))))
+  (package/inherit %mission-center-package
+    (inputs `(("nvda" ,nvda-new-feature)
+              ,@(package-inputs %mission-center-package)))
+    (arguments (substitute-keyword-arguments (package-arguments
+                                              %mission-center-package)
+                 ((#:phases phases)
+                  #~(modify-phases #$phases
+                      (add-after 'wrap-runtime-paths 'add-nvidia-nvml-runtime
+                        (lambda _
+                          (for-each (lambda (program)
+                                      (wrap-program (string-append #$output
+                                                                   "/bin/"
+                                                                   program)
+                                        `("LD_LIBRARY_PATH" ":" prefix
+                                          (,(string-append #$(this-package-input
+                                                              "nvda") "/lib")))))
+                                    '("missioncenter" "missioncenter-magpie"))))))))))
 
 ;; 静态偏好（io.missioncenter.MissionCenter，pinned 1.2.0 schema 实测）：
 ;;   first-time-running  bool  false
@@ -90,16 +88,14 @@
 ;; 已在 virelith 包内禁用）。其余键保持 schema 默认（窗口尺寸/选中页等
 ;; 由运行时写入 disposable dconf）。
 (define %mission-center-gsettings
-  (list (gsettings-setting
-         (schema "io.missioncenter.MissionCenter")
-         (key "first-time-running")
-         (value "false"))))
+  (list (gsettings-setting (schema "io.missioncenter.MissionCenter")
+                           (key "first-time-running")
+                           (value "false"))))
 
 (define %mission-center
-  (application
-   (name 'mission-center)
-   ;; 单一包：GUI 与 Magpie 后端、desktop entry、GSettings schema 与
-   ;; hw.db 均在其中；依赖经包闭包随 profile 进入（GTK4/libadwaita/
-   ;; Mesa/Vulkan loader/nvtop 等）。
-    (home-packages (list %mission-center-package/with-nvml))
-   (gsettings %mission-center-gsettings)))
+  (application (name 'mission-center)
+               ;; 单一包：GUI 与 Magpie 后端、desktop entry、GSettings schema 与
+               ;; hw.db 均在其中；依赖经包闭包随 profile 进入（GTK4/libadwaita/
+               ;; Mesa/Vulkan loader/nvtop 等）。
+               (home-packages (list %mission-center-package/with-nvml))
+               (gsettings %mission-center-gsettings)))

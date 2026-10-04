@@ -27,38 +27,38 @@
 (use-modules (guixcfg gsettings model)
              (guixcfg gsettings serialize)
              (guixcfg gsettings reconcile)
-             (guixcfg apps model)       ; applications-gsettings
-             (guixcfg apps registry)    ; %applications（唯一启用事实源）
+             (guixcfg apps model) ;applications-gsettings
+             (guixcfg apps registry) ;%applications（唯一启用事实源）
              (ice-9 match))
 
 (define (usage)
   (format (current-error-port)
-          "Usage: guix time-machine -C channels.lock.scm -- repl ~
+   "Usage: guix time-machine -C channels.lock.scm -- repl ~
 tools/gsettings.scm -- ACTION~%actions: status | apply | dry-run-apply~%")
   (exit 1))
 
 (define (print-lines lines)
-  (for-each (lambda (line) (format #t "~a~%" line)) lines))
+  (for-each (lambda (line)
+              (format #t "~a~%" line)) lines))
 
 (define (desired-state)
   (gsettings-desired-state (applications-gsettings %applications)))
 
 (define (main args)
   (match args
-         (("status")
-          (print-lines (gsettings-status-format
-                        (gsettings-status (desired-state)))))
-         (("dry-run-apply")
-          ;; dry-run 契约：真实只读 status/diff + plan；零 mutation
-          ;; （绝不 invoke dconf load）。
-          (let ((desired (desired-state)))
-            (print-lines (gsettings-status-format (gsettings-status desired)))
-            (format #t "dry-run: ~a managed key(s) would be applied~%"
-                    (length (gsettings-plan desired)))))
-         (("apply")
-          (let ((desired (desired-state)))
-            (format #t "gsettings apply: ~a managed key(s)~%"
-                    (gsettings-apply! desired))))
-         (_ (usage))))
+    (("status")
+     (print-lines (gsettings-status-format (gsettings-status (desired-state)))))
+    (("dry-run-apply")
+     ;; dry-run 契约：真实只读 status/diff + plan；零 mutation
+     ;; （绝不 invoke dconf load）。
+     (let ((desired (desired-state)))
+       (print-lines (gsettings-status-format (gsettings-status desired)))
+       (format #t "dry-run: ~a managed key(s) would be applied~%"
+               (length (gsettings-plan desired)))))
+    (("apply")
+     (let ((desired (desired-state)))
+       (format #t "gsettings apply: ~a managed key(s)~%"
+               (gsettings-apply! desired))))
+    (_ (usage))))
 
 (main (cdr (command-line)))

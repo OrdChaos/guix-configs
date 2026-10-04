@@ -11,11 +11,11 @@
 (use-modules (guixcfg flatpak model)
              (guixcfg flatpak reconcile)
              (guixcfg flatpak registry)
-             (guix build utils)          ; mkdir-p、delete-file-recursively
-             (ice-9 rdelim)              ; read-string
+             (guix build utils) ;mkdir-p、delete-file-recursively
+             (ice-9 rdelim) ;read-string
              (srfi srfi-1)
-             (srfi srfi-13)              ; string-contains
-             (srfi srfi-26)              ; cut
+             (srfi srfi-13) ;string-contains
+             (srfi srfi-26) ;cut
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -24,52 +24,73 @@
 
 ;; ── fake binary 环境 ────────────────────────────────────────
 
-(define %fp-dir (string-append "/tmp/guixcfg-fp-actions-"
-                               (number->string (getpid))))
-(define %fp-bin (string-append %fp-dir "/bin"))
-(define %fp-log (string-append %fp-dir "/argv.log"))
-(define %fp-list-app-out (string-append %fp-dir "/list-app.out"))
-(define %fp-list-runtime-out (string-append %fp-dir "/list-runtime.out"))
-(define %fp-remotes-out (string-append %fp-dir "/remotes.out"))
-(define %fp-pins-out (string-append %fp-dir "/pins.out"))
-(define %fp-original-path (getenv "PATH"))
+(define %fp-dir
+  (string-append "/tmp/guixcfg-fp-actions-"
+                 (number->string (getpid))))
+(define %fp-bin
+  (string-append %fp-dir "/bin"))
+(define %fp-log
+  (string-append %fp-dir "/argv.log"))
+(define %fp-list-app-out
+  (string-append %fp-dir "/list-app.out"))
+(define %fp-list-runtime-out
+  (string-append %fp-dir "/list-runtime.out"))
+(define %fp-remotes-out
+  (string-append %fp-dir "/remotes.out"))
+(define %fp-pins-out
+  (string-append %fp-dir "/pins.out"))
+(define %fp-original-path
+  (getenv "PATH"))
 
 (define (fp-write-file path content)
-  (call-with-output-file path (lambda (p) (display content p))))
+  (call-with-output-file path
+    (lambda (p)
+      (display content p))))
 
 (define (fp-install-fake-flatpak)
   (mkdir-p %fp-bin)
   (call-with-output-file (string-append %fp-bin "/flatpak")
-                         (lambda (p)
-                           (display "#!/bin/sh\n" p)
-                           (display "printf 'flatpak %s\\n' \"$*\" >> \"${FP_FAKE_LOG:?}\"\n" p)
-                           (display "case \"$1\" in\n" p)
-                           (display "  list)\n" p)
-                           (display "    case \"$*\" in\n" p)
-                           (display "      *--runtime*) cat \"${FP_FAKE_LIST_RUNTIME_OUT:-/dev/null}\" 2>/dev/null ;;\n" p)
-                           (display "      *) cat \"${FP_FAKE_LIST_APP_OUT:-/dev/null}\" 2>/dev/null ;;\n" p)
-                           (display "    esac\n" p)
-                           (display "    ;;\n" p)
-                           (display "  remotes)\n" p)
-                           (display "    cat \"${FP_FAKE_REMOTES_OUT:-/dev/null}\" 2>/dev/null\n" p)
-                           (display "    ;;\n" p)
-                           (display "  pin)\n" p)
-                           (display "    case \"$*\" in\n" p)
-                           (display "      \"pin --user\") cat \"${FP_FAKE_PINS_OUT:-/dev/null}\" 2>/dev/null ;;\n" p)
-                           (display "    esac\n" p)
-                           (display "    ;;\n" p)
-                           (display "  info)\n" p)
-                           (display "    printf 'Commit: deadbeef\\n'\n" p)
-                           (display "    ;;\n" p)
-                           (display "  *)\n" p)
-                           (display "    exit 0\n" p)
-                           (display "    ;;\n" p)
-                           (display "esac\n" p)))
+    (lambda (p)
+      (display "#!/bin/sh\n" p)
+      (display "printf 'flatpak %s\\n' \"$*\" >> \"${FP_FAKE_LOG:?}\"
+" p)
+      (display "case \"$1\" in\n" p)
+      (display "  list)\n" p)
+      (display "    case \"$*\" in\n" p)
+      (display
+       "      *--runtime*) cat \"${FP_FAKE_LIST_RUNTIME_OUT:-/dev/null}\" 2>/dev/null ;;
+"
+       p)
+      (display
+       "      *) cat \"${FP_FAKE_LIST_APP_OUT:-/dev/null}\" 2>/dev/null ;;
+" p)
+      (display "    esac\n" p)
+      (display "    ;;\n" p)
+      (display "  remotes)\n" p)
+      (display "    cat \"${FP_FAKE_REMOTES_OUT:-/dev/null}\" 2>/dev/null
+" p)
+      (display "    ;;\n" p)
+      (display "  pin)\n" p)
+      (display "    case \"$*\" in\n" p)
+      (display
+       "      \"pin --user\") cat \"${FP_FAKE_PINS_OUT:-/dev/null}\" 2>/dev/null ;;
+"
+       p)
+      (display "    esac\n" p)
+      (display "    ;;\n" p)
+      (display "  info)\n" p)
+      (display "    printf 'Commit: deadbeef\\n'\n" p)
+      (display "    ;;\n" p)
+      (display "  *)\n" p)
+      (display "    exit 0\n" p)
+      (display "    ;;\n" p)
+      (display "esac\n" p)))
   (chmod (string-append %fp-bin "/flatpak") #o755))
 
 (define (fp-setup!)
   (fp-install-fake-flatpak)
-  (setenv "PATH" (string-append %fp-bin ":" %fp-original-path))
+  (setenv "PATH"
+          (string-append %fp-bin ":" %fp-original-path))
   (setenv "FP_FAKE_LOG" %fp-log)
   (setenv "FP_FAKE_LIST_APP_OUT" %fp-list-app-out)
   (setenv "FP_FAKE_LIST_RUNTIME_OUT" %fp-list-runtime-out)
@@ -79,64 +100,94 @@
 
 (define (fp-log-lines)
   (call-with-input-file %fp-log
-                        (lambda (p)
-                          (let loop ((acc '()))
-                            (let ((l (read-line p)))
-                              (if (eof-object? l) (reverse acc) (loop (cons l acc))))))))
+    (lambda (p)
+      (let loop
+        ((acc '()))
+        (let ((l (read-line p)))
+          (if (eof-object? l)
+              (reverse acc)
+              (loop (cons l acc))))))))
 
 (define (fp-log-contains? needle)
-  (any (cut string-contains <> needle) (fp-log-lines)))
+  (any (cut string-contains <> needle)
+       (fp-log-lines)))
 
 (fp-setup!)
 
 ;; ── action 契约 ─────────────────────────────────────────────
 
 (test-equal "flatpak-actions lists names in canonical order"
-            '("sync" "status" "update" "update-runtimes" "remove" "remote-replace" "gc")
+            '("sync" "status"
+              "update"
+              "update-runtimes"
+              "remove"
+              "remote-replace"
+              "gc")
             (flatpak-actions))
 
 (test-equal "validate: status (no flag)"
-            '(status ()) (flatpak-validate-action-arguments "status" '()))
+            '(status ())
+            (flatpak-validate-action-arguments "status"
+                                               '()))
 
 (test-equal "validate: status --refresh"
-            '(status (refresh)) (flatpak-validate-action-arguments "status" '("--refresh")))
+            '(status (refresh))
+            (flatpak-validate-action-arguments "status"
+                                               '("--refresh")))
 
 (test-equal "validate: sync"
-            '(sync ()) (flatpak-validate-action-arguments "sync" '()))
+            '(sync ())
+            (flatpak-validate-action-arguments "sync"
+                                               '()))
 
 (test-equal "validate: update"
-            '(update ()) (flatpak-validate-action-arguments "update" '()))
+            '(update ())
+            (flatpak-validate-action-arguments "update"
+                                               '()))
 
 (test-equal "validate: update-runtimes"
-            '(update-runtimes ()) (flatpak-validate-action-arguments "update-runtimes" '()))
+            '(update-runtimes ())
+            (flatpak-validate-action-arguments "update-runtimes"
+                                               '()))
 
 (test-equal "validate: remove with one argument"
-            '(remove ("qq")) (flatpak-validate-action-arguments "remove" '("qq")))
+            '(remove ("qq"))
+            (flatpak-validate-action-arguments "remove"
+                                               '("qq")))
 
 (test-equal "validate: remote-replace with one argument"
             '(remote-replace ("flathub"))
-            (flatpak-validate-action-arguments "remote-replace" '("flathub")))
+            (flatpak-validate-action-arguments "remote-replace"
+                                               '("flathub")))
 
 (test-equal "validate: gc"
-            '(gc ()) (flatpak-validate-action-arguments "gc" '()))
+            '(gc ())
+            (flatpak-validate-action-arguments "gc"
+                                               '()))
 
 (test-assert "validate: missing action -> #f"
-             (not (flatpak-validate-action-arguments #f '())))
+             (not (flatpak-validate-action-arguments #f
+                                                     '())))
 
 (test-assert "validate: unknown action -> #f (no fallback)"
-             (not (flatpak-validate-action-arguments "foobar" '())))
+             (not (flatpak-validate-action-arguments "foobar"
+                                                     '())))
 
 (test-assert "validate: remove without argument -> #f"
-             (not (flatpak-validate-action-arguments "remove" '())))
+             (not (flatpak-validate-action-arguments "remove"
+                                                     '())))
 
 (test-assert "validate: remove with two arguments -> #f"
-             (not (flatpak-validate-action-arguments "remove" '("a" "b"))))
+             (not (flatpak-validate-action-arguments "remove"
+                                                     '("a" "b"))))
 
 (test-assert "validate: status with unknown flag -> #f"
-             (not (flatpak-validate-action-arguments "status" '("--bogus"))))
+             (not (flatpak-validate-action-arguments "status"
+                                                     '("--bogus"))))
 
 (test-assert "validate: sync with extra argument -> #f"
-             (not (flatpak-validate-action-arguments "sync" '("extra"))))
+             (not (flatpak-validate-action-arguments "sync"
+                                                     '("extra"))))
 
 ;; ── dry-run plan（只读；绝不 mutate） ───────────────────────
 
@@ -146,74 +197,78 @@
 (fp-write-file %fp-list-runtime-out "")
 
 (test-assert "sync-plan: missing remote -> would add (descriptor + transport)"
-             (let ((lines (flatpak-sync-plan %flatpak-remotes
-                                             %flatpak-applications
-                                             %flatpak-selection)))
-               (any (lambda (l) (string-contains l "would add remote")) lines)))
+ (let ((lines (flatpak-sync-plan %flatpak-remotes %flatpak-applications
+                                 %flatpak-selection)))
+   (any (lambda (l)
+          (string-contains l "would add remote")) lines)))
 
-(test-assert "sync-plan: uninstalled selected app -> would install with remote"
-             (let ((lines (flatpak-sync-plan %flatpak-remotes
-                                             %flatpak-applications
-                                             %flatpak-selection)))
-               (any (lambda (l)
-                      (and (string-contains l "would install")
-                           (string-contains l " from ")))
-                    lines)))
+(test-assert
+ "sync-plan: uninstalled selected app -> would install with remote"
+ (let ((lines (flatpak-sync-plan %flatpak-remotes %flatpak-applications
+                                 %flatpak-selection)))
+   (any (lambda (l)
+          (and (string-contains l "would install")
+               (string-contains l " from "))) lines)))
 
 (define %wrong-branch-ext
-  (flatpak-extension
-   (name 'layer)
-   (id "org.freedesktop.Platform.VulkanLayer.example")
-   (remote 'flathub)
-   (branch "25.08")))
+  (flatpak-extension (name 'layer)
+                     (id "org.freedesktop.Platform.VulkanLayer.example")
+                     (remote 'flathub)
+                     (branch "25.08")))
 (fp-write-file %fp-list-app-out
-               "org.freedesktop.Platform.VulkanLayer.example\t24.08\n")
+               "org.freedesktop.Platform.VulkanLayer.example	24.08
+")
 (test-assert "sync-plan: wrong extension branch remains missing"
              (any (lambda (line)
-                    (string-contains
-                     line
+                    (string-contains line
                      "org.freedesktop.Platform.VulkanLayer.example//25.08"))
-                  (flatpak-sync-plan
-                   %flatpak-remotes %flatpak-applications '()
-                   #:extensions (list %wrong-branch-ext)
-                   #:extension-selection '(layer))))
+                  (flatpak-sync-plan %flatpak-remotes
+                                     %flatpak-applications
+                                     '()
+                                     #:extensions (list %wrong-branch-ext)
+                                     #:extension-selection '(layer))))
 (fp-write-file %fp-list-app-out "")
 
-(test-assert "sync-plan: performs no mutation (log has only read-only commands)"
-             (begin
-              (flatpak-sync-plan %flatpak-remotes %flatpak-applications %flatpak-selection)
-              (not (any (lambda (l)
-                          (or (string-contains l " install")
-                              (string-contains l " uninstall")
-                              (string-contains l " update")
-                              (string-contains l "remote-add")
-                              (string-contains l "remote-modify")
-                              (string-contains l "remote-delete")
-                              (string-contains l "repair")))
-                        (fp-log-lines)))))
+(test-assert
+ "sync-plan: performs no mutation (log has only read-only commands)"
+ (begin
+   (flatpak-sync-plan %flatpak-remotes %flatpak-applications
+                      %flatpak-selection)
+   (not (any (lambda (l)
+               (or (string-contains l " install")
+                   (string-contains l " uninstall")
+                   (string-contains l " update")
+                   (string-contains l "remote-add")
+                   (string-contains l "remote-modify")
+                   (string-contains l "remote-delete")
+                   (string-contains l "repair")))
+             (fp-log-lines)))))
 
 ;; update-plan：装两个（一个 unpinned selected，一个 pinned selected，
 ;; 一个 unselected）→ 只出 unpinned selected 的 ref。
 (fp-write-file %fp-list-app-out
-               (string-append
-                (flatpak-application-id (car (flatpak-select-applications %flatpak-selection %flatpak-applications)))
-                "\tstable\n"))
+               (string-append (flatpak-application-id (car (flatpak-select-applications
+                                                            %flatpak-selection
+                                                            %flatpak-applications)))
+                              "\tstable\n"))
 (test-assert "update-plan: yields refs for selected+installed+unpinned only"
-             (let* ((selected (flatpak-select-applications %flatpak-selection %flatpak-applications))
+             (let* ((selected (flatpak-select-applications %flatpak-selection
+                               %flatpak-applications))
                     (installed-refs (flatpak-list-installed-apps))
-                    (expected
-                     (map flatpak-application-ref
-                          (filter (lambda (a)
-                                    (and (member (flatpak-application-ref a)
-                                                 installed-refs)
-                                         (not (flatpak-application-commit a))))
-                                  selected))))
+                    (expected (map flatpak-application-ref
+                                   (filter (lambda (a)
+                                             (and (member (flatpak-application-ref
+                                                           a) installed-refs)
+                                                  (not (flatpak-application-commit
+                                                        a)))) selected))))
                (equal? expected
-                       (flatpak-update-plan %flatpak-applications %flatpak-selection))))
+                       (flatpak-update-plan %flatpak-applications
+                                            %flatpak-selection))))
 
 ;; update-runtimes-plan：空输出 → 空计划；有输出 → ref 列表。
 (test-equal "update-runtimes-plan: no runtimes -> empty"
-            '() (flatpak-update-runtimes-plan))
+            '()
+            (flatpak-update-runtimes-plan))
 (fp-write-file %fp-list-runtime-out "org.freedesktop.Platform 23.08\n")
 (test-equal "update-runtimes-plan: yields refs"
             '("org.freedesktop.Platform//23.08")
@@ -222,20 +277,27 @@
 ;; remove-plan：已知 name → app；未知 name → 同 remove 的 fail-fast。
 (test-assert "remove-plan: known logical name resolves to an application"
              (let ((name (flatpak-application-name (car %flatpak-applications))))
-               (flatpak-application? (flatpak-remove-plan name %flatpak-applications))))
+               (flatpak-application? (flatpak-remove-plan name
+                                      %flatpak-applications))))
 
 (test-assert "remove-plan: unknown name fails fast mentioning the name"
-             (let ((msg (string-join
-                         (let walk ((x (catch #t
-                                         (lambda () (flatpak-remove-plan 'no-such-app
-                                                                         %flatpak-applications)
-                                           '())
-                                         (lambda (key . args) args))))
-                           (cond ((string? x) (list x))
-                             ((symbol? x) (list (symbol->string x)))
-                             ((pair? x) (append (walk (car x)) (walk (cdr x))))
-                             (else '())))
-                         " ")))
+             (let ((msg (string-join (let walk
+                                       ((x (catch #t
+                                                  (lambda ()
+                                                    (flatpak-remove-plan 'no-such-app
+                                                     %flatpak-applications)
+                                                    '())
+                                                  (lambda (key . args)
+                                                    args))))
+                                       (cond
+                                         ((string? x)
+                                          (list x))
+                                         ((symbol? x)
+                                          (list (symbol->string x)))
+                                         ((pair? x)
+                                          (append (walk (car x))
+                                                  (walk (cdr x))))
+                                         (else '()))) " ")))
                (string-contains msg "no-such-app")))
 
 ;; replace-remote-plan：无 remote → #f；有 remote → url。
@@ -247,65 +309,67 @@
                (string? (flatpak-replace-remote-plan remote))))
 
 ;; gc-commands：两条 argv，全部显式 --user，无 sudo/system，无 shell 拼接。
-(test-equal "gc-commands: exactly two commands"
-            2 (length (flatpak-gc-commands)))
+(test-equal "gc-commands: exactly two commands" 2
+            (length (flatpak-gc-commands)))
 
-(test-assert "gc-commands: every mutation explicit --user, never --system/sudo"
-             (let ((all (flatpak-gc-commands)))
-               (and (every (lambda (argv) (member "--user" argv)) all)
-                    (not (any (lambda (argv) (member "--system" argv)) all))
-                    (not (any (lambda (argv) (member "sudo" argv)) all))
-                    (every list? all))))
+(test-assert
+ "gc-commands: every mutation explicit --user, never --system/sudo"
+ (let ((all (flatpak-gc-commands)))
+   (and (every (lambda (argv)
+                 (member "--user" argv)) all)
+        (not (any (lambda (argv)
+                    (member "--system" argv)) all))
+        (not (any (lambda (argv)
+                    (member "sudo" argv)) all))
+        (every list? all))))
 
 (test-equal "gc: stale catalog extension pins exclude selected ref"
             '("org.freedesktop.Platform.VulkanLayer.example//24.08"
               "runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/24.08")
-            (flatpak-stale-extension-pins
-             '("org.freedesktop.Platform.VulkanLayer.example//24.08"
-               "org.freedesktop.Platform.VulkanLayer.example//25.08"
-               "runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/24.08"
-               "runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/25.08"
-               "org.example.UserRuntime//stable")
-             #:extensions (list %wrong-branch-ext)
-             #:extension-selection '(layer)))
+            (flatpak-stale-extension-pins '("org.freedesktop.Platform.VulkanLayer.example//24.08"
+                                            "org.freedesktop.Platform.VulkanLayer.example//25.08"
+                                            "runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/24.08"
+                                            "runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/25.08"
+                                            "org.example.UserRuntime//stable")
+                                          #:extensions (list %wrong-branch-ext)
+                                          #:extension-selection '(layer)))
 
 ;; sync 收敛契约：已声明 remote + 全部 selected 已装 → 只打印
 ;; no-op 报告、零 mutation 命令、返回空安装列表（收敛的 sync 必须
 ;; 有输出、绝不触发任何 install/remote-add/remote-modify）。
 (fp-write-file %fp-remotes-out
                (string-append "flathub\t"
-                              (flatpak-remote-repository-url
-                               (car %flatpak-remotes))
+                              (flatpak-remote-repository-url (car
+                                                              %flatpak-remotes))
                               "\n"))
 ;; 全局 extension selection 的 refs 也计入"已装"集合：converged
 ;; 判定覆盖 apps + extensions（零 mutation 契约适用于全部 selection）。
 (fp-write-file %fp-list-app-out
-               (string-join
-                (append
-                 (map (lambda (app)
-                        (string-append (flatpak-application-id app)
-                                       "\t"
-                                       (flatpak-application-branch app)))
-                      (flatpak-select-applications
-                       %flatpak-selection %flatpak-applications))
-                 (map (lambda (ext)
-                        (string-append (flatpak-extension-id ext)
-                                       "\t"
-                                       (flatpak-extension-branch ext)))
-                      (flatpak-select-extensions
-                       %flatpak-extension-selection %flatpak-extensions)))
-                "\n"))
+               (string-join (append (map (lambda (app)
+                                           (string-append (flatpak-application-id
+                                                           app) "\t"
+                                                          (flatpak-application-branch
+                                                           app)))
+                                         (flatpak-select-applications
+                                          %flatpak-selection
+                                          %flatpak-applications))
+                                    (map (lambda (ext)
+                                           (string-append (flatpak-extension-id
+                                                           ext) "\t"
+                                                          (flatpak-extension-branch
+                                                           ext)))
+                                         (flatpak-select-extensions
+                                          %flatpak-extension-selection
+                                          %flatpak-extensions))) "\n"))
 (fp-write-file %fp-pins-out
-               (string-join
-                (map flatpak-extension-ref
-                     (flatpak-select-extensions
-                      %flatpak-extension-selection %flatpak-extensions))
-                "\n"))
+               (string-join (map flatpak-extension-ref
+                                 (flatpak-select-extensions
+                                  %flatpak-extension-selection
+                                  %flatpak-extensions)) "\n"))
 (test-assert "sync converged: zero mutation commands, empty install list"
-             (let ((result (flatpak-sync
-                            #:extensions %flatpak-extensions
-                            #:extension-selection
-                            %flatpak-extension-selection)))
+             (let ((result (flatpak-sync #:extensions %flatpak-extensions
+                                         #:extension-selection
+                                         %flatpak-extension-selection)))
                (and (null? result)
                     (let ((log (fp-log-lines)))
                       (not (any (lambda (line)
@@ -318,11 +382,12 @@
 ;; flatpak-binary 解析契约：会话 PATH 优先（显式覆盖），随后 guix
 ;; 标准安装位置（VM system profile / 用户 profile）——ssh 非 login
 ;; shell 无 system profile PATH 也能解析（绝不依赖 /etc/profile）。
-(test-equal "flatpak-binary-candidates: PATH first, then guix standard locations"
-            (list (string-append %fp-bin "/flatpak")
-                  "/run/current-system/profile/bin/flatpak"
-                  (string-append (getenv "HOME") "/.guix-profile/bin/flatpak"))
-            (flatpak-binary-candidates))
+(test-equal
+ "flatpak-binary-candidates: PATH first, then guix standard locations"
+ (list (string-append %fp-bin "/flatpak")
+       "/run/current-system/profile/bin/flatpak"
+       (string-append (getenv "HOME") "/.guix-profile/bin/flatpak"))
+ (flatpak-binary-candidates))
 
 (test-equal "flatpak-binary: resolves the PATH candidate when present"
             (string-append %fp-bin "/flatpak")
@@ -331,74 +396,75 @@
 ;; ── GL driver doctor（纯函数；离线）──────────────────────────
 (test-equal "GL doctor: no nvidia active and no nvidia refs -> silent"
             '()
-            (flatpak-gl-driver-status-lines '() '()))
+            (flatpak-gl-driver-status-lines '()
+                                            '()))
 
 (test-equal "GL doctor: matching extension installed -> silent"
             '()
-            (flatpak-gl-driver-status-lines
-             '("nvidia-610-57-04")
-             '("org.freedesktop.Platform.GL.nvidia-610-57-04"
-               "com.valvesoftware.Steam")))
+            (flatpak-gl-driver-status-lines '("nvidia-610-57-04")
+                                            '("org.freedesktop.Platform.GL.nvidia-610-57-04"
+                                              "com.valvesoftware.Steam")))
 
 (test-assert "GL doctor: active driver without extension -> actionable line"
-             (let ((lines (flatpak-gl-driver-status-lines
-                           '("nvidia-615-01-02")
-                           '())))
-               (and (= 1 (length lines))
+             (let ((lines (flatpak-gl-driver-status-lines '("nvidia-615-01-02")
+                                                          '())))
+               (and (= 1
+                       (length lines))
                     (string-contains (car lines) "nvidia-615-01-02")
                     (string-contains (car lines) "update-runtimes"))))
 
 (test-assert "GL doctor: stale extension -> gc line"
-             (let ((lines (flatpak-gl-driver-status-lines
-                           '("nvidia-610-57-04")
-                           '("org.freedesktop.Platform.GL.nvidia-610-57-04"
-                             "org.freedesktop.Platform.GL.nvidia-580-1-2"))))
-               (and (= 1 (length lines))
+             (let ((lines (flatpak-gl-driver-status-lines '("nvidia-610-57-04")
+                                                          '("org.freedesktop.Platform.GL.nvidia-610-57-04"
+                                                            "org.freedesktop.Platform.GL.nvidia-580-1-2"))))
+               (and (= 1
+                       (length lines))
                     (string-contains (car lines) "580-1-2")
                     (string-contains (car lines) "gc"))))
 
 (test-assert "GL doctor: missing and stale reported together"
-             (let ((lines (flatpak-gl-driver-status-lines
-                           '("nvidia-615-01-02")
-                           '("org.freedesktop.Platform.GL.nvidia-610-57-04"))))
-               (and (= 2 (length lines))
+             (let ((lines (flatpak-gl-driver-status-lines '("nvidia-615-01-02")
+                                                          '("org.freedesktop.Platform.GL.nvidia-610-57-04"))))
+               (and (= 2
+                       (length lines))
                     (any (cut string-contains <> "nvidia-615-01-02") lines)
                     (any (cut string-contains <> "610-57-04") lines))))
 
 (test-equal "GL doctor: non-nvidia drivers are not nvidia expectations"
             '()
-            (flatpak-gl-driver-status-lines
-             '("nvidia-610-57-04" "default" "host")
-             '("org.freedesktop.Platform.GL.nvidia-610-57-04")))
+            (flatpak-gl-driver-status-lines '("nvidia-610-57-04" "default"
+                                              "host")
+                                            '("org.freedesktop.Platform.GL.nvidia-610-57-04")))
 
 (test-assert "GL doctor: default/host alone are not nvidia active"
-             (equal? '() (flatpak-gl-driver-status-lines '("default" "host") '())))
+             (equal? '()
+                     (flatpak-gl-driver-status-lines '("default" "host")
+                                                     '())))
 
 (test-assert "GL doctor: Steam requires matching GL32"
-             (let ((lines (flatpak-gl-driver-status-lines
-                           '("nvidia-610-57-04")
-                           '("org.freedesktop.Platform.GL.nvidia-610-57-04//1.4")
-                           #:require-gl32? #t)))
-               (and (= 1 (length lines))
+             (let ((lines (flatpak-gl-driver-status-lines '("nvidia-610-57-04")
+                                                          '("org.freedesktop.Platform.GL.nvidia-610-57-04//1.4")
+                                                          #:require-gl32? #t)))
+               (and (= 1
+                       (length lines))
                     (string-contains (car lines) "GL32"))))
 
 (test-assert "GL doctor: stale GL32 is reported"
-             (let ((lines (flatpak-gl-driver-status-lines
-                           '("nvidia-610-57-04")
-                           '("org.freedesktop.Platform.GL.nvidia-610-57-04//1.4"
-                             "org.freedesktop.Platform.GL32.nvidia-580-1-2//1.4")
-                           #:require-gl32? #t)))
-               (and (= 2 (length lines))
+             (let ((lines (flatpak-gl-driver-status-lines '("nvidia-610-57-04")
+                                                          '("org.freedesktop.Platform.GL.nvidia-610-57-04//1.4"
+                                                            "org.freedesktop.Platform.GL32.nvidia-580-1-2//1.4")
+                                                          #:require-gl32? #t)))
+               (and (= 2
+                       (length lines))
                     (any (cut string-contains <> "GL32") lines)
                     (any (cut string-contains <> "580-1-2") lines))))
 
 (test-equal "GL doctor: matching GL and GL32 full refs are healthy"
             '()
-            (flatpak-gl-driver-status-lines
-             '("nvidia-610-57-04")
-             '("org.freedesktop.Platform.GL.nvidia-610-57-04//1.4"
-               "org.freedesktop.Platform.GL32.nvidia-610-57-04//1.4")
-             #:require-gl32? #t))
+            (flatpak-gl-driver-status-lines '("nvidia-610-57-04")
+                                            '("org.freedesktop.Platform.GL.nvidia-610-57-04//1.4"
+                                              "org.freedesktop.Platform.GL32.nvidia-610-57-04//1.4")
+                                            #:require-gl32? #t))
 
 (test-end)
 

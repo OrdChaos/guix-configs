@@ -8,7 +8,7 @@
 
 (use-modules (guixcfg system deploy)
              (guixcfg system reconfigure)
-             (guixcfg utils repository-source) ; repository-root
+             (guixcfg utils repository-source) ;repository-root
              (ice-9 match))
 
 (define (usage)
@@ -24,15 +24,20 @@
 (define (run host home-user)
   (let ((root (repository-root)))
     (chdir root)
-    (let ((code (reconfigure-transaction! host home-user #:root root)))
+    (let ((code (reconfigure-transaction! host home-user
+                                          #:root root)))
       (when (zero? code)
-        (unless (zero? (apply system* (gc-cli-argv root "run" host '())))
+        (unless (zero? (apply system*
+                              (gc-cli-argv root "run" host
+                                           '())))
           (format (current-error-port)
-                  "WARNING: post-reconfigure generation deletion failed; run 'blue gc ~a' manually~%"
-                  host)))
+           "WARNING: post-reconfigure generation deletion failed; run 'blue gc ~a' manually~%"
+           host)))
       (exit code))))
 
 (match (cdr (command-line))
-       (("--" host home-user) (run host home-user))
-       ((host home-user) (run host home-user))
-       (_ (usage)))
+  (("--" host home-user)
+   (run host home-user))
+  ((host home-user)
+   (run host home-user))
+  (_ (usage)))

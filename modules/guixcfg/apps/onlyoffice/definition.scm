@@ -46,22 +46,21 @@
 ;;; 在 setuid 模式下被 bwrap 禁止，non-setuid 是结构性前提）。
 
 (define-module (guixcfg apps onlyoffice definition)
-               #:use-module (virelith packages onlyoffice) ; onlyoffice-desktopeditors
-               #:use-module (gnu packages virtualization)  ; bubblewrap
-               #:use-module (gnu packages bash)            ; bash-minimal
-               #:use-module (gnu packages fontutils)       ; fontconfig（无 share/fonts，结构性排除）
-               #:use-module (gnu packages fonts)           ; font-dejavu
-               #:use-module (guix packages)          ; package、package-name、package-version
-               #:use-module (guix build-system trivial)
-               #:use-module (guix gexp)              ; gexp、file-append、computed-file
-               #:use-module (guixcfg fonts model)   ; %fonts（包事实）
-               #:use-module (guixcfg fonts fontconfig-policy) ; %fontconfig-snippets（策略接口）
-               #:use-module (guixcfg apps model)     ; application
-               #:use-module (guixcfg system application-persistence) ; rule
-               #:use-module (sxml simple)            ; sxml->xml
-               #:use-module (srfi srfi-1)            ; delete、append-map
-               #:export (%onlyoffice
-                         %onlyoffice-desktop-entry))
+  #:use-module (virelith packages onlyoffice) ;onlyoffice-desktopeditors
+  #:use-module (gnu packages virtualization) ;bubblewrap
+  #:use-module (gnu packages bash) ;bash-minimal
+  #:use-module (gnu packages fontutils) ;fontconfig（无 share/fonts，结构性排除）
+  #:use-module (gnu packages fonts) ;font-dejavu
+  #:use-module (guix packages) ;package、package-name、package-version
+  #:use-module (guix build-system trivial)
+  #:use-module (guix gexp) ;gexp、file-append、computed-file
+  #:use-module (guixcfg fonts model) ;%fonts（包事实）
+  #:use-module (guixcfg fonts fontconfig-policy) ;%fontconfig-snippets（策略接口）
+  #:use-module (guixcfg apps model) ;application
+  #:use-module (guixcfg system application-persistence) ;rule
+  #:use-module (sxml simple) ;sxml->xml
+  #:use-module (srfi srfi-1) ;delete、append-map
+  #:export (%onlyoffice %onlyoffice-desktop-entry))
 
 ;; ── 字体 bind 规格（从 %fonts 派生，不复制清单）────────────────
 ;; %fonts 是唯一事实源；下列 bind 规格基于已完成的结构审计生成：
@@ -99,10 +98,9 @@
 ;; 路径在 build 期由 gexp 拼接。
 (define %onlyoffice-fontconfig-prefix
   (string-append "<?xml version='1.0'?>\n"
-                 "<!DOCTYPE fontconfig SYSTEM 'fonts.dtd'>\n"
-                 "<fontconfig>\n"
-                 "<dir prefix=\"xdg\">fonts</dir>\n"
-                 "<dir>~/.fonts</dir>\n"))
+                 "<!DOCTYPE fontconfig SYSTEM 'fonts.dtd'>
+" "<fontconfig>\n"
+                 "<dir prefix=\"xdg\">fonts</dir>\n" "<dir>~/.fonts</dir>\n"))
 
 ;; 规范化 match（Qt 原生弹窗的默认 family 是带空格的 "Sans Serif"）。
 ;; 这 4 条在 fontconfig 默认 fonts.conf 的【正文】里（不在 conf.d，
@@ -114,42 +112,59 @@
 ;; 默认 fonts.conf 自带这些规则，共享策略模块不含它们。
 (define %onlyoffice-fontconfig-normalizations
   '((match (@ (target "pattern"))
-           (test (@ (qual "any") (name "family")) (string "mono"))
-           (edit (@ (name "family") (mode "assign") (binding "same"))
-                 (string "monospace")))
+      (test (@ (qual "any")
+               (name "family"))
+            (string "mono"))
+      (edit (@ (name "family")
+               (mode "assign")
+               (binding "same"))
+            (string "monospace")))
     (match (@ (target "pattern"))
-           (test (@ (qual "any") (name "family")) (string "sans serif"))
-           (edit (@ (name "family") (mode "assign") (binding "same"))
-                 (string "sans-serif")))
+      (test (@ (qual "any")
+               (name "family"))
+            (string "sans serif"))
+      (edit (@ (name "family")
+               (mode "assign")
+               (binding "same"))
+            (string "sans-serif")))
     (match (@ (target "pattern"))
-           (test (@ (qual "any") (name "family")) (string "sans"))
-           (edit (@ (name "family") (mode "assign") (binding "same"))
-                 (string "sans-serif")))
+      (test (@ (qual "any")
+               (name "family"))
+            (string "sans"))
+      (edit (@ (name "family")
+               (mode "assign")
+               (binding "same"))
+            (string "sans-serif")))
     (match (@ (target "pattern"))
-           (test (@ (qual "any") (name "family")) (string "system ui"))
-           (edit (@ (name "family") (mode "assign") (binding "same"))
-                 (string "system-ui")))))
+      (test (@ (qual "any")
+               (name "family"))
+            (string "system ui"))
+      (edit (@ (name "family")
+               (mode "assign")
+               (binding "same"))
+            (string "system-ui")))))
 
 (define %onlyoffice-fontconfig-suffix
-  (string-append
-   (call-with-output-string
-    (lambda (port)
-      ;; 规范化规则在前（与默认 fonts.conf 的正文先于 conf.d 同序）。
-      (for-each (lambda (snippet) (sxml->xml snippet port))
-                (append %onlyoffice-fontconfig-normalizations
-                        %fontconfig-snippets))))
-   "</fontconfig>\n"))
+  (string-append (call-with-output-string (lambda (port)
+                                            ;; 规范化规则在前（与默认 fonts.conf 的正文先于 conf.d 同序）。
+                                            (for-each (lambda (snippet)
+                                                        (sxml->xml snippet
+                                                                   port))
+                                                      (append
+                                                       %onlyoffice-fontconfig-normalizations
+                                                       %fontconfig-snippets))))
+                 "</fontconfig>\n"))
 
 (define onlyoffice-fontconfig-file
-  (computed-file
-   "onlyoffice-fonts.conf"
-   #~(call-with-output-file #$output
-                            (lambda (port)
-                              (display #$%onlyoffice-fontconfig-prefix port)
-                              (display "<dir>" port)
-                              (display #$(file-append font-dejavu "/share/fonts") port)
-                              (display "</dir>\n" port)
-                              (display #$%onlyoffice-fontconfig-suffix port)))))
+  (computed-file "onlyoffice-fonts.conf"
+                 #~(call-with-output-file #$output
+                     (lambda (port)
+                       (display #$%onlyoffice-fontconfig-prefix port)
+                       (display "<dir>" port)
+                       (display #$(file-append font-dejavu "/share/fonts")
+                                port)
+                       (display "</dir>\n" port)
+                       (display #$%onlyoffice-fontconfig-suffix port)))))
 
 ;; bwrap argv（顺序是契约，见头部注释 3/4）：
 ;;   --bind / /            宿主视图（recursive，子挂载继承）
@@ -167,16 +182,28 @@
 ;;                         不能用 --native-file-dialog（直连 GTK chooser
 ;;                         在 niri 下无正确父窗口，会被平铺放大）。
 (define %onlyoffice-bwrap-argv
-  (append
-   (list "--bind" "/" "/"
-         "--dev-bind" "/dev" "/dev"
-         "--overlay-src" "/usr" "--tmp-overlay" "/usr"
-         "--dir" "/usr/local/share/fonts")
-   (append-map (lambda (spec)
-                 (list "--ro-bind" (cadr spec) (caddr spec)))
-               %onlyoffice-font-bind-specs)
-   (list "--setenv" "CUSTOM_FONTS_PATH" "/usr/local/share/fonts"
-         "--setenv" "FONTCONFIG_FILE" onlyoffice-fontconfig-file)))
+  (append (list "--bind"
+                "/"
+                "/"
+                "--dev-bind"
+                "/dev"
+                "/dev"
+                "--overlay-src"
+                "/usr"
+                "--tmp-overlay"
+                "/usr"
+                "--dir"
+                "/usr/local/share/fonts")
+          (append-map (lambda (spec)
+                        (list "--ro-bind"
+                              (cadr spec)
+                              (caddr spec))) %onlyoffice-font-bind-specs)
+          (list "--setenv"
+                "CUSTOM_FONTS_PATH"
+                "/usr/local/share/fonts"
+                "--setenv"
+                "FONTCONFIG_FILE"
+                onlyoffice-fontconfig-file)))
 
 ;; ── 私有 adapter package ─────────────────────────────────────
 ;; profile 只装 adapter（base 包不进 profile——desktop/bin 冲突）：
@@ -193,92 +220,94 @@
 ;; 输出 references——GC closure 完整，字体包 bump 触发 adapter 重建。
 (define onlyoffice-adapter
   (package
-   (name "onlyoffice-desktopeditors-adapter")
-   (version (package-version onlyoffice-desktopeditors))
-   (source #f)
-   (build-system trivial-build-system)
-   (arguments
-    (list
-     #:modules '((guix build utils)
-                 (guix build union)
-                 (ice-9 regex))       ; regexp-quote
-     #:builder
-     #~(begin
-        (use-modules (guix build utils)
-                     (guix build union)
-                     (ice-9 regex))
-        (let* ((out (assoc-ref %outputs "out"))
-               (bin (string-append out "/bin"))
-               (wrapper (string-append bin "/onlyoffice-desktopeditors"))
-               (apps (string-append out "/share/applications"))
-               (icons (string-append out "/share/icons"))
-               (base-desktop
-                (string-append #$onlyoffice-desktopeditors
-                               "/share/applications/onlyoffice-desktopeditors.desktop"))
-               (base-launcher
-                (string-append #$onlyoffice-desktopeditors
-                               "/bin/onlyoffice-desktopeditors")))
-          (mkdir-p bin)
-          (mkdir-p apps)
-          ;; wrapper：每个 argv 一行（路径均无空格，无需转义）。
-          (call-with-output-file wrapper
-                                 (lambda (port)
-                                   (format port "#!~a~%" #$(file-append bash-minimal "/bin/bash"))
-                                   (format port "exec ~a \\\n"
-                                           #$(file-append bubblewrap "/bin/bwrap"))
-                                   (for-each (lambda (arg) (format port "  ~a \\\n" arg))
-                                             (list #$@%onlyoffice-bwrap-argv))
-                                    (format port "  -- ~a --xdg-desktop-portal=default \"$@\"~%"
-                                            base-launcher)))
-          (chmod wrapper #o755)
-          ;; desktop entry：复制 base 后把 base launcher 路径换成
-          ;; wrapper（主 Exec / TryExec / 4 个 new-document action
-          ;; 一次替换覆盖；%U、--new:* 等参数原样保留）。pattern 经
-          ;; regexp-quote 字面化，避免 store basename 里的版本号
-          ;; 字符（. 等）被当 regexp 解释。
-          (let ((desktop-out
-                 (string-append apps "/onlyoffice-desktopeditors.desktop")))
-            (copy-file base-desktop desktop-out)
-            (substitute* desktop-out
-                         (((regexp-quote base-launcher)) wrapper)))
-          ;; icons：base 图标树的 per-file symlink（union-build）。
-          (union-build icons
-                       (list (string-append #$onlyoffice-desktopeditors
-                                            "/share/icons")))))
-     ))
-   (inputs (list onlyoffice-desktopeditors bubblewrap bash-minimal))
-   (supported-systems '("x86_64-linux"))
-   (home-page "https://www.onlyoffice.com/desktop.aspx")
-   (synopsis "ONLYOFFICE Desktop Editors with namespaced font projection")
-   (description
-    "Adapter around the virelith onlyoffice-desktopeditors package: launches
+    (name "onlyoffice-desktopeditors-adapter")
+    (version (package-version onlyoffice-desktopeditors))
+    (source
+     #f)
+    (build-system trivial-build-system)
+    (arguments
+     (list
+      #:modules '((guix build utils)
+                  (guix build union)
+                  (ice-9 regex)) ;regexp-quote
+      #:builder
+      #~(begin
+          (use-modules (guix build utils)
+                       (guix build union)
+                       (ice-9 regex))
+          (let* ((out (assoc-ref %outputs "out"))
+                 (bin (string-append out "/bin"))
+                 (wrapper (string-append bin "/onlyoffice-desktopeditors"))
+                 (apps (string-append out "/share/applications"))
+                 (icons (string-append out "/share/icons"))
+                 (base-desktop (string-append #$onlyoffice-desktopeditors
+                                "/share/applications/onlyoffice-desktopeditors.desktop"))
+                 (base-launcher (string-append #$onlyoffice-desktopeditors
+                                 "/bin/onlyoffice-desktopeditors")))
+            (mkdir-p bin)
+            (mkdir-p apps)
+            ;; wrapper：每个 argv 一行（路径均无空格，无需转义）。
+            (call-with-output-file wrapper
+              (lambda (port)
+                (format port "#!~a~%"
+                        #$(file-append bash-minimal "/bin/bash"))
+                (format port "exec ~a \\\n"
+                        #$(file-append bubblewrap "/bin/bwrap"))
+                (for-each (lambda (arg)
+                            (format port "  ~a \\\n" arg))
+                          (list #$@%onlyoffice-bwrap-argv))
+                (format port "  -- ~a --xdg-desktop-portal=default \"$@\"~%"
+                        base-launcher)))
+            (chmod wrapper #o755)
+            ;; desktop entry：复制 base 后把 base launcher 路径换成
+            ;; wrapper（主 Exec / TryExec / 4 个 new-document action
+            ;; 一次替换覆盖；%U、--new:* 等参数原样保留）。pattern 经
+            ;; regexp-quote 字面化，避免 store basename 里的版本号
+            ;; 字符（. 等）被当 regexp 解释。
+            (let ((desktop-out (string-append apps
+                                "/onlyoffice-desktopeditors.desktop")))
+              (copy-file base-desktop desktop-out)
+              (substitute* desktop-out
+                (((regexp-quote base-launcher))
+                 wrapper)))
+            ;; icons：base 图标树的 per-file symlink（union-build）。
+            (union-build icons
+                         (list (string-append #$onlyoffice-desktopeditors
+                                              "/share/icons")))))))
+    (inputs (list onlyoffice-desktopeditors bubblewrap bash-minimal))
+    (supported-systems '("x86_64-linux"))
+    (home-page "https://www.onlyoffice.com/desktop.aspx")
+    (synopsis "ONLYOFFICE Desktop Editors with namespaced font projection")
+    (description
+     "Adapter around the virelith onlyoffice-desktopeditors package: launches
 the upstream launcher inside a bubblewrap mount namespace that projects the
 Guix font packages as real directories under /usr/local/share/fonts (its
 built-in font scanner skips symlinks and never consults fontconfig).")
-   (license (package-license onlyoffice-desktopeditors))))
+    (license (package-license onlyoffice-desktopeditors))))
 
 ;; ONLYOFFICE 的 XDG desktop entry 名（virelith 包 install-plan 的
 ;; share/applications/ 目标；adapter 原样保留该文件名）。纯数据常量：
 ;; 供统一 XDG/default-apps 策略模块 (guixcfg home xdg) 引用，本模块
 ;; 不决定默认应用。
-(define %onlyoffice-desktop-entry "onlyoffice-desktopeditors.desktop")
+(define %onlyoffice-desktop-entry
+  "onlyoffice-desktopeditors.desktop")
 
 (define %onlyoffice
-  (application
-   (name 'onlyoffice)
-   (home-packages (list onlyoffice-adapter))
-   ;; 无 system-services/home-services：挂载全部发生在 per-launch
-   ;; namespace 内，宿主零状态。
-   (persistence
-    (list (application-persistence-rule
-           (name 'config)
-           (backing "onlyoffice/config")          ; backing root 相对
-           (consumer ".config/onlyoffice")        ; DesktopEditors.conf 等
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))
-          (application-persistence-rule
-           (name 'share)
-           (backing "onlyoffice/share")           ; 词典/插件/recover/字体 DB
-           (consumer ".local/share/onlyoffice")
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))))))
+  (application (name 'onlyoffice)
+               (home-packages (list onlyoffice-adapter))
+               ;; 无 system-services/home-services：挂载全部发生在 per-launch
+               ;; namespace 内，宿主零状态。
+               (persistence (list (application-persistence-rule (name 'config)
+                                                                (backing
+                                                                 "onlyoffice/config") ;backing root 相对
+                                                                (consumer
+                                                                 ".config/onlyoffice") ;DesktopEditors.conf 等
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))
+                                  (application-persistence-rule (name 'share)
+                                                                (backing
+                                                                 "onlyoffice/share") ;词典/插件/recover/字体 DB
+                                                                (consumer
+                                                                 ".local/share/onlyoffice")
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))))))

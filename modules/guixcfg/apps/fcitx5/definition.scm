@@ -79,63 +79,68 @@
 ;;; Wayland IME flags 属各应用单元，不进本单元。
 
 (define-module (guixcfg apps fcitx5 definition)
-               #:use-module (gnu home services)      ; home-files / xdg-config / env vars
-               #:use-module (gnu packages fcitx5)    ; fcitx5、fcitx5-gtk、fcitx5-qt
-               #:use-module (gnu services)           ; simple-service
-               #:use-module (guix gexp)              ; local-file
-               #:use-module (guix records)
-               #:use-module (virelith packages fcitx5) ; fcitx5-rime-virelith、fcitx5-fluentlight-theme
-               #:use-module (virelith packages rime) ; rime-data-wanxiang
-               #:use-module (guixcfg apps model)
-               #:use-module (guixcfg system application-persistence)
-               #:export (%fcitx5))
+  #:use-module (gnu home services) ;home-files / xdg-config / env vars
+  #:use-module (gnu packages fcitx5) ;fcitx5、fcitx5-gtk、fcitx5-qt
+  #:use-module (gnu services) ;simple-service
+  #:use-module (guix gexp) ;local-file
+  #:use-module (guix records)
+  #:use-module (virelith packages fcitx5) ;fcitx5-rime-virelith、fcitx5-fluentlight-theme
+  #:use-module (virelith packages rime) ;rime-data-wanxiang
+  #:use-module (guixcfg apps model)
+  #:use-module (guixcfg system application-persistence)
+  #:export (%fcitx5))
 
 (define %fcitx5
-  (application
-   (name 'fcitx5)
-   (home-packages (list fcitx5 fcitx5-gtk fcitx5-qt
-                        fcitx5-rime-virelith fcitx5-fluentlight-theme))
-   (home-services
-    (list ;; 声明式 Fcitx5 配置（~/.config/fcitx5/**）。
-          (simple-service 'fcitx5-config
-                          home-files-service-type
-                          `((".config/fcitx5/config"
-                             ,(local-file "config" "fcitx5-config"))
-                            (".config/fcitx5/profile"
-                             ,(local-file "profile" "fcitx5-profile"))
-                            (".config/fcitx5/conf/classicui.conf"
-                             ,(local-file "classicui.conf"
-                                          "fcitx5-classicui.conf"))
-                            (".config/fcitx5/conf/rime.conf"
-                             ,(local-file "rime.conf"
-                                          "fcitx5-rime-addon.conf"))))
-          ;; 声明式 Rime 用户配置（~/.local/share/fcitx5/rime/——
-          ;; 非 .config 目标，走 home-files；polkit-gnome 的
-          ;; .local/bin wrapper 同款）。
-          (simple-service 'fcitx5-rime-user-config
-                          home-files-service-type
-                          `((".local/share/fcitx5/rime/default.custom.yaml"
-                             ,(local-file "default.custom.yaml"
-                                          "fcitx5-rime-default-custom.yaml"))
-                            (".local/share/fcitx5/rime/rime_ice.custom.yaml"
-                             ,(local-file "rime_ice.custom.yaml"
-                                          "fcitx5-rime-ice-custom.yaml"))
-                            ;; 万象语法模型本体（Virelith 快照包
-                            ;; rime-data-wanxiang，sha256 pinned；
-                            ;; 见文件头）。
-                            (".local/share/fcitx5/rime/wanxiang-lts-zh-hans.gram"
-                             ,(file-append rime-data-wanxiang
-                                           "/share/rime-data/wanxiang-lts-zh-hans.gram"))))
-          ;; 会话环境（home-environment-variables 共享 sink 的
-          ;; native extension——polkit-gnome PATH 同款模式）。
-          (simple-service 'fcitx5-env
-                          home-environment-variables-service-type
-                          '(("XMODIFIERS" . "@im=fcitx")
-                            ("QT_IM_MODULES" . "wayland;fcitx")))))
-   (persistence
-    (list (application-persistence-rule
-           (name 'rime-userdb)
-           (backing "fcitx5/rime_ice.userdb") ; backing root 相对（persistence.md）
-           (consumer ".local/share/fcitx5/rime/rime_ice.userdb") ; HOME 相对
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))))))
+  (application (name 'fcitx5)
+               (home-packages (list fcitx5 fcitx5-gtk fcitx5-qt
+                                    fcitx5-rime-virelith
+                                    fcitx5-fluentlight-theme))
+               (home-services (list ;声明式 Fcitx5 配置（~/.config/fcitx5/**）。
+                                    (simple-service 'fcitx5-config
+                                                    home-files-service-type
+                                                    `((".config/fcitx5/config" ,
+                                                       (local-file "config"
+                                                        "fcitx5-config"))
+                                                      (".config/fcitx5/profile" ,
+                                                       (local-file "profile"
+                                                        "fcitx5-profile"))
+                                                      (".config/fcitx5/conf/classicui.conf" ,
+                                                       (local-file
+                                                        "classicui.conf"
+                                                        "fcitx5-classicui.conf"))
+                                                      (".config/fcitx5/conf/rime.conf" ,
+                                                       (local-file "rime.conf"
+                                                        "fcitx5-rime-addon.conf"))))
+                                    ;; 声明式 Rime 用户配置（~/.local/share/fcitx5/rime/——
+                                    ;; 非 .config 目标，走 home-files；polkit-gnome 的
+                                    ;; .local/bin wrapper 同款）。
+                                    (simple-service 'fcitx5-rime-user-config
+                                                    home-files-service-type
+                                                    `((".local/share/fcitx5/rime/default.custom.yaml" ,
+                                                       (local-file
+                                                        "default.custom.yaml"
+                                                        "fcitx5-rime-default-custom.yaml"))
+                                                      (".local/share/fcitx5/rime/rime_ice.custom.yaml" ,
+                                                       (local-file
+                                                        "rime_ice.custom.yaml"
+                                                        "fcitx5-rime-ice-custom.yaml"))
+                                                      ;; 万象语法模型本体（Virelith 快照包
+                                                      ;; rime-data-wanxiang，sha256 pinned；
+                                                      ;; 见文件头）。
+                                                      (".local/share/fcitx5/rime/wanxiang-lts-zh-hans.gram" ,
+                                                       (file-append
+                                                        rime-data-wanxiang
+                                                        "/share/rime-data/wanxiang-lts-zh-hans.gram"))))
+                                    ;; 会话环境（home-environment-variables 共享 sink 的
+                                    ;; native extension——polkit-gnome PATH 同款模式）。
+                                    (simple-service 'fcitx5-env
+                                     home-environment-variables-service-type
+                                     '(("XMODIFIERS" . "@im=fcitx")
+                                       ("QT_IM_MODULES" . "wayland;fcitx")))))
+               (persistence (list (application-persistence-rule (name 'rime-userdb)
+                                                                (backing
+                                                                 "fcitx5/rime_ice.userdb") ;backing root 相对（persistence.md）
+                                                                (consumer
+                                                                 ".local/share/fcitx5/rime/rime_ice.userdb") ;HOME 相对
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))))))

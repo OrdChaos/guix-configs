@@ -6,10 +6,11 @@
 ;;; 谓词，禁止各处复制（invariants §13 second-implementation trigger）。
 
 (define-module (guixcfg utils module-closure)
-               #:use-module (guix modules)  ; guix-module-name?、source-module-closure
-               #:export (guixcfg-module-select?))
+  #:use-module (guix modules) ;guix-module-name?、source-module-closure
+  #:export (guixcfg-module-select?))
 
 (define (guixcfg-module-select? name)
   "source-module-closure 的 #:select?：guix/gnu 模块 + 项目 (guixcfg …)。"
   (or (guix-module-name? name)
-      (eq? (car name) 'guixcfg)))
+      (eq? (car name)
+           'guixcfg)))

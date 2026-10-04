@@ -7,9 +7,9 @@
 ;;; 避免 srfi-64 失败信息打印 passphrase 本身。
 
 (use-modules (srfi srfi-64)
-             (srfi srfi-1)       ; every、any
-             (ice-9 rdelim)      ; read-line
-             (ice-9 textual-ports)  ; get-string-all
+             (srfi srfi-1) ;every、any
+             (ice-9 rdelim) ;read-line
+             (ice-9 textual-ports) ;get-string-all
              (guixcfg storage model)
              (guixcfg storage policies)
              (guixcfg storage plan)
@@ -21,33 +21,38 @@
 (define %fake-bin
   (string-append "/tmp/guixcfg-test-luks-bin-"
                  (number->string (getpid))))
-(define %fake-argv (string-append %fake-bin "/argv.txt"))
-(define %fake-stdin (string-append %fake-bin "/stdin.txt"))
-(define %original-path (getenv "PATH"))
+(define %fake-argv
+  (string-append %fake-bin "/argv.txt"))
+(define %fake-stdin
+  (string-append %fake-bin "/stdin.txt"))
+(define %original-path
+  (getenv "PATH"))
 
 (define (install-fake-cryptsetup exit-code)
   "把假 cryptsetup 装入临时 PATH；EXIT-CODE 为模拟退出码。"
   (unless (file-exists? %fake-bin)
     (mkdir %fake-bin))
   (call-with-output-file (string-append %fake-bin "/cryptsetup")
-                         (lambda (p)
-                           (display "#!/bin/sh\n" p)
-                           (display "printf '%s\\n' \"$*\" > \"$FAKE_LUKS_ARGV\"\n" p)
-                           (display "cat > \"$FAKE_LUKS_STDIN\"\n" p)
-                           (display "exit \"${FAKE_LUKS_EXIT:-0}\"\n" p)))
+    (lambda (p)
+      (display "#!/bin/sh\n" p)
+      (display "printf '%s\\n' \"$*\" > \"$FAKE_LUKS_ARGV\"\n" p)
+      (display "cat > \"$FAKE_LUKS_STDIN\"\n" p)
+      (display "exit \"${FAKE_LUKS_EXIT:-0}\"\n" p)))
   (chmod (string-append %fake-bin "/cryptsetup") #o755)
-  (setenv "PATH" (string-append %fake-bin ":" %original-path))
+  (setenv "PATH"
+          (string-append %fake-bin ":" %original-path))
   (setenv "FAKE_LUKS_ARGV" %fake-argv)
   (setenv "FAKE_LUKS_STDIN" %fake-stdin)
-  (setenv "FAKE_LUKS_EXIT" (number->string exit-code)))
+  (setenv "FAKE_LUKS_EXIT"
+          (number->string exit-code)))
 
 (define (fake-argv)
-  (false-if-exception
-   (call-with-input-file %fake-argv read-line)))
+  (false-if-exception (call-with-input-file %fake-argv
+                        read-line)))
 
 (define (fake-stdin)
-  (false-if-exception
-   (call-with-input-file %fake-stdin get-string-all)))
+  (false-if-exception (call-with-input-file %fake-stdin
+                        get-string-all)))
 
 (test-begin "luks-passphrase")
 
@@ -56,23 +61,27 @@
        (secret "sup3r-s3cret-value"))
   (test-assert "plan detail has no passphrase/password/secret keys"
                (every (lambda (step)
-                        (let ((keys (map car (plan-step-detail step))))
-                          (not (any (lambda (k) (memq k keys))
-                                    '(passphrase password secret)))))
-                      plan))
+                        (let ((keys (map car
+                                         (plan-step-detail step))))
+                          (not (any (lambda (k)
+                                      (memq k keys))
+                                    '(passphrase password secret))))) plan))
   (test-assert "plan text does not contain the secret"
                (not (string-contains (plan->text plan) secret))))
 
 ;; ── 2. passphrase 复用于两个 operation ─────────────────────
 (let ((calls 0))
   (define (reader)
-    (set! calls (1+ calls))
-    "pw")
-  (define source (make-luks-passphrase-source reader))
+    (set! calls
+          (1+ calls)) "pw")
+  (define source
+    (make-luks-passphrase-source reader))
   (test-assert "first call returns reader's value"
-               (string=? "pw" (source)))
+               (string=? "pw"
+                         (source)))
   (test-assert "later calls return the same value (no re-read)"
-               (string=? "pw" (source)))
+               (string=? "pw"
+                         (source)))
   (test-assert "reader called exactly once"
                (= 1 calls)))
 
@@ -80,11 +89,13 @@
 (test-assert "re-prompts after two mismatches"
              (string=? "okpw"
                        (with-input-from-string "foo\nbar\nokpw\nokpw\n"
-                                               (lambda () (read-luks-passphrase!)))))
+                                               (lambda ()
+                                                 (read-luks-passphrase!)))))
 (test-assert "empty passphrase rejected"
              (string=? "realpw"
                        (with-input-from-string "\n\nrealpw\nrealpw\n"
-                                               (lambda () (read-luks-passphrase!)))))
+                                               (lambda ()
+                                                 (read-luks-passphrase!)))))
 
 ;; ── 4. luksFormat：--batch-mode + --key-file=-，stdin 是 passphrase ──
 (install-fake-cryptsetup 0)
@@ -97,11 +108,13 @@
                     (string-contains args "/dev/vda2")
                     (not (string-contains args "/dev/disk/by-partlabel")))))
 (test-assert "luksFormat stdin receives passphrase"
-             (string=? "pw4fmt" (fake-stdin)))
+             (string=? "pw4fmt"
+                       (fake-stdin)))
 ;; 关键：display + EOF 不附加换行——最终用户启动时交互输入的
 ;; recovery password 必须与安装时写入的完全一致（含字节边界）。
 (test-assert "luksFormat stdin has no trailing newline"
-             (not (string-suffix? "\n" (fake-stdin))))
+             (not (string-suffix? "\n"
+                                  (fake-stdin))))
 
 ;; ── 5. open：--key-file=-，stdin 是 passphrase ─────────────
 (execute-luks-open "/dev/vda2" "pw4open")
@@ -112,14 +125,17 @@
                     (string-contains args "/dev/vda2")
                     (not (string-contains args "/dev/disk/by-partlabel")))))
 (test-assert "open stdin receives passphrase"
-             (string=? "pw4open" (fake-stdin)))
+             (string=? "pw4open"
+                       (fake-stdin)))
 (test-assert "open stdin has no trailing newline"
-             (not (string-suffix? "\n" (fake-stdin))))
+             (not (string-suffix? "\n"
+                                  (fake-stdin))))
 
 ;; 非 ASCII passphrase：UTF-8 多字节字符经 stdin 原样传递
 (execute-luks-format "/dev/vda2" "秘密pw-✓")
 (test-assert "non-ASCII passphrase bytes match stdin exactly"
-             (string=? "秘密pw-✓" (fake-stdin)))
+             (string=? "秘密pw-✓"
+                       (fake-stdin)))
 
 ;; ── 6. luksFormat 失败：抛错（不继续 open/Btrfs）────────────
 (install-fake-cryptsetup 1)

@@ -27,18 +27,18 @@
 
 (use-modules (guixcfg hosts vm)
              (guixcfg home user)
-             (guixcfg apps model)       ; applications-home-packages（旧 (guixcfg home packages) 已删）
-             (guixcfg apps niri definition) ; home-niri-session-service-type
+             (guixcfg apps model) ;applications-home-packages（旧 (guixcfg home packages) 已删）
+             (guixcfg apps niri definition) ;home-niri-session-service-type
              (gnu home)
              (gnu home services)
-             (gnu home services desktop) ; home-dbus-service-type
-             (gnu home services shepherd) ; shepherd-service-respawn?
-             (gnu home services sound)   ; home-pipewire-service-type
+             (gnu home services desktop) ;home-dbus-service-type
+             (gnu home services shepherd) ;shepherd-service-respawn?
+             (gnu home services sound) ;home-pipewire-service-type
              (gnu services)
-             (gnu services guix)         ; guix-home-service-type
-             (gnu system)                ; operating-system-services
-             (guix packages)             ; package-name
-             (gnu packages xorg)         ; xwayland-satellite
+             (gnu services guix) ;guix-home-service-type
+             (gnu system) ;operating-system-services
+             (guix packages) ;package-name
+             (gnu packages xorg) ;xwayland-satellite
              (ice-9 rdelim)
              (srfi srfi-1)
              (srfi srfi-13)
@@ -48,7 +48,8 @@
 
 (define (home-service? svc-type)
   "HOME 的 %guix-home 是否含 SVC-TYPE 服务。"
-  (any (lambda (svc) (eq? (service-kind svc) svc-type))
+  (any (lambda (svc)
+         (eq? (service-kind svc) svc-type))
        (home-environment-services %guix-home)))
 
 (test-begin "session-env")
@@ -67,16 +68,18 @@
 
 ;; ── OFF2b：niri service 的注销 lifecycle 固定 ──────────────
 (define %home-shepherd-services
-  (home-shepherd-configuration-services
-   (service-value
-    (fold-services (home-environment-services %guix-home)
-                   #:target-type home-shepherd-service-type))))
+  (home-shepherd-configuration-services (service-value (fold-services (home-environment-services
+                                                                       %guix-home)
+                                                        #:target-type
+                                                        home-shepherd-service-type))))
 
 (define (home-svc name)
-  (find (lambda (svc) (eq? name (shepherd-service-canonical-name svc)))
-        %home-shepherd-services))
+  (find (lambda (svc)
+          (eq? name
+               (shepherd-service-canonical-name svc))) %home-shepherd-services))
 
-(define %niri-shepherd-service (home-svc 'niri))
+(define %niri-shepherd-service
+  (home-svc 'niri))
 
 (test-assert "OFF2b: niri service does not respawn (exit = logout)"
              (not (shepherd-service-respawn? %niri-shepherd-service)))
@@ -84,9 +87,9 @@
 (test-assert "OFF2b: niri wrapper terminates the login session (source)"
              ;; wrapper 用 $XDG_SESSION_ID（不硬编码 session id）；
              ;; stop 先写 guard marker（herd stop/reconfigure 不注销）。
-             (let ((s (call-with-input-file
-                       "modules/guixcfg/apps/niri/definition.scm"
-                       (lambda (p) (read-string p)))))
+             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/definition.scm"
+                        (lambda (p)
+                          (read-string p)))))
                (and (string-contains s "terminate-session")
                     (string-contains s "XDG_SESSION_ID")
                     (string-contains s "niri-logout-guard"))))
@@ -94,17 +97,20 @@
 ;; ── OFF4/5/6：custom wrapper 已删除 ────────────────────────
 (test-assert "OFF4: no private dbus-run-session owner in desktop.scm"
              (let ((s (call-with-input-file "modules/guixcfg/system/desktop.scm"
-                                            (lambda (p) (read-string p)))))
+                        (lambda (p)
+                          (read-string p)))))
                (not (string-contains s "dbus-run-session"))))
 
 (test-assert "OFF5: no custom HOME setter for the session"
              (let ((s (call-with-input-file "modules/guixcfg/system/desktop.scm"
-                                            (lambda (p) (read-string p)))))
+                        (lambda (p)
+                          (read-string p)))))
                (not (string-contains s "setenv \"HOME\""))))
 
 (test-assert "OFF6: no custom graphical PATH constructor"
              (let ((s (call-with-input-file "modules/guixcfg/system/desktop.scm"
-                                            (lambda (p) (read-string p)))))
+                        (lambda (p)
+                          (read-string p)))))
                (not (string-contains s "setenv \"PATH\""))))
 
 ;; ── OFF7：niri config 声明式（home-files 官方 mechanism）───
@@ -116,7 +122,8 @@
                                 (eq? (service-extension-target ext)
                                      home-files-service-type))
                               (service-type-extensions (service-kind svc)))
-                         (assoc ".config/niri/config.kdl" (service-value svc))))
+                         (assoc ".config/niri/config.kdl"
+                                (service-value svc))))
                   (home-environment-services %guix-home)))
 
 ;; ── OFF8：xwayland-satellite 单 provider ───────────────────
@@ -126,12 +133,11 @@
 
 ;; ── OFF9：PipeWire 单 owner（niri config 不再 spawn）───────
 (test-assert "OFF9: niri config does not spawn pipewire/wireplumber"
-             (let ((s (call-with-input-file
-                       "modules/guixcfg/apps/niri/config.kdl"
-                       (lambda (p) (read-string p)))))
+             (let ((s (call-with-input-file "modules/guixcfg/apps/niri/config.kdl"
+                        (lambda (p)
+                          (read-string p)))))
                (and (not (string-contains s "spawn-at-startup \"pipewire\""))
-                    (not (string-contains s
-                                          "spawn-at-startup \"wireplumber\"")))))
+                    (not (string-contains s "spawn-at-startup \"wireplumber\"")))))
 
 ;; ── OFF13：session one-shot / daemon lifecycle 语义 ────────
 ;; 2026-08 迁移：真正 one-shot 的 session 服务显式 respawn? #f；
@@ -149,28 +155,30 @@
                     (shepherd-service-one-shot? svc)
                     (not (shepherd-service-respawn? svc)))))
 
-(test-assert "OFF13: gnome-keyring-session is long-running (daemon \
-managed for the whole session), no respawn, after D-Bus"
-             (let ((svc (home-svc 'gnome-keyring-session)))
-               (and svc
-                    (not (shepherd-service-one-shot? svc))
-                    (not (shepherd-service-respawn? svc))
-                    (equal? '(dbus) (shepherd-service-requirement svc)))))
+(test-assert
+ "OFF13: gnome-keyring-session is long-running (daemon managed for the whole session), no respawn, after D-Bus"
+ (let ((svc (home-svc 'gnome-keyring-session)))
+   (and svc
+        (not (shepherd-service-one-shot? svc))
+        (not (shepherd-service-respawn? svc))
+        (equal? '(dbus)
+                (shepherd-service-requirement svc)))))
 
-(test-assert "OFF13: gpg-agent is long-running, no respawn, after \
-gnupg-session"
-             (let ((svc (home-svc 'gpg-agent)))
-               (and svc
-                    (not (shepherd-service-one-shot? svc))
-                    (not (shepherd-service-respawn? svc))
-                    (equal? '(gnupg-session)
-                            (shepherd-service-requirement svc)))))
+(test-assert
+ "OFF13: gpg-agent is long-running, no respawn, after gnupg-session"
+ (let ((svc (home-svc 'gpg-agent)))
+   (and svc
+        (not (shepherd-service-one-shot? svc))
+        (not (shepherd-service-respawn? svc))
+        (equal? '(gnupg-session)
+                (shepherd-service-requirement svc)))))
 
 ;; ── OFF12：Home 绑定 system generation ─────────────────────
-(test-assert "OFF12: Home remains bound to system generation (guix-home-service-type)"
-             (any (lambda (svc)
-                    (eq? (service-kind svc) guix-home-service-type))
-                  (operating-system-services %vm-os)))
+(test-assert
+ "OFF12: Home remains bound to system generation (guix-home-service-type)"
+ (any (lambda (svc)
+        (eq? (service-kind svc) guix-home-service-type))
+      (operating-system-services %vm-os)))
 
 ;; OFF10/OFF11（greetd gating / fallback tty）由 test-desktop
 ;; D2/D3 覆盖——composition invariant 见该文件。

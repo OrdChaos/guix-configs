@@ -26,13 +26,13 @@
 ;;; initrd 运行时事实，不进 OS derivation）。
 
 (use-modules (guixcfg hosts vm)
-             (guixcfg boot uki)           ; <boot-plan>、make-uki-deploy-program
+             (guixcfg boot uki) ;<boot-plan>、make-uki-deploy-program
              (guixcfg system kernel-platform)
-             (guix packages)              ; package-name
-             (guix gexp)                  ; file-append-base/suffix、program-file?
-             (gnu system)                 ; operating-system-*
-             (nongnu packages linux)      ; linux-7.2、intel-microcode（nonguix）
-             (nongnu system linux-initrd) ; microcode-initrd
+             (guix packages) ;package-name
+             (guix gexp) ;file-append-base/suffix、program-file?
+             (gnu system) ;operating-system-*
+             (nongnu packages linux) ;linux-7.2、intel-microcode（nonguix）
+             (nongnu system linux-initrd) ;microcode-initrd
              (ice-9 rdelim)
              (srfi srfi-1)
              (srfi srfi-13)
@@ -42,35 +42,50 @@
 
 (define (strip-comments path)
   "读 PATH，去掉引号外的 ; 注释，返回行列表（K2 扫描用）。"
-  (let loop ((lines (call-with-input-file path
-                                          (lambda (p)
-                                            (let l ((acc '()))
-                                              (let ((line (read-line p)))
-                                                (if (eof-object? line)
-                                                  (reverse acc)
-                                                  (l (cons line acc))))))))
-             (acc '()))
+  (let loop
+    ((lines (call-with-input-file path
+              (lambda (p)
+                (let l
+                  ((acc '()))
+                  (let ((line (read-line p)))
+                    (if (eof-object? line)
+                        (reverse acc)
+                        (l (cons line acc))))))))
+     (acc '()))
     (if (null? lines)
-      (reverse acc)
-      (let ((line (car lines)))
-        (let scan ((i 0) (in-str #f) (out '()))
-          (if (>= i (string-length line))
-            (loop (cdr lines) (cons (list->string (reverse out)) acc))
-            (let ((c (string-ref line i)))
-              (cond
-                (in-str
-                 (cond ((char=? c #\\) (scan (+ i 2) #t (cons c out)))
-                   ((char=? c #\") (scan (+ i 1) #f (cons c out)))
-                   (else (scan (+ i 1) #t (cons c out)))))
-                ((char=? c #\") (scan (+ i 1) #t (cons c out)))
-                ((char=? c #\;) (loop (cdr lines)
-                                      (cons (list->string (reverse out)) acc)))
-                (else (scan (+ i 1) #f (cons c out)))))))))))
+        (reverse acc)
+        (let ((line (car lines)))
+          (let scan
+            ((i 0)
+             (in-str #f)
+             (out '()))
+            (if (>= i
+                    (string-length line))
+                (loop (cdr lines)
+                      (cons (list->string (reverse out)) acc))
+                (let ((c (string-ref line i)))
+                  (cond
+                    (in-str (cond
+                              ((char=? c #\\)
+                               (scan (+ i 2) #t
+                                     (cons c out)))
+                              ((char=? c #\")
+                               (scan (+ i 1) #f
+                                     (cons c out)))
+                              (else (scan (+ i 1) #t
+                                          (cons c out)))))
+                    ((char=? c #\")
+                     (scan (+ i 1) #t
+                           (cons c out)))
+                    ((char=? c #\;)
+                     (loop (cdr lines)
+                           (cons (list->string (reverse out)) acc)))
+                    (else (scan (+ i 1) #f
+                                (cons c out)))))))))))
 
 (define %boot-runtime-modules
   ;; boot/runtime 侧消费 kernel 的模块（K2 扫描范围）。
-  '("modules/guixcfg/boot/uki.scm"
-    "modules/guixcfg/boot/uki-bootloader.scm"
+  '("modules/guixcfg/boot/uki.scm" "modules/guixcfg/boot/uki-bootloader.scm"
     "modules/guixcfg/boot/initrd.scm"
     "modules/guixcfg/boot/boot-state.scm"
     "modules/guixcfg/boot/device-resolver.scm"
@@ -85,22 +100,21 @@
              (eq? (operating-system-kernel %vm-os) %kernel))
 
 ;; ── K2：boot/runtime 不依赖 Linux-libre package identity ───
-(test-assert "K2: boot/runtime modules have no linux-libre symbol (comments excluded)"
-             (every (lambda (path)
-                      (not (any (lambda (line)
-                                  (string-contains line "linux-libre"))
-                                (strip-comments path))))
-                    %boot-runtime-modules))
+(test-assert
+ "K2: boot/runtime modules have no linux-libre symbol (comments excluded)"
+ (every (lambda (path)
+          (not (any (lambda (line)
+                      (string-contains line "linux-libre"))
+                    (strip-comments path)))) %boot-runtime-modules))
 
 ;; ── K3：firmware declarative ────────────────────────────────
 (test-assert "K3: %vm-os firmware includes linux-firmware"
-             (memq linux-firmware (operating-system-firmware %vm-os)))
-
+             (memq linux-firmware
+                   (operating-system-firmware %vm-os)))
 
 ;; ── K4：microcode composition（非 replacement）──────────────
 (test-assert "K4: %vm-os initrd is the microcode + custom initrd composition"
              (eq? (operating-system-initrd %vm-os) microcode-ephemeral-initrd))
-
 
 (test-assert "K4: microcode composition wraps the custom initrd builder"
              ;; microcode-initrd 配置期就把剩余关键字（#:linux 等）
@@ -108,30 +122,35 @@
              ;; 证明 custom initrd builder 是 composition 的 payload 端。
              (let ((seen '()))
                (define (stub-initrd file-systems . rest)
-                 (set! seen (cons rest seen))
-                 (computed-file "stub-initrd" #~(mkdir-p #$output)))
+                 (set! seen
+                       (cons rest seen))
+                 (computed-file "stub-initrd"
+                                #~(mkdir-p #$output)))
                (microcode-initrd '()
                                  #:initrd stub-initrd
                                  #:microcode-packages (list intel-microcode)
                                  #:linux 'linux-pkg)
-               (any (lambda (rest) (memq 'linux-pkg rest)) seen)))
+               (any (lambda (rest)
+                      (memq 'linux-pkg rest)) seen)))
 
 ;; ── K6：UKI/boot-plan 消费 selected kernel 路径（generic）──
 (test-assert "K6: kernel-file of %vm-os is %kernel's bzImage (generic path)"
              (let ((kf (operating-system-kernel-file %vm-os)))
                (and (eq? (file-append-base kf) %kernel)
-                    (equal? (file-append-suffix kf) '("/" "bzImage")))))
+                    (equal? (file-append-suffix kf)
+                            '("/" "bzImage")))))
 
 ;; ── K7：UKI deployment derivation 能以 standard Linux 构建 ──
 (test-assert "K7: UKI deploy program builds from the selected kernel path"
              ;; program-file 结构检查；完整 UKI build 由 M1-6 的
              ;; system build --dry-run 证明（最终 derivation 使用
              ;; nonguix linux 7.1 source）。
-             (let* ((bp (boot-plan
-                         (kernel (operating-system-kernel-file %vm-os))
-                         (initrd (computed-file "test-initrd"
-                                                #~(mkdir-p #$output)))
-                         (cmdline "root=/selected-root gnu.system=/gnu/store/x-system")))
+             (let* ((bp (boot-plan (kernel (operating-system-kernel-file
+                                            %vm-os))
+                                   (initrd (computed-file "test-initrd"
+                                                          #~(mkdir-p #$output)))
+                                   (cmdline
+                                    "root=/selected-root gnu.system=/gnu/store/x-system")))
                     (prog (make-uki-deploy-program bp)))
                (and (program-file? prog)
                     (eq? (file-append-base (boot-plan-kernel bp)) %kernel))))

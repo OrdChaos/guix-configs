@@ -6,13 +6,16 @@
 ;;; 失败），属于不支持的运行时自写行为，不要点。
 
 (define-module (guixcfg apps vscode extensions scheme-lsp)
-  #:use-module (guix packages)          ; base32
-  #:use-module ((guix licenses) #:prefix license:)
+  #:use-module (guix packages) ;base32
+  #:use-module ((guix licenses)
+                #:prefix license:)
   #:use-module (virelith packages vscode-extensions)
   #:export (vscode-extension-scheme-lsp))
 
 (define-public vscode-extension-scheme-lsp
-  (vscode-marketplace-extension
-   "rgherdt" "scheme-lsp" "0.3.12"
-   (base32 "0hr4hyq4w4p88jg3pvi8xbpiwp0dhnp98xrh2zqqc03573qhsxqh")
-   #:license license:gpl3))
+  (vscode-marketplace-extension "rgherdt"
+                                "scheme-lsp"
+                                "0.3.12"
+                                (base32
+                                 "0hr4hyq4w4p88jg3pvi8xbpiwp0dhnp98xrh2zqqc03573qhsxqh")
+                                #:license license:gpl3))

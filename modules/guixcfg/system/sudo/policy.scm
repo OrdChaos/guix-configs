@@ -22,8 +22,8 @@
 ;;;     fail-loud。
 
 (define-module (guixcfg system sudo policy)
-               #:use-module (guix gexp) ; local-file
-               #:export (%sudoers-file))
+  #:use-module (guix gexp) ;local-file
+  #:export (%sudoers-file))
 
 (define %sudoers-file
   (local-file "sudoers" "sudoers"))

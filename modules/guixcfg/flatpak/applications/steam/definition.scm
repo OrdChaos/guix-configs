@@ -37,23 +37,22 @@
 ;;; export / steam-launcher 1.0.0.87；升级 launcher 时人工 diff。
 
 (define-module (guixcfg flatpak applications steam definition)
-               #:use-module (guix gexp) ; local-file
-               #:use-module (guixcfg flatpak model)
-               #:use-module (guixcfg system gaming) ; %steam-games-library-path
-               #:export (%flatpak-steam))
+  #:use-module (guix gexp) ;local-file
+  #:use-module (guixcfg flatpak model)
+  #:use-module (guixcfg system gaming) ;%steam-games-library-path
+  #:export (%flatpak-steam))
 
 (define %flatpak-steam
-  (flatpak-application
-   (name 'steam)
-   (id "com.valvesoftware.Steam")
-   (remote 'flathub)
-   (branch "stable")
-   (update-policy 'track-branch)
-   (desktop-files
-    (list (list "com.valvesoftware.Steam.desktop"
-                (local-file "com.valvesoftware.Steam.desktop"
-                            "steam-flatpak-desktop-shadow.desktop"))))
-   (override-policy
-    (list 'managed-overrides
-          (flatpak-override
-           (filesystems (list %steam-games-library-path)))))))
+  (flatpak-application (name 'steam)
+                       (id "com.valvesoftware.Steam")
+                       (remote 'flathub)
+                       (branch "stable")
+                       (update-policy 'track-branch)
+                       (desktop-files (list (list
+                                             "com.valvesoftware.Steam.desktop"
+                                             (local-file
+                                              "com.valvesoftware.Steam.desktop"
+                                              "steam-flatpak-desktop-shadow.desktop"))))
+                       (override-policy (list 'managed-overrides
+                                              (flatpak-override (filesystems (list
+                                                                              %steam-games-library-path)))))))

@@ -21,10 +21,9 @@
 ;;; 不读取 Git checkout。
 
 (define-module (guixcfg utils repository-source)
-               #:use-module (guixcfg utils paths)
-               #:use-module (guix gexp)   ; local-file、assume-source-relative-file-name
-               #:export (repository-file
-                         repository-root))
+  #:use-module (guixcfg utils paths)
+  #:use-module (guix gexp) ;local-file、assume-source-relative-file-name
+  #:export (repository-file repository-root))
 
 ;; 本模块所在目录（modules/guixcfg/utils/）。%load-path 必须含
 ;; modules/（guix repl -L modules / tests 的 add-to-load-path）。
@@ -34,17 +33,22 @@
 (define %helper-dir
   (let ((f (search-path %load-path "guixcfg/utils/repository-source.scm")))
     (if f
-      (canonicalize-path (dirname f))
-      (error "repository-source: cannot locate module on %load-path (run with -L modules)"))))
+        (canonicalize-path (dirname f))
+        (error
+         "repository-source: cannot locate module on %load-path (run with -L modules)"))))
 
 (define (repository-root)
   "仓库根绝对路径：从本模块目录向上找含 channels.lock.scm 的目录
 （marker-based；evaluation-time，不进入 runtime closure）。"
-  (let loop ((dir %helper-dir))
-    (cond ((file-exists? (string-append dir "/channels.lock.scm")) dir)
+  (let loop
+    ((dir %helper-dir))
+    (cond
+      ((file-exists? (string-append dir "/channels.lock.scm"))
+       dir)
       ((string=? dir "/")
-       (error "repository-source: repo root not found (no channels.lock.scm above)"
-              %helper-dir))
+       (error
+        "repository-source: repo root not found (no channels.lock.scm above)"
+        %helper-dir))
       (else (loop (dirname dir))))))
 
 (define (repository-file relative-path)
@@ -54,12 +58,11 @@
 完整现场（root/rel/helper-dir）——不让 local-file 的
 canonicalize-path 报裸路径。"
   (let ((rel (if (string-prefix? "./" relative-path)
-               (substring relative-path 2)
-               relative-path)))
+                 (substring relative-path 2) relative-path)))
     (unless (valid-relative-path? rel)
       (error "repository-file: unsafe relative path" relative-path))
     (let ((path (string-append (repository-root) "/" rel)))
       (unless (file-exists? path)
-        (error "repository-file: resolved file does not exist"
-               path (repository-root) relative-path %helper-dir))
+        (error "repository-file: resolved file does not exist" path
+               (repository-root) relative-path %helper-dir))
       (local-file (assume-source-relative-file-name path)))))

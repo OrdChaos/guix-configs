@@ -54,50 +54,65 @@
 
 (test-group "parse-lsblk-json"
             (let ((disk (parse-lsblk-json %mounted-disk-json)))
-              (test-equal "recognizes whole-disk type" "disk" (device-node-type disk))
-              (test-equal "size is integer (-b)" 26843545600 (device-node-size disk))
-              (test-equal "parses two child partitions" 2 (length (device-node-children disk)))
-              (test-assert "whole disk itself not mounted" (not (device-node-mounted? disk)))
+              (test-equal "recognizes whole-disk type" "disk"
+                          (device-node-type disk))
+              (test-equal "size is integer (-b)" 26843545600
+                          (device-node-size disk))
+              (test-equal "parses two child partitions" 2
+                          (length (device-node-children disk)))
+              (test-assert "whole disk itself not mounted"
+                           (not (device-node-mounted? disk)))
               (test-assert "child partition vda2 mounted"
-                           (device-node-mounted?
-                            (cadr (device-node-children disk)))))
-            
+                           (device-node-mounted? (cadr (device-node-children
+                                                        disk)))))
+
             (let ((disk (parse-lsblk-json %clean-disk-json)))
               (test-assert "clean disk unmounted and childless"
                            (and (not (device-node-mounted? disk))
                                 (null? (device-node-children disk)))))
-            
+
             (let ((part (parse-lsblk-json %partition-json)))
-              (test-equal "recognizes partition type" "part" (device-node-type part))
-              (test-assert "partition mounted" (device-node-mounted? part)))
-            
+              (test-equal "recognizes partition type" "part"
+                          (device-node-type part))
+              (test-assert "partition mounted"
+                           (device-node-mounted? part)))
+
             (let ((rom (parse-lsblk-json %livecd-rom-json)))
-              (test-assert "LiveCD media recognized as mounted" (device-node-mounted? rom))))
+              (test-assert "LiveCD media recognized as mounted"
+                           (device-node-mounted? rom))))
 
 (test-assert "mounted descendants are detected recursively"
-             (device-node-tree-mounted?
-              (parse-lsblk-json %nested-mounted-json)))
+             (device-node-tree-mounted? (parse-lsblk-json %nested-mounted-json)))
 
 ;; target-partition-path derives NVMe names and verifies ownership through
 ;; lsblk before returning a path.
 (define %fake-bin
   (string-append "/tmp/guixcfg-test-device-bin-"
                  (number->string (getpid))))
-(define %original-path (getenv "PATH"))
+(define %original-path
+  (getenv "PATH"))
 (unless (file-exists? %fake-bin)
   (mkdir %fake-bin))
 (call-with-output-file (string-append %fake-bin "/lsblk")
-                       (lambda (p)
-                         (display "#!/bin/sh\n" p)
-                         (display "field=$2; dev=$3\n" p)
-                         (display "case \"$field:$dev\" in\n" p)
-                         (display "TYPE:/dev/nvme0n1|TYPE:/dev/nvme1n1) printf 'disk\\n' ;;\n" p)
-                         (display "TYPE:/dev/nvme0n1p2|TYPE:/dev/nvme1n1p2) printf 'part\\n' ;;\n" p)
-                         (display "PARTLABEL:/dev/nvme0n1p2|PARTLABEL:/dev/nvme1n1p2) printf 'system\\n' ;;\n" p)
-                         (display "PKNAME:/dev/nvme0n1p2|PKNAME:/dev/nvme1n1p2) printf 'nvme0n1\\n' ;;\n" p)
-                         (display "esac\n" p)))
+  (lambda (p)
+    (display "#!/bin/sh\n" p)
+    (display "field=$2; dev=$3\n" p)
+    (display "case \"$field:$dev\" in\n" p)
+    (display "TYPE:/dev/nvme0n1|TYPE:/dev/nvme1n1) printf 'disk\\n' ;;
+" p)
+    (display "TYPE:/dev/nvme0n1p2|TYPE:/dev/nvme1n1p2) printf 'part\\n' ;;
+" p)
+    (display
+     "PARTLABEL:/dev/nvme0n1p2|PARTLABEL:/dev/nvme1n1p2) printf 'system\\n' ;;
+"
+     p)
+    (display
+     "PKNAME:/dev/nvme0n1p2|PKNAME:/dev/nvme1n1p2) printf 'nvme0n1\\n' ;;
+" p)
+    (display "esac\n" p)))
 (chmod (string-append %fake-bin "/lsblk") #o755)
-(setenv "PATH" (string-append %fake-bin ":" %original-path))
+(setenv "PATH"
+        (string-append %fake-bin ":" %original-path))
 
 (test-equal "partition path is derived from and owned by target disk"
             "/dev/nvme0n1p2"

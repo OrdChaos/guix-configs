@@ -96,12 +96,12 @@
 ;;; 测试固定见 tests/test-desktop.scm "HOME provenance" 组。
 
 (define-module (guixcfg system desktop)
-               #:use-module (gnu services)            ; service
-               #:use-module (gnu services base)       ; greetd-service-type、greetd-configuration、greetd-terminal-configuration
-               #:use-module (gnu services desktop)    ; udisks-service-type（可移动介质后端）
-               #:use-module (virelith services noctalia-greeter) ; noctalia-greeter-service-type、noctalia-greeter-configuration、greetd-noctalia-session
-               #:use-module (guixcfg system noctalia-greeter) ; %noctalia-greeter-state-dir、noctalia-greeter-session-profile-service
-               #:export (desktop-services))
+  #:use-module (gnu services) ;service
+  #:use-module (gnu services base) ;greetd-service-type、greetd-configuration、greetd-terminal-configuration
+  #:use-module (gnu services desktop) ;udisks-service-type（可移动介质后端）
+  #:use-module (virelith services noctalia-greeter) ;noctalia-greeter-service-type、noctalia-greeter-configuration、greetd-noctalia-session
+  #:use-module (guixcfg system noctalia-greeter) ;%noctalia-greeter-state-dir、noctalia-greeter-session-profile-service
+  #:export (desktop-services))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; greetd：tty1，gated by interactive-session-ready，
@@ -122,41 +122,39 @@
 ;;; (guixcfg system noctalia-greeter) 的会话发现数据）。
 (define (greetd-login-service)
   (service greetd-service-type
-           (greetd-configuration
-            (allow-empty-passwords? #f)
-            ;; The greeter compositor opens DRM and libinput devices before a
-            ;; user session exists.  Its dedicated account needs the same
-            ;; device access as a graphical login manager.
-            (greeter-supplementary-groups '("video" "input"))
-            (terminals
-             (list
-              (greetd-terminal-configuration
-               (terminal-vt "1")
-               ;; core readiness join barrier：login prompt 可见 =
-               ;; interactive-session-ready 已过（与 tty2 mingetty
-               ;; 同一 invariant）。
-               (extra-shepherd-requirement '(interactive-session-ready))
-               ;; source-profile? #f：用户会话 profile 单次 source
-               ;; 语义见文件头 "XDG_SESSION_TYPE 契约" 审计
-               ;; （greeter 原生提供 wayland env，profile 改由
-               ;; bash -l 自行 source）。greeter 自身的环境由
-               ;; channel helper 提供，与本开关无关——不因 helper
-               ;; 自带 env 而改动 profile policy。
-               (source-profile? #f)
-               ;; Noctalia Greeter 的 greetd entry point（channel
-               ;; helper wrapper，非裸 upstream script；greeter 以
-               ;; greetd 的 greeter 用户无认证运行——start_greeter
-               ;; authenticate=false，HOME=/var/empty）。
-                ;; 使用 channel 提供的 unpatched upstream greeter。
-                (default-session-command
-                 (greetd-noctalia-session
-                  ;; Upstream parks compositor stderr by default, leaving
-                  ;; greetd with only an unhelpful exit notice.  Keep a
-                  ;; temporary, world-readable failure log on the ephemeral
-                  ;; root until the physical greeter failure is resolved.
-                  #:extra-environment
-                  '(("NOCTALIA_GREETER_LOG" . "/tmp/noctalia-greeter.log")
-                    ("WLR_LOG" . "info"))))))))))
+           (greetd-configuration (allow-empty-passwords? #f)
+                                 ;; The greeter compositor opens DRM and libinput devices before a
+                                 ;; user session exists.  Its dedicated account needs the same
+                                 ;; device access as a graphical login manager.
+                                 (greeter-supplementary-groups '("video"
+                                                                 "input"))
+                                 (terminals (list (greetd-terminal-configuration
+                                                   (terminal-vt "1")
+                                                   ;; core readiness join barrier：login prompt 可见 =
+                                                   ;; interactive-session-ready 已过（与 tty2 mingetty
+                                                   ;; 同一 invariant）。
+                                                   (extra-shepherd-requirement '
+                                                    (interactive-session-ready))
+                                                   ;; source-profile? #f：用户会话 profile 单次 source
+                                                   ;; 语义见文件头 "XDG_SESSION_TYPE 契约" 审计
+                                                   ;; （greeter 原生提供 wayland env，profile 改由
+                                                   ;; bash -l 自行 source）。greeter 自身的环境由
+                                                   ;; channel helper 提供，与本开关无关——不因 helper
+                                                   ;; 自带 env 而改动 profile policy。
+                                                   (source-profile? #f)
+                                                   ;; Noctalia Greeter 的 greetd entry point（channel
+                                                   ;; helper wrapper，非裸 upstream script；greeter 以
+                                                   ;; greetd 的 greeter 用户无认证运行——start_greeter
+                                                   ;; authenticate=false，HOME=/var/empty）。
+                                                   ;; 使用 channel 提供的 unpatched upstream greeter。
+                                                   (default-session-command (greetd-noctalia-session
+                                                                             ;; Upstream parks compositor stderr by default, leaving
+                                                                             ;; greetd with only an unhelpful exit notice.  Keep a
+                                                                             ;; temporary, world-readable failure log on the ephemeral
+                                                                             ;; root until the physical greeter failure is resolved.
+                                                                             #:extra-environment '
+                                                                             (("NOCTALIA_GREETER_LOG" . "/tmp/noctalia-greeter.log")
+                                                                              ("WLR_LOG" . "info"))))))))))
 
 ;; udisks 对 'ntfs' 签名的内建驱动顺序是 ntfs3,ntfs，且仅在 ntfs3 返回
 ;; "unknown fs" 时才回退。本机内核对某些 NTFS 卷（实测 Zephr's 移动盘）
@@ -166,15 +164,14 @@
 ;; 把 udisks 的 sysconfdir 编进 store（/etc 不被读取），故走 udev 通道。
 ;; 规则必须晚于 60-persistent-storage.rules（blkid → ID_FS_TYPE）。
 (define %udisks-ntfs-driver-udev-rule-contents
-  (string-append
-   "ENV{ID_FS_TYPE}==\"ntfs\", "
-   "ENV{UDISKS_MOUNT_OPTIONS_NTFS_DRIVERS}=\"ntfs\"\n"))
+  (string-append "ENV{ID_FS_TYPE}==\"ntfs\", "
+                 "ENV{UDISKS_MOUNT_OPTIONS_NTFS_DRIVERS}=\"ntfs\"
+"))
 
 (define %udisks-ntfs-driver-udev-service
-  (udev-rules-service
-   'udisks-ntfs-driver
-   (udev-rule "90-udisks-ntfs-driver.rules"
-              %udisks-ntfs-driver-udev-rule-contents)))
+  (udev-rules-service 'udisks-ntfs-driver
+                      (udev-rule "90-udisks-ntfs-driver.rules"
+                                 %udisks-ntfs-driver-udev-rule-contents)))
 
 (define desktop-services
   ;; M2 Wayland desktop 系统层服务。Noctalia Greeter 的通用系统
@@ -188,8 +185,8 @@
   ;; docs/architecture/graphics.md）。
   (list (greetd-login-service)
         (service noctalia-greeter-service-type
-                 (noctalia-greeter-configuration
-                  (state-directory %noctalia-greeter-state-dir)))
+                 (noctalia-greeter-configuration (state-directory
+                                                  %noctalia-greeter-state-dir)))
         ;; 可移动介质后端：gvfs 的 UDisks2 volume monitor 的 system 侧
         ;; daemon（见文件头"可移动介质"）。官方 udisks-service-type
         ;; 从 system bus / udev / polkit 三处接线；仅补一条 ntfs 驱动

@@ -9,7 +9,7 @@
 ;;; repository-source 的 search-path 定位）。
 (add-to-load-path (string-append (getcwd) "/modules"))
 
-(use-modules (system base compile)  ; compile-file
+(use-modules (system base compile) ;compile-file
              (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64))
@@ -22,21 +22,27 @@
 ;; accessor wrong-type-arg——fastfetch 2026-08 实测）。新增应用/模块
 ;; 无需改本文件。
 
-(use-modules (ice-9 ftw)     ; scandir
-             (ice-9 regex)   ; regexp-exec、make-regexp
-             (ice-9 rdelim)) ; read-line
+(use-modules (ice-9 ftw) ;scandir
+             (ice-9 regex) ;regexp-exec、make-regexp
+             (ice-9 rdelim))
+ ; read-line
 
 (define (scheme-files-under dir)
   "DIR 下全部 .scm 文件（递归）。"
-  (let loop ((dir dir))
+  (let loop
+    ((dir dir))
     (append-map (lambda (e)
                   (let ((p (string-append dir "/" e)))
-                    (cond ((string-suffix? ".scm" e) (list p))
+                    (cond
+                      ((string-suffix? ".scm" e)
+                       (list p))
                       ((and (not (string-prefix? "." e))
-                            (eq? 'directory (stat:type (stat p))))
+                            (eq? 'directory
+                                 (stat:type (stat p))))
                        (loop p))
                       (else '()))))
-                (or (false-if-exception (scandir dir)) '()))))
+                (or (false-if-exception (scandir dir))
+                    '()))))
 
 (define (module-name-of file)
   "从 FILE 的 define-module 行提取模块名（符号列表）；非模块文件
@@ -44,8 +50,11 @@
   (let ((rx (make-regexp "\\(define-module \\(([a-z0-9-]+( [a-z0-9-]+)*)")))
     (let ((m (regexp-exec rx
                           (call-with-input-file file
-                                                (lambda (p) (read-string p))))))
-      (and m (map string->symbol (string-split (match:substring m 1) #\space))))))
+                            (lambda (p)
+                              (read-string p))))))
+      (and m
+           (map string->symbol
+                (string-split (match:substring m 1) #\space))))))
 
 ;; 非模块的共享源文件（无 define-module，经 include-from-path /
 ;; local-file + load 双消费——见 gsettings/runtime.scm 头部）。不
@@ -63,66 +72,77 @@
 (define (guixcfg-use-modules file)
   "FILE 中 #:use-module 引用的 guixcfg 模块名列表（跳过注释行）。"
   (let ((rx (make-regexp "#:use-module[ \t]+\\(\\(?guixcfg(( [a-z0-9-]+)*)")))
-    (let loop ((lines (call-with-input-file file
-                                            (lambda (p)
-                                              (let loop ((acc '()))
-                                                (let ((l (read-line p)))
-                                                  (if (eof-object? l) (reverse acc)
-                                                    (loop (cons l acc))))))))
-               (acc '()))
+    (let loop
+      ((lines (call-with-input-file file
+                (lambda (p)
+                  (let loop
+                    ((acc '()))
+                    (let ((l (read-line p)))
+                      (if (eof-object? l)
+                          (reverse acc)
+                          (loop (cons l acc))))))))
+       (acc '()))
       (if (null? lines)
-        (reverse acc)
-        (let ((line (car lines)))
-          (if (or (string-prefix? ";;" line)
-                  (not (string-contains line "#:use-module")))
-            (loop (cdr lines) acc)
-            (let ((m (regexp-exec rx line)))
-              (loop (cdr lines)
-                    (if m
-                      (cons (cons 'guixcfg
-                                  (map string->symbol
-                                       (filter (lambda (s) (> (string-length s) 0))
-                                               (string-split (match:substring m 1)
-                                                             #\space))))
-                            acc)
-                      acc)))))))))
+          (reverse acc)
+          (let ((line (car lines)))
+            (if (or (string-prefix? ";;" line)
+                    (not (string-contains line "#:use-module")))
+                (loop (cdr lines) acc)
+                (let ((m (regexp-exec rx line)))
+                  (loop (cdr lines)
+                        (if m
+                            (cons (cons 'guixcfg
+                                        (map string->symbol
+                                             (filter (lambda (s)
+                                                       (> (string-length s) 0))
+                                                     (string-split (match:substring
+                                                                    m 1)
+                                                                   #\space))))
+                                  acc) acc)))))))))
 
 (define (topo-sort nodes edges)
   "NODES 按 EDGES（alist: node -> 依赖列表）拓扑排序；有环报错。"
-  (let loop ((remaining (map (lambda (n)
-                               (cons n (or (assoc-ref edges n) '())))
-                             nodes))
-             (ready (filter (lambda (n)
-                              (null? (or (assoc-ref edges n) '())))
-                            nodes))
-             (acc '()))
+  (let loop
+    ((remaining (map (lambda (n)
+                       (cons n
+                             (or (assoc-ref edges n)
+                                 '()))) nodes))
+     (ready (filter (lambda (n)
+                      (null? (or (assoc-ref edges n)
+                                 '()))) nodes))
+     (acc '()))
     (if (null? ready)
-      (if (= (length acc) (length nodes))
-        (reverse acc)
-        (error "module dependency cycle" nodes edges))
-      (let ((n (car ready)))
-        (let* ((remaining* (map (lambda (e)
-                                  (cons (car e)
-                                        (filter (lambda (d) (not (equal? d n)))
-                                                (cdr e))))
-                                remaining))
-               (dependents (map car (filter (lambda (e)
-                                              (member n (cdr e)))
-                                            edges)))
-               (ready* (append (cdr ready)
-                               (filter (lambda (m)
-                                         (and (not (member m acc))
-                                              (not (member m ready))
-                                              (null? (or (assoc-ref remaining* m)
-                                                         '()))))
-                                       dependents))))
-          (loop remaining* ready* (cons n acc)))))))
+        (if (= (length acc)
+               (length nodes))
+            (reverse acc)
+            (error "module dependency cycle" nodes edges))
+        (let ((n (car ready)))
+          (let* ((remaining* (map (lambda (e)
+                                    (cons (car e)
+                                          (filter (lambda (d)
+                                                    (not (equal? d n)))
+                                                  (cdr e)))) remaining))
+                 (dependents (map car
+                                  (filter (lambda (e)
+                                            (member n
+                                                    (cdr e))) edges)))
+                 (ready* (append (cdr ready)
+                                 (filter (lambda (m)
+                                           (and (not (member m acc))
+                                                (not (member m ready))
+                                                (null? (or (assoc-ref
+                                                            remaining* m)
+                                                           '())))) dependents))))
+            (loop remaining* ready*
+                  (cons n acc)))))))
 
 (define (app-module-name? name)
   (and (pair? name)
        (pair? (cdr name))
-       (eq? (car name) 'guixcfg)
-       (eq? (cadr name) 'apps)))
+       (eq? (car name)
+            'guixcfg)
+       (eq? (cadr name)
+            'apps)))
 
 (define %all-modules
   (let* ((all-files (filter (lambda (file)
@@ -132,36 +152,41 @@
          (all-nodes (map module-name-of all-files))
          (raw-edges (map (lambda (file)
                            (cons (module-name-of file)
-                                 (guixcfg-use-modules file)))
-                         all-files))
+                                 (guixcfg-use-modules file))) all-files))
          (direct (filter (lambda (node)
                            (any app-module-name?
-                                (or (assoc-ref raw-edges node) '())))
-                         all-nodes))
-         (blocked
-          (let loop ((blocked direct))
-            (let ((next
-                   (delete-duplicates
-                    (append blocked
-                            (filter
-                             (lambda (node)
-                               (any (lambda (dep) (member dep blocked))
-                                    (or (assoc-ref raw-edges node) '())))
-                             all-nodes)))))
-              (if (= (length next) (length blocked)) blocked
-                (loop next)))))
-         (nodes (filter (lambda (node) (not (member node blocked))) all-nodes))
+                                (or (assoc-ref raw-edges node)
+                                    '()))) all-nodes))
+         (blocked (let loop
+                    ((blocked direct))
+                    (let ((next (delete-duplicates (append blocked
+                                                           (filter (lambda (node)
+                                                                     (any (lambda 
+                                                                                  (dep)
+                                                                            (member
+                                                                             dep
+                                                                             blocked))
+                                                                          (or (assoc-ref
+                                                                               raw-edges
+                                                                               node)
+                                                                              '())))
+                                                                   all-nodes)))))
+                      (if (= (length next)
+                             (length blocked)) blocked
+                          (loop next)))))
+         (nodes (filter (lambda (node)
+                          (not (member node blocked))) all-nodes))
          (edges (map (lambda (node)
                        (cons node
-                             (filter (lambda (dep) (member dep nodes))
-                                     (or (assoc-ref raw-edges node) '()))))
-                     nodes)))
+                             (filter (lambda (dep)
+                                       (member dep nodes))
+                                     (or (assoc-ref raw-edges node)
+                                         '())))) nodes)))
     (topo-sort nodes edges)))
 
 (define (module-file name)
   (string-append "modules/"
-                 (string-join (map symbol->string name) "/")
-                 ".scm"))
+                 (string-join (map symbol->string name) "/") ".scm"))
 
 (test-begin "modules-compile")
 
@@ -174,22 +199,22 @@
 
 (test-assert "all modules compile and load without unbound-variable warnings"
              (let ((warnings (open-output-string)))
-               (let ((ok
-                      (every (lambda (name)
-                               (catch #t
-                                 (lambda ()
-                                   (parameterize ((current-warning-port warnings))
-                                                 (compile-file (module-file name) #:to 'value))
-                                   #t)
-                                 (lambda (key . args)
-                                   (format (current-error-port) "module compile failed: ~a (~a ~a)~%"
-                                           name key args)
-                                   #f)))
-                             %all-modules)))
+               (let ((ok (every (lambda (name)
+                                  (catch #t
+                                         (lambda ()
+                                           (parameterize ((current-warning-port
+                                                           warnings))
+                                             (compile-file (module-file name)
+                                                           #:to 'value)) #t)
+                                         (lambda (key . args)
+                                           (format (current-error-port)
+                                            "module compile failed: ~a (~a ~a)~%"
+                                            name key args) #f))) %all-modules)))
                  (let ((text (get-output-string warnings)))
                    (when (string-contains text "unbound")
                      (format (current-error-port) "~a" text))
-                   (and ok (not (string-contains text "unbound")))))))
+                   (and ok
+                        (not (string-contains text "unbound")))))))
 
 ;; tools/*.scm 是 CLI 脚本（无 define-module）：脚本里的未绑定变量只有
 ;; 运行到对应分支才炸（实测教训：(unresolved) 曾在 disk-install 的
@@ -199,27 +224,28 @@
              (let ((warnings (open-output-string)))
                (let ((ok (every (lambda (file)
                                   (catch #t
-                                    (lambda ()
-                                      (parameterize ((current-warning-port warnings))
-                                                    (compile-file
-                                                     (string-append "tools/" file)
-                                                     #:output-file
-                                                     "/tmp/guixcfg-tools-compile-check.go"))
-                                      #t)
-                                    (lambda (key . args)
-                                      (format (current-error-port)
-                                              "tool compile failed: ~a (~a ~a)~%"
-                                              file key args)
-                                      #f)))
+                                         (lambda ()
+                                           (parameterize ((current-warning-port
+                                                           warnings))
+                                             (compile-file (string-append
+                                                            "tools/" file)
+                                              #:output-file
+                                              "/tmp/guixcfg-tools-compile-check.go"))
+                                           #t)
+                                         (lambda (key . args)
+                                           (format (current-error-port)
+                                            "tool compile failed: ~a (~a ~a)~%"
+                                            file key args) #f)))
                                 (or (scandir "tools"
                                              (lambda (f)
                                                (string-suffix? ".scm" f)))
                                     '()))))
-                 (false-if-exception
-                  (delete-file "/tmp/guixcfg-tools-compile-check.go"))
+                 (false-if-exception (delete-file
+                                      "/tmp/guixcfg-tools-compile-check.go"))
                  (let ((text (get-output-string warnings)))
                    (when (string-contains text "unbound")
                      (format (current-error-port) "~a" text))
-                   (and ok (not (string-contains text "unbound")))))))
+                   (and ok
+                        (not (string-contains text "unbound")))))))
 
 (test-end)

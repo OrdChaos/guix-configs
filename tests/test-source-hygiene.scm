@@ -9,8 +9,8 @@
 ;;;   - 测试意图：app definition 必须可移植（不知 repo root、不知
 ;;;     HOME 绝对路径、不知用户名）。
 
-(use-modules (ice-9 rdelim)   ; read-string
-             (ice-9 ftw)      ; scandir
+(use-modules (ice-9 rdelim) ;read-string
+             (ice-9 ftw) ;scandir
              (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64))
@@ -20,19 +20,26 @@
 (test-begin "source-hygiene")
 
 (define (read-file p)
-  (call-with-input-file p (lambda (port) (read-string port))))
+  (call-with-input-file p
+    (lambda (port)
+      (read-string port))))
 
 (define (scheme-files-under dir)
   "DIR 下所有 .scm 文件（递归）。"
-  (let loop ((dir dir))
+  (let loop
+    ((dir dir))
     (append-map (lambda (e)
                   (let ((p (string-append dir "/" e)))
-                    (cond ((string-suffix? ".scm" e) (list p))
+                    (cond
+                      ((string-suffix? ".scm" e)
+                       (list p))
                       ((and (not (string-prefix? "." e))
-                            (eq? 'directory (stat:type (stat p))))
+                            (eq? 'directory
+                                 (stat:type (stat p))))
                        (loop p))
                       (else '()))))
-                (or (false-if-exception (scandir dir)) '()))))
+                (or (false-if-exception (scandir dir))
+                    '()))))
 
 ;; ── 1. template 可移植性 ────────────────────────────────────
 (test-assert "application template contains no username/HOME/checkout"

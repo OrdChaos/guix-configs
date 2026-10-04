@@ -19,23 +19,27 @@
 ;;; ukify 直接签 UKI，sbsign 签 Limine；不存在则全部不签（开发期）。
 
 (define-module (guixcfg boot uki)
-               #:use-module (guixcfg boot limine-menu) ; limine-config-text（部署脚本加载）
-               #:use-module (guixcfg boot layout)      ; ESP 布局固定事实
-               #:use-module (guixcfg utils module-closure) ; guixcfg-module-select?
-               #:use-module (rosenthal packages bootloaders)  ; limine、systemd-stub、ukify
-               #:use-module (gnu packages efi)   ; sbsigntools
-               #:use-module (guix gexp)
-               #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
-               #:use-module (guix modules)       ; source-module-closure
-               #:use-module (guix records)       ; define-record-type*
-               #:use-module (ice-9 regex)        ; string-match（cmdline-system）
-               #:export (;; Boot Plan
-                         <boot-plan>
-                         boot-plan make-boot-plan boot-plan?
-                         boot-plan-kernel boot-plan-initrd boot-plan-cmdline
-                         boot-plan-system
-                         ;; 部署脚本生成
-                         make-uki-deploy-program))
+  #:use-module (guixcfg boot limine-menu) ;limine-config-text（部署脚本加载）
+  #:use-module (guixcfg boot layout) ;ESP 布局固定事实
+  #:use-module (guixcfg utils module-closure) ;guixcfg-module-select?
+  #:use-module (rosenthal packages bootloaders) ;limine、systemd-stub、ukify
+  #:use-module (gnu packages efi) ;sbsigntools
+  #:use-module (guix gexp)
+  #:use-module (guixcfg storage model) ;persist-mount-point（/persist 语义路径 authority）
+  #:use-module (guix modules) ;source-module-closure
+  #:use-module (guix records) ;define-record-type*
+  #:use-module (ice-9 regex) ;string-match（cmdline-system）
+  #:export ( ;Boot Plan
+             <boot-plan>
+            boot-plan
+            make-boot-plan
+            boot-plan?
+            boot-plan-kernel
+            boot-plan-initrd
+            boot-plan-cmdline
+            boot-plan-system
+            ;; 部署脚本生成
+            make-uki-deploy-program))
 
 ;; Secure Boot 密钥的固定语义路径（docs/architecture/boot.md（Secure Boot））。
 (define %secure-boot-keydir
@@ -44,19 +48,18 @@
 ;;; ────────────────────────────────────────────────────────────
 ;;; Boot Plan：一个可启动项的全部输入（框架无关）。
 
-(define-record-type* <boot-plan>
-                     boot-plan make-boot-plan
-                     boot-plan?
-                     (kernel  boot-plan-kernel)
-                     (initrd  boot-plan-initrd)
-                     (cmdline boot-plan-cmdline)
-                     ;; 本次部署的 system 目录（/gnu/store/<hash>-system）。
-                     ;; 由 menu-entry->boot-plan 从部署 cmdline 的
-                     ;; gnu.system= 解析；Recovery candidate 的 identity
-                     ;; 以此为准（不能从 kernel 路径 dirname 推导——布局
-                     ;; 依赖，实测 bug）。#f 时部署脚本回退 cmdline 解析。
-                     (system  boot-plan-system
-                              (default #f)))
+(define-record-type* <boot-plan> boot-plan make-boot-plan
+  boot-plan?
+  (kernel boot-plan-kernel)
+  (initrd boot-plan-initrd)
+  (cmdline boot-plan-cmdline)
+  ;; 本次部署的 system 目录（/gnu/store/<hash>-system）。
+  ;; 由 menu-entry->boot-plan 从部署 cmdline 的
+  ;; gnu.system= 解析；Recovery candidate 的 identity
+  ;; 以此为准（不能从 kernel 路径 dirname 推导——布局
+  ;; 依赖，实测 bug）。#f 时部署脚本回退 cmdline 解析。
+  (system boot-plan-system
+          (default #f)))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 部署脚本：以 root 在部署期运行。
@@ -68,211 +71,319 @@ rootmode=recovery 构建（并记录 system identity 到 candidate.scm）；
 只有 userspace confirm 验证 candidate.system == /run/current-system
 后才 promote 为正式 Recovery（见 (guixcfg boot recovery)）——部署期
 不读取也不信任任何历史状态。"
-  (program-file
-   "deploy-uki"
-   (with-imported-modules
-    (source-module-closure '((guix build utils)
-                             (guix build syscalls)
-                             (guixcfg boot limine-menu)
-                             (guixcfg utils atomic-file))
-                           #:select? guixcfg-module-select?)
-    #~(begin
-       (use-modules ((guix build utils) #:hide (delete))
-                    (guix build syscalls)
-                    (guixcfg boot limine-menu)
-                    (guixcfg utils atomic-file)
-                    (ice-9 rdelim)
-                    (ice-9 regex)          ; cmdline-system（gnu.system= 解析）
-                    (srfi srfi-1)
-                    (srfi srfi-13))
-       
-       ;; 参数：mount-point（init 时 /mnt，reconfigure 时 /）、efi 挂载点。
-       (define mount-point (cadr (command-line)))
-       (define efi-target (caddr (command-line)))
-       ;; 不能命名为 mount，会遮蔽 (guix build syscalls) 的 mount。
-       (define mnt (string-trim-right mount-point #\/))
-       (define esp (if (file-exists? (string-append mnt efi-target))
-                     (string-append mnt efi-target)
-                     efi-target))
-       
-       (define ukify-bin #$(file-append ukify "/bin/ukify"))
-       (define stub-bin
-         #$(file-append systemd-stub "/libexec/" (systemd-stub-name)))
-       (define sbsign-bin #$(file-append sbsigntools "/bin/sbsign"))
-       (define limine-bin
-         #$(file-append limine "/share/limine/BOOTX64.EFI"))
-       
-       ;; Secure Boot 密钥存在则签名。
-       (define keydir (string-append mnt #$%secure-boot-keydir))
-       (define db-key (string-append keydir "/db.key"))
-       (define db-crt (string-append keydir "/db.crt"))
-       (define signed? (and (file-exists? db-key) (file-exists? db-crt)))
-       
-       (define uki-dir (string-append esp "/" #$%esp-uki-directory))
-       (define boot-dir (string-append esp "/EFI/BOOT"))
-       (define config-file (string-append esp "/limine.conf"))
-       (define deployed-file (string-append uki-dir "/.deployed"))
-       (mkdir-p uki-dir)
-       (mkdir-p boot-dir)
-       
-       (define (remove-path! path)
-         (when (file-exists? path)
-           (if (eq? (stat:type (lstat path)) 'directory)
-             (delete-file-recursively path)
-             (delete-file path))))
-       
-       ;; limine.conf 是 active-slot 的事实来源；.deployed 不是提交标记。
-       ;; 旧版 flat layout 的配置不含 /A/ 或 /B/，视为“尚无活动槽”。
-       (define (active-slot)
-         (and (file-exists? config-file)
-              (call-with-input-file config-file
-                                    (lambda (port)
-                                      (let loop ()
-                                        (let ((line (read-line port)))
-                                          (cond
-                                            ((eof-object? line) #f)
-                                            ((string-contains
-                                              line
-                                              #$(string-append "/" %esp-uki-directory "/A/"))
-                                             "A")
-                                            ((string-contains
-                                              line
-                                              #$(string-append "/" %esp-uki-directory "/B/"))
-                                             "B")
-                                            (else (loop)))))))))
-       
-       (define active (active-slot))
-       (define target-slot (if (and active (string=? active "A")) "B" "A"))
-       (define target-dir (string-append uki-dir "/" target-slot))
-       (define staging-dir (string-append uki-dir "/." target-slot ".new"))
-       
-       ;; ── 1. 在非活动 staging 槽中构建完整 UKI 集合 ────────────────
-       ;; 任何失败都不会改变当前 limine.conf 指向的活动槽。
-       (remove-path! staging-dir)
-       (remove-path! target-dir)          ; target-slot 必定是非活动槽
-       (mkdir-p staging-dir)
-       
-       (define os-release (string-append staging-dir "/.os-release"))
-       (call-with-output-file os-release
-                              (lambda (port)
-                                (display "NAME=\"Guix System\"\nID=guix\n" port)
-                                (fsync port)))
-       
-       (define (build-uki kernel initrd cmdline out-name)
-         (let ((out (string-append staging-dir "/" out-name)))
-           (apply invoke ukify-bin "build"
-             "--linux" kernel
-             "--initrd" initrd
-             "--cmdline" cmdline
-             "--stub" stub-bin
-             "--os-release" os-release
-             (append
-              (if signed?
-                (list "--secureboot-private-key" db-key
-                      "--secureboot-certificate" db-crt)
-                '())
-              (list "--output" out)))
-           ;; ukify 已关闭输出 fd；显式 fsync 后才允许发布这个槽。
-           (fsync-path! out)
-           out))
-       
-       (define current-cmdline #$(boot-plan-cmdline current))
-       (define current-kernel #$(boot-plan-kernel current))
-       (define current-initrd #$(boot-plan-initrd current))
-       
-       (build-uki current-kernel current-initrd current-cmdline
-                  "CURRENT.EFI")
-       ;; Recovery candidate：总是为本次部署的 system 准备（同 CURRENT 的
-       ;; kernel/initrd + rootmode=recovery），并记录 system identity。
-       ;; candidate 不是正式 Recovery——只有 userspace confirm 验证
-       ;; candidate.system == /run/current-system 后才 promote 到稳定路径
-       ;; EFI/Guix/RECOVERY.EFI（见 (guixcfg boot recovery)）。
-       (build-uki current-kernel current-initrd
-                  (string-append current-cmdline " rootmode=recovery")
-                  "RECOVERY.EFI")
-       (let ((candidate-meta (string-append uki-dir "/candidate.scm")))
-         ;; candidate 的 system = 本次部署的 system 目录。从部署 cmdline
-         ;; 的 gnu.system= 解析——不能从 kernel 路径 dirname 推断：
-         ;; kernel 是 <hash>-linux-<version>/bzImage 时 dirname 两次会退到
-         ;; /gnu/store（实测 bug，导致 candidate 永不匹配 → promote 跳过
-         ;; → limine 永不出现 Recovery 项）。
-         (define (cmdline-system cmdline)
-           (let ((m (string-match "gnu\\.system=([^ ]+)" cmdline)))
-             (and m (match:substring m 1))))
-         (let ((candidate-system (or #$(boot-plan-system current)
-                                     (cmdline-system current-cmdline)
-                                     (dirname (dirname current-kernel)))))
-           (atomic-write-file! candidate-meta
-                               (lambda (port)
-                                 (write `((system . ,candidate-system)
-                                          (slot . ,target-slot))
-                                        port)
-                                 (newline port)))))
-       
-       (delete-file os-release)
-       ;; 先持久化 staging 内的目录项，再把完整目录发布为 target-slot。
-       (fsync-path! staging-dir)
-       (rename-file staging-dir target-dir)
-       (fsync-path! uki-dir)
-       
-       ;; ── 2. 准备新的 Limine fallback 与配置，但尚不切菜单 ─────────
-       (define fallback-file (string-append boot-dir "/BOOTX64.EFI"))
-       (define fallback-new (string-append fallback-file ".new"))
-       (define fallback-unsigned (string-append fallback-file ".unsigned"))
-       (remove-path! fallback-new)
-       (remove-path! fallback-unsigned)
-       (if signed?
-         (begin
-          (copy-file limine-bin fallback-unsigned)
-          (invoke sbsign-bin "--key" db-key "--cert" db-crt
-                  "--output" fallback-new fallback-unsigned)
-          (delete-file fallback-unsigned))
-         (copy-file limine-bin fallback-new))
-       (fsync-path! fallback-new)
-       
-       (define config-new (string-append config-file ".new"))
-       (call-with-output-file config-new
-                              (lambda (port)
-                                (display
-                                 (limine-config-text
-                                  target-slot
-                                  (file-exists?
-                                   (string-append uki-dir "/RECOVERY.EFI")))
-                                 port)
-                                (fsync port)))
-       
-       ;; ── 3. 提交 ─────────────────────────────────────────────────
-       ;; fallback 先换：即使随后掉电，新 Limine 仍读取旧 limine.conf。
-       ;; limine.conf 是最终 commit point：它一旦切换，新槽已完整持久化。
-       (atomic-replace-file! fallback-new fallback-file)
-       (atomic-replace-file! config-new config-file)
-       
-       ;; ── 4. 所有权清单与旧 flat layout 清理 ─────────────────────
-       ;; 只删除旧版 .deployed 曾记录、且名字属于旧 flat UKI 白名单的文件；
-       ;; 不信任清单里的任意 ../ 路径。A/B 两槽都保留，由下一次部署覆盖
-       ;; 非活动槽，因此总能留下上一套完整 deployment。
-       (define (legacy-flat-uki? name)
-         (or (string=? name "CURRENT.EFI")
-             (string=? name "RECOVERY.EFI")))
-       (when (file-exists? deployed-file)
-         (let ((old (false-if-exception
-                     (call-with-input-file deployed-file read))))
-           (when (list? old)
-             (for-each
-              (lambda (name)
-                (when (and (string? name) (legacy-flat-uki? name))
-                  (remove-path! (string-append uki-dir "/" name))))
-              old))))
-       (atomic-write-file! deployed-file
-                           (lambda (port)
-                             (write '("A" "B"
-                                          "../../EFI/BOOT/BOOTX64.EFI"
-                                          "../../limine.conf")
-                                    port)
-                             (newline port)))
-       
-       (format #t
-               "UKI deployment ~a has been committed (~a signed, Recovery candidate has been set up; Original active slot: ~a)~%"
-               target-slot
-               (if signed? "already" "not")
-               (or active "legacy/none"))))))
+  (program-file "deploy-uki"
+                (with-imported-modules (source-module-closure '((guix build
+                                                                      utils)
+                                                                (guix build
+                                                                 syscalls)
+                                                                (guixcfg boot
+                                                                 limine-menu)
+                                                                (guixcfg utils
+                                                                 atomic-file))
+                                        #:select? guixcfg-module-select?)
+                                       #~(begin
+                                           (use-modules ((guix build utils)
+                                                         #:hide (delete))
+                                                        (guix build syscalls)
+                                                        (guixcfg boot
+                                                                 limine-menu)
+                                                        (guixcfg utils
+                                                                 atomic-file)
+                                                        (ice-9 rdelim)
+                                                        (ice-9 regex) ;cmdline-system（gnu.system= 解析）
+                                                        (srfi srfi-1)
+                                                        (srfi srfi-13))
+
+                                           ;; 参数：mount-point（init 时 /mnt，reconfigure 时 /）、efi 挂载点。
+                                           (define mount-point
+                                             (cadr (command-line)))
+                                           (define efi-target
+                                             (caddr (command-line)))
+                                           ;; 不能命名为 mount，会遮蔽 (guix build syscalls) 的 mount。
+                                           (define mnt
+                                             (string-trim-right mount-point
+                                                                #\/))
+                                           (define esp
+                                             (if (file-exists? (string-append
+                                                                mnt efi-target))
+                                                 (string-append mnt efi-target)
+                                                 efi-target))
+
+                                           (define ukify-bin
+                                             #$(file-append ukify "/bin/ukify"))
+                                           (define stub-bin
+                                             #$(file-append systemd-stub
+                                                            "/libexec/"
+                                                            (systemd-stub-name)))
+                                           (define sbsign-bin
+                                             #$(file-append sbsigntools
+                                                            "/bin/sbsign"))
+                                           (define limine-bin
+                                             #$(file-append limine
+                                                "/share/limine/BOOTX64.EFI"))
+
+                                           ;; Secure Boot 密钥存在则签名。
+                                           (define keydir
+                                             (string-append mnt
+                                                            #$%secure-boot-keydir))
+                                           (define db-key
+                                             (string-append keydir "/db.key"))
+                                           (define db-crt
+                                             (string-append keydir "/db.crt"))
+                                           (define signed?
+                                             (and (file-exists? db-key)
+                                                  (file-exists? db-crt)))
+
+                                           (define uki-dir
+                                             (string-append esp "/"
+                                                            #$%esp-uki-directory))
+                                           (define boot-dir
+                                             (string-append esp "/EFI/BOOT"))
+                                           (define config-file
+                                             (string-append esp "/limine.conf"))
+                                           (define deployed-file
+                                             (string-append uki-dir
+                                                            "/.deployed"))
+                                           (mkdir-p uki-dir)
+                                           (mkdir-p boot-dir)
+
+                                           (define (remove-path! path)
+                                             (when (file-exists? path)
+                                               (if (eq? (stat:type (lstat path))
+                                                        'directory)
+                                                   (delete-file-recursively
+                                                    path)
+                                                   (delete-file path))))
+
+                                           ;; limine.conf 是 active-slot 的事实来源；.deployed 不是提交标记。
+                                           ;; 旧版 flat layout 的配置不含 /A/ 或 /B/，视为“尚无活动槽”。
+                                           (define (active-slot)
+                                             (and (file-exists? config-file)
+                                                  (call-with-input-file config-file
+                                                    (lambda (port)
+                                                      (let loop
+                                                        ()
+                                                        (let ((line (read-line
+                                                                     port)))
+                                                          (cond
+                                                            ((eof-object? line)
+                                                             #f)
+                                                            ((string-contains
+                                                              line
+                                                              #$(string-append
+                                                                 "/"
+                                                                 %esp-uki-directory
+                                                                 "/A/"))
+                                                             "A")
+                                                            ((string-contains
+                                                              line
+                                                              #$(string-append
+                                                                 "/"
+                                                                 %esp-uki-directory
+                                                                 "/B/"))
+                                                             "B")
+                                                            (else (loop)))))))))
+
+                                           (define active
+                                             (active-slot))
+                                           (define target-slot
+                                             (if (and active
+                                                      (string=? active "A"))
+                                                 "B" "A"))
+                                           (define target-dir
+                                             (string-append uki-dir "/"
+                                                            target-slot))
+                                           (define staging-dir
+                                             (string-append uki-dir "/."
+                                                            target-slot ".new"))
+
+                                           ;; ── 1. 在非活动 staging 槽中构建完整 UKI 集合 ────────────────
+                                           ;; 任何失败都不会改变当前 limine.conf 指向的活动槽。
+                                           (remove-path! staging-dir)
+                                           (remove-path! target-dir) ;target-slot 必定是非活动槽
+                                           (mkdir-p staging-dir)
+
+                                           (define os-release
+                                             (string-append staging-dir
+                                                            "/.os-release"))
+                                           (call-with-output-file os-release
+                                             (lambda (port)
+                                               (display
+                                                        "NAME=\"Guix System\"\nID=guix\n"
+                                                        port)
+                                               (fsync port)))
+
+                                           (define (build-uki kernel initrd
+                                                              cmdline out-name)
+                                             (let ((out (string-append
+                                                         staging-dir "/"
+                                                         out-name)))
+                                               (apply invoke
+                                                      ukify-bin
+                                                      "build"
+                                                      "--linux"
+                                                      kernel
+                                                      "--initrd"
+                                                      initrd
+                                                      "--cmdline"
+                                                      cmdline
+                                                      "--stub"
+                                                      stub-bin
+                                                      "--os-release"
+                                                      os-release
+                                                      (append (if signed?
+                                                                  (list
+                                                                   "--secureboot-private-key"
+                                                                   db-key
+                                                                   "--secureboot-certificate"
+                                                                   db-crt)
+                                                                  '())
+                                                              (list "--output"
+                                                               out)))
+                                               ;; ukify 已关闭输出 fd；显式 fsync 后才允许发布这个槽。
+                                               (fsync-path! out) out))
+
+                                           (define current-cmdline
+                                             #$(boot-plan-cmdline current))
+                                           (define current-kernel
+                                             #$(boot-plan-kernel current))
+                                           (define current-initrd
+                                             #$(boot-plan-initrd current))
+
+                                           (build-uki current-kernel
+                                                      current-initrd
+                                                      current-cmdline
+                                                      "CURRENT.EFI")
+                                           ;; Recovery candidate：总是为本次部署的 system 准备（同 CURRENT 的
+                                           ;; kernel/initrd + rootmode=recovery），并记录 system identity。
+                                           ;; candidate 不是正式 Recovery——只有 userspace confirm 验证
+                                           ;; candidate.system == /run/current-system 后才 promote 到稳定路径
+                                           ;; EFI/Guix/RECOVERY.EFI（见 (guixcfg boot recovery)）。
+                                           (build-uki current-kernel
+                                                      current-initrd
+                                                      (string-append
+                                                       current-cmdline
+                                                       " rootmode=recovery")
+                                                      "RECOVERY.EFI")
+                                           (let ((candidate-meta (string-append
+                                                                  uki-dir
+                                                                  "/candidate.scm")))
+                                             ;; candidate 的 system = 本次部署的 system 目录。从部署 cmdline
+                                             ;; 的 gnu.system= 解析——不能从 kernel 路径 dirname 推断：
+                                             ;; kernel 是 <hash>-linux-<version>/bzImage 时 dirname 两次会退到
+                                             ;; /gnu/store（实测 bug，导致 candidate 永不匹配 → promote 跳过
+                                             ;; → limine 永不出现 Recovery 项）。
+                                             (define (cmdline-system cmdline)
+                                               (let ((m (string-match
+                                                         "gnu\\.system=([^ ]+)"
+                                                         cmdline)))
+                                                 (and m
+                                                      (match:substring m 1))))
+                                             (let ((candidate-system (or #$(boot-plan-system
+                                                                            current)
+                                                                         (cmdline-system
+                                                                          current-cmdline)
+                                                                         (dirname
+                                                                          (dirname
+                                                                           current-kernel)))))
+                                               (atomic-write-file!
+                                                candidate-meta
+                                                (lambda (port)
+                                                  (write `((system unquote
+                                                            candidate-system)
+                                                           (slot unquote
+                                                                 target-slot))
+                                                         port)
+                                                  (newline port)))))
+
+                                           (delete-file os-release)
+                                           ;; 先持久化 staging 内的目录项，再把完整目录发布为 target-slot。
+                                           (fsync-path! staging-dir)
+                                           (rename-file staging-dir target-dir)
+                                           (fsync-path! uki-dir)
+
+                                           ;; ── 2. 准备新的 Limine fallback 与配置，但尚不切菜单 ─────────
+                                           (define fallback-file
+                                             (string-append boot-dir
+                                                            "/BOOTX64.EFI"))
+                                           (define fallback-new
+                                             (string-append fallback-file
+                                                            ".new"))
+                                           (define fallback-unsigned
+                                             (string-append fallback-file
+                                                            ".unsigned"))
+                                           (remove-path! fallback-new)
+                                           (remove-path! fallback-unsigned)
+                                           (if signed?
+                                               (begin
+                                                 (copy-file limine-bin
+                                                            fallback-unsigned)
+                                                 (invoke sbsign-bin
+                                                         "--key"
+                                                         db-key
+                                                         "--cert"
+                                                         db-crt
+                                                         "--output"
+                                                         fallback-new
+                                                         fallback-unsigned)
+                                                 (delete-file
+                                                  fallback-unsigned))
+                                               (copy-file limine-bin
+                                                          fallback-new))
+                                           (fsync-path! fallback-new)
+
+                                           (define config-new
+                                             (string-append config-file ".new"))
+                                           (call-with-output-file config-new
+                                             (lambda (port)
+                                               (display (limine-config-text
+                                                         target-slot
+                                                         (file-exists? (string-append
+                                                                        uki-dir
+                                                                        "/RECOVERY.EFI")))
+                                                        port)
+                                               (fsync port)))
+
+                                           ;; ── 3. 提交 ─────────────────────────────────────────────────
+                                           ;; fallback 先换：即使随后掉电，新 Limine 仍读取旧 limine.conf。
+                                           ;; limine.conf 是最终 commit point：它一旦切换，新槽已完整持久化。
+                                           (atomic-replace-file! fallback-new
+                                            fallback-file)
+                                           (atomic-replace-file! config-new
+                                                                 config-file)
+
+                                           ;; ── 4. 所有权清单与旧 flat layout 清理 ─────────────────────
+                                           ;; 只删除旧版 .deployed 曾记录、且名字属于旧 flat UKI 白名单的文件；
+                                           ;; 不信任清单里的任意 ../ 路径。A/B 两槽都保留，由下一次部署覆盖
+                                           ;; 非活动槽，因此总能留下上一套完整 deployment。
+                                           (define (legacy-flat-uki? name)
+                                             (or (string=? name "CURRENT.EFI")
+                                                 (string=? name "RECOVERY.EFI")))
+                                           (when (file-exists? deployed-file)
+                                             (let ((old (false-if-exception (call-with-input-file deployed-file
+                                                                              read))))
+                                               (when (list? old)
+                                                 (for-each (lambda (name)
+                                                             (when (and (string?
+                                                                         name)
+                                                                        (legacy-flat-uki?
+                                                                         name))
+                                                               (remove-path! (string-append
+                                                                              uki-dir
+                                                                              "/"
+                                                                              name))))
+                                                           old))))
+                                           (atomic-write-file! deployed-file
+                                                               (lambda (port)
+                                                                 (write '("A"
+                                                                          "B"
+                                                                          "../../EFI/BOOT/BOOTX64.EFI"
+                                                                          "../../limine.conf")
+                                                                        port)
+                                                                 (newline port)))
+
+                                           (format #t
+                                            "UKI deployment ~a has been committed (~a signed, Recovery candidate has been set up; Original active slot: ~a)~%"
+                                            target-slot
+                                            (if signed? "already" "not")
+                                            (or active "legacy/none"))))))

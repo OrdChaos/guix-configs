@@ -29,17 +29,19 @@
 ;;;
 ;;; 纯 Scheme 静态断言，不触发任何 derivation 构建（AGENT.md §1/§2）。
 
-(use-modules ((guixcfg hosts lenovo-legion-y7000p) #:prefix host:)
-             ((guixcfg hosts vm) #:prefix vm:)
+(use-modules ((guixcfg hosts lenovo-legion-y7000p)
+              #:prefix host:)
+             ((guixcfg hosts vm)
+              #:prefix vm:)
              (guixcfg system graphics nvidia)
-             (guixcfg home user)          ; %guix-home（VM/default home）
-             (gnu home)                   ; home-environment-packages
-             (gnu home services)          ; home-environment-variables-service-type
-             (gnu services)               ; fold-services
-             (guix packages)              ; package-name、package-inputs
-             (nongnu packages nvidia)     ; nvda-new-feature（rolling selector）
-             (srfi srfi-1)                ; every、find
-             (srfi srfi-13)               ; string-contains
+             (guixcfg home user) ;%guix-home（VM/default home）
+             (gnu home) ;home-environment-packages
+             (gnu home services) ;home-environment-variables-service-type
+             (gnu services) ;fold-services
+             (guix packages) ;package-name、package-inputs
+             (nongnu packages nvidia) ;nvda-new-feature（rolling selector）
+             (srfi srfi-1) ;every、find
+             (srfi srfi-13) ;string-contains
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -51,19 +53,20 @@
 (test-begin "prime-run")
 
 ;; ── P3：wrapper 脚本结构 ────────────────────────────────────
-(define %script (prime-run-script))
+(define %script
+  (prime-run-script))
 
 (test-assert "P3: script embeds every policy variable (single source)"
              (every (lambda (entry)
-                      (string-contains
-                       %script
-                       (string-append "export " (car entry)
-                                      "=" (cdr entry))))
+                      (string-contains %script
+                                       (string-append "export "
+                                                      (car entry) "="
+                                                      (cdr entry))))
                     %prime-offload-environment))
 
 (test-assert "P3: script resolves nvda via system profile symlink at runtime"
              (string-contains %script
-                              "readlink -f /run/current-system/profile/bin/nvidia-smi"))
+              "readlink -f /run/current-system/profile/bin/nvidia-smi"))
 
 (test-assert "P3: script carries no store literals (generation-stable)"
              (not (string-contains %script "/gnu/store")))
@@ -71,20 +74,19 @@
 (test-assert "P3: GLX vendor library resolution uses scoped LD_LIBRARY_PATH"
              ;; glvnd 1.7.0 libglxmapping.c:290-298 以裸名 dlopen
              ;; "libGLX_nvidia.so.0"——LD_LIBRARY_PATH 是唯一生效机制。
-             (string-contains %script
-                              "export LD_LIBRARY_PATH=\"$NVDA_LIB"))
+             (string-contains %script "export LD_LIBRARY_PATH=\"$NVDA_LIB"))
 
 (test-assert "P3: EGL vendor json discovery scoped"
              (string-contains %script
-                              "export __EGL_VENDOR_LIBRARY_DIRS=\"$NVDA_SHARE/glvnd/egl_vendor.d"))
+              "export __EGL_VENDOR_LIBRARY_DIRS=\"$NVDA_SHARE/glvnd/egl_vendor.d"))
 
 (test-assert "P3: EGL external platform (NVIDIA wayland) scoped"
              (string-contains %script
-                              "export __EGL_EXTERNAL_PLATFORM_CONFIG_DIRS=\"$NVDA_SHARE/egl/egl_external_platform.d"))
+              "export __EGL_EXTERNAL_PLATFORM_CONFIG_DIRS=\"$NVDA_SHARE/egl/egl_external_platform.d"))
 
-(test-assert "P3: Vulkan ICD + implicit layer discovery scoped via XDG_DATA_DIRS"
-             (string-contains %script
-                              "export XDG_DATA_DIRS=\"$NVDA_SHARE"))
+(test-assert
+ "P3: Vulkan ICD + implicit layer discovery scoped via XDG_DATA_DIRS"
+ (string-contains %script "export XDG_DATA_DIRS=\"$NVDA_SHARE"))
 
 (test-assert "P3: GBM/VAAPI/VDPAU scoped per nvda search-path contract"
              (and (string-contains %script
@@ -92,13 +94,14 @@
                   (string-contains %script
                                    "export LIBVA_DRIVERS_PATH=\"$NVDA_LIB/dri")
                   (string-contains %script
-                                   "export VDPAU_DRIVER_PATH=\"$NVDA_LIB/vdpau")))
+                   "export VDPAU_DRIVER_PATH=\"$NVDA_LIB/vdpau")))
 
 (test-assert "P3: wrapper keeps exec semantics (prime-run cmd args...)"
              (string-contains %script "exec \"$@\""))
 
-(test-assert "P3: no dGPU-only session style (GBM_BACKEND=nvidia-drm) in wrapper"
-             (not (string-contains %script "GBM_BACKEND=")))
+(test-assert
+ "P3: no dGPU-only session style (GBM_BACKEND=nvidia-drm) in wrapper"
+ (not (string-contains %script "GBM_BACKEND=")))
 
 (test-assert "P8: wrapper is version-independent (no driver-series literals)"
              ;; rolling policy 不变式：prime-run 经 nvidia-smi 符号链
@@ -118,7 +121,8 @@
 ;; home-environment-packages 可含 (package "output") 形态条目
 ;; （官方 home service 贡献，如 (list glib "bin")）——归一化取 package。
 (define (home-package-entry p)
-  (if (package? p) p (car p)))
+  (if (package? p) p
+      (car p)))
 
 (test-assert "P5: laptop home provides the prime-run host capability"
              (find (lambda (p)
@@ -135,14 +139,13 @@
 
 ;; ── P6：无 session-global NVIDIA offload 变量 ────────────────
 (define %laptop-home-env
-  (service-value
-   (fold-services
-    (home-environment-services host:%lenovo-legion-y7000p-guix-home)
-    #:target-type home-environment-variables-service-type)))
+  (service-value (fold-services (home-environment-services
+                                 host:%lenovo-legion-y7000p-guix-home)
+                                #:target-type
+                                home-environment-variables-service-type)))
 
 (define %forbidden-global-nvidia-vars
-  '("__NV_PRIME_RENDER_OFFLOAD"
-    "__VK_LAYER_NV_optimus"
+  '("__NV_PRIME_RENDER_OFFLOAD" "__VK_LAYER_NV_optimus"
     "__GLX_VENDOR_LIBRARY_NAME"
     "GBM_BACKEND"
     "__EGL_VENDOR_LIBRARY_DIRS"

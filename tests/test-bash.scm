@@ -14,10 +14,10 @@
 
 (use-modules (guixcfg apps model)
              (guixcfg apps registry)
-             (gnu home services shells) ; home-bash-service-type
-             (gnu services)             ; service-kind、service-value
-             (guix records)             ; record-type-descriptor、record-accessor
-             (ice-9 rdelim)             ; read-string
+             (gnu home services shells) ;home-bash-service-type
+             (gnu services) ;service-kind、service-value
+             (guix records) ;record-type-descriptor、record-accessor
+             (ice-9 rdelim) ;read-string
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -26,15 +26,18 @@
 (test-begin "bash")
 
 (define (app-by-name name)
-  (find (lambda (a) (eq? name (application-name a))) %applications))
+  (find (lambda (a)
+          (eq? name
+               (application-name a))) %applications))
 
-(define %bash-app (app-by-name 'bash))
+(define %bash-app
+  (app-by-name 'bash))
 
 (define %bash-config
-  (service-value
-   (find (lambda (s)
-           (eq? home-bash-service-type (service-kind s)))
-         (application-home-services %bash-app))))
+  (service-value (find (lambda (s)
+                         (eq? home-bash-service-type
+                              (service-kind s)))
+                       (application-home-services %bash-app))))
 
 (define (bash-field name)
   "home-bash-configuration 的 field accessor（经 record type descriptor）。"
@@ -46,21 +49,23 @@
 ;; home 的唯一激活机制 setup-environment——系统 /etc/profile 不再
 ;; 触碰 home profile（guixcfg system profile policy）。
 (test-assert "BS3: repo owns the bashrc (guix defaults off)"
-             (not ((bash-field 'guix-defaults?) %bash-config)))
+             (not ((bash-field 'guix-defaults?)
+                   %bash-config)))
 
-(test-assert "BS3: non-interactive SSH branch sources /etc/profile and the \
-home setup-environment (single Guix Home activation)"
-             (let ((s (call-with-input-file
-                       "modules/guixcfg/apps/bash/bashrc"
-                       (lambda (p) (read-string p)))))
-               (and (string-contains s "SSH_CLIENT")
-                    (string-contains s "/etc/profile")
-                    (string-contains s "setup-environment"))))
+(test-assert
+ "BS3: non-interactive SSH branch sources /etc/profile and the home setup-environment (single Guix Home activation)"
+ (let ((s (call-with-input-file "modules/guixcfg/apps/bash/bashrc"
+            (lambda (p)
+              (read-string p)))))
+   (and (string-contains s "SSH_CLIENT")
+        (string-contains s "/etc/profile")
+        (string-contains s "setup-environment"))))
 
 (test-assert "BS2: GPG_TTY stays dynamic (bashrc), not a static env var"
-             (let ((vars ((bash-field 'environment-variables) %bash-config)))
+             (let ((vars ((bash-field 'environment-variables)
+                          %bash-config)))
                (not (any (lambda (pair)
-                           (string=? "GPG_TTY" (car pair)))
-                         vars))))
+                           (string=? "GPG_TTY"
+                                     (car pair))) vars))))
 
 (test-end "bash")

@@ -14,26 +14,28 @@
 ;;; 同时让它成为 guix system 的入口文件（同 hosts/vm.scm 模式）。
 
 (define-module (integration t3 host)
-               #:use-module (gnu)                          ; operating-system 等
-               #:use-module (gnu services base)            ; agetty-service-type、agetty-configuration
-               #:use-module (gnu services ssh)             ; openssh-service-type、openssh-configuration
-               #:use-module (gnu packages bash)            ; bash
-               #:use-module (gnu packages package-management) ; guix
-               #:use-module (virelith packages tpm2)       ; tpm2-tools-compat
-               #:use-module (guix gexp)                    ; local-file
-               #:use-module ((guixcfg hosts vm) #:prefix vm:) ; %vm-os
-               #:export (%t3-os))
+  #:use-module (gnu) ;operating-system 等
+  #:use-module (gnu services base) ;agetty-service-type、agetty-configuration
+  #:use-module (gnu services ssh) ;openssh-service-type、openssh-configuration
+  #:use-module (gnu packages bash) ;bash
+  #:use-module (gnu packages package-management) ;guix
+  #:use-module (virelith packages tpm2) ;tpm2-tools-compat
+  #:use-module (guix gexp) ;local-file
+  #:use-module ((guixcfg hosts vm)
+                #:prefix vm:) ;%vm-os
+  #:export (%t3-os))
 
 ;; T3 测试 root 账号。密码哈希对应 t3-root-password（仅测试环境；
 ;; 测试凭据只存在于 tests/integration/t3，不进正常 VM host）。
 (define %t3-root
   (user-account
-   (name "root")
-   (comment "T3 test root")
-   (group "root")
-   (shell (file-append bash "/bin/bash"))
-   (home-directory "/root")
-   (password "$6$PLZmfXnlX.NPoslT$8l/LjqcwElCDRi7oRnyp13NKV1LY83jJNl.sLwIfzhHh/xyst9XH05QiGYA1Uyc15vQ9dzyneq2YKKignmMMd1")))
+    (name "root")
+    (comment "T3 test root")
+    (group "root")
+    (shell (file-append bash "/bin/bash"))
+    (home-directory "/root")
+    (password
+     "$6$PLZmfXnlX.NPoslT$8l/LjqcwElCDRi7oRnyp13NKV1LY83jJNl.sLwIfzhHh/xyst9XH05QiGYA1Uyc15vQ9dzyneq2YKKignmMMd1")))
 
 ;; T3 harness SSH 公钥：run.sh 生成（fresh workspace）。
 ;; local-file 相对本文件解析：tests/integration/t3 → 仓库根 → vms/t3/ssh。
@@ -46,28 +48,27 @@
    ;; agetty 显式占用后 %base-services 内置的自动探测会跳过 ttyS0
    ;; （实测 mingetty 与自动探测竞争会导致会话被杀）。
    (service agetty-service-type
-            (agetty-configuration
-             (tty "ttyS0")
-             (term "vt100")
-             (auto-login "root")))
+            (agetty-configuration (tty "ttyS0")
+                                  (term "vt100")
+                                  (auto-login "root")))
    ;; SSH（T3 harness 经 hostfwd 2222→22 执行系统内命令——串口 getty
    ;; 会话在注入输入时不稳定，实测）；root 登录仅测试环境。
    (service openssh-service-type
-            (openssh-configuration
-             (permit-root-login #t)
-             (authorized-keys
-              `(("root" ,%t3-ssh-pubkey)))))))
+            (openssh-configuration (permit-root-login #t)
+                                   (authorized-keys `(("root" ,%t3-ssh-pubkey)))))))
 
 (define %t3-os
   (operating-system
-   (inherit vm:%vm-os)
-   (users (cons %t3-root (operating-system-users vm:%vm-os)))
-   (packages (append (list guix tpm2-tools-compat)
-                     (operating-system-packages vm:%vm-os)))
-   ;; 基础服务用 vm 的显式 services 字段（%vm-services）——不含
-   ;; operating-system-services 自动生成的 account/shepherd-root
-   ;; （本 OS 的 users 与实例化会各自生成唯一实例）。
-   (services (append vm:%vm-services %t3-extra-services))))
+    (inherit vm:%vm-os)
+    (users (cons %t3-root
+                 (operating-system-users vm:%vm-os)))
+    (packages (append (list guix tpm2-tools-compat)
+                      (operating-system-packages vm:%vm-os)))
+    ;; 基础服务用 vm 的显式 services 字段（%vm-services）——不含
+    ;; operating-system-services 自动生成的 account/shepherd-root
+    ;; （本 OS 的 users 与实例化会各自生成唯一实例）。
+    (services
+     (append vm:%vm-services %t3-extra-services))))
 
 ;; 末尾裸表达式：guix system init/reconfigure 加载本文件时取此值。
 %t3-os

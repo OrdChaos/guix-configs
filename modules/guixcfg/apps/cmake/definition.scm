@@ -7,6 +7,5 @@
   #:export (%cmake))
 
 (define %cmake
-  (application
-   (name 'cmake)
-   (home-packages (list cmake))))
+  (application (name 'cmake)
+               (home-packages (list cmake))))

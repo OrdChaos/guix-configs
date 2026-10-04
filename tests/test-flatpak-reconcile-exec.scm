@@ -18,10 +18,10 @@
 
 (use-modules (guixcfg flatpak model)
              (guixcfg flatpak reconcile)
-             (guix build utils)          ; mkdir-p、delete-file-recursively
-             (ice-9 rdelim)              ; read-string
+             (guix build utils) ;mkdir-p、delete-file-recursively
+             (ice-9 rdelim) ;read-string
              (srfi srfi-1)
-             (srfi srfi-13)              ; string-split、string-contains
+             (srfi srfi-13) ;string-split、string-contains
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -29,64 +29,91 @@
 (test-begin "flatpak-reconcile-exec")
 
 ;; ── fake binary 环境 ────────────────────────────────────────
-(define %fp-dir (string-append "/tmp/guixcfg-fp-fake-"
-                               (number->string (getpid))))
-(define %fp-bin (string-append %fp-dir "/bin"))
-(define %fp-log (string-append %fp-dir "/argv.log"))
-(define %fp-list-app-out (string-append %fp-dir "/list-app.out"))
-(define %fp-list-runtime-out (string-append %fp-dir "/list-runtime.out"))
-(define %fp-info-out (string-append %fp-dir "/info.out"))
-(define %fp-remotes-out (string-append %fp-dir "/remotes.out"))
-(define %fp-remote-info-out (string-append %fp-dir "/remote-info.out"))
-(define %fp-pins-out (string-append %fp-dir "/pins.out"))
+(define %fp-dir
+  (string-append "/tmp/guixcfg-fp-fake-"
+                 (number->string (getpid))))
+(define %fp-bin
+  (string-append %fp-dir "/bin"))
+(define %fp-log
+  (string-append %fp-dir "/argv.log"))
+(define %fp-list-app-out
+  (string-append %fp-dir "/list-app.out"))
+(define %fp-list-runtime-out
+  (string-append %fp-dir "/list-runtime.out"))
+(define %fp-info-out
+  (string-append %fp-dir "/info.out"))
+(define %fp-remotes-out
+  (string-append %fp-dir "/remotes.out"))
+(define %fp-remote-info-out
+  (string-append %fp-dir "/remote-info.out"))
+(define %fp-pins-out
+  (string-append %fp-dir "/pins.out"))
 
-(define %fp-original-path (getenv "PATH"))
+(define %fp-original-path
+  (getenv "PATH"))
 
 (define (fp-write-file path content)
-  (call-with-output-file path (lambda (p) (display content p))))
+  (call-with-output-file path
+    (lambda (p)
+      (display content p))))
 
 (define (fp-install-fake-flatpak)
   (mkdir-p %fp-bin)
   (call-with-output-file (string-append %fp-bin "/flatpak")
-                         (lambda (p)
-                           (display "#!/bin/sh\n" p)
-                           (display "printf 'flatpak %s\\n' \"$*\" >> \"${FP_FAKE_LOG:?}\"\n" p)
-                           (display "case \"$1\" in\n" p)
-                           (display "  list)\n" p)
-                           (display "    case \"$*\" in\n" p)
-                           (display "      *--runtime*) cat \"${FP_FAKE_LIST_RUNTIME_OUT:-/dev/null}\" 2>/dev/null ;;\n" p)
-                           (display "      *) cat \"${FP_FAKE_LIST_APP_OUT:-/dev/null}\" 2>/dev/null ;;\n" p)
-                           (display "    esac\n" p)
-                           (display "    ;;\n" p)
-                           (display "  info)\n" p)
-                           (display "    cat \"${FP_FAKE_INFO_OUT:-/dev/null}\" 2>/dev/null\n" p)
-                           (display "    ;;\n" p)
-                           (display "  remotes)\n" p)
-                           (display "    cat \"${FP_FAKE_REMOTES_OUT:-/dev/null}\" 2>/dev/null\n" p)
-                           (display "    ;;\n" p)
-                           (display "  remote-delete)\n" p)
-                           (display "    : > \"${FP_FAKE_REMOTES_OUT:-/dev/null}\"\n" p)
-                           (display "    ;;\n" p)
-                           (display "  remote-info)\n" p)
-                           (display "    cat \"${FP_FAKE_REMOTE_INFO_OUT:-/dev/null}\" 2>/dev/null\n" p)
-                           (display "    ;;\n" p)
-                           (display "  pin)\n" p)
-                           (display "    case \"$*\" in\n" p)
-                           (display "      \"pin --user\") cat \"${FP_FAKE_PINS_OUT:-/dev/null}\" 2>/dev/null ;;\n" p)
-                           (display "    esac\n" p)
-                           (display "    ;;\n" p)
-                           (display "esac\n" p)
-                           (display "if [ -n \"${FP_FAKE_FAIL_ON:-}\" ]; then\n" p)
-                           (display "  case \"$*\" in\n" p)
-                           (display "    *\"$FP_FAKE_FAIL_ON\"*)\n" p)
-                           (display "      echo \"fake flatpak failure\" >&2\n" p)
-                           (display "      exit 1\n" p)
-                           (display "      ;;\n" p)
-                           (display "  esac\n" p)
-                           (display "fi\n" p)
-                           (display "exit 0\n" p)))
+    (lambda (p)
+      (display "#!/bin/sh\n" p)
+      (display "printf 'flatpak %s\\n' \"$*\" >> \"${FP_FAKE_LOG:?}\"
+" p)
+      (display "case \"$1\" in\n" p)
+      (display "  list)\n" p)
+      (display "    case \"$*\" in\n" p)
+      (display
+       "      *--runtime*) cat \"${FP_FAKE_LIST_RUNTIME_OUT:-/dev/null}\" 2>/dev/null ;;
+"
+       p)
+      (display
+       "      *) cat \"${FP_FAKE_LIST_APP_OUT:-/dev/null}\" 2>/dev/null ;;
+" p)
+      (display "    esac\n" p)
+      (display "    ;;\n" p)
+      (display "  info)\n" p)
+      (display "    cat \"${FP_FAKE_INFO_OUT:-/dev/null}\" 2>/dev/null
+" p)
+      (display "    ;;\n" p)
+      (display "  remotes)\n" p)
+      (display "    cat \"${FP_FAKE_REMOTES_OUT:-/dev/null}\" 2>/dev/null
+" p)
+      (display "    ;;\n" p)
+      (display "  remote-delete)\n" p)
+      (display "    : > \"${FP_FAKE_REMOTES_OUT:-/dev/null}\"
+" p)
+      (display "    ;;\n" p)
+      (display "  remote-info)\n" p)
+      (display "    cat \"${FP_FAKE_REMOTE_INFO_OUT:-/dev/null}\" 2>/dev/null
+"
+               p)
+      (display "    ;;\n" p)
+      (display "  pin)\n" p)
+      (display "    case \"$*\" in\n" p)
+      (display
+       "      \"pin --user\") cat \"${FP_FAKE_PINS_OUT:-/dev/null}\" 2>/dev/null ;;
+"
+       p)
+      (display "    esac\n" p)
+      (display "    ;;\n" p)
+      (display "esac\n" p)
+      (display "if [ -n \"${FP_FAKE_FAIL_ON:-}\" ]; then\n" p)
+      (display "  case \"$*\" in\n" p)
+      (display "    *\"$FP_FAKE_FAIL_ON\"*)\n" p)
+      (display "      echo \"fake flatpak failure\" >&2\n" p)
+      (display "      exit 1\n" p)
+      (display "      ;;\n" p)
+      (display "  esac\n" p)
+      (display "fi\n" p)
+      (display "exit 0\n" p)))
   (chmod (string-append %fp-bin "/flatpak") #o755)
-  (setenv "PATH" (string-append %fp-bin ":" %fp-original-path))
+  (setenv "PATH"
+          (string-append %fp-bin ":" %fp-original-path))
   (setenv "FP_FAKE_LOG" %fp-log)
   (setenv "FP_FAKE_LIST_APP_OUT" %fp-list-app-out)
   (setenv "FP_FAKE_LIST_RUNTIME_OUT" %fp-list-runtime-out)
@@ -100,380 +127,452 @@
   (false-if-exception (delete-file %fp-log)))
 
 (define (fp-log-lines)
-  (false-if-exception
-   (filter (negate string-null?)
-           (string-split
-            (call-with-input-file %fp-log
-                                  (lambda (p) (read-string p)))
-            #\newline))))
+  (false-if-exception (filter (negate string-null?)
+                              (string-split (call-with-input-file %fp-log
+                                              (lambda (p)
+                                                (read-string p))) #\newline))))
 
 (define (fp-log-has? fragment)
-  (any (lambda (line) (string-contains line fragment))
-       (or (fp-log-lines) '())))
+  (any (lambda (line)
+         (string-contains line fragment))
+       (or (fp-log-lines)
+           '())))
 
 (define (fp-log-pred? pred)
-  (any pred (or (fp-log-lines) '())))
+  (any pred
+       (or (fp-log-lines)
+           '())))
 
 ;; fixtures（与 test-flatpak-model 同构）
 (define %fp-remotes
-  (list (flatpak-remote
-         (name 'flathub)
-         (descriptor-url "https://dl.flathub.org/repo/flathub.flatpakrepo")
-         (repository-url "https://dl.flathub.org/repo/"))
-        (flatpak-remote
-         (name 'testremote)
-         (descriptor-url "https://example.invalid/foo.flatpakrepo")
-         (repository-url "https://mirror.example.invalid/foo"))))
+  (list (flatpak-remote (name 'flathub)
+                        (descriptor-url
+                         "https://dl.flathub.org/repo/flathub.flatpakrepo")
+                        (repository-url "https://dl.flathub.org/repo/"))
+        (flatpak-remote (name 'testremote)
+                        (descriptor-url
+                         "https://example.invalid/foo.flatpakrepo")
+                        (repository-url "https://mirror.example.invalid/foo"))))
 (define %fp-commit
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 (define %fp-apps
-  (list (flatpak-application
-         (name 'wechat) (id "com.tencent.WeChat")
-         (remote 'flathub) (branch "stable"))
-        (flatpak-application
-         (name 'pinned) (id "org.example.Pinned")
-         (remote 'flathub) (branch "stable")
-         (update-policy (list 'flatpak-commit-pin %fp-commit)))
-        (flatpak-application
-         (name 'unselected) (id "org.example.Unselected")
-         (remote 'flathub) (branch "stable"))))
+  (list (flatpak-application (name 'wechat)
+                             (id "com.tencent.WeChat")
+                             (remote 'flathub)
+                             (branch "stable"))
+        (flatpak-application (name 'pinned)
+                             (id "org.example.Pinned")
+                             (remote 'flathub)
+                             (branch "stable")
+                             (update-policy (list 'flatpak-commit-pin
+                                                  %fp-commit)))
+        (flatpak-application (name 'unselected)
+                             (id "org.example.Unselected")
+                             (remote 'flathub)
+                             (branch "stable"))))
 (define %fp-exts
-  (list (flatpak-extension
-         (name 'layer)
-         (id "org.freedesktop.Platform.VulkanLayer.example")
-         (remote 'flathub)
-         (branch "25.08"))))
+  (list (flatpak-extension (name 'layer)
+                           (id "org.freedesktop.Platform.VulkanLayer.example")
+                           (remote 'flathub)
+                           (branch "25.08"))))
 
-(dynamic-wind
- (lambda ()
-   (fp-install-fake-flatpak))
- (lambda ()
-   ;; ── 1. sync：add remote + install missing selected（只增）────
-   (fp-write-file %fp-remotes-out "")
-   (fp-write-file %fp-list-app-out "")
-   (fp-clear-log!)
-   (let ((missing (flatpak-sync #:remotes %fp-remotes
-                                #:applications %fp-apps
-                                #:selection '(wechat pinned))))
-     (test-equal "sync returns the installed-missing set"
-                 '(wechat pinned)
-                 (map flatpak-application-name missing))
-     (test-assert "sync: every invocation carries --user"
-                  (not (fp-log-pred?
-                        (lambda (line)
-                          (not (string-contains line "--user"))))))
-     (test-assert "sync: remote-add via official descriptor URL (--from)"
-                  (fp-log-has?
-                   "flatpak remote-add --user --if-not-exists --from flathub https://dl.flathub.org/repo/flathub.flatpakrepo"))
-     (test-assert "sync: remote URL pinned via remote-modify after add"
-                  (fp-log-has?
-                   "flatpak remote-modify --user --url=https://dl.flathub.org/repo/ flathub"))
-     (test-assert "sync: remote-modify follows remote-add"
-                  (let ((lines (fp-log-lines)))
-                    (< (list-index (lambda (l)
-                                     (string-contains l "remote-add"))
-                                   lines)
-                       (list-index (lambda (l)
-                                     (string-contains l "remote-modify"))
-                                   lines))))
-     (test-assert "sync: installs missing selected app"
-                  (fp-log-has?
-                   "flatpak install --user -y flathub com.tencent.WeChat//stable"))
-     (test-assert "sync: never installs unselected catalog app"
-                  (not (fp-log-has? "org.example.Unselected")))
-     (test-assert "sync: custom app selection does not inherit production extensions"
-                  (and (not (fp-log-has? "VulkanLayer.gamescope"))
-                       (not (fp-log-has? "CompatibilityTool.Proton-GE"))))
-     (test-assert "sync: pinned app deploys via update --commit after install"
-                  (let ((lines (fp-log-lines)))
-                    (and (any (lambda (l)
-                                (string-contains
-                                 l
-                                 "flatpak update --user --commit=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef org.example.Pinned//stable"))
-                              lines)
-                         (let ((install-i (list-index (lambda (l)
-                                                        (and (string-contains l "install")
-                                                             (string-contains l "org.example.Pinned")))
-                                                      lines))
-                               (update-i (list-index (lambda (l)
-                                                       (string-contains l "--commit="))
-                                                     lines)))
-                           (and install-i update-i
-                                (< install-i update-i))))))
-     (test-assert "sync: never bare update (no ref-less update command)"
-                  (not (fp-log-pred?
-                        (lambda (line)
-                          (and (string-contains line "flatpak update")
-                               (not (string-contains line "--commit="))
-                               (not (string-contains line "//")))))))
-     (test-assert "sync: never uninstall"
-                  (not (fp-log-has? "uninstall"))))
-   
-   ;; ── 2. sync：全部已装 + unmanaged/runtime → no-op ─────────
-   (fp-write-file %fp-remotes-out
-                  "flathub\thttps://dl.flathub.org/repo/\n")
-   (fp-write-file %fp-list-app-out
-                  "com.tencent.WeChat\tstable\norg.example.Pinned\tstable\norg.other.Unmanaged\tstable\norg.freedesktop.Platform\t25.08\norg.freedesktop.Platform.VulkanLayer.example\t25.08\n")
-   (fp-write-file %fp-pins-out
-                  "org.freedesktop.Platform.VulkanLayer.example//25.08\n")
-   (fp-clear-log!)
-   (let ((missing (flatpak-sync #:remotes (list (car %fp-remotes))
-                                #:applications %fp-apps
-                                #:selection '(wechat pinned)
+(dynamic-wind (lambda ()
+                (fp-install-fake-flatpak))
+              (lambda ()
+                ;; ── 1. sync：add remote + install missing selected（只增）────
+                (fp-write-file %fp-remotes-out "")
+                (fp-write-file %fp-list-app-out "")
+                (fp-clear-log!)
+                (let ((missing (flatpak-sync #:remotes %fp-remotes
+                                             #:applications %fp-apps
+                                             #:selection '(wechat pinned))))
+                  (test-equal "sync returns the installed-missing set"
+                              '(wechat pinned)
+                              (map flatpak-application-name missing))
+                  (test-assert "sync: every invocation carries --user"
+                               (not (fp-log-pred? (lambda (line)
+                                                    (not (string-contains line
+                                                          "--user"))))))
+                  (test-assert
+                   "sync: remote-add via official descriptor URL (--from)"
+                   (fp-log-has?
+                    "flatpak remote-add --user --if-not-exists --from flathub https://dl.flathub.org/repo/flathub.flatpakrepo"))
+                  (test-assert
+                   "sync: remote URL pinned via remote-modify after add"
+                   (fp-log-has?
+                    "flatpak remote-modify --user --url=https://dl.flathub.org/repo/ flathub"))
+                  (test-assert "sync: remote-modify follows remote-add"
+                               (let ((lines (fp-log-lines)))
+                                 (< (list-index (lambda (l)
+                                                  (string-contains l
+                                                   "remote-add")) lines)
+                                    (list-index (lambda (l)
+                                                  (string-contains l
+                                                   "remote-modify")) lines))))
+                  (test-assert "sync: installs missing selected app"
+                               (fp-log-has?
+                                "flatpak install --user -y flathub com.tencent.WeChat//stable"))
+                  (test-assert "sync: never installs unselected catalog app"
+                               (not (fp-log-has? "org.example.Unselected")))
+                  (test-assert
+                   "sync: custom app selection does not inherit production extensions"
+                   (and (not (fp-log-has? "VulkanLayer.gamescope"))
+                        (not (fp-log-has? "CompatibilityTool.Proton-GE"))))
+                  (test-assert
+                   "sync: pinned app deploys via update --commit after install"
+                   (let ((lines (fp-log-lines)))
+                     (and (any (lambda (l)
+                                 (string-contains l
+                                  "flatpak update --user --commit=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef org.example.Pinned//stable"))
+                               lines)
+                          (let ((install-i (list-index (lambda (l)
+                                                         (and (string-contains
+                                                               l "install")
+                                                              (string-contains
+                                                               l
+                                                               "org.example.Pinned")))
+                                                       lines))
+                                (update-i (list-index (lambda (l)
+                                                        (string-contains l
+                                                         "--commit=")) lines)))
+                            (and install-i update-i
+                                 (< install-i update-i))))))
+                  (test-assert
+                   "sync: never bare update (no ref-less update command)"
+                   (not (fp-log-pred? (lambda (line)
+                                        (and (string-contains line
+                                              "flatpak update")
+                                             (not (string-contains line
+                                                   "--commit="))
+                                             (not (string-contains line "//")))))))
+                  (test-assert "sync: never uninstall"
+                               (not (fp-log-has? "uninstall"))))
+
+                ;; ── 2. sync：全部已装 + unmanaged/runtime → no-op ─────────
+                (fp-write-file %fp-remotes-out
+                               "flathub\thttps://dl.flathub.org/repo/\n")
+                (fp-write-file %fp-list-app-out
+                 "com.tencent.WeChat	stable
+org.example.Pinned	stable
+org.other.Unmanaged	stable
+org.freedesktop.Platform	25.08
+org.freedesktop.Platform.VulkanLayer.example	25.08
+")
+                (fp-write-file %fp-pins-out
+                 "org.freedesktop.Platform.VulkanLayer.example//25.08
+")
+                (fp-clear-log!)
+                (let ((missing (flatpak-sync #:remotes (list (car %fp-remotes))
+                                             #:applications %fp-apps
+                                             #:selection '(wechat pinned)
+                                             #:extensions %fp-exts
+                                             #:extension-selection '(layer))))
+                  (test-equal "sync: nothing missing"
+                              '() missing)
+                  (test-assert
+                   "sync: no remote-add when remote matches declaration"
+                   (not (fp-log-has? "remote-add")))
+                  (test-assert "sync: no install when already installed"
+                               (not (fp-log-has? "install")))
+                  (test-assert "sync: unmanaged app never appears in any argv"
+                   (not (fp-log-has? "org.other.Unmanaged")))
+                  ;; runtime 与 extension refs 不进 app 安装目标（extension 已装
+                  ;; 且 pin 在册时绝不 reinstall——全局 extension selection 的
+                  ;; no-op 路径）。
+                  (test-assert "sync: runtime refs never appear in any argv"
+                               (not (any (lambda (line)
+                                           (and (string-contains line
+                                                                 "install")
+                                                (string-contains line
+                                                 "org.freedesktop.Platform")))
+                                         (fp-log-lines)))))
+
+                ;; 同 ID 的错误 branch 不满足 selection；安装正确 ABI branch，
+                ;; 并 pin 声明 ref，避免 gc/autoprune 破坏 desired state。
+                (fp-write-file %fp-list-app-out
+                 "org.freedesktop.Platform.VulkanLayer.example	24.08
+")
+                (fp-write-file %fp-pins-out "")
+                (fp-clear-log!)
+                (flatpak-sync #:remotes (list (car %fp-remotes))
+                              #:applications %fp-apps
+                              #:selection '()
+                              #:extensions %fp-exts
+                              #:extension-selection '(layer))
+                (test-assert
+                 "sync: wrong extension branch installs declared branch"
+                 (fp-log-has?
+                  "flatpak install --user -y flathub org.freedesktop.Platform.VulkanLayer.example//25.08"))
+                (test-assert "sync: selected extension is pinned against gc"
+                             (fp-log-has?
+                              "flatpak pin --user org.freedesktop.Platform.VulkanLayer.example//25.08"))
+                (fp-write-file %fp-list-app-out
+                 "org.freedesktop.Platform.VulkanLayer.example	25.08
+")
+                (fp-write-file %fp-pins-out
+                 "org.freedesktop.Platform.VulkanLayer.example//25.08
+")
+                (fp-clear-log!)
+                (flatpak-sync #:remotes (list (car %fp-remotes))
+                              #:applications %fp-apps
+                              #:selection '()
+                              #:extensions %fp-exts
+                              #:extension-selection '(layer))
+                (test-assert
+                 "sync: matching extension branch is not reinstalled"
+                 (not (fp-log-has? "flatpak install")))
+                (test-assert "sync: converged extension pin is not rewritten"
+                             (not (fp-log-has?
+                                   "flatpak pin --user org.freedesktop.Platform.VulkanLayer.example//25.08")))
+
+                ;; ── 3. remote drift → fail，绝不 auto-modify ──────────────
+                (fp-write-file %fp-remotes-out
+                               "flathub\thttps://evil.example/repo/\n")
+                (fp-write-file %fp-list-app-out "")
+                (fp-clear-log!)
+                (test-error "sync: remote drift fails loudly" #t
+                            (flatpak-sync #:remotes (list (car %fp-remotes))
+                                          #:applications %fp-apps
+                                          #:selection '()))
+                (test-assert "sync: drift never auto remote-modify/delete"
+                             (and (not (fp-log-has? "remote-modify"))
+                                  (not (fp-log-has? "remote-delete"))
+                                  (not (fp-log-has? "remote-add"))))
+
+                ;; ── 3b. arbitrary remote（无 flathub 硬编码）+ 换源命令 ─────
+                ;; 任意 remote 走同一 bootstrap：官方 descriptor URL + 自身
+                ;; repository-url canonicalize——reconcile 不得有 per-remote
+                ;; 分支。
+                (fp-write-file %fp-remotes-out "")
+                (fp-write-file %fp-list-app-out "")
+                (fp-clear-log!)
+                (flatpak-sync #:remotes (cdr %fp-remotes)
+                              #:applications %fp-apps
+                              #:selection '())
+                (test-assert
+                 "arbitrary remote bootstraps with its own descriptor URL"
+                 (fp-log-has?
+                  "flatpak remote-add --user --if-not-exists --from testremote https://example.invalid/foo.flatpakrepo"))
+                (test-assert
+                 "arbitrary remote canonicalizes its own transport URL"
+                 (fp-log-has?
+                  "flatpak remote-modify --user --url=https://mirror.example.invalid/foo testremote"))
+                ;; remote-replace：已有 remote → 显式 remote-delete + 重建。
+                (fp-write-file %fp-remotes-out
+                               "flathub\thttps://dl.flathub.org/repo/\n")
+                (fp-clear-log!)
+                (flatpak-replace-remote! (car %fp-remotes))
+                (test-assert "remote-replace: explicit delete first"
+                             (fp-log-has?
+                              "flatpak remote-delete --user flathub"))
+                (test-assert
+                 "remote-replace: rebuild via official descriptor URL"
+                 (fp-log-has?
+                  "flatpak remote-add --user --if-not-exists --from flathub https://dl.flathub.org/repo/flathub.flatpakrepo"))
+                (test-assert
+                 "remote-replace: declared URL enforced via remote-modify"
+                 (fp-log-has?
+                  "flatpak remote-modify --user --url=https://dl.flathub.org/repo/ flathub"))
+                (test-assert "remote-replace: delete precedes add"
+                             (let ((lines (fp-log-lines)))
+                               (< (list-index (lambda (l)
+                                                (string-contains l
+                                                 "remote-delete")) lines)
+                                  (list-index (lambda (l)
+                                                (string-contains l
+                                                                 "remote-add"))
+                                              lines))))
+                ;; remote-replace：remote 缺失 → 无 delete，只有 add。
+                (fp-write-file %fp-remotes-out "")
+                (fp-clear-log!)
+                (flatpak-replace-remote! (car %fp-remotes))
+                (test-assert "remote-replace: no delete when remote missing"
+                             (not (fp-log-has? "remote-delete")))
+                (test-assert "remote-replace: adds when remote missing"
+                             (fp-log-has? "flatpak remote-add"))
+                (test-error "remote-by-name: unknown remote fails fast" #t
+                            (flatpak-remote-by-name 'nope))
+
+                ;; ── 3c. bootstrap partial-failure rollback ────────────────
+                ;; remote 原本不存在 → remote-add 成功、remote-modify（URL
+                ;; canonicalize）失败 → 只删除【本次调用创建】的 remote，避免
+                ;; 留下 redirect 改写后的非声明状态等下次 sync 才发现 drift。
+                ;; bootstrap 只会在 check-remote! = #f 时运行，因此 rollback
+                ;; 不可能命中本操作之前已存在的 remote。
+                (fp-write-file %fp-remotes-out "")
+                (fp-write-file %fp-list-app-out "")
+                (setenv "FP_FAKE_FAIL_ON" "remote-modify")
+                (fp-clear-log!)
+                (test-error "bootstrap: modify failure propagates" #t
+                            (flatpak-bootstrap-remote! (car %fp-remotes)))
+                (test-assert
+                 "bootstrap: failed canonicalize rolls back created remote"
+                 (fp-log-has? "flatpak remote-delete --user flathub"))
+                (test-assert "bootstrap: add still preceded rollback"
+                             (let ((lines (fp-log-lines)))
+                               (< (list-index (lambda (l)
+                                                (string-contains l
+                                                                 "remote-add"))
+                                              lines)
+                                  (list-index (lambda (l)
+                                                (string-contains l
+                                                 "remote-delete")) lines))))
+                (setenv "FP_FAKE_FAIL_ON" "")
+
+                ;; ── 4. update：显式 unpinned selected targets ─────────────
+                (fp-write-file %fp-remotes-out
+                               "flathub\thttps://dl.flathub.org/repo/\n")
+                (fp-write-file %fp-list-app-out "com.tencent.WeChat	stable
+org.example.Unselected	stable
+org.other.Unmanaged	stable
+")
+                (fp-clear-log!)
+                (flatpak-update #:applications %fp-apps
+                                #:selection '(wechat pinned unselected))
+                (test-assert
+                 "update: explicit refs, pinned excluded, unmanaged excluded"
+                 (fp-log-has?
+                  "flatpak update --user -y com.tencent.WeChat//stable org.example.Unselected//stable"))
+                (test-assert "update: pinned app never in target list"
+                             (not (fp-log-has? "org.example.Pinned")))
+                (test-assert "update: unmanaged app never in target list"
+                             (not (fp-log-has? "org.other.Unmanaged")))
+                (fp-write-file %fp-list-app-out
+                 "org.freedesktop.Platform.VulkanLayer.example	25.08
+")
+                (fp-clear-log!)
+                (flatpak-update #:applications %fp-apps
+                                #:selection '()
                                 #:extensions %fp-exts
-                                #:extension-selection '(layer))))
-     (test-equal "sync: nothing missing"
-                 '() missing)
-     (test-assert "sync: no remote-add when remote matches declaration"
-                  (not (fp-log-has? "remote-add")))
-     (test-assert "sync: no install when already installed"
-                  (not (fp-log-has? "install")))
-     (test-assert "sync: unmanaged app never appears in any argv"
-                  (not (fp-log-has? "org.other.Unmanaged")))
-     ;; runtime 与 extension refs 不进 app 安装目标（extension 已装
-     ;; 且 pin 在册时绝不 reinstall——全局 extension selection 的
-     ;; no-op 路径）。
-     (test-assert "sync: runtime refs never appear in any argv"
-                  (not (any (lambda (line)
-                              (and (string-contains line "install")
-                                   (string-contains line "org.freedesktop.Platform")))
-                            (fp-log-lines)))))
-   
-   ;; 同 ID 的错误 branch 不满足 selection；安装正确 ABI branch，
-   ;; 并 pin 声明 ref，避免 gc/autoprune 破坏 desired state。
-   (fp-write-file %fp-list-app-out
-                  "org.freedesktop.Platform.VulkanLayer.example\t24.08\n")
-   (fp-write-file %fp-pins-out "")
-   (fp-clear-log!)
-   (flatpak-sync #:remotes (list (car %fp-remotes))
-                 #:applications %fp-apps #:selection '()
-                 #:extensions %fp-exts #:extension-selection '(layer))
-   (test-assert "sync: wrong extension branch installs declared branch"
-                (fp-log-has?
-                 "flatpak install --user -y flathub org.freedesktop.Platform.VulkanLayer.example//25.08"))
-   (test-assert "sync: selected extension is pinned against gc"
-                (fp-log-has?
-                 "flatpak pin --user org.freedesktop.Platform.VulkanLayer.example//25.08"))
-   (fp-write-file %fp-list-app-out
-                  "org.freedesktop.Platform.VulkanLayer.example\t25.08\n")
-   (fp-write-file %fp-pins-out
-                  "org.freedesktop.Platform.VulkanLayer.example//25.08\n")
-   (fp-clear-log!)
-   (flatpak-sync #:remotes (list (car %fp-remotes))
-                 #:applications %fp-apps #:selection '()
-                 #:extensions %fp-exts #:extension-selection '(layer))
-   (test-assert "sync: matching extension branch is not reinstalled"
-                (not (fp-log-has? "flatpak install")))
-   (test-assert "sync: converged extension pin is not rewritten"
-                (not (fp-log-has?
-                      "flatpak pin --user org.freedesktop.Platform.VulkanLayer.example//25.08")))
-   
-   ;; ── 3. remote drift → fail，绝不 auto-modify ──────────────
-   (fp-write-file %fp-remotes-out
-                  "flathub\thttps://evil.example/repo/\n")
-   (fp-write-file %fp-list-app-out "")
-   (fp-clear-log!)
-   (test-error "sync: remote drift fails loudly" #t
-               (flatpak-sync #:remotes (list (car %fp-remotes))
-                             #:applications %fp-apps
-                             #:selection '()))
-   (test-assert "sync: drift never auto remote-modify/delete"
-                (and (not (fp-log-has? "remote-modify"))
-                     (not (fp-log-has? "remote-delete"))
-                     (not (fp-log-has? "remote-add"))))
-   
-   ;; ── 3b. arbitrary remote（无 flathub 硬编码）+ 换源命令 ─────
-   ;; 任意 remote 走同一 bootstrap：官方 descriptor URL + 自身
-   ;; repository-url canonicalize——reconcile 不得有 per-remote
-   ;; 分支。
-   (fp-write-file %fp-remotes-out "")
-   (fp-write-file %fp-list-app-out "")
-   (fp-clear-log!)
-   (flatpak-sync #:remotes (cdr %fp-remotes)
-                 #:applications %fp-apps
-                 #:selection '())
-   (test-assert "arbitrary remote bootstraps with its own descriptor URL"
-                (fp-log-has?
-                 "flatpak remote-add --user --if-not-exists --from testremote https://example.invalid/foo.flatpakrepo"))
-   (test-assert "arbitrary remote canonicalizes its own transport URL"
-                (fp-log-has?
-                 "flatpak remote-modify --user --url=https://mirror.example.invalid/foo testremote"))
-   ;; remote-replace：已有 remote → 显式 remote-delete + 重建。
-   (fp-write-file %fp-remotes-out
-                  "flathub\thttps://dl.flathub.org/repo/\n")
-   (fp-clear-log!)
-   (flatpak-replace-remote! (car %fp-remotes))
-   (test-assert "remote-replace: explicit delete first"
-                (fp-log-has? "flatpak remote-delete --user flathub"))
-   (test-assert "remote-replace: rebuild via official descriptor URL"
-                (fp-log-has?
-                 "flatpak remote-add --user --if-not-exists --from flathub https://dl.flathub.org/repo/flathub.flatpakrepo"))
-   (test-assert "remote-replace: declared URL enforced via remote-modify"
-                (fp-log-has?
-                 "flatpak remote-modify --user --url=https://dl.flathub.org/repo/ flathub"))
-   (test-assert "remote-replace: delete precedes add"
-                (let ((lines (fp-log-lines)))
-                  (< (list-index (lambda (l) (string-contains l "remote-delete"))
-                                 lines)
-                     (list-index (lambda (l) (string-contains l "remote-add"))
-                                 lines))))
-   ;; remote-replace：remote 缺失 → 无 delete，只有 add。
-   (fp-write-file %fp-remotes-out "")
-   (fp-clear-log!)
-   (flatpak-replace-remote! (car %fp-remotes))
-   (test-assert "remote-replace: no delete when remote missing"
-                (not (fp-log-has? "remote-delete")))
-   (test-assert "remote-replace: adds when remote missing"
-                (fp-log-has? "flatpak remote-add"))
-   (test-error "remote-by-name: unknown remote fails fast" #t
-               (flatpak-remote-by-name 'nope))
-   
-   ;; ── 3c. bootstrap partial-failure rollback ────────────────
-   ;; remote 原本不存在 → remote-add 成功、remote-modify（URL
-   ;; canonicalize）失败 → 只删除【本次调用创建】的 remote，避免
-   ;; 留下 redirect 改写后的非声明状态等下次 sync 才发现 drift。
-   ;; bootstrap 只会在 check-remote! = #f 时运行，因此 rollback
-   ;; 不可能命中本操作之前已存在的 remote。
-   (fp-write-file %fp-remotes-out "")
-   (fp-write-file %fp-list-app-out "")
-   (setenv "FP_FAKE_FAIL_ON" "remote-modify")
-   (fp-clear-log!)
-   (test-error "bootstrap: modify failure propagates" #t
-               (flatpak-bootstrap-remote! (car %fp-remotes)))
-   (test-assert "bootstrap: failed canonicalize rolls back created remote"
-                (fp-log-has? "flatpak remote-delete --user flathub"))
-   (test-assert "bootstrap: add still preceded rollback"
-                (let ((lines (fp-log-lines)))
-                  (< (list-index (lambda (l)
-                                   (string-contains l "remote-add"))
-                                 lines)
-                     (list-index (lambda (l)
-                                   (string-contains l "remote-delete"))
-                                 lines))))
-   (setenv "FP_FAKE_FAIL_ON" "")
-   
-   ;; ── 4. update：显式 unpinned selected targets ─────────────
-   (fp-write-file %fp-remotes-out
-                  "flathub\thttps://dl.flathub.org/repo/\n")
-   (fp-write-file %fp-list-app-out
-                  "com.tencent.WeChat\tstable\norg.example.Unselected\tstable\norg.other.Unmanaged\tstable\n")
-   (fp-clear-log!)
-   (flatpak-update #:applications %fp-apps
-                   #:selection '(wechat pinned unselected))
-   (test-assert "update: explicit refs, pinned excluded, unmanaged excluded"
-                (fp-log-has?
-                 "flatpak update --user -y com.tencent.WeChat//stable org.example.Unselected//stable"))
-   (test-assert "update: pinned app never in target list"
-                (not (fp-log-has? "org.example.Pinned")))
-   (test-assert "update: unmanaged app never in target list"
-                (not (fp-log-has? "org.other.Unmanaged")))
-   (fp-write-file %fp-list-app-out
-                  "org.freedesktop.Platform.VulkanLayer.example\t25.08\n")
-   (fp-clear-log!)
-   (flatpak-update #:applications %fp-apps #:selection '()
-                   #:extensions %fp-exts #:extension-selection '(layer))
-   (test-assert "update: installed selected extension uses full ref"
-                (fp-log-has?
-                 "flatpak update --user -y org.freedesktop.Platform.VulkanLayer.example//25.08"))
-   (fp-clear-log!)
-   (flatpak-update #:applications %fp-apps #:selection '())
-   (test-assert "update: no targets -> no bare update command"
-                (not (fp-log-has? "flatpak update")))
-   
-   ;; ── 5. update-runtimes：枚举 + 显式 refs ──────────────────
-   (fp-write-file %fp-list-runtime-out
-                  "org.freedesktop.Platform\t23.08\norg.freedesktop.Platform\t24.08\n")
-   (fp-clear-log!)
-   (flatpak-update-runtimes)
-   (test-assert "update-runtimes: explicit ref list from enumeration"
-                (fp-log-has?
-                 "flatpak update --user -y org.freedesktop.Platform//23.08 org.freedesktop.Platform//24.08"))
-   (fp-write-file %fp-list-runtime-out "")
-   (fp-clear-log!)
-   (flatpak-update-runtimes)
-   (test-assert "update-runtimes: none installed -> no update command"
-                (not (fp-log-has? "flatpak update")))
-   
-   ;; ── 6. status：默认离线；--refresh 才 remote-info ─────────
-   (fp-write-file %fp-list-app-out "com.tencent.WeChat\tstable\n")
-   (fp-write-file %fp-info-out "Commit: 0123456789abcdef0123456789abcdef\n")
-   (fp-clear-log!)
-   (flatpak-status #:applications %fp-apps #:selection '(wechat))
-   (test-assert "status: default is fully offline (no remote-info)"
-                (not (fp-log-has? "remote-info")))
-   (test-assert "status: reads installed commit via info"
-                (fp-log-has?
-                 "flatpak info --user --show-commit com.tencent.WeChat"))
-   (fp-clear-log!)
-   (flatpak-status #:refresh? #t
-                   #:applications %fp-apps #:selection '(wechat))
-   (test-assert "status --refresh queries remote current commit"
-                (fp-log-has?
-                 "flatpak remote-info --user --show-commit flathub com.tencent.WeChat//stable"))
-   (test-assert "installed commit parsing strips 'Commit: ' prefix"
-                (string=?
-                 "0123456789abcdef0123456789abcdef"
-                 (flatpak-installed-commit "com.tencent.WeChat")))
-   
-   ;; ── 7. remove：只 uninstall ref ───────────────────────────
-   (fp-clear-log!)
-   (flatpak-remove 'wechat #:applications %fp-apps)
-   (test-assert "remove: explicit --user uninstall of the ref only"
-                (fp-log-has?
-                 "flatpak uninstall --user -y com.tencent.WeChat//stable"))
-   (test-assert "remove: no other mutation (no update/repair)"
-                (and (not (fp-log-has? "flatpak update"))
-                     (not (fp-log-has? "repair"))))
-   (test-error "remove: unknown logical name fails fast" #t
-               (flatpak-remove 'ghost #:applications %fp-apps))
-   
-   ;; ── 8. gc：只有维护操作 ───────────────────────────────────
-   (fp-write-file %fp-pins-out
-                  "org.freedesktop.Platform.VulkanLayer.example//24.08\norg.freedesktop.Platform.VulkanLayer.example//25.08\nruntime/org.freedesktop.Platform.VulkanLayer.example/x86_64/24.08\nruntime/org.freedesktop.Platform.VulkanLayer.example/x86_64/25.08\n")
-   (fp-clear-log!)
-   (flatpak-gc #:extensions %fp-exts #:extension-selection '(layer))
-   (test-assert "gc: unpins obsolete managed extension branch"
-                (fp-log-has?
-                 "flatpak pin --user --remove org.freedesktop.Platform.VulkanLayer.example//24.08"))
-   (test-assert "gc: keeps selected managed extension pin"
-                (not (fp-log-has?
-                      "flatpak pin --user --remove org.freedesktop.Platform.VulkanLayer.example//25.08")))
-   (test-assert "gc: unpins obsolete automatic canonical pin"
-                (fp-log-has?
-                 "flatpak pin --user --remove runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/24.08"))
-   (test-assert "gc: keeps selected automatic canonical pin"
-                (not (fp-log-has?
-                      "flatpak pin --user --remove runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/25.08")))
-   (test-assert "gc: uninstall --unused --user"
-                (fp-log-has? "flatpak uninstall --unused --user -y"))
-   (test-assert "gc: repair --user"
-                (fp-log-has? "flatpak repair --user"))
-   (test-assert "gc: pin query + stale unpins + two maintenance commands"
-                (let ((lines (fp-log-lines)))
-                  (= 5 (length lines))))
-   
-   ;; ── 9. network failure：干净失败、无半成品操作 ────────────
-   (fp-write-file %fp-remotes-out "")
-   (fp-write-file %fp-list-app-out "")
-   (setenv "FP_FAKE_FAIL_ON" "install")
-   (fp-clear-log!)
-   (test-error "sync: install network failure propagates" #t
-               (flatpak-sync #:remotes (list (car %fp-remotes))
-                             #:applications %fp-apps
-                             #:selection '(wechat pinned)))
-   (test-assert "sync: failure stops before pinned deploy"
-                (not (fp-log-has? "--commit=")))
-   (test-assert "sync: remote-add (local config) completed before failure"
-                (fp-log-has? "remote-add"))
-   (setenv "FP_FAKE_FAIL_ON" ""))
- (lambda ()
-   (setenv "PATH" %fp-original-path)
-   (for-each (lambda (var)
-               (setenv var ""))
-             '("FP_FAKE_LOG" "FP_FAKE_LIST_APP_OUT" "FP_FAKE_LIST_RUNTIME_OUT"
-                             "FP_FAKE_INFO_OUT" "FP_FAKE_REMOTES_OUT" "FP_FAKE_REMOTE_INFO_OUT"
-                             "FP_FAKE_PINS_OUT"
-                             "FP_FAKE_FAIL_ON"))
-   (false-if-exception (delete-file-recursively %fp-dir))))
+                                #:extension-selection '(layer))
+                (test-assert
+                 "update: installed selected extension uses full ref"
+                 (fp-log-has?
+                  "flatpak update --user -y org.freedesktop.Platform.VulkanLayer.example//25.08"))
+                (fp-clear-log!)
+                (flatpak-update #:applications %fp-apps
+                                #:selection '())
+                (test-assert "update: no targets -> no bare update command"
+                             (not (fp-log-has? "flatpak update")))
+
+                ;; ── 5. update-runtimes：枚举 + 显式 refs ──────────────────
+                (fp-write-file %fp-list-runtime-out
+                               "org.freedesktop.Platform	23.08
+org.freedesktop.Platform	24.08
+")
+                (fp-clear-log!)
+                (flatpak-update-runtimes)
+                (test-assert
+                 "update-runtimes: explicit ref list from enumeration"
+                 (fp-log-has?
+                  "flatpak update --user -y org.freedesktop.Platform//23.08 org.freedesktop.Platform//24.08"))
+                (fp-write-file %fp-list-runtime-out "")
+                (fp-clear-log!)
+                (flatpak-update-runtimes)
+                (test-assert
+                 "update-runtimes: none installed -> no update command"
+                 (not (fp-log-has? "flatpak update")))
+
+                ;; ── 6. status：默认离线；--refresh 才 remote-info ─────────
+                (fp-write-file %fp-list-app-out "com.tencent.WeChat\tstable\n")
+                (fp-write-file %fp-info-out
+                               "Commit: 0123456789abcdef0123456789abcdef
+")
+                (fp-clear-log!)
+                (flatpak-status #:applications %fp-apps
+                                #:selection '(wechat))
+                (test-assert
+                 "status: default is fully offline (no remote-info)"
+                 (not (fp-log-has? "remote-info")))
+                (test-assert "status: reads installed commit via info"
+                             (fp-log-has?
+                              "flatpak info --user --show-commit com.tencent.WeChat"))
+                (fp-clear-log!)
+                (flatpak-status #:refresh? #t
+                                #:applications %fp-apps
+                                #:selection '(wechat))
+                (test-assert "status --refresh queries remote current commit"
+                             (fp-log-has?
+                              "flatpak remote-info --user --show-commit flathub com.tencent.WeChat//stable"))
+                (test-assert
+                 "installed commit parsing strips 'Commit: ' prefix"
+                 (string=? "0123456789abcdef0123456789abcdef"
+                           (flatpak-installed-commit "com.tencent.WeChat")))
+
+                ;; ── 7. remove：只 uninstall ref ───────────────────────────
+                (fp-clear-log!)
+                (flatpak-remove 'wechat
+                                #:applications %fp-apps)
+                (test-assert
+                 "remove: explicit --user uninstall of the ref only"
+                 (fp-log-has?
+                  "flatpak uninstall --user -y com.tencent.WeChat//stable"))
+                (test-assert "remove: no other mutation (no update/repair)"
+                             (and (not (fp-log-has? "flatpak update"))
+                                  (not (fp-log-has? "repair"))))
+                (test-error "remove: unknown logical name fails fast" #t
+                            (flatpak-remove 'ghost
+                                            #:applications %fp-apps))
+
+                ;; ── 8. gc：只有维护操作 ───────────────────────────────────
+                (fp-write-file %fp-pins-out
+                 "org.freedesktop.Platform.VulkanLayer.example//24.08
+org.freedesktop.Platform.VulkanLayer.example//25.08
+runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/24.08
+runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/25.08
+")
+                (fp-clear-log!)
+                (flatpak-gc #:extensions %fp-exts
+                            #:extension-selection '(layer))
+                (test-assert "gc: unpins obsolete managed extension branch"
+                             (fp-log-has?
+                              "flatpak pin --user --remove org.freedesktop.Platform.VulkanLayer.example//24.08"))
+                (test-assert "gc: keeps selected managed extension pin"
+                             (not (fp-log-has?
+                                   "flatpak pin --user --remove org.freedesktop.Platform.VulkanLayer.example//25.08")))
+                (test-assert "gc: unpins obsolete automatic canonical pin"
+                             (fp-log-has?
+                              "flatpak pin --user --remove runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/24.08"))
+                (test-assert "gc: keeps selected automatic canonical pin"
+                             (not (fp-log-has?
+                                   "flatpak pin --user --remove runtime/org.freedesktop.Platform.VulkanLayer.example/x86_64/25.08")))
+                (test-assert "gc: uninstall --unused --user"
+                             (fp-log-has?
+                              "flatpak uninstall --unused --user -y"))
+                (test-assert "gc: repair --user"
+                             (fp-log-has? "flatpak repair --user"))
+                (test-assert
+                 "gc: pin query + stale unpins + two maintenance commands"
+                 (let ((lines (fp-log-lines)))
+                   (= 5
+                      (length lines))))
+
+                ;; ── 9. network failure：干净失败、无半成品操作 ────────────
+                (fp-write-file %fp-remotes-out "")
+                (fp-write-file %fp-list-app-out "")
+                (setenv "FP_FAKE_FAIL_ON" "install")
+                (fp-clear-log!)
+                (test-error "sync: install network failure propagates" #t
+                            (flatpak-sync #:remotes (list (car %fp-remotes))
+                                          #:applications %fp-apps
+                                          #:selection '(wechat pinned)))
+                (test-assert "sync: failure stops before pinned deploy"
+                             (not (fp-log-has? "--commit=")))
+                (test-assert
+                 "sync: remote-add (local config) completed before failure"
+                 (fp-log-has? "remote-add"))
+                (setenv "FP_FAKE_FAIL_ON" ""))
+              (lambda ()
+                (setenv "PATH" %fp-original-path)
+                (for-each (lambda (var)
+                            (setenv var ""))
+                          '("FP_FAKE_LOG" "FP_FAKE_LIST_APP_OUT"
+                            "FP_FAKE_LIST_RUNTIME_OUT"
+                            "FP_FAKE_INFO_OUT"
+                            "FP_FAKE_REMOTES_OUT"
+                            "FP_FAKE_REMOTE_INFO_OUT"
+                            "FP_FAKE_PINS_OUT"
+                            "FP_FAKE_FAIL_ON"))
+                (false-if-exception (delete-file-recursively %fp-dir))))
 
 (test-end "flatpak-reconcile-exec")

@@ -27,14 +27,13 @@
 ;;; 之外的例外。
 
 (define-module (guixcfg flatpak applications discord definition)
-               #:use-module (guixcfg flatpak model)
-               #:export (%flatpak-discord))
+  #:use-module (guixcfg flatpak model)
+  #:export (%flatpak-discord))
 
 (define %flatpak-discord
-  (flatpak-application
-   (name 'discord)
-   (id "com.discordapp.Discord")
-   (remote 'flathub)
-   (branch "stable")
-   (update-policy 'track-branch)
-   (override-policy 'external)))
+  (flatpak-application (name 'discord)
+                       (id "com.discordapp.Discord")
+                       (remote 'flathub)
+                       (branch "stable")
+                       (update-policy 'track-branch)
+                       (override-policy 'external)))

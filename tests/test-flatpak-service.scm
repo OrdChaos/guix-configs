@@ -9,24 +9,24 @@
 ;;;
 ;;; 只 evaluate + 源码断言，不触 flatpak CLI、不触网络。
 
-(use-modules (guixcfg hosts vm)          ; %vm-os
-             (guixcfg users user)        ; user-profile-name、%primary-user
-             (guixcfg fonts model)      ; %fonts（shared fact）
-             (guixcfg storage model)     ; persist-mount-point
-             (guixcfg system packages)   ; %system-packages
+(use-modules (guixcfg hosts vm) ;%vm-os
+             (guixcfg users user) ;user-profile-name、%primary-user
+             (guixcfg fonts model) ;%fonts（shared fact）
+             (guixcfg storage model) ;persist-mount-point
+             (guixcfg system packages) ;%system-packages
              (guixcfg flatpak model)
              (guixcfg flatpak registry)
              (guixcfg flatpak service)
-             (guix gexp)                 ; plain-file
-             (gnu packages package-management) ; flatpak
-             (gnu packages)              ; package-name
-             (gnu system)                ; operating-system-file-systems
-             (gnu system file-systems)   ; file-system-mount-point、file-system-device
-             (gnu home)                  ; home-environment-services
-             (gnu home services)         ; home-environment-variables-service-type、home-files-service-type
-             (gnu services)              ; service-kind
-             (guixcfg home user)         ; %guix-home
-             (ice-9 rdelim)              ; read-string
+             (guix gexp) ;plain-file
+             (gnu packages package-management) ;flatpak
+             (gnu packages) ;package-name
+             (gnu system) ;operating-system-file-systems
+             (gnu system file-systems) ;file-system-mount-point、file-system-device
+             (gnu home) ;home-environment-services
+             (gnu home services) ;home-environment-variables-service-type、home-files-service-type
+             (gnu services) ;service-kind
+             (guixcfg home user) ;%guix-home
+             (ice-9 rdelim) ;read-string
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -38,7 +38,8 @@
 (test-assert "system profile contains flatpak executable"
              (member flatpak %system-packages))
 (test-assert "system profile projects every shared %fonts package"
-             (every (lambda (p) (member p %system-packages)) %fonts))
+             (every (lambda (p)
+                      (member p %system-packages)) %fonts))
 
 ;; ── Home services 结构 ─────────────────────────────────────
 ;; simple-service 返回的是包装 service-type（名字 = simple-service
@@ -60,39 +61,38 @@
 
 ;; ── XDG_DATA_DIRS：追加不覆盖 ──────────────────────────────
 (define %home-env-value
-  (service-value
-   (fold-services (home-environment-services %guix-home)
-                  #:target-type home-environment-variables-service-type)))
+  (service-value (fold-services (home-environment-services %guix-home)
+                                #:target-type
+                                home-environment-variables-service-type)))
 
 (test-assert "home closure contains the flatpak XDG_DATA_DIRS contribution"
-             (member '("XDG_DATA_DIRS"
-                       . "$XDG_DATA_DIRS:$HOME/.local/share/flatpak/exports/share")
+             (member '("XDG_DATA_DIRS" . "$XDG_DATA_DIRS:$HOME/.local/share/flatpak/exports/share")
                      %home-env-value))
 ;; ── override files：managed 才生成（external = user-owned）────
-(test-equal "catalog apps with external override policy produce no override files"
-            '()
-            (flatpak-override-files
-             (filter (lambda (app)
-                       (eq? 'external
-                            (flatpak-application-override-policy app)))
-                     %flatpak-applications)))
+(test-equal
+ "catalog apps with external override policy produce no override files"
+ '()
+ (flatpak-override-files (filter (lambda (app)
+                                   (eq? 'external
+                                        (flatpak-application-override-policy
+                                         app))) %flatpak-applications)))
 ;; fixture：managed-overrides 的 app 生成完整文件；system activation 将它
 ;; 投影到 persistent installation 的 overrides/<id>。
 (define %managed-override-files
-  (flatpak-override-files
-   (list (flatpak-application
-          (name 'managed) (id "org.example.Managed")
-          (remote 'flathub) (branch "stable")
-          (override-policy
-           (list 'managed-overrides
-                 (flatpak-override (sockets '("wayland")))))))))
+  (flatpak-override-files (list (flatpak-application (name 'managed)
+                                                     (id "org.example.Managed")
+                                                     (remote 'flathub)
+                                                     (branch "stable")
+                                                     (override-policy (list 'managed-overrides
+                                                                            (flatpak-override
+                                                                             (sockets '
+                                                                              ("wayland")))))))))
 (test-equal "managed override policy produces one override entry"
-             '(".local/share/flatpak/overrides/org.example.Managed")
-             (map car %managed-override-files))
+            '(".local/share/flatpak/overrides/org.example.Managed")
+            (map car %managed-override-files))
 (test-assert "managed override activation compiles"
-             (and (gexp->script
-                   "flatpak-overrides-activation-check"
-                   (service-value (flatpak-overrides-activation '())))
+             (and (gexp->script "flatpak-overrides-activation-check"
+                                (service-value (flatpak-overrides-activation '())))
                   #t))
 
 ;; ── override 随 selection 投影（与 persistence 同一事实）────
@@ -102,31 +102,33 @@
 ;; managed 也不生成；selection 删除后下一 Home generation 清除
 ;; declarative override symlink（projection 不再包含该 target）。
 (define %fp-selection-fixture-catalog
-  (list (flatpak-application
-         (name 'selected-external) (id "org.example.SelectedExternal")
-         (remote 'flathub) (branch "stable")
-         (override-policy 'external))
-        (flatpak-application
-         (name 'selected-managed) (id "org.example.SelectedManaged")
-         (remote 'flathub) (branch "stable")
-         (override-policy
-          (list 'managed-overrides
-                (flatpak-override (sockets '("wayland"))))))
-        (flatpak-application
-         (name 'unselected-managed) (id "org.example.UnselectedManaged")
-         (remote 'flathub) (branch "stable")
-         (override-policy
-          (list 'managed-overrides
-                (flatpak-override (devices '("dri"))))))))
+  (list (flatpak-application (name 'selected-external)
+                             (id "org.example.SelectedExternal")
+                             (remote 'flathub)
+                             (branch "stable")
+                             (override-policy 'external))
+        (flatpak-application (name 'selected-managed)
+                             (id "org.example.SelectedManaged")
+                             (remote 'flathub)
+                             (branch "stable")
+                             (override-policy (list 'managed-overrides
+                                                    (flatpak-override (sockets '
+                                                                       ("wayland"))))))
+        (flatpak-application (name 'unselected-managed)
+                             (id "org.example.UnselectedManaged")
+                             (remote 'flathub)
+                             (branch "stable")
+                             (override-policy (list 'managed-overrides
+                                                    (flatpak-override (devices '
+                                                                       ("dri"))))))))
 
 (define %fp-selection-fixture-selection
   '(selected-external selected-managed))
 
 (define (override-targets-for selection)
   (map car
-       (flatpak-override-files
-        (flatpak-select-applications selection
-                                     %fp-selection-fixture-catalog))))
+       (flatpak-override-files (flatpak-select-applications selection
+                                %fp-selection-fixture-catalog))))
 
 (test-equal "override projection follows selection: only selected-managed"
             '(".local/share/flatpak/overrides/org.example.SelectedManaged")
@@ -140,32 +142,35 @@
 (define %desktop-source
   (plain-file "selected.desktop" "[Desktop Entry]\nType=Application\n"))
 (define %desktop-app
-  (flatpak-application
-   (name 'desktop-app) (id "org.example.DesktopApp")
-   (remote 'flathub) (branch "stable")
-   (desktop-files (list (list "org.example.DesktopApp.desktop"
-                              %desktop-source)))))
+  (flatpak-application (name 'desktop-app)
+                       (id "org.example.DesktopApp")
+                       (remote 'flathub)
+                       (branch "stable")
+                       (desktop-files (list (list
+                                             "org.example.DesktopApp.desktop"
+                                             %desktop-source)))))
 (test-equal "selected desktop shadow projects under XDG applications"
             '(".local/share/applications/org.example.DesktopApp.desktop")
-            (map car (flatpak-desktop-files (list %desktop-app))))
+            (map car
+                 (flatpak-desktop-files (list %desktop-app))))
 (test-equal "unselected desktop shadow produces no home file"
             '()
             (flatpak-desktop-files '()))
 
 ;; ── %vm-os persistence wiring ─────────────────────────────────
-(define %fp-user (user-profile-name %primary-user))
+(define %fp-user
+  (user-profile-name %primary-user))
 
-(test-assert "OS file-systems bind ~/.local/share/flatpak -> flatpak/installation"
-             (any (lambda (fs)
-                    (and (string=?
-                          (string-append "/home/" %fp-user
-                                         "/.local/share/flatpak")
-                          (file-system-mount-point fs))
-                         (string=?
-                          (string-append (persist-mount-point "@persist-data-app")
-                                         "/flatpak/installation")
-                          (file-system-device fs))))
-                  (operating-system-file-systems %vm-os)))
+(test-assert
+ "OS file-systems bind ~/.local/share/flatpak -> flatpak/installation"
+ (any (lambda (fs)
+        (and (string=? (string-append "/home/" %fp-user
+                                      "/.local/share/flatpak")
+                       (file-system-mount-point fs))
+             (string=? (string-append (persist-mount-point "@persist-data-app")
+                                      "/flatpak/installation")
+                       (file-system-device fs))))
+      (operating-system-file-systems %vm-os)))
 
 ;; 生产 selection 回归：每个 selected app 的 ~/.var/app/<id> bind
 ;; 由 host 组装进 OS（persistence 从 selected definitions 投影）——
@@ -173,29 +178,33 @@
 (test-assert "OS file-systems bind every selected app's ~/.var/app/<id>"
              (every (lambda (app)
                       (any (lambda (fs)
-                             (and (string=?
-                                   (string-append "/home/" %fp-user
-                                                  "/.var/app/"
-                                                  (flatpak-application-id app))
-                                   (file-system-mount-point fs))
-                                  (string=?
-                                   (string-append (persist-mount-point "@persist-data-app")
-                                                  "/flatpak/apps/"
-                                                  (flatpak-application-id app))
-                                   (file-system-device fs))))
+                             (and (string=? (string-append "/home/" %fp-user
+                                                           "/.var/app/"
+                                                           (flatpak-application-id
+                                                            app))
+                                            (file-system-mount-point fs))
+                                  (string=? (string-append (persist-mount-point
+                                                            "@persist-data-app")
+                                                           "/flatpak/apps/"
+                                                           (flatpak-application-id
+                                                            app))
+                                            (file-system-device fs))))
                            (operating-system-file-systems %vm-os)))
                     (flatpak-selected-applications)))
 
 ;; ── 静态回归：platform 模块零 flatpak CLI / 零 reconcile ────
 (define (module-source path)
-  (call-with-input-file
-   (string-append "modules/guixcfg/flatpak/" path)
-   (lambda (port) (read-string port))))
+  (call-with-input-file (string-append "modules/guixcfg/flatpak/" path)
+    (lambda (port)
+      (read-string port))))
 
 (define %platform-sources
-  (list (cons "model.scm" (module-source "model.scm"))
-        (cons "registry.scm" (module-source "registry.scm"))
-        (cons "service.scm" (module-source "service.scm"))
+  (list (cons "model.scm"
+              (module-source "model.scm"))
+        (cons "registry.scm"
+              (module-source "registry.scm"))
+        (cons "service.scm"
+              (module-source "service.scm"))
         (cons "applications/qq/definition.scm"
               (module-source "applications/qq/definition.scm"))
         (cons "applications/wechat/definition.scm"
@@ -209,25 +218,24 @@
 
 (test-assert "platform service/model/registry never import reconcile"
              (every (lambda (entry)
-                      (not (string-contains
-                            (cdr entry)
+                      (not (string-contains (cdr entry)
                             "use-module (guixcfg flatpak reconcile)")))
                     %platform-sources))
-(test-assert "platform service/model/registry contain no subprocess invocation surface"
-             (every (lambda (entry)
-                      (not (any (lambda (fragment)
-                                  (string-contains (cdr entry) fragment))
-                                %flatpak-cli-invocation-fragments)))
-                    %platform-sources))
+(test-assert
+ "platform service/model/registry contain no subprocess invocation surface"
+ (every (lambda (entry)
+          (not (any (lambda (fragment)
+                      (string-contains (cdr entry) fragment))
+                    %flatpak-cli-invocation-fragments))) %platform-sources))
 ;; 反过来锚定测试有效性：reconcile 模块确实在 flatpak area、import
 ;; 了子进程原语且带 CLI 面（网络边界只归 tools 入口）。
 (define %reconcile-source
   (call-with-input-file "modules/guixcfg/flatpak/reconcile.scm"
-                        (lambda (port) (read-string port))))
+    (lambda (port)
+      (read-string port))))
 (test-assert "reconcile module exists and carries the CLI surface"
              (and (string-contains %reconcile-source "remote-add")
                   (string-contains %reconcile-source "remote-info")
                   (string-contains %reconcile-source "invoke-capture")))
-
 
 (test-end "flatpak-service")

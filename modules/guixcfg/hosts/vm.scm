@@ -17,47 +17,48 @@
 ;;;      tests/test-nvidia.scm N6 断言）。
 
 (define-module (guixcfg hosts vm)
-               #:use-module (gnu)                          ; operating-system、user-account、service 等
-               #:use-module (gnu services networking)      ; network-manager-service-type
-               #:use-module (guixcfg storage model)          ; host-storage-policy-keep-root-generations
-               #:use-module ((guixcfg storage policies) #:prefix storage:)
-               #:use-module (guixcfg hosts common)         ; 共享 host composition algorithm
-               #:use-module (guixcfg inventory hosts)      ; Host ID → hostname 单一映射
-               #:use-module (guixcfg users user)           ; %primary-user（结构事实权威源）
-               #:use-module (guixcfg home user)            ; %guix-home（挂入 system）
-               #:use-module (guixcfg security secrets)     ; secret-decl
-               #:use-module (guixcfg utils repository-source) ; repository-file（VM 测试 sentinel 密文）
-               #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
-               #:use-module (guixcfg apps model)      ; applications-secrets
-               #:use-module (guixcfg system mihomo service) ; %mihomo-secrets、%mihomo-data-persistence-rule
-               #:use-module (guixcfg system dns nm-dnsmasq) ; dnsmasq 专用账号配置
-               #:export (%vm-storage-policy %vm-services %vm-test-secrets
-                                            %vm-os))
+  #:use-module (gnu) ;operating-system、user-account、service 等
+  #:use-module (gnu services networking) ;network-manager-service-type
+  #:use-module (guixcfg storage model) ;host-storage-policy-keep-root-generations
+  #:use-module ((guixcfg storage policies)
+                #:prefix storage:)
+  #:use-module (guixcfg hosts common) ;共享 host composition algorithm
+  #:use-module (guixcfg inventory hosts) ;Host ID → hostname 单一映射
+  #:use-module (guixcfg users user) ;%primary-user（结构事实权威源）
+  #:use-module (guixcfg home user) ;%guix-home（挂入 system）
+  #:use-module (guixcfg security secrets) ;secret-decl
+  #:use-module (guixcfg utils repository-source) ;repository-file（VM 测试 sentinel 密文）
+  #:use-module (guixcfg apps registry) ;%applications（secret composition root）
+  #:use-module (guixcfg apps model) ;applications-secrets
+  #:use-module (guixcfg system mihomo service) ;%mihomo-secrets、%mihomo-data-persistence-rule
+  #:use-module (guixcfg system dns nm-dnsmasq) ;dnsmasq 专用账号配置
+  #:export (%vm-storage-policy %vm-services %vm-test-secrets %vm-os))
 
 ;; 保留 host 模块原有导出名；实际 policy 放在纯存储模块中，避免早期
 ;; disk-install 为取 policy 而加载完整 OS/UKI/channel 依赖。
-(define %vm-storage-policy storage:%vm-storage-policy)
+(define %vm-storage-policy
+  storage:%vm-storage-policy)
 
 ;; VM 测试机的 secrets 机制 sentinel（不是 host-owned secret 层——
 ;; 只是这台测试机要部署的测试密文；密文归 tests/fixtures/secrets/，
 ;; 经 repository-file（仓库根相对）解析。laptop 等真实 host 不需要。
 (define %vm-test-secrets
-  (list (secret-decl
-         (name 'test-system)
-         (scope 'system)
-         (domain 'login-critical)
-         (source (repository-file "tests/fixtures/secrets/test-system.age"))
-         (target-name "test-system")
-         (owner-user "root")
-         (mode #o400))
-        (secret-decl
-         (name 'test-user)
-         (scope 'user)
-         (domain 'login-critical)
-         (source (repository-file "tests/fixtures/secrets/test-user.age"))
-         (target-name "test-user")
-         (owner-user (user-profile-name %primary-user))
-         (mode #o600))))
+  (list (secret-decl (name 'test-system)
+                     (scope 'system)
+                     (domain 'login-critical)
+                     (source (repository-file
+                              "tests/fixtures/secrets/test-system.age"))
+                     (target-name "test-system")
+                     (owner-user "root")
+                     (mode 256))
+        (secret-decl (name 'test-user)
+                     (scope 'user)
+                     (domain 'login-critical)
+                     (source (repository-file
+                              "tests/fixtures/secrets/test-user.age"))
+                     (target-name "test-user")
+                     (owner-user (user-profile-name %primary-user))
+                     (mode 384))))
 
 ;; HOME persistence bind mounts（user data + app state；单一定义，
 ;; %vm-services 的 gvfs-mount-metadata 服务与 file-systems 字段共用）。
@@ -70,35 +71,32 @@
    ;; QEMU user-mode 网络（SLIRP：DHCP 10.0.2.15 / DNS 10.0.2.3）。
    ;; DNS 语义见 docs/architecture/dns.md：NetworkManager 自带 dnsmasq
    ;; backend（127.0.0.1:53 → DHCP DNS），以专用稳定 UID 运行。
-   #:network-services
-   (list (service network-manager-service-type
-                  (network-manager-configuration
-                   (dns "dnsmasq")
-                   (dnsmasq-configuration-files
-                    (nm-dnsmasq-dnsmasq-configuration-files))
-                   (shepherd-requirement '()))))
-   #:keep-root-generations
-   (host-storage-policy-keep-root-generations %vm-storage-policy)
+   #:network-services (list (service network-manager-service-type
+                                     (network-manager-configuration (dns
+                                                                     "dnsmasq")
+                                                                    (dnsmasq-configuration-files
+                                                                     (nm-dnsmasq-dnsmasq-configuration-files))
+                                                                    (shepherd-requirement '()))))
+   #:keep-root-generations (host-storage-policy-keep-root-generations
+                            %vm-storage-policy)
    #:persistent-mount-file-systems %persistent-mount-file-systems))
 
 ;; 完整 user services（不含 account-databases 投影本身）。
 (define %vm-user-services
-  (make-host-user-services
-   #:system-services %vm-services
-   #:application-persistence-rules
-   (host-application-persistence-rules)
-   #:secrets (append %vm-test-secrets
-                     %mihomo-secrets
-                     (applications-secrets %applications))
-   #:home-environment (guix-home)))
+  (make-host-user-services #:system-services %vm-services
+                           #:application-persistence-rules (host-application-persistence-rules)
+                           #:secrets (append %vm-test-secrets %mihomo-secrets
+                                             (applications-secrets
+                                              %applications))
+                           #:home-environment (guix-home)))
 
 ;; 基础 OS：与最终 %vm-os 完全相同，只是不含 account-databases 投影。
 ;; 仅用于折叠 account 列表；真正启动用 %vm-os。
 (define %os-without-account-databases
-  (make-base-host-operating-system
-   #:host-name (host-name-for-id "vm")
-   #:persistent-mount-file-systems %persistent-mount-file-systems
-   #:user-services %vm-user-services))
+  (make-base-host-operating-system #:host-name (host-name-for-id "vm")
+                                   #:persistent-mount-file-systems
+                                   %persistent-mount-file-systems
+                                   #:user-services %vm-user-services))
 
 ;; 最终 OS：account fold + machine-identity + account-databases 投影
 ;; （共享组装算法，无 final transformation——VM 无 NVIDIA）。

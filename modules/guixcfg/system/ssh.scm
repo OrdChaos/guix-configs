@@ -12,16 +12,14 @@
 ;;; private 0600、public 可读），之后跨 root generation 稳定不变。
 
 (define-module (guixcfg system ssh)
-               #:use-module (gnu services)            ; service、simple-service
-               #:use-module (gnu services ssh)        ; openssh-service-type
-               #:use-module (gnu packages ssh)        ; openssh
-               #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
-               #:use-module (guix gexp)
-               #:use-module (guix modules)            ; source-module-closure
-               #:export (%ssh-host-key-dir
-                         ssh-host-key-activation
-                         ssh-host-key-service
-                         secure-ssh-service))
+  #:use-module (gnu services) ;service、simple-service
+  #:use-module (gnu services ssh) ;openssh-service-type
+  #:use-module (gnu packages ssh) ;openssh
+  #:use-module (guixcfg storage model) ;persist-mount-point（/persist 语义路径 authority）
+  #:use-module (guix gexp)
+  #:use-module (guix modules) ;source-module-closure
+  #:export (%ssh-host-key-dir ssh-host-key-activation ssh-host-key-service
+                              secure-ssh-service))
 
 ;; SSH host key 持久化目录（机器状态，跨 root generation 不变）。
 (define %ssh-host-key-dir
@@ -37,17 +35,23 @@
 已生成（缺失才生成）。"
   (with-imported-modules (source-module-closure '((guix build utils)))
                          #~(begin
-                            (use-modules (guix build utils))
-                            (mkdir-p #$%ssh-host-key-dir)
-                            (let ((key (string-append #$%ssh-host-key-dir
-                                                      "/ssh_host_ed25519_key")))
-                              (unless (file-exists? key)
-                                (invoke (string-append #$(file-append openssh "/bin/ssh-keygen"))
-                                        "-t" "ed25519" "-N" "" "-f" key)
-                                (chmod key #o600)
-                                (chmod (string-append key ".pub") #o644))
-                              ;; 目录本身 root 可读写即可（权限 0755）。
-                              (chmod #$%ssh-host-key-dir #o755)))))
+                             (use-modules (guix build utils))
+                             (mkdir-p #$%ssh-host-key-dir)
+                             (let ((key (string-append #$%ssh-host-key-dir
+                                         "/ssh_host_ed25519_key")))
+                               (unless (file-exists? key)
+                                 (invoke (string-append #$(file-append openssh
+                                                           "/bin/ssh-keygen"))
+                                         "-t"
+                                         "ed25519"
+                                         "-N"
+                                         ""
+                                         "-f"
+                                         key)
+                                 (chmod key #o600)
+                                 (chmod (string-append key ".pub") #o644))
+                               ;; 目录本身 root 可读写即可（权限 0755）。
+                               (chmod #$%ssh-host-key-dir #o755)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; System-owned OpenSSH server policy（production VM）。
@@ -61,22 +65,21 @@
 sshd 配置与 host-key 持久化由 System 拥有；Guix Home 不管理 sshd，
 也不创建任何私钥。"
   (service openssh-service-type
-           (openssh-configuration
-            (port-number 22)
-            ;; #f 生成 PermitRootLogin no（guix 的 permit-root-login 字段
-            ;; 不支持 'no 符号——match 只认 #t/#f/without-password/
-            ;; prohibit-password，实测 match-error）。
-            (permit-root-login #f)
-            (allow-empty-passwords? #f)
-            (password-authentication? #t)
-            (public-key-authentication? #t)
-            ;; 我们自己管理 host keys（/persist/system/ssh），
-            ;; 禁用默认 /etc/ssh/ssh_host_* 生成。
-            (generate-host-keys? #f)
-            (extra-content (string-append
-                            "HostKey " %ssh-host-key-dir
-                            "/ssh_host_ed25519_key\n"
-                            "DenyUsers root\n")))))
+           (openssh-configuration (port-number 22)
+                                  ;; #f 生成 PermitRootLogin no（guix 的 permit-root-login 字段
+                                  ;; 不支持 'no 符号——match 只认 #t/#f/without-password/
+                                  ;; prohibit-password，实测 match-error）。
+                                  (permit-root-login #f)
+                                  (allow-empty-passwords? #f)
+                                  (password-authentication? #t)
+                                  (public-key-authentication? #t)
+                                  ;; 我们自己管理 host keys（/persist/system/ssh），
+                                  ;; 禁用默认 /etc/ssh/ssh_host_* 生成。
+                                  (generate-host-keys? #f)
+                                  (extra-content (string-append "HostKey "
+                                                  %ssh-host-key-dir
+                                                  "/ssh_host_ed25519_key\n"
+                                                  "DenyUsers root\n")))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; host-key activation 的服务组合（vm.scm 的 %vm-services 使用）。

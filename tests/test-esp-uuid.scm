@@ -8,12 +8,13 @@
 ;;;
 ;;; 由 tests/run-tests.scm 加载运行（从仓库根目录）。
 
-(use-modules (guixcfg boot esp-uuid)        ; esp-luks-uuid-service
-             ((guixcfg hosts vm) #:prefix vm:) ; %vm-os
-             (gnu system)                   ; operating-system-user-services
-             (gnu services)                 ; service-kind、service-value
-             (gnu services base)            ; activation-service-type
-             (srfi srfi-1)                  ; find、any
+(use-modules (guixcfg boot esp-uuid) ;esp-luks-uuid-service
+             ((guixcfg hosts vm)
+              #:prefix vm:) ;%vm-os
+             (gnu system) ;operating-system-user-services
+             (gnu services) ;service-kind、service-value
+             (gnu services base) ;activation-service-type
+             (srfi srfi-1) ;find、any
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))

@@ -48,16 +48,14 @@
 ;;; 路径，无需搜索路径）。
 
 (define-module (guixcfg apps nushell definition)
-               #:use-module (gnu home services)      ; home-files-service-type
-               #:use-module (gnu services)           ; simple-service
-               #:use-module (guix gexp)              ; local-file、file-append、computed-file
-               #:use-module (guix records)
-               #:use-module (virelith packages nushell) ; nushell（自建 channel）
-               #:use-module (guixcfg apps model)
-               #:use-module (guixcfg system application-persistence) ; rule
-               #:export (%nushell
-                         %nushell-default-plugins
-                         nushell-plugin-registry))
+  #:use-module (gnu home services) ;home-files-service-type
+  #:use-module (gnu services) ;simple-service
+  #:use-module (guix gexp) ;local-file、file-append、computed-file
+  #:use-module (guix records)
+  #:use-module (virelith packages nushell) ;nushell（自建 channel）
+  #:use-module (guixcfg apps model)
+  #:use-module (guixcfg system application-persistence) ;rule
+  #:export (%nushell %nushell-default-plugins nushell-plugin-registry))
 
 ;; 默认注册的官方插件集合（Nushell 官方 default non-developer
 ;; plugins；custom_values/example/stress_internals 属 example/
@@ -65,10 +63,7 @@
 ;; $out/bin，只是不进声明式 registry）。未来第三方插件可在此追加
 ;; 独立 package 的 executable（file-append 模型，不限同 package）。
 (define %nushell-default-plugins
-  '("nu_plugin_inc"
-    "nu_plugin_polars"
-    "nu_plugin_gstat"
-    "nu_plugin_formats"
+  '("nu_plugin_inc" "nu_plugin_polars" "nu_plugin_gstat" "nu_plugin_formats"
     "nu_plugin_query"))
 
 (define (nushell-plugin-registry)
@@ -93,44 +88,46 @@ backed 链接；用户直接 plugin add 修改默认 $nu.plugin-path 会因只�
         (plugins (map (lambda (plugin)
                         (file-append nushell "/bin/" plugin))
                       %nushell-default-plugins)))
-    (computed-file
-     "nushell-plugin-registry.msgpackz"
-     #~(begin
-        (define nu #$nu)
-        ;; gexp 运行时（构建期）拼接命令串：全部 Guile core
-        ;; binding（AGENT.md §3），无额外 import。
-        (define commands
-          (apply string-append
-            (map (lambda (plugin)
-                   (string-append "plugin add " plugin "; "))
-                 (list #$@plugins))))
-        (unless (zero?
-                 (system* nu
-                          (string-append "--plugin-config=" #$output)
-                          "--commands"
-                          commands))
-          (error "nushell plugin registry generation failed"))))))
+    (computed-file "nushell-plugin-registry.msgpackz"
+                   #~(begin
+                       (define nu
+                         #$nu)
+                       ;; gexp 运行时（构建期）拼接命令串：全部 Guile core
+                       ;; binding（AGENT.md §3），无额外 import。
+                       (define commands
+                         (apply string-append
+                                (map (lambda (plugin)
+                                       (string-append "plugin add " plugin
+                                                      "; "))
+                                     (list #$@plugins))))
+                       (unless (zero? (system* nu
+                                               (string-append
+                                                "--plugin-config="
+                                                #$output) "--commands"
+                                               commands))
+                         (error "nushell plugin registry generation failed"))))))
 
 (define %nushell
-  (application
-   (name 'nushell)
-   (home-packages (list nushell))
-   (home-services
-    (list (simple-service 'nushell-config
-                          home-files-service-type
-                          `((".config/nushell/config.nu"
-                             ,(local-file "config.nu" "nushell-config.nu"))
-                            (".config/nushell/env.nu"
-                             ,(local-file "env.nu" "nushell-env.nu"))
-                            (".config/nushell/theme.nu"
-                             ,(local-file "theme.nu" "nushell-theme.nu"))
-                            (".config/nushell/plugin.msgpackz"
-                             ,(nushell-plugin-registry))))))
-   (persistence
-    (list (application-persistence-rule
-           (name 'state)
-           (backing "nushell/state")        ; backing root 相对（persistence.md）
-           (consumer ".local/state/nushell") ; HOME 相对（history 所在目录；
-           ;   XDG_STATE_HOME 语义，mpv 同模式）
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))))))
+  (application (name 'nushell)
+               (home-packages (list nushell))
+               (home-services (list (simple-service 'nushell-config
+                                                    home-files-service-type
+                                                    `((".config/nushell/config.nu" ,
+                                                       (local-file "config.nu"
+                                                        "nushell-config.nu"))
+                                                      (".config/nushell/env.nu" ,
+                                                       (local-file "env.nu"
+                                                        "nushell-env.nu"))
+                                                      (".config/nushell/theme.nu" ,
+                                                       (local-file "theme.nu"
+                                                        "nushell-theme.nu"))
+                                                      (".config/nushell/plugin.msgpackz" ,
+                                                       (nushell-plugin-registry))))))
+               (persistence (list (application-persistence-rule (name 'state)
+                                                                (backing
+                                                                 "nushell/state") ;backing root 相对（persistence.md）
+                                                                (consumer
+                                                                 ".local/state/nushell") ;HOME 相对（history 所在目录；
+                                                                ;; XDG_STATE_HOME 语义，mpv 同模式）
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))))))

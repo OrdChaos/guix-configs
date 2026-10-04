@@ -29,20 +29,17 @@
 ;;;   自身为子进程注入同名变量，互不冲突。
 
 (define-module (guixcfg apps nodejs definition)
-               #:use-module (gnu home services)        ; home-environment-variables-service-type
-               #:use-module (gnu packages node)        ; node（含 npm）
-               #:use-module (gnu services)             ; simple-service
-               #:use-module (guix records)
-               #:use-module (virelith packages nodejs) ; pnpm
-               #:use-module (guixcfg apps model)
-               #:export (%nodejs))
+  #:use-module (gnu home services) ;home-environment-variables-service-type
+  #:use-module (gnu packages node) ;node（含 npm）
+  #:use-module (gnu services) ;simple-service
+  #:use-module (guix records)
+  #:use-module (virelith packages nodejs) ;pnpm
+  #:use-module (guixcfg apps model)
+  #:export (%nodejs))
 
 (define %nodejs
-  (application
-   (name 'nodejs)
-   (home-packages (list node pnpm))
-   (home-services
-    (list (simple-service
-           'nodejs-env
-           home-environment-variables-service-type
-           '(("pnpm_config_pm_on_fail" . "ignore")))))))
+  (application (name 'nodejs)
+               (home-packages (list node pnpm))
+               (home-services (list (simple-service 'nodejs-env
+                                     home-environment-variables-service-type
+                                     '(("pnpm_config_pm_on_fail" . "ignore")))))))

@@ -37,28 +37,27 @@
 ;;; 字段时不引入抽象（未来真实 daemon 需要再按最小 contract 扩展）。
 
 (define-module (guixcfg system machine-state-persistence)
-               #:use-module (gnu services)            ; simple-service
-               #:use-module (gnu system file-systems) ; file-system
-               #:use-module (guix gexp)
-               #:use-module (guix modules)            ; source-module-closure
-               #:use-module (guix records)
-               #:use-module (guixcfg storage model)   ; persist-mount-point
-               #:use-module (guixcfg utils paths)     ; valid-relative-path?（persistence 契约共享）
-               #:use-module (srfi srfi-1)             ; every
-               #:export (<machine-state-persistence-rule>
-                         machine-state-persistence-rule
-                         make-machine-state-persistence-rule
-                         machine-state-persistence-rule?
-                         machine-state-persistence-rule-name
-                         machine-state-persistence-rule-backing
-                         machine-state-persistence-rule-consumer
-                         machine-state-persistence-rule-exposure
-                         machine-state-persistence-rule-lifecycle
-                         %machine-state-root
-                         valid-machine-state-persistence-rule?
-                         machine-state-persistence-file-systems
-                         machine-state-persistence-activation
-                         machine-state-persistence-service))
+  #:use-module (gnu services) ;simple-service
+  #:use-module (gnu system file-systems) ;file-system
+  #:use-module (guix gexp)
+  #:use-module (guix modules) ;source-module-closure
+  #:use-module (guix records)
+  #:use-module (guixcfg storage model) ;persist-mount-point
+  #:use-module (guixcfg utils paths) ;valid-relative-path?（persistence 契约共享）
+  #:use-module (srfi srfi-1) ;every
+  #:export (<machine-state-persistence-rule> machine-state-persistence-rule
+            make-machine-state-persistence-rule
+            machine-state-persistence-rule?
+            machine-state-persistence-rule-name
+            machine-state-persistence-rule-backing
+            machine-state-persistence-rule-consumer
+            machine-state-persistence-rule-exposure
+            machine-state-persistence-rule-lifecycle
+            %machine-state-root
+            valid-machine-state-persistence-rule?
+            machine-state-persistence-file-systems
+            machine-state-persistence-activation
+            machine-state-persistence-service))
 
 ;; machine-state root = @persist-system 挂载点 + "state"
 ;; （ownership layering：storage/model.scm 拥有 /persist/system；
@@ -69,21 +68,30 @@
 
 ;; consumer 禁止落入的 immutable/runtime authority roots。
 (define %forbidden-consumer-roots
-  '("/gnu/store" "/run" "/persist" "/home" "/proc" "/sys" "/dev" "/tmp"))
+  '("/gnu/store" "/run"
+    "/persist"
+    "/home"
+    "/proc"
+    "/sys"
+    "/dev"
+    "/tmp"))
 
-(define %allowed-exposures '(bind-directory))
-(define %allowed-lifecycles '(machine-owned))
+(define %allowed-exposures
+  '(bind-directory))
+(define %allowed-lifecycles
+  '(machine-owned))
 
 (define-record-type* <machine-state-persistence-rule>
-                     machine-state-persistence-rule make-machine-state-persistence-rule
-                     machine-state-persistence-rule?
-                     (name machine-state-persistence-rule-name)          ; symbol
-                     (backing machine-state-persistence-rule-backing)    ; string：machine-state root 相对
-                     (consumer machine-state-persistence-rule-consumer)  ; string：absolute system path
-                     (exposure machine-state-persistence-rule-exposure   ; symbol：仅 'bind-directory
-                               (default 'bind-directory))
-                     (lifecycle machine-state-persistence-rule-lifecycle ; symbol：仅 'machine-owned
-                                (default 'machine-owned)))
+                     machine-state-persistence-rule
+                     make-machine-state-persistence-rule
+  machine-state-persistence-rule?
+  (name machine-state-persistence-rule-name) ;symbol
+  (backing machine-state-persistence-rule-backing) ;string：machine-state root 相对
+  (consumer machine-state-persistence-rule-consumer) ;string：absolute system path
+  (exposure machine-state-persistence-rule-exposure ;symbol：仅 'bind-directory
+            (default 'bind-directory))
+  (lifecycle machine-state-persistence-rule-lifecycle ;symbol：仅 'machine-owned
+             (default 'machine-owned)))
 
 (define (valid-absolute-consumer? consumer)
   "CONSUMER 是否是合法的 absolute system consumer（非根、不在禁止
@@ -107,21 +115,23 @@ roots 下）。"
       (error "machine-state backing must be a safe relative path"
              (machine-state-persistence-rule-name rule) backing))
     (unless (valid-absolute-consumer? consumer)
-      (error "machine-state consumer must be an absolute system path outside immutable/runtime roots"
-             (machine-state-persistence-rule-name rule) consumer))
+      (error
+       "machine-state consumer must be an absolute system path outside immutable/runtime roots"
+       (machine-state-persistence-rule-name rule) consumer))
     (unless (memq exposure %allowed-exposures)
       (error "unsupported machine-state exposure"
              (machine-state-persistence-rule-name rule) exposure))
     (unless (memq lifecycle %allowed-lifecycles)
       (error "unsupported machine-state lifecycle"
-             (machine-state-persistence-rule-name rule) lifecycle))
-    #t))
+             (machine-state-persistence-rule-name rule) lifecycle)) #t))
 
 (define (valid-machine-state-persistence-rule? rule)
   "RULE 是否合法（不抛错版本，供测试/筛选）。"
   (catch #t
-    (lambda () (validate-machine-state-persistence-rule rule) #t)
-    (lambda (k . a) #f)))
+         (lambda ()
+           (validate-machine-state-persistence-rule rule) #t)
+         (lambda (k . a)
+           #f)))
 
 (define (machine-state-persistence-file-systems rules)
   "RULES 的 bind mount 声明（/persist/system/state/<backing> →
@@ -130,14 +140,13 @@ roots 下）。"
   (map (lambda (rule)
          (validate-machine-state-persistence-rule rule)
          (file-system
-          (device (string-append %machine-state-root "/"
-                                 (machine-state-persistence-rule-backing rule)))
-          (mount-point (machine-state-persistence-rule-consumer rule))
-          (type "none")
-          (flags '(bind-mount))
-          (create-mount-point? #t)
-          (check? #f)))
-       rules))
+           (device (string-append %machine-state-root "/"
+                                  (machine-state-persistence-rule-backing rule)))
+           (mount-point (machine-state-persistence-rule-consumer rule))
+           (type "none")
+           (flags '(bind-mount))
+           (create-mount-point? #t)
+           (check? #f))) rules))
 
 (define (machine-state-persistence-activation rules)
   "activation gexp：创建 backing 目录（root-owned）与 consumer parent
@@ -146,26 +155,22 @@ roots 下）。"
 shepherd file-systems 服务挂载（boot/init/reconfigure 三路径安全）。"
   (with-imported-modules (source-module-closure '((guix build utils)))
                          #~(begin
-                            (use-modules (guix build utils))
-                            (for-each
-                             (lambda (spec)
-                               (let* ((backing (car spec))
-                                      (consumer (cadr spec)))
-                                 (mkdir-p (string-append
-                                           #$%machine-state-root "/" backing))
-                                 (mkdir-p (dirname consumer))))
-                             (quote
-                               (#$@(map (lambda (rule)
-                                          (list (machine-state-persistence-rule-backing
-                                                 rule)
-                                                (machine-state-persistence-rule-consumer
-                                                 rule)))
-                                        rules)))))))
+                             (use-modules (guix build utils))
+                             (for-each (lambda (spec)
+                                         (let* ((backing (car spec))
+                                                (consumer (cadr spec)))
+                                           (mkdir-p (string-append #$%machine-state-root
+                                                                   "/" backing))
+                                           (mkdir-p (dirname consumer))))
+                                       '(#$@(map (lambda (rule)
+                                                   (list (machine-state-persistence-rule-backing
+                                                          rule)
+                                                         (machine-state-persistence-rule-consumer
+                                                          rule))) rules))))))
 
 (define (machine-state-persistence-service rules)
   "把 RULES 的 backing/parent 创建挂到系统 activation。RULES 为空时
 返回 #f（不产生无意义服务）。"
-  (if (null? rules)
-    #f
-    (simple-service 'machine-state-persistence activation-service-type
-                    (machine-state-persistence-activation rules))))
+  (if (null? rules) #f
+      (simple-service 'machine-state-persistence activation-service-type
+                      (machine-state-persistence-activation rules))))

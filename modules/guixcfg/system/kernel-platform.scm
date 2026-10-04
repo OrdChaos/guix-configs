@@ -27,34 +27,36 @@
 ;;;     custom initrd。
 
 (define-module (guixcfg system kernel-platform)
-               #:use-module (nongnu packages linux)        ; linux-7.2、linux-firmware、intel-microcode
-               #:use-module (nongnu system linux-initrd)   ; microcode-initrd
-               #:use-module (guixcfg boot initrd)          ; ephemeral-root-initrd
-               #:export (%kernel
-                         %kernel-firmware
-                         %kernel-microcode-packages
-                         microcode-ephemeral-initrd))
+  #:use-module (nongnu packages linux) ;linux-7.2、linux-firmware、intel-microcode
+  #:use-module (nongnu system linux-initrd) ;microcode-initrd
+  #:use-module (guixcfg boot initrd) ;ephemeral-root-initrd
+  #:export (%kernel %kernel-firmware %kernel-microcode-packages
+                    microcode-ephemeral-initrd))
 
 ;; 系统 runtime kernel：Nonguix standard Linux 7.2（pinned revision
 ;; 的 `linux-7.2' = corrupt-linux linux-libre-7.2——含非自由 blob 的
 ;; unmodified upstream kernel）。这是唯一权威 kernel 定义。
-(define %kernel linux-7.2)
+(define %kernel
+  linux-7.2)
 
 ;; 完整 linux-firmware（generic firmware ecosystem；NVIDIA proprietary
 ;; driver 属于后续 graphics phase，不在此处）。
-(define %kernel-firmware linux-firmware)
+(define %kernel-firmware
+  linux-firmware)
 
 ;; Intel CPU microcode（实机 Intel；AMD microcode 不加入 common base）。
-(define %kernel-microcode-packages (list intel-microcode))
+(define %kernel-microcode-packages
+  (list intel-microcode))
 
 (define* (microcode-ephemeral-initrd file-systems . rest)
-         "<operating-system> 的 initrd 构建器：microcode-initrd 把 Intel
+  "<operating-system> 的 initrd 构建器：microcode-initrd 把 Intel
 microcode cpio 拼接在 ephemeral-root-initrd 之前（combined-initrd，
 kernel 从单文件加载多个 initrd archive）。框架传入的 linux/
 linux-modules/mapped-devices/keyboard-layout 经 REST 透传给 custom
 initrd——custom initrd 仍是 authoritative payload implementation。
 调用约定由 operating-system-initrd-file 决定。"
-         (apply microcode-initrd file-systems
-           #:initrd ephemeral-root-initrd
-           #:microcode-packages %kernel-microcode-packages
-           rest))
+  (apply microcode-initrd
+         file-systems
+         #:initrd ephemeral-root-initrd
+         #:microcode-packages %kernel-microcode-packages
+         rest))

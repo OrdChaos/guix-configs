@@ -5,38 +5,33 @@
 ;;; 因此这里不能导入 boot、services、Rosenthal/Nonguix 等 channel 模块。
 
 (define-module (guixcfg storage policies)
-               #:use-module (guixcfg storage model)
-               #:use-module (srfi srfi-1)
-               #:export (%vm-storage-policy
-                         %lenovo-legion-y7000p-storage-policy
-                         %storage-policies
-                         storage-policy-by-name))
+  #:use-module (guixcfg storage model)
+  #:use-module (srfi srfi-1)
+  #:export (%vm-storage-policy %lenovo-legion-y7000p-storage-policy
+                               %storage-policies storage-policy-by-name))
 
 ;; QEMU 测试盘，容量小，不绑定具体 by-id（安装时必须显式传入设备）。
 (define %vm-storage-policy
-  (host-storage-policy
-   (name 'vm)
-   (esp-size (gib 2))
-   (min-disk-size (gib 20))
-   (swapfile-size (gib 4))
-   (keep-root-generations 3)))
+  (host-storage-policy (name 'vm)
+                       (esp-size (gib 2))
+                       (min-disk-size (gib 20))
+                       (swapfile-size (gib 4))
+                       (keep-root-generations 3)))
 
 ;; 实机参数；首次实机安装时按实际 SSD 容量和内存大小校准。
 (define %lenovo-legion-y7000p-storage-policy
-  (host-storage-policy
-   (name 'lenovo-legion-y7000p)
-   (esp-size (gib 4))
-   (min-disk-size (gib 200))
-   (swapfile-size (gib 16))
-   (keep-root-generations 5)))
+  (host-storage-policy (name 'lenovo-legion-y7000p)
+                       (esp-size (gib 4))
+                       (min-disk-size (gib 200))
+                       (swapfile-size (gib 16))
+                       (keep-root-generations 5)))
 
 (define %storage-policies
-  (list %vm-storage-policy
-        %lenovo-legion-y7000p-storage-policy))
+  (list %vm-storage-policy %lenovo-legion-y7000p-storage-policy))
 
 (define (storage-policy-by-name name)
   "返回 NAME 对应的 host storage policy。NAME 可为字符串或符号；未知时返回 #f。"
   (find (lambda (policy)
           (eq? (host-storage-policy-name policy)
-               (if (symbol? name) name (string->symbol name))))
-        %storage-policies))
+               (if (symbol? name) name
+                   (string->symbol name)))) %storage-policies))

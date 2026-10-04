@@ -18,13 +18,12 @@
 ;;;     本模块取 name，不再各自硬编码。
 
 (define-module (guixcfg users user)
-               #:use-module (gnu system accounts)  ; user-account
-               #:use-module (gnu packages bash)    ; bash（shell file-like 值）
-               #:use-module (guix gexp)
-               #:use-module (guix records)
-               #:use-module (guixcfg users facts)  ; structural facts（re-export 原名）
-               #:re-export (user-profile
-                            user-profile?
+  #:use-module (gnu system accounts) ;user-account
+  #:use-module (gnu packages bash) ;bash（shell file-like 值）
+  #:use-module (guix gexp)
+  #:use-module (guix records)
+  #:use-module (guixcfg users facts) ;structural facts（re-export 原名）
+  #:re-export (user-profile user-profile?
                             user-profile-name
                             user-profile-uid
                             user-profile-group
@@ -34,7 +33,7 @@
                             user-profile-comment
                             user-profile-password-secret
                             %primary-user)
-               #:export (primary-user-account))
+  #:export (primary-user-account))
 
 (define (primary-user-account)
   "由 %primary-user 生成 <user-account>。password 恒为 #f——hash 不进入
@@ -43,14 +42,14 @@ shadow 条目，安装期注入的 hash 跨 boot/reconfigure 保留，见
 docs/architecture/secrets.md 与 tests/test-users.scm）。"
   (let ((u %primary-user))
     (user-account
-     (name (user-profile-name u))
-     (uid (user-profile-uid u))
-     (group (user-profile-group u))
-     (supplementary-groups (user-profile-supplementary-groups u))
-     (comment (user-profile-comment u))
-     (home-directory (user-profile-home-directory u))
-     ;; shell 的 file-like 值权威在本模块（facts 无法 import bash——
-     ;; 毒化 blue 编译路径；值未被结构化，见 facts.scm 头部）。
-     (shell (or (user-profile-shell u)
-                (file-append bash "/bin/bash")))
-     (password #f))))
+      (name (user-profile-name u))
+      (uid (user-profile-uid u))
+      (group (user-profile-group u))
+      (supplementary-groups (user-profile-supplementary-groups u))
+      (comment (user-profile-comment u))
+      (home-directory (user-profile-home-directory u))
+      ;; shell 的 file-like 值权威在本模块（facts 无法 import bash——
+      ;; 毒化 blue 编译路径；值未被结构化，见 facts.scm 头部）。
+      (shell (or (user-profile-shell u)
+                 (file-append bash "/bin/bash")))
+      (password #f))))

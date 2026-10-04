@@ -55,21 +55,21 @@
 ;;; gtk-theme-name（保持原生 Adwaita/libadwaita 结构）。
 
 (define-module (guixcfg apps gtk definition)
-               #:use-module (gnu home services)      ; xdg-config、home-files
-               #:use-module (gnu home services shepherd) ; home-shepherd-service-type
-               #:use-module (gnu packages glib)      ; glib（bin 输出：gsettings）
-               #:use-module (gnu packages gnome)     ; gsettings-desktop-schemas、dconf
-               #:use-module (gnu packages gnome-xyz) ; adw-gtk3-theme
-               #:use-module (gnu services)           ; simple-service
-               #:use-module (gnu services shepherd)  ; shepherd-service
-               #:use-module (guix gexp)              ; local-file、plain-file、program-file
-               #:use-module (guix records)
-               #:use-module (virelith packages icons)   ; fluent-icon-theme
-               #:use-module (virelith packages cursors) ; fluent-cursor-theme
-               #:use-module (guixcfg apps model)
-               #:use-module (guixcfg home appearance)  ; 共享外观事实
-               #:export (%gtk
-                         %appearance-sync))           ; 测试需要真实执行
+  #:use-module (gnu home services) ;xdg-config、home-files
+  #:use-module (gnu home services shepherd) ;home-shepherd-service-type
+  #:use-module (gnu packages glib) ;glib（bin 输出：gsettings）
+  #:use-module (gnu packages gnome) ;gsettings-desktop-schemas、dconf
+  #:use-module (gnu packages gnome-xyz) ;adw-gtk3-theme
+  #:use-module (gnu services) ;simple-service
+  #:use-module (gnu services shepherd) ;shepherd-service
+  #:use-module (guix gexp) ;local-file、plain-file、program-file
+  #:use-module (guix records)
+  #:use-module (virelith packages icons) ;fluent-icon-theme
+  #:use-module (virelith packages cursors) ;fluent-cursor-theme
+  #:use-module (guixcfg apps model)
+  #:use-module (guixcfg home appearance) ;共享外观事实
+  #:export (%gtk %appearance-sync))
+ ; 测试需要真实执行
 
 ;; gtk-{3,4}/gtk.css 唯一职责：导入 Noctalia 生成的动态配色
 ;; （同目录 noctalia.css）。与 stock hook 写入文本逐字节一致。
@@ -79,130 +79,136 @@
 
 (define (settings-ini name entries)
   "由共享事实生成 settings.ini（单一来源，不散落——任务十五）。"
-  (plain-file
-   name
-   (string-append
-    "[Settings]\n"
-    (apply string-append
-      (map (lambda (pair)
-             (string-append (car pair) "=" (cdr pair) "\n"))
-           entries)))))
+  (plain-file name
+              (string-append "[Settings]\n"
+                             (apply string-append
+                                    (map (lambda (pair)
+                                           (string-append (car pair) "="
+                                                          (cdr pair) "\n"))
+                                         entries)))))
 
 ;; GTK3：含 adw-gtk3 主题（静态 Light fallback；运行时切换经
 ;; GSettings，不改写本文件）。
 (define %gtk3-settings
-  (settings-ini
-   "gtk3-settings.ini"
-   `(("gtk-theme-name" . ,%appearance-gtk-theme-light)
-     ("gtk-icon-theme-name" . ,%appearance-icon-theme)
-     ("gtk-cursor-theme-name" . ,%appearance-cursor-theme)
-     ("gtk-cursor-theme-size" . ,(number->string %appearance-cursor-size))
-     ("gtk-font-name" . ,%appearance-ui-font))))
+  (settings-ini "gtk3-settings.ini"
+                `(("gtk-theme-name" unquote %appearance-gtk-theme-light)
+                  ("gtk-icon-theme-name" unquote %appearance-icon-theme)
+                  ("gtk-cursor-theme-name" unquote %appearance-cursor-theme)
+                  ("gtk-cursor-theme-size" unquote
+                   (number->string %appearance-cursor-size))
+                  ("gtk-font-name" unquote %appearance-ui-font))))
 
 ;; GTK4/libadwaita：无 gtk-theme-name（原生结构）；dark mode 走
 ;; portal color-scheme，不写 gtk-application-prefer-dark-theme。
 (define %gtk4-settings
-  (settings-ini
-   "gtk4-settings.ini"
-   `(("gtk-icon-theme-name" . ,%appearance-icon-theme)
-     ("gtk-cursor-theme-name" . ,%appearance-cursor-theme)
-     ("gtk-cursor-theme-size" . ,(number->string %appearance-cursor-size))
-     ("gtk-font-name" . ,%appearance-ui-font))))
+  (settings-ini "gtk4-settings.ini"
+                `(("gtk-icon-theme-name" unquote %appearance-icon-theme)
+                  ("gtk-cursor-theme-name" unquote %appearance-cursor-theme)
+                  ("gtk-cursor-theme-size" unquote
+                   (number->string %appearance-cursor-size))
+                  ("gtk-font-name" unquote %appearance-ui-font))))
 
 ;; runtime appearance 同步工具。全部 Guile core binding + gexp 内
 ;; 显式 import（AGENT.md §3 审计面）；gsettings 经会话 PATH 解析
 ;; （glib bin 在本单元 home-packages）。
 (define %appearance-sync
-  (program-file
-   "appearance-sync"
-   #~(begin
-      (define (usage)
-        (format (current-error-port)
-                "usage: appearance-sync (light|dark)~%")
-        (exit 2))
-      (define args (command-line))
-      (unless (= (length args) 2) (usage))
-      (define mode (cadr args))
-      (define theme
-        (cond ((string=? mode "light") #$%appearance-gtk-theme-light)
-          ((string=? mode "dark") #$%appearance-gtk-theme-dark)
-          (else (usage))))
-      ;; GSettings org.gnome.desktop.interface 全量键（GTK3 on Wayland
-      ;; 直读 GSettings；GTK4 经 portal Settings 读同一组——pinned
-      ;; 审计见文件头）。color-scheme/gtk-theme 随 mode，icon/cursor/
-      ;; font 不随 mode。无 session bus / schema 缺失时只警告不中断。
-      (for-each
-       (lambda (pair)
-         (catch 'system-error
-           (lambda ()
-             (unless (zero? (system* "gsettings" "set"
-                                     "org.gnome.desktop.interface"
-                                     (car pair) (cdr pair)))
-               (format (current-error-port)
-                       "appearance-sync: gsettings set ~a failed~%"
-                       (car pair))))
-           (lambda (key . rest)
-             (format (current-error-port)
-                     "appearance-sync: cannot execute gsettings~%"))))
-       (list (cons "color-scheme" (string-append "prefer-" mode))
-             (cons "gtk-theme" theme)
-             (cons "icon-theme" #$%appearance-icon-theme)
-             (cons "cursor-theme" #$%appearance-cursor-theme)
-             (cons "cursor-size" (number->string #$%appearance-cursor-size))
-             (cons "font-name" #$%appearance-ui-font))))))
+  (program-file "appearance-sync"
+                #~(begin
+                    (define (usage)
+                      (format (current-error-port)
+                              "usage: appearance-sync (light|dark)~%")
+                      (exit 2))
+                    (define args
+                      (command-line))
+                    (unless (= (length args) 2)
+                      (usage))
+                    (define mode
+                      (cadr args))
+                    (define theme
+                      (cond
+                        ((string=? mode "light")
+                         #$%appearance-gtk-theme-light)
+                        ((string=? mode "dark")
+                         #$%appearance-gtk-theme-dark)
+                        (else (usage))))
+                    ;; GSettings org.gnome.desktop.interface 全量键（GTK3 on Wayland
+                    ;; 直读 GSettings；GTK4 经 portal Settings 读同一组——pinned
+                    ;; 审计见文件头）。color-scheme/gtk-theme 随 mode，icon/cursor/
+                    ;; font 不随 mode。无 session bus / schema 缺失时只警告不中断。
+                    (for-each (lambda (pair)
+                                (catch 'system-error
+                                       (lambda ()
+                                         (unless (zero? (system* "gsettings"
+                                                         "set"
+                                                         "org.gnome.desktop.interface"
+                                                         (car pair)
+                                                         (cdr pair)))
+                                           (format (current-error-port)
+                                            "appearance-sync: gsettings set ~a failed~%"
+                                            (car pair))))
+                                       (lambda (key . rest)
+                                         (format (current-error-port)
+                                          "appearance-sync: cannot execute gsettings~%"))))
+                              (list (cons "color-scheme"
+                                          (string-append "prefer-" mode))
+                                    (cons "gtk-theme" theme)
+                                    (cons "icon-theme"
+                                          #$%appearance-icon-theme)
+                                    (cons "cursor-theme"
+                                          #$%appearance-cursor-theme)
+                                    (cons "cursor-size"
+                                          (number->string #$%appearance-cursor-size))
+                                    (cons "font-name"
+                                          #$%appearance-ui-font))))))
 
 ;; 登录 reconcile launcher：Home Shepherd 环境 PATH 不保证含 glib bin，
 ;; 这里显式前置 glib bin（gsettings）后 exec appearance-sync；其余环境
 ;; （HOME / session D-Bus / XDG_RUNTIME_DIR）沿用 shepherd 进程。
 (define %appearance-reconcile-launcher
-  (program-file
-   "appearance-reconcile"
-   #~(begin
-       (setenv "PATH"
-               (string-append
-                #$(file-append (gexp-input glib "bin") "/bin")
-                ":" (or (getenv "PATH") "")))
-       (execl #$%appearance-sync "appearance-sync"
-              #$(symbol->string %appearance-default-mode)))))
+  (program-file "appearance-reconcile"
+                #~(begin
+                    (setenv "PATH"
+                            (string-append #$(file-append (gexp-input glib
+                                                                      "bin")
+                                                          "/bin") ":"
+                                           (or (getenv "PATH") "")))
+                    (execl #$%appearance-sync "appearance-sync"
+                           #$(symbol->string %appearance-default-mode)))))
 
 ;; one-shot Home Shepherd 服务：session D-Bus 就绪后按声明默认 mode 把
 ;; 外观 6 键投影进 runtime dconf（Noctalia mode 切换时再经 post-hook 调
 ;; appearance-sync）。dconf 是 runtime derived state，不持久化。
 (define %appearance-reconcile-service
-  (simple-service
-   'appearance-reconcile
-   home-shepherd-service-type
-   (list (shepherd-service
-          (documentation "Project the declared appearance mode into runtime dconf.")
-          (provision '(appearance-reconcile))
-          (requirement '(dbus))
-          (one-shot? #t)
-          (respawn? #f)
-          (modules '((shepherd support))) ; %user-log-dir
-          (start #~(make-forkexec-constructor
-                    (list #$%appearance-reconcile-launcher)
-                    #:log-file
-                    (string-append %user-log-dir "/appearance-reconcile.log")))
-          (stop #~(make-kill-destructor))))))
+  (simple-service 'appearance-reconcile home-shepherd-service-type
+                  (list (shepherd-service (documentation
+                                           "Project the declared appearance mode into runtime dconf.")
+                                          (provision '(appearance-reconcile))
+                                          (requirement '(dbus))
+                                          (one-shot? #t)
+                                          (respawn? #f)
+                                          (modules '((shepherd support))) ;%user-log-dir
+                                          (start #~(make-forkexec-constructor (list #$%appearance-reconcile-launcher)
+                                                                              #:log-file
+                                                                              (string-append
+                                                                               %user-log-dir
+                                                                               "/appearance-reconcile.log")))
+                                          (stop #~(make-kill-destructor))))))
 
 (define %gtk
-  (application
-   (name 'gtk)
-   (home-packages (list adw-gtk3-theme
-                        fluent-icon-theme
-                        fluent-cursor-theme
-                        gsettings-desktop-schemas
-                        dconf
-                        (list glib "bin")))
-   (home-services
-    (list (simple-service 'gtk-appearance-config
-                          home-files-service-type
-                          `((".config/gtk-3.0/settings.ini" ,%gtk3-settings)
-                            (".config/gtk-3.0/gtk.css" ,%gtk-css-import)
-                            (".config/gtk-4.0/settings.ini" ,%gtk4-settings)
-                            (".config/gtk-4.0/gtk.css" ,%gtk-css-import)))
-          (simple-service 'gtk-appearance-sync-tool
-                          home-files-service-type
-                          `((".local/bin/appearance-sync"
-                             ,%appearance-sync)))
-          %appearance-reconcile-service))))
+  (application (name 'gtk)
+               (home-packages (list adw-gtk3-theme
+                                    fluent-icon-theme
+                                    fluent-cursor-theme
+                                    gsettings-desktop-schemas
+                                    dconf
+                                    (list glib "bin")))
+               (home-services (list (simple-service 'gtk-appearance-config
+                                                    home-files-service-type
+                                                    `((".config/gtk-3.0/settings.ini" ,%gtk3-settings)
+                                                      (".config/gtk-3.0/gtk.css" ,%gtk-css-import)
+                                                      (".config/gtk-4.0/settings.ini" ,%gtk4-settings)
+                                                      (".config/gtk-4.0/gtk.css" ,%gtk-css-import)))
+                                    (simple-service 'gtk-appearance-sync-tool
+                                                    home-files-service-type
+                                                    `((".local/bin/appearance-sync" ,%appearance-sync)))
+                                    %appearance-reconcile-service))))

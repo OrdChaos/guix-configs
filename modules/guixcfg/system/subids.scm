@@ -12,35 +12,35 @@
 ;;; 测试全部 EINVAL/ENOENT）。此处使其成为系统配置的一等事实。
 
 (define-module (guixcfg system subids)
-               #:use-module (gnu services)          ; service、simple-service、privileged-program-service-type
-               #:use-module (gnu system shadow)     ; subids-service-type、subids-configuration
-               #:use-module (gnu system accounts)   ; subid-range
-               #:use-module (gnu system privilege)  ; privileged-program
-               #:use-module (gnu packages admin)    ; shadow（newuidmap/newgidmap）
-               #:use-module (guix gexp)             ; file-append
-               #:use-module (guixcfg users facts)   ; %primary-user
-               #:export (%subids-services))
+  #:use-module (gnu services) ;service、simple-service、privileged-program-service-type
+  #:use-module (gnu system shadow) ;subids-service-type、subids-configuration
+  #:use-module (gnu system accounts) ;subid-range
+  #:use-module (gnu system privilege) ;privileged-program
+  #:use-module (gnu packages admin) ;shadow（newuidmap/newgidmap）
+  #:use-module (guix gexp) ;file-append
+  #:use-module (guixcfg users facts) ;%primary-user
+  #:export (%subids-services))
 
 ;; %subordinate-id-min（(gnu build accounts)，100000）起的第一个 65536
 ;; 段由 subids-service 的 add-root? 默认行为自动分给 root；primary user
 ;; 显式取紧随其后的段，避免与自动 root 段重叠。
-(define %primary-user-subid-start 165536)
+(define %primary-user-subid-start
+  165536)
 
 (define %primary-user-subid-range
-  (subid-range
-   (name (user-profile-name %primary-user))
-   (start %primary-user-subid-start)))
+  (subid-range (name (user-profile-name %primary-user))
+               (start %primary-user-subid-start)))
 
 (define %subids-services
   (list (service subids-service-type
-                 (subids-configuration
-                  (subuids (list %primary-user-subid-range))
-                  (subgids (list %primary-user-subid-range))))
-        (simple-service 'newuidmap-privileged
-                        privileged-program-service-type
+                 (subids-configuration (subuids (list
+                                                 %primary-user-subid-range))
+                                       (subgids (list
+                                                 %primary-user-subid-range))))
+        (simple-service 'newuidmap-privileged privileged-program-service-type
                         (list (privileged-program
-                               (program (file-append shadow "/bin/newuidmap"))
-                               (setuid? #t))
+                                (program (file-append shadow "/bin/newuidmap"))
+                                (setuid? #t))
                               (privileged-program
-                               (program (file-append shadow "/bin/newgidmap"))
-                               (setuid? #t))))))
+                                (program (file-append shadow "/bin/newgidmap"))
+                                (setuid? #t))))))

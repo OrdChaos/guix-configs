@@ -27,8 +27,8 @@
 ;;; 只做 pathname/ownership 原语。
 
 (define-module (guixcfg utils home-path)
-               #:use-module (guix build utils)   ; mkdir-p
-               #:export (ensure-home-parent-directories!))
+  #:use-module (guix build utils) ;mkdir-p
+  #:export (ensure-home-parent-directories!))
 
 (define (ensure-home-parent-directories! home consumer uid gid)
   "确保 HOME 下 CONSUMER 的全部中间父目录存在且 owner 为 UID/GID。
@@ -39,15 +39,17 @@
   (unless (and (string? consumer)
                (> (string-length consumer) 0)
                (not (string-prefix? "/" consumer)))
-    (error "ensure-home-parent-directories!: invalid consumer (expected a \
-non-empty HOME-relative path)"
-           consumer))
-  (let loop ((parts (string-split consumer #\/))
-             (cur home))
+    (error
+     "ensure-home-parent-directories!: invalid consumer (expected a non-empty HOME-relative path)"
+     consumer))
+  (let loop
+    ((parts (string-split consumer #\/))
+     (cur home))
     ;; parts 只剩最后一个元素（consumer 叶子）时停止——中间父目录
     ;; = consumer 除叶子外的全部前缀。
     (when (pair? (cdr parts))
-      (let ((dir (string-append cur "/" (car parts))))
+      (let ((dir (string-append cur "/"
+                                (car parts))))
         (mkdir-p dir)
         (chown dir uid gid)
         (loop (cdr parts) dir)))))

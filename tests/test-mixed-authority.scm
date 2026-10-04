@@ -24,15 +24,15 @@
              (guix gexp)
              (guix derivations)
              (guix modules)
-             (guix build utils)          ; mkdir-p
+             (guix build utils) ;mkdir-p
              (gnu services)
              (gnu system file-systems)
              (guixcfg system application-persistence)
-             (guixcfg storage model)     ; persist-mount-point
+             (guixcfg storage model) ;persist-mount-point
              (ice-9 rdelim)
              (ice-9 popen)
              (ice-9 textual-ports)
-             (ice-9 ftw)                 ; scandir
+             (ice-9 ftw) ;scandir
              (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64))
@@ -44,56 +44,62 @@
 ;; ── 1-5：validation contract（mixed container 是 bind-directory 的
 ;;    合法消费者；公共 XDG root 仍禁止）────────────────────────
 (define mixed-rule
-  (application-persistence-rule
-   (name 'example-app)
-   (backing "example-app/config")        ; /persist/data-app 相对
-   (consumer ".config/example-app")      ; app-private 容器（HOME 相对）
-   (exposure 'bind-directory)
-   (lifecycle 'application-owned)))
+  (application-persistence-rule (name 'example-app)
+                                (backing "example-app/config") ;/persist/data-app 相对
+                                (consumer ".config/example-app") ;app-private 容器（HOME 相对）
+                                (exposure 'bind-directory)
+                                (lifecycle 'application-owned)))
 
 (test-assert "app-private mixed container is legal"
              (valid-application-persistence-rule? mixed-rule))
 
-(for-each
- (lambda (root)
-   (test-assert (string-append "public XDG root is illegal: " root)
-                (not (valid-application-persistence-rule?
-                      (application-persistence-rule
-                       (name 'bad) (backing "x") (consumer root))))))
- '(".config" ".local" ".local/share" ".cache"))
+(for-each (lambda (root)
+            (test-assert (string-append "public XDG root is illegal: " root)
+                         (not (valid-application-persistence-rule? (application-persistence-rule
+                                                                    (name 'bad)
+                                                                    (backing
+                                                                     "x")
+                                                                    (consumer
+                                                                     root))))))
+          '(".config" ".local" ".local/share" ".cache"))
 
 (test-assert "bind-file is a legal production exposure (file bind)"
-             (valid-application-persistence-rule?
-              (application-persistence-rule
-               (name 'ok) (backing "x/state.json")
-               (consumer ".config/x/state.json")
-               (exposure 'bind-file))))
+             (valid-application-persistence-rule? (application-persistence-rule
+                                                   (name 'ok)
+                                                   (backing "x/state.json")
+                                                   (consumer
+                                                    ".config/x/state.json")
+                                                   (exposure 'bind-file))))
 
-(test-assert "unknown exposures stay rejected (symlink not a production \
-exposure)"
-             (not (valid-application-persistence-rule?
-                   (application-persistence-rule
-                    (name 'bad) (backing "x") (consumer ".config/x")
-                    (exposure 'symlink)))))
+(test-assert
+ "unknown exposures stay rejected (symlink not a production exposure)"
+ (not (valid-application-persistence-rule? (application-persistence-rule (name 'bad)
+                                                                         (backing
+                                                                          "x")
+                                                                         (consumer
+                                                                          ".config/x")
+                                                                         (exposure 'symlink)))))
 
 (test-assert "backing stays under /persist/data-app"
-             (let ((fs (car (application-persistence-file-systems
-                             (list mixed-rule) "alice"))))
-               (string-prefix?
-                (string-append (persist-mount-point "@persist-data-app") "/")
-                (file-system-device fs))))
+             (let ((fs (car (application-persistence-file-systems (list
+                                                                   mixed-rule)
+                                                                  "alice"))))
+               (string-prefix? (string-append (persist-mount-point
+                                               "@persist-data-app") "/")
+                               (file-system-device fs))))
 
 (test-assert "consumer derives from the user parameter (no HOME hardcoding)"
-             (let ((fs (car (application-persistence-file-systems
-                             (list mixed-rule) "alice"))))
+             (let ((fs (car (application-persistence-file-systems (list
+                                                                   mixed-rule)
+                                                                  "alice"))))
                (string=? "/home/alice/.config/example-app"
                          (file-system-mount-point fs))))
 
 (test-assert "no copy/sync/migration in generated artifacts"
-             (let ((s (object->string
-                       (gexp->approximate-sexp
-                        (application-persistence-activation
-                         (list mixed-rule) "alice")))))
+             (let ((s (object->string (gexp->approximate-sexp (application-persistence-activation
+                                                               (list
+                                                                mixed-rule)
+                                                               "alice")))))
                (and (not (string-contains s "copy-file"))
                     (not (string-contains s "copy-recursively"))
                     (not (string-contains s "rsync"))
@@ -104,23 +110,29 @@ exposure)"
 ;; Home-managed children（declarative occupants）+ unknown mutable
 ;; child（application authority）。stale 清理、dual-authority backup
 ;; 全部按 pinned 实现行为断言（gnu/home/services/symlink-manager.scm）。
-(define %store (open-connection))
+(define %store
+  (open-connection))
 
 (define (build-thing thing)
-  (let ((drv (run-with-store %store (lower-object thing))))
-    (build-derivations %store (list drv))
+  (let ((drv (run-with-store %store
+                             (lower-object thing))))
+    (build-derivations %store
+                       (list drv))
     (derivation->output-path drv)))
 
 ;; gexp->file 返回 monadic 值（不经 lower-object；同
 ;; test-runtime-exec 的 build-script 模式）。
 (define %update-symlinks
   (let ((drv (run-with-store %store
-                             (gexp->file
-                              "update-symlinks-mixed-test"
-                              (program-file-gexp
-                               ((module-ref (resolve-module '(gnu home services symlink-manager))
-                                            'update-symlinks-script)))))))
-    (build-derivations %store (list drv))
+                             (gexp->file "update-symlinks-mixed-test"
+                                         (program-file-gexp ((module-ref (resolve-module '
+                                                                          (gnu
+                                                                           home
+                                                                           services
+                                                                           symlink-manager))
+                                                                         'update-symlinks-script)))))))
+    (build-derivations %store
+                       (list drv))
     (derivation->output-path drv)))
 
 ;; gexp->file 产物无 shebang；从独立 program-file 提取 guile 路径
@@ -129,7 +141,8 @@ exposure)"
   (let* ((prog (build-thing (program-file "mixed-guile-probe"
                                           #~(display "ok"))))
          (line (call-with-input-file prog
-                                     (lambda (p) (read-line p)))))
+                 (lambda (p)
+                   (read-line p)))))
     (and (string-prefix? "#!" line)
          (car (string-split (substring line 2) #\space)))))
 
@@ -139,17 +152,22 @@ GUIX_OLD_HOME/GUIX_NEW_HOME 指向 fake generations）。"
   ;; Guix's immutable /gnu/store cannot be bind-cloned by an unprivileged user
   ;; namespace.  Keep it visible and overlay only the fake mutable HOME.
   (let* ((cmd (string-append
-                "unshare --user --map-root-user --map-users=auto "
-                "--map-groups=auto --mount --pid --fork sh -c '"
-                "mount --bind " root "/home /home && "
-                "unset XDG_CONFIG_HOME XDG_DATA_HOME; "
-                "HOME=/home/user"
-                (if old-gen
-                    (string-append " GUIX_OLD_HOME=" root old-gen)
-                    "")
-                " GUIX_NEW_HOME=" root new-gen " "
-                %guile
-                " --no-auto-compile " %update-symlinks
+               "unshare --user --map-root-user --map-users=auto "
+               "--map-groups=auto --mount --pid --fork sh -c '"
+               "mount --bind "
+               root
+               "/home /home && "
+               "unset XDG_CONFIG_HOME XDG_DATA_HOME; "
+               "HOME=/home/user"
+               (if old-gen
+                   (string-append " GUIX_OLD_HOME=" root old-gen) "")
+               " GUIX_NEW_HOME="
+               root
+               new-gen
+               " "
+               %guile
+               " --no-auto-compile "
+               %update-symlinks
                " >/dev/null 2>&1'"))
          (pipe (open-input-pipe cmd))
          (_ (get-string-all pipe)))
@@ -157,9 +175,9 @@ GUIX_OLD_HOME/GUIX_NEW_HOME 指向 fake generations）。"
 
 (define (make-fake-root)
   "带 /home/user 与 genA/genB fake generations 的 root。"
-  (let* ((root (string-append (or (getenv "TMPDIR") "/tmp")
-                              "/guixcfg-mixed-" (number->string (getpid))
-                              "-" (number->string (random 100000))))
+  (let* ((root (string-append (or (getenv "TMPDIR") "/tmp") "/guixcfg-mixed-"
+                              (number->string (getpid)) "-"
+                              (number->string (random 100000))))
          (home (string-append root "/home/user")))
     (mkdir-p (string-append home "/.config/fish"))
     ;; genA：声明 config.fish + conf.d/foo.fish（store symlink）
@@ -178,59 +196,73 @@ GUIX_OLD_HOME/GUIX_NEW_HOME 指向 fake generations）。"
 
 ;; 场景 1：genA → genB 切换；mixed 容器里有 unknown mutable child
 (let ((root (make-fake-root)))
-  (dynamic-wind
-   (lambda () #t)
-   (lambda ()
-     ;; unknown mutable child（application authority；Home 不声明）
-     (call-with-output-file (string-append root "/home/user/.config/fish/fish_variables")
-                            (lambda (p) (display "V3-content" p)))
-     (run-update-symlinks root "/genA" "/genB")
-     (let* ((home (string-append root "/home/user/.config/fish"))
-            (config (string-append home "/config.fish"))
-            (stale (string-append home "/conf.d/foo.fish"))
-            (mutable (string-append home "/fish_variables")))
-       (test-assert "MIX-1: declared occupant switched to generation B"
-                    (and (string? (false-if-exception (readlink config)))
-                         (string-contains (readlink config)
-                                          "cccccccccccccccccccccccccccccccc")))
-       (test-assert "MIX-1: stale managed occupant removed (pinned Home cleanup)"
-                    (not (file-exists? stale)))
-       (test-assert "MIX-1: unknown mutable child preserved"
-                    (let ((s (call-with-input-file mutable
-                                                   (lambda (p) (get-string-all p)))))
-                      (string=? "V3-content" s)))))
-   (lambda () (false-if-exception (delete-file-recursively root)))))
+  (dynamic-wind (lambda ()
+                  #t)
+                (lambda ()
+                  ;; unknown mutable child（application authority；Home 不声明）
+                  (call-with-output-file (string-append root
+                                          "/home/user/.config/fish/fish_variables")
+                    (lambda (p)
+                      (display "V3-content" p)))
+                  (run-update-symlinks root "/genA" "/genB")
+                  (let* ((home (string-append root "/home/user/.config/fish"))
+                         (config (string-append home "/config.fish"))
+                         (stale (string-append home "/conf.d/foo.fish"))
+                         (mutable (string-append home "/fish_variables")))
+                    (test-assert
+                     "MIX-1: declared occupant switched to generation B"
+                     (and (string? (false-if-exception (readlink config)))
+                          (string-contains (readlink config)
+                                           "cccccccccccccccccccccccccccccccc")))
+                    (test-assert
+                     "MIX-1: stale managed occupant removed (pinned Home cleanup)"
+                     (not (file-exists? stale)))
+                    (test-assert "MIX-1: unknown mutable child preserved"
+                                 (let ((s (call-with-input-file mutable
+                                            (lambda (p)
+                                              (get-string-all p)))))
+                                   (string=? "V3-content" s)))))
+                (lambda ()
+                  (false-if-exception (delete-file-recursively root)))))
 
 ;; 场景 2：dual authority——app 写 Home 管理的文件 → Home backup+replace
 (let ((root (make-fake-root)))
-  (dynamic-wind
-   (lambda () #t)
-   (lambda ()
-     (call-with-output-file (string-append root "/home/user/.config/fish/config.fish")
-                            (lambda (p) (display "app-wrote-this" p)))
-     (run-update-symlinks root #f "/genA")
-     (let* ((home (string-append root "/home/user/.config/fish"))
-            (config (string-append home "/config.fish"))
-            (backups (filter (lambda (e)
-                               (string-suffix? "-guix-home-legacy-configs-backup" e))
-                             (or (false-if-exception (scandir
-                                                      (string-append root "/home/user")))
-                                 '()))))
-       (test-assert "MIX-2: Home replaced app-written file with store symlink"
-                    (and (string? (false-if-exception (readlink config)))
-                         (string-contains (readlink config)
-                                          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")))
-       (test-assert "MIX-2: app-written file backed up (not silently lost)"
-                    (pair? backups))))
-   (lambda () (false-if-exception (delete-file-recursively root)))))
+  (dynamic-wind (lambda ()
+                  #t)
+                (lambda ()
+                  (call-with-output-file (string-append root
+                                          "/home/user/.config/fish/config.fish")
+                    (lambda (p)
+                      (display "app-wrote-this" p)))
+                  (run-update-symlinks root #f "/genA")
+                  (let* ((home (string-append root "/home/user/.config/fish"))
+                         (config (string-append home "/config.fish"))
+                         (backups (filter (lambda (e)
+                                            (string-suffix?
+                                             "-guix-home-legacy-configs-backup"
+                                             e))
+                                          (or (false-if-exception (scandir (string-append
+                                                                            root
+                                                                            "/home/user")))
+                                              '()))))
+                    (test-assert
+                     "MIX-2: Home replaced app-written file with store symlink"
+                     (and (string? (false-if-exception (readlink config)))
+                          (string-contains (readlink config)
+                                           "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")))
+                    (test-assert
+                     "MIX-2: app-written file backed up (not silently lost)"
+                     (pair? backups))))
+                (lambda ()
+                  (false-if-exception (delete-file-recursively root)))))
 
 ;; ── 10-11：generic executor 不知具体应用；HOME 由 user 参数派生 ──
 ;; （模块里合法的 (string-append "/home/" user ...) 是参数化构造，
 ;; 不是硬编码——consumer 派生由 alice fixture 测试证明。）
 (test-assert "generic executor source knows no concrete app"
-             (let ((s (call-with-input-file
-                       "modules/guixcfg/system/application-persistence.scm"
-                       (lambda (p) (read-string p)))))
+             (let ((s (call-with-input-file "modules/guixcfg/system/application-persistence.scm"
+                        (lambda (p)
+                          (read-string p)))))
                (and (not (string-contains s "mpv"))
                     (not (string-contains s "fish")))))
 

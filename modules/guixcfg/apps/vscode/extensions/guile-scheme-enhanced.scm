@@ -7,18 +7,21 @@
 ;;; settings 的权威是本仓库，扩展不得触碰。
 
 (define-module (guixcfg apps vscode extensions guile-scheme-enhanced)
-  #:use-module (guix gexp)              ; #~ #$
-  #:use-module (guix packages)          ; base32
-  #:use-module (guix utils)             ; substitute-keyword-arguments
-  #:use-module ((guix licenses) #:prefix license:)
+  #:use-module (guix gexp) ;#~ #$
+  #:use-module (guix packages) ;base32
+  #:use-module (guix utils) ;substitute-keyword-arguments
+  #:use-module ((guix licenses)
+                #:prefix license:)
   #:use-module (virelith packages vscode-extensions)
   #:export (vscode-extension-guile-scheme-enhanced))
 
 (define-public vscode-extension-guile-scheme-enhanced
-  (let ((base (vscode-marketplace-extension
-               "tsyesika" "guile-scheme-enhanced" "0.0.2"
-               (base32 "0hwk13j6n7rlyx94906bvqs2b0kw1ws81khy63kx206yn9yxi0ds")
-               #:license license:asl2.0)))
+  (let ((base (vscode-marketplace-extension "tsyesika"
+                                            "guile-scheme-enhanced"
+                                            "0.0.2"
+                                            (base32
+                                             "0hwk13j6n7rlyx94906bvqs2b0kw1ws81khy63kx206yn9yxi0ds")
+                                            #:license license:asl2.0)))
     (package
       (inherit base)
       (arguments
@@ -29,4 +32,5 @@
                 (lambda _
                   ;; 已在 unpack 阶段 chdir 进 extension/。
                   (substitute* "src/main.js"
-                    (("^.*schemeConfig\\.update\\('autoIndent'.*$") "")))))))))))
+                    (("^.*schemeConfig\\.update\\('autoIndent'.*$")
+                     "")))))))))))

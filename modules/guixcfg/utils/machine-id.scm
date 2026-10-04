@@ -24,16 +24,13 @@
 ;;; 契约以 dbus 的实现为准）。
 
 (define-module (guixcfg utils machine-id)
-               #:use-module (guix build utils)        ; mkdir-p
-               #:use-module (guixcfg utils atomic-file) ; atomic-write-file!
-               #:use-module (ice-9 popen)             ; open-pipe*（非 Guile core，AGENT.md §3）
-               #:use-module (ice-9 rdelim)            ; read-line、read-string（非 Guile core）
-               #:export (machine-id-valid?
-                         normalize-machine-id
-                         read-machine-id-file
-                         generate-machine-id
-                         ensure-machine-id!
-                         project-machine-id!))
+  #:use-module (guix build utils) ;mkdir-p
+  #:use-module (guixcfg utils atomic-file) ;atomic-write-file!
+  #:use-module (ice-9 popen) ;open-pipe*（非 Guile core，AGENT.md §3）
+  #:use-module (ice-9 rdelim) ;read-line、read-string（非 Guile core）
+  #:export (machine-id-valid? normalize-machine-id read-machine-id-file
+                              generate-machine-id ensure-machine-id!
+                              project-machine-id!))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 格式：与 dbus 的 machine-id 契约一致（dbus-uuidgen 输出 = 32 个
@@ -45,27 +42,34 @@
 纯 Guile core 实现——char-whitespace? 是 Guile core primitive，
 不引 SRFI-13）。"
   (let ((len (string-length s)))
-    (let loop ((start 0))
+    (let loop
+      ((start 0))
       (if (and (< start len)
                (char-whitespace? (string-ref s start)))
-        (loop (+ start 1))
-        (let loop ((end len))
-          (if (and (> end start)
-                   (char-whitespace? (string-ref s (1- end))))
-            (loop (- end 1))
-            (substring s start end)))))))
+          (loop (+ start 1))
+          (let loop
+            ((end len))
+            (if (and (> end start)
+                     (char-whitespace? (string-ref s
+                                                   (1- end))))
+                (loop (- end 1))
+                (substring s start end)))))))
 
 (define (hex-digit? c)
   "C 是否是 hex 字符（0-9 a-f A-F）。"
   (or (char-numeric? c)
-      (and (char>=? c #\a) (char<=? c #\f))
-      (and (char>=? c #\A) (char<=? c #\F))))
+      (and (char>=? c #\a)
+           (char<=? c #\f))
+      (and (char>=? c #\A)
+           (char<=? c #\F))))
 
 (define (machine-id-valid? s)
   "S 是否是合法 machine-id 内容：trim 空白后恰好 32 个 hex 字符。"
   (let ((s (string-trim-whitespace s)))
-    (and (= 32 (string-length s))
-         (let loop ((i 0))
+    (and (= 32
+            (string-length s))
+         (let loop
+           ((i 0))
            (or (= i 32)
                (and (hex-digit? (string-ref s i))
                     (loop (+ i 1))))))))
@@ -80,12 +84,13 @@
 缺失 → #f；存在但非法/不可读/不是文件 → 'invalid。
 不抛错（调用方决定 fail-closed 还是按 'invalid 处理）。"
   (if (file-exists? path)
-    (catch #t
-      (lambda ()
-        (or (normalize-machine-id (call-with-input-file path read-string))
-            'invalid))
-      (lambda (k . args) 'invalid))
-    #f))
+      (catch #t
+             (lambda ()
+               (or (normalize-machine-id (call-with-input-file path
+                                           read-string))
+                   'invalid))
+             (lambda (k . args)
+               'invalid)) #f))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 生成：dbus-uuidgen 可执行路径由调用方注入（激活脚本里是
@@ -115,20 +120,22 @@
 返回 canonical 内容。"
   (let ((existing (read-machine-id-file canonical)))
     (cond
-      ((string? existing) existing)
-      ((eq? existing 'invalid)
-       (error "persistent machine-id is corrupt; refusing to regenerate \
-(machine identity must not change silently). Restore it or delete it \
-explicitly to mint a fresh identity" canonical))
-      (else
-       (let ((id (generate)))
-         (unless (string? id)
-           (error "machine-id generator returned no valid id" id))
-         (mkdir-p (dirname canonical))
-         (atomic-write-file! canonical
-                             (lambda (port) (display id port) (newline port)))
-         (chmod canonical #o444)
-         id)))))
+      ((string? existing)
+       existing)
+      ((eq? existing
+            'invalid)
+       (error
+        "persistent machine-id is corrupt; refusing to regenerate (machine identity must not change silently). Restore it or delete it explicitly to mint a fresh identity"
+        canonical))
+      (else (let ((id (generate)))
+              (unless (string? id)
+                (error "machine-id generator returned no valid id" id))
+              (mkdir-p (dirname canonical))
+              (atomic-write-file! canonical
+                                  (lambda (port)
+                                    (display id port)
+                                    (newline port)))
+              (chmod canonical #o444) id)))))
 
 (define (project-machine-id! canonical consumer)
   "把 CANONICAL 投影到 CONSUMER（/etc/machine-id）：
@@ -139,9 +146,11 @@ explicitly to mint a fresh identity" canonical))
       (error "cannot project machine-id; canonical missing or corrupt"
              canonical))
     (let ((current (read-machine-id-file consumer)))
-      (unless (and (string? current) (string=? id current))
+      (unless (and (string? current)
+                   (string=? id current))
         (mkdir-p (dirname consumer))
         (atomic-write-file! consumer
-                            (lambda (port) (display id port) (newline port)))
-        (chmod consumer #o444)))
-    id))
+                            (lambda (port)
+                              (display id port)
+                              (newline port)))
+        (chmod consumer #o444))) id))

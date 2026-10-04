@@ -5,9 +5,9 @@
 
 (use-modules (srfi srfi-1)
              (srfi srfi-64)
-             (guix derivations)          ; derivation?
-             (guix monads)              ; mlet、run-with-store、mapm
-             (guix store)               ; open-connection
+             (guix derivations) ;derivation?
+             (guix monads) ;mlet、run-with-store、mapm
+             (guix store) ;open-connection
              (guixcfg security certificates))
 
 (test-runner-current (test-runner-simple))
@@ -15,16 +15,21 @@
 (test-begin "vendor-certificates")
 
 (test-group "lowering"
-            (test-assert "all sources lower to one certificate package derivation (no build, no network)"
-                         (run-with-store (open-connection)
-                                         (mlet %store-monad ((drvs (mapm %store-monad
-                                                                         (lambda (cert)
-                                                                           (lower-object
-                                                                            (vendor-certificate-source cert)))
-                                                                         %vendor-certificates)))
-                                               (return (and (= 7 (length drvs))
-                                                            (every derivation? drvs)
-                                                            (= 1 (length (delete-duplicates drvs)))))))))
+            (test-assert
+             "all sources lower to one certificate package derivation (no build, no network)"
+             (run-with-store (open-connection)
+                             (mlet %store-monad
+                                   ((drvs (mapm %store-monad
+                                                (lambda (cert)
+                                                  (lower-object (vendor-certificate-source
+                                                                 cert)))
+                                                %vendor-certificates)))
+                                   (return (and (= 7
+                                                   (length drvs))
+                                                (every derivation? drvs)
+                                                (= 1
+                                                   (length (delete-duplicates
+                                                            drvs)))))))))
 
 ;; Evaluation of this module performs no network I/O; the only external
 ;; interaction is the local store socket used above.

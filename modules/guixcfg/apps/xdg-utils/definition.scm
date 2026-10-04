@@ -6,6 +6,5 @@
   #:export (%xdg-utils))
 
 (define %xdg-utils
-  (application
-   (name 'xdg-utils)
-   (home-packages (list xdg-utils))))
+  (application (name 'xdg-utils)
+               (home-packages (list xdg-utils))))

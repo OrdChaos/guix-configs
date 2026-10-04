@@ -26,14 +26,13 @@
 ;;;     头部）。
 
 (define-module (guixcfg home environment)
-               #:use-module (gnu home services) ; home-environment-variables-service-type
-               #:use-module (gnu services)      ; simple-service
-               #:export (%session-environment-service))
+  #:use-module (gnu home services) ;home-environment-variables-service-type
+  #:use-module (gnu services) ;simple-service
+  #:export (%session-environment-service))
 
 ;; 桌面会话环境变量（host-agnostic 用户偏好）。
 (define %session-environment-service
-  (simple-service 'session-environment
-                  home-environment-variables-service-type
+  (simple-service 'session-environment home-environment-variables-service-type
                   '(("QT_QPA_PLATFORMTHEME" . "gtk3")
                     ("ELECTRON_OZONE_PLATFORM_HINT" . "auto")
                     ("PROTON_ENABLE_WAYLAND" . "1"))))

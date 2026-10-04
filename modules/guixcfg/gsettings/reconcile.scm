@@ -25,19 +25,18 @@
 ;;; （见 runtime.scm 头部）。
 
 (define-module (guixcfg gsettings reconcile)
-               #:use-module (guixcfg gsettings model)
-               #:use-module (guixcfg gsettings serialize)
-               #:use-module (guix build utils)      ; which
-               #:use-module (ice-9 match)
-               #:use-module (srfi srfi-1)  ; member、filter
-               #:use-module (srfi srfi-13) ; string-join
-               #:export (%gsettings-actions
-                         gsettings-actions
-                         gsettings-validate-action-arguments
-                         gsettings-status
-                         gsettings-plan
-                         gsettings-apply!
-                         gsettings-status-format))
+  #:use-module (guixcfg gsettings model)
+  #:use-module (guixcfg gsettings serialize)
+  #:use-module (guix build utils) ;which
+  #:use-module (ice-9 match)
+  #:use-module (srfi srfi-1) ;member、filter
+  #:use-module (srfi srfi-13) ;string-join
+  #:export (%gsettings-actions gsettings-actions
+                               gsettings-validate-action-arguments
+                               gsettings-status
+                               gsettings-plan
+                               gsettings-apply!
+                               gsettings-status-format))
 
 ;; 唯一 runtime contract（schema/key 校验 + 浅层值校验 + 五态 +
 ;; dconf load + 输出格式）：与 generated wrapper 共享的同一份源码。
@@ -46,8 +45,7 @@
 ;;; ── action registry ────────────────────────────────────────
 
 (define %gsettings-actions
-  '(("status" . read-only)
-    ("apply" . mutating)))
+  '(("status" . read-only) ("apply" . mutating)))
 
 (define (gsettings-actions)
   "gsettings 子命令名列表（canonical 顺序）。"
@@ -59,22 +57,24 @@
   (and (string? action)
        (assoc-ref %gsettings-actions action)
        (match (cons action arguments)
-              (("status") '(status ()))
-              (("apply") '(apply ()))
-              (_ #f))))
+         (("status")
+          '(status ()))
+         (("apply")
+          '(apply ()))
+         (_ #f))))
 
 ;;; ── tooling（PATH 解析，fail fast；wrapper 侧用 file-append
 ;;;    绝对路径，不经此处）─────────────────────────────────────
 
 (define (gsettings-tool)
   (or (which "gsettings")
-      (error "gsettings executable not found in PATH \
-(install glib in the home profile)")))
+      (error
+       "gsettings executable not found in PATH (install glib in the home profile)")))
 
 (define (dconf-tool)
   (or (which "dconf")
-      (error "dconf executable not found in PATH \
-(install dconf in the home profile)")))
+      (error
+       "dconf executable not found in PATH (install dconf in the home profile)")))
 
 ;;; ── thin 包装（record ↔ entries，委托 runtime contract）──────
 
@@ -82,18 +82,19 @@
   (map (lambda (setting)
          (list (gsettings-setting-schema setting)
                (gsettings-setting-key setting)
-               (gsettings-setting-value setting)))
-       settings))
+               (gsettings-setting-value setting))) settings))
 
 (define (gsettings-status settings)
   "SETTINGS → ((schema key status desired current) ...)（deterministic：
 按输入顺序；调用方用 gsettings-desired-state 提供排序输入）。"
-  (gsettings-runtime-status (gsettings-tool) (settings->entries settings)))
+  (gsettings-runtime-status (gsettings-tool)
+                            (settings->entries settings)))
 
 (define (gsettings-plan settings)
   "SETTINGS 中 status 非 synced 的条目（apply 的作用面）。"
   (filter (lambda (entry)
-            (not (eq? 'synced (caddr entry))))
+            (not (eq? 'synced
+                      (caddr entry))))
           (gsettings-status settings)))
 
 (define (gsettings-apply! settings)
@@ -103,21 +104,23 @@
 返回 managed 键数。空声明集 → 无操作（#t，不 invoke dconf）。"
   (for-each (lambda (problem)
               (match problem
-                     ((schema key text)
-                      (error (string-append "gsettings apply: " key
-                                            " (" schema ") " text)
-                             #f))))
+                ((schema key text)
+                 (error (string-append "gsettings apply: "
+                                       key
+                                       " ("
+                                       schema
+                                       ") "
+                                       text) #f))))
             (gsettings-runtime-problems (gsettings-tool)
                                         (settings->entries settings)))
-  (if (null? settings)
-    #t
-    (begin
-     (let ((status (gsettings-runtime-apply!
-                    (dconf-tool)
-                    (serialize-gsettings-keyfile settings))))
-       (unless (zero? status)
-         (error "gsettings apply: dconf load failed" status)))
-     (length settings))))
+  (if (null? settings) #t
+      (begin
+        (let ((status (gsettings-runtime-apply! (dconf-tool)
+                                                (serialize-gsettings-keyfile
+                                                 settings))))
+          (unless (zero? status)
+            (error "gsettings apply: dconf load failed" status)))
+        (length settings))))
 
 (define (gsettings-status-format entries)
   "ENTRIES → 逐键文本报告行（runtime contract 的输出格式）。"

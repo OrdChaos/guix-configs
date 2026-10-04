@@ -16,10 +16,12 @@
 ;; secure-ssh-service 的 service-value 即 openssh-configuration
 ;; （openssh-service-type 的配置；fold-services 需要 shepherd-root
 ;; 上下文，这里直接取 service 值）。
-(define ssh-config (service-value (secure-ssh-service)))
+(define ssh-config
+  (service-value (secure-ssh-service)))
 
 (test-assert "permit-root-login = no (all root auth forbidden)"
-             (eq? #f (openssh-configuration-permit-root-login ssh-config)))
+             (eq? #f
+                  (openssh-configuration-permit-root-login ssh-config)))
 (test-assert "PasswordAuthentication yes"
              (openssh-configuration-password-authentication? ssh-config))
 (test-assert "PubkeyAuthentication yes"
@@ -30,15 +32,15 @@
              (not (openssh-configuration-generate-host-keys? ssh-config)))
 
 ;; DenyUsers 出现在 sshd 配置
-(define extra (openssh-configuration-extra-content ssh-config))
+(define extra
+  (openssh-configuration-extra-content ssh-config))
 (test-assert "DenyUsers root as defense-in-depth"
              (string-contains extra "DenyUsers root"))
 
 ;; 首启 host-key activation 可编译（gexp->script）
 (test-assert "host-key activation gexp compiles"
-             (let ((out (false-if-exception
-                         (gexp->script "ssh-host-key-check"
-                                       (ssh-host-key-activation)))))
+             (let ((out (false-if-exception (gexp->script "ssh-host-key-check"
+                                             (ssh-host-key-activation)))))
                (and out #t)))
 
 (test-end "system-ssh")

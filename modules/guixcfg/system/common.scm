@@ -2,18 +2,17 @@
 ;;; 对应 docs/architecture/overview.md（host 是组装点，共享内容放这里）。
 
 (define-module (guixcfg system common)
-               #:use-module (gnu services)         ; service
-               #:use-module (gnu services base)    ; guix-service-type、guix-configuration
-               #:use-module (gnu services desktop) ; elogind-service-type、elogind-configuration、polkit-wheel-service
-               #:use-module (gnu services dbus)    ; polkit-service-type（polkitd 的 authority）
-               #:use-module (guix gexp)            ; local-file
-               #:use-module (virelith packages elogind) ; elogind-compat（257.16）
-               #:export (%common-timezone
-                         %common-locale
-                         %common-services))
+  #:use-module (gnu services) ;service
+  #:use-module (gnu services base) ;guix-service-type、guix-configuration
+  #:use-module (gnu services desktop) ;elogind-service-type、elogind-configuration、polkit-wheel-service
+  #:use-module (gnu services dbus) ;polkit-service-type（polkitd 的 authority）
+  #:use-module (guix gexp) ;local-file
+  #:use-module (virelith packages elogind) ;elogind-compat（257.16）
+  #:export (%common-timezone %common-locale %common-services))
 
 ;; 时区与区域设置：两台机器相同。
-(define %common-timezone "Asia/Shanghai")
+(define %common-timezone
+  "Asia/Shanghai")
 
 ;; 中文 locale（桌面阶段）：zh_CN.utf8 已在 pinned guix
 ;; %default-locale-definitions 内（gnu/system/locale.scm 的
@@ -22,7 +21,8 @@
 ;; 会话 LANG=zh_CN.utf8 → Fontconfig 默认 lang=zh-cn（fcdefault.c
 ;; FcGetDefaultLangs：FC_LANG > LC_ALL > LC_CTYPE > LANG），强化
 ;; 字体配置的 SC-first 语义（(guixcfg home fonts) 已核实，无破坏）。
-(define %common-locale "zh_CN.utf8")
+(define %common-locale
+  "zh_CN.utf8")
 
 ;; 基础 session infrastructure（docs/architecture/accounts-sessions.md）：
 ;; elogind 提供 login/session tracking、/run/user/<uid> 生命周期与
@@ -76,17 +76,14 @@
 ;; 由 /etc/systemd/system/guix-daemon.service 的 Environment 单独配置。
 (define %common-services
   (list (service guix-service-type
-                 (guix-configuration
-                  (tmpdir "/var/tmp")
-                  (substitute-urls
-                   '("https://mirror.sjtu.edu.cn/guix"
-                     "https://cache-cdn.guix.moe"
-                     "https://ci.guix.gnu.org"
-                     "https://bordeaux.guix.gnu.org"
-                     "https://substitutes.nonguix.org"))
-                  (authorized-keys
-                   (list (local-file "nonguix-key.pub")))))
-        (service elogind-service-type (elogind-configuration
-                                       (elogind elogind-compat)))
-        (service polkit-service-type)
-        polkit-wheel-service))
+                 (guix-configuration (tmpdir "/var/tmp")
+                                     (substitute-urls '("https://mirror.sjtu.edu.cn/guix"
+                                                        "https://cache-cdn.guix.moe"
+                                                        "https://ci.guix.gnu.org"
+                                                        "https://bordeaux.guix.gnu.org"
+                                                        "https://substitutes.nonguix.org"))
+                                     (authorized-keys (list (local-file
+                                                             "nonguix-key.pub")))))
+        (service elogind-service-type
+                 (elogind-configuration (elogind elogind-compat)))
+        (service polkit-service-type) polkit-wheel-service))

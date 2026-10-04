@@ -22,14 +22,13 @@
 ;;; 之外的例外。
 
 (define-module (guixcfg flatpak applications wechat definition)
-               #:use-module (guixcfg flatpak model)
-               #:export (%flatpak-wechat))
+  #:use-module (guixcfg flatpak model)
+  #:export (%flatpak-wechat))
 
 (define %flatpak-wechat
-  (flatpak-application
-   (name 'wechat)
-   (id "com.tencent.WeChat")
-   (remote 'flathub)
-   (branch "stable")
-   (update-policy 'track-branch)
-   (override-policy 'external)))
+  (flatpak-application (name 'wechat)
+                       (id "com.tencent.WeChat")
+                       (remote 'flathub)
+                       (branch "stable")
+                       (update-policy 'track-branch)
+                       (override-policy 'external)))

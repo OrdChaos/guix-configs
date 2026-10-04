@@ -23,14 +23,13 @@
 ;;; 之外的例外。
 
 (define-module (guixcfg flatpak applications telegram definition)
-               #:use-module (guixcfg flatpak model)
-               #:export (%flatpak-telegram))
+  #:use-module (guixcfg flatpak model)
+  #:export (%flatpak-telegram))
 
 (define %flatpak-telegram
-  (flatpak-application
-   (name 'telegram)
-   (id "org.telegram.desktop")
-   (remote 'flathub)
-   (branch "stable")
-   (update-policy 'track-branch)
-   (override-policy 'external)))
+  (flatpak-application (name 'telegram)
+                       (id "org.telegram.desktop")
+                       (remote 'flathub)
+                       (branch "stable")
+                       (update-policy 'track-branch)
+                       (override-policy 'external)))

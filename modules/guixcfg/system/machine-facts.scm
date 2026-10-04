@@ -20,15 +20,14 @@
 ;;; persist-mount-point（固定事实）与 Guile core。
 
 (define-module (guixcfg system machine-facts)
-               #:use-module (guixcfg storage model)  ; persist-mount-point（固定事实）
-               #:use-module (srfi srfi-1)            ; every
-               #:export (%default-machine-facts-path
-                         machine-facts-path
-                         resolve-facts-path
-                         load-machine-facts
-                         facts-alist?
-                         machine-facts
-                         require-fact))
+  #:use-module (guixcfg storage model) ;persist-mount-point（固定事实）
+  #:use-module (srfi srfi-1) ;every
+  #:export (%default-machine-facts-path machine-facts-path
+                                        resolve-facts-path
+                                        load-machine-facts
+                                        facts-alist?
+                                        machine-facts
+                                        require-fact))
 
 (define %default-machine-facts-path
   (string-append (persist-mount-point "@persist-system") "/facts/host.scm"))
@@ -36,20 +35,23 @@
 (define (regular-file? path)
   "PATH 存在且是普通文件（目录等显式拒绝）。"
   (and (file-exists? path)
-       (eq? (stat:type (stat path)) 'regular)))
+       (eq? (stat:type (stat path))
+            'regular)))
 
 (define (resolve-facts-path override default)
   "解析 facts 路径（纯函数，便于测试）。OVERRIDE 是 GUIX_CONFIG_FACTS
 的值（#f 或空串 = 未设置）。返回实际路径或 #f（无 facts）。"
   (cond
-    ((and override (not (string-null? override)))
+    ((and override
+          (not (string-null? override)))
      (cond
-       ((regular-file? override) override)
+       ((regular-file? override)
+        override)
        ((file-exists? override)
         (error "GUIX_CONFIG_FACTS does not point to a regular file:" override))
-       (else
-        (error "GUIX_CONFIG_FACTS points to a missing file:" override))))
-    ((regular-file? default) default)
+       (else (error "GUIX_CONFIG_FACTS points to a missing file:" override))))
+    ((regular-file? default)
+     default)
     ((file-exists? default)
      (error "default machine facts path is not a regular file:" default))
     (else #f)))
@@ -58,18 +60,20 @@
   (resolve-facts-path (getenv "GUIX_CONFIG_FACTS") %default-machine-facts-path))
 
 (define (facts-alist? x)
-  (and (list? x) (every pair? x)))
+  (and (list? x)
+       (every pair? x)))
 
 (define (load-machine-facts path)
   "读取并校验 facts 文件：必须是可 read 的 alist，否则显式报错。"
   (let ((facts (catch #t
-                 (lambda ()
-                   (call-with-input-file path read))
-                 (lambda (key . args)
-                   (error "cannot parse machine facts file:" path key args)))))
+                      (lambda ()
+                        (call-with-input-file path
+                          read))
+                      (lambda (key . args)
+                        (error "cannot parse machine facts file:" path key
+                               args)))))
     (unless (facts-alist? facts)
-      (error "malformed machine facts file (expected an alist):" path))
-    facts))
+      (error "malformed machine facts file (expected an alist):" path)) facts))
 
 ;; 惰性求值：模块加载阶段不执行任何 I/O 或校验——guile 的
 ;; resolve-module 会吞掉模块加载失败时的原始错误并留下半成品模块，
@@ -78,7 +82,9 @@
 ;; 信息清晰可诊断。
 (define %machine-facts
   (delay (let ((path (machine-facts-path)))
-           (if path (load-machine-facts path) '()))))
+           (if path
+               (load-machine-facts path)
+               '()))))
 
 (define (machine-facts)
   (force %machine-facts))

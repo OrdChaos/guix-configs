@@ -3,15 +3,15 @@
 ;;; （不声明 ~/.config/noctalia 配置；niri 的 noctalia.kdl 是
 ;;; Noctalia 运行时生成，与 seed 模型无关）。
 
-(use-modules (gnu services)          ; service-kind、service-value、service-type-name
+(use-modules (gnu services) ;service-kind、service-value、service-type-name
              (guix records)
-             (virelith packages noctalia) ; noctalia（channel 固定版本）
+             (virelith packages noctalia) ;noctalia（channel 固定版本）
              (guixcfg apps model)
              (guixcfg apps registry)
              (guixcfg apps noctalia definition)
              (guixcfg system application-persistence)
-             (ice-9 rdelim)      ; read-string
-             (srfi srfi-1)       ; count、any
+             (ice-9 rdelim) ;read-string
+             (srfi srfi-1) ;count、any
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -19,7 +19,9 @@
 (test-begin "noctalia-seed")
 
 (define (read-file p)
-  (call-with-input-file p (lambda (port) (read-string port))))
+  (call-with-input-file p
+    (lambda (port)
+      (read-string port))))
 
 (define %seed-text
   (read-file "modules/guixcfg/apps/noctalia/base-settings.toml"))
@@ -33,11 +35,12 @@
              (not (string-contains %seed-text "eDP-")))
 
 ;; ── 2. persistence rule 声明 ────────────────────────────────
-(define rules (applications-persistence (list %noctalia)))
+(define rules
+  (applications-persistence (list %noctalia)))
 (define rule
   (find (lambda (r)
-          (eq? 'state (application-persistence-rule-name r)))
-        rules))
+          (eq? 'state
+               (application-persistence-rule-name r))) rules))
 (test-equal "state: consumer is the whole state dir (no file whitelist)"
             ".local/state/noctalia"
             (application-persistence-rule-consumer rule))
@@ -52,18 +55,20 @@
             (application-persistence-rule-lifecycle rule))
 (test-assert "rule seeds settings.toml"
              (member "settings.toml"
-                     (map car (application-persistence-rule-seeds rule))))
+                     (map car
+                          (application-persistence-rule-seeds rule))))
 (test-equal "seed targets stay minimal (one entry)"
             '("settings.toml")
-            (map car (application-persistence-rule-seeds rule)))
+            (map car
+                 (application-persistence-rule-seeds rule)))
 (test-assert "seeded rule passes validation"
              (valid-application-persistence-rule? rule))
 
 ;; plugins：用户运行时安装的插件目录（app-private，跨 boot 保留）。
 (define plugins-rule
   (find (lambda (r)
-          (eq? 'plugins (application-persistence-rule-name r)))
-        rules))
+          (eq? 'plugins
+               (application-persistence-rule-name r))) rules))
 (test-equal "plugins: consumer is the app-private plugins dir"
             ".local/share/noctalia/plugins"
             (application-persistence-rule-consumer plugins-rule))
@@ -83,14 +88,14 @@
 
 ;; ── 3. 无第二配置源：不声明 settings；palettes 是静态素材例外 ─
 (define %noctalia-xdg-value
-  (service-value
-   (find (lambda (s)
-           (eq? 'noctalia-palettes
-                (service-type-name (service-kind s))))
-         (application-home-services %noctalia))))
+  (service-value (find (lambda (s)
+                         (eq? 'noctalia-palettes
+                              (service-type-name (service-kind s))))
+                       (application-home-services %noctalia))))
 
 (test-assert "fluent-blue palette installed under .config/noctalia/palettes"
-             (assoc ".config/noctalia/palettes/fluent-blue.json" %noctalia-xdg-value))
+             (assoc ".config/noctalia/palettes/fluent-blue.json"
+                    %noctalia-xdg-value))
 (test-assert "no declarative settings config (no second config source)"
              (not (assoc ".config/noctalia/config.toml" %noctalia-xdg-value)))
 (test-assert "no other .config/noctalia toml files declared"
@@ -98,8 +103,9 @@
                          (string-suffix? ".toml" target))
                        (map car %noctalia-xdg-value))))
 (test-assert "registry enables noctalia exactly once"
-             (= 1 (count (lambda (a)
-                           (eq? (application-name a) 'noctalia))
-                         %applications)))
+             (= 1
+                (count (lambda (a)
+                         (eq? (application-name a)
+                              'noctalia)) %applications)))
 
 (test-end "noctalia-seed")

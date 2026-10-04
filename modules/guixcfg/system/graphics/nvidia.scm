@@ -100,29 +100,30 @@
 ;;; 单独签名即可加载（仅 taint）。
 
 (define-module (guixcfg system graphics nvidia)
-                #:use-module (nonguix transformations) ; nonguix-transformation-nvidia
-                #:use-module (nongnu packages nvidia)  ; nvda-new-feature（rolling selector）
-                #:use-module (gnu system)              ; operating-system、
-                ; operating-system-user-kernel-arguments
-                #:use-module (gnu services base)        ; udev-hardware-service
-               #:use-module (guix build-system trivial) ; trivial-build-system（%prime-run-wrapper）
-               #:use-module (guix gexp)               ; plain-file
-               #:use-module ((guix licenses) #:prefix license:) ; license:gpl3+
-               #:use-module (guix packages)           ; package
-               #:use-module (srfi srfi-1)             ; every
-               #:use-module (srfi srfi-13)            ; string-every
-               #:export (%nvidia-adapter-enabled?
-                         %nvidia-driver
-                         nvidia-kernel-arguments
-                         %prime-offload-environment
-                         %prime-offload-environment-strings
-                         %flatpak-prime-environment-overrides
-                         %prime-run-wrapper
-                         nvidia-system-transformation))
+  #:use-module (nonguix transformations) ;nonguix-transformation-nvidia
+  #:use-module (nongnu packages nvidia) ;nvda-new-feature（rolling selector）
+  #:use-module (gnu system) ;operating-system、
+  ;; operating-system-user-kernel-arguments
+  #:use-module (gnu services base) ;udev-hardware-service
+  #:use-module (guix build-system trivial) ;trivial-build-system（%prime-run-wrapper）
+  #:use-module (guix gexp) ;plain-file
+  #:use-module ((guix licenses)
+                #:prefix license:) ;license:gpl3+
+  #:use-module (guix packages) ;package
+  #:use-module (srfi srfi-1) ;every
+  #:use-module (srfi srfi-13) ;string-every
+  #:export (%nvidia-adapter-enabled? %nvidia-driver
+                                     nvidia-kernel-arguments
+                                     %prime-offload-environment
+                                     %prime-offload-environment-strings
+                                     %flatpak-prime-environment-overrides
+                                     %prime-run-wrapper
+                                     nvidia-system-transformation))
 
 ;; 是否启用 NVIDIA（当前 #t：laptop host policy；VM/Intel-only 机器
 ;; 不调用 nvidia-system-transformation，本模块对其零贡献）。
-(define %nvidia-adapter-enabled? #t)
+(define %nvidia-adapter-enabled?
+  #t)
 
 ;; NVIDIA userspace driver 的唯一 authority（package binding）：
 ;; rolling New Feature Branch selector——具体 realization（610.x →
@@ -132,24 +133,26 @@
 ;; firmware / modprobe / settings）由 pinned Nonguix transformation
 ;; 按同一 binding 自动推导（见文件头）。consumers 同源引用
 ;; （Flatpak steam/aagl override 的 env 投影、prime-run wrapper）。
-(define %nvidia-driver nvda-new-feature)
+(define %nvidia-driver
+  nvda-new-feature)
 
 ;; NVIDIA 特定 kernel arguments 的 host 级调优 seam（当前空）：
 ;; transformation 已自动加入 nouveau/nova 黑名单与
 ;; nvidia_drm.modeset=1；S0ix 等 NVreg 调优参数（如
 ;; mem_sleep_default=s2idle、nvidia.NVreg_EnableS0ixPowerManagement=1）
 ;; 未来按需加入，禁止 speculative workaround。
-(define nvidia-kernel-arguments '())
+(define nvidia-kernel-arguments
+  '())
 
 ;; Magpie's embedded nvtop collector names Intel GPUs from the PCI udev hwdb.
 ;; Raptor Lake-P's PCI record lacks that name in the pinned hwdb, so provide
 ;; the one machine-specific fact it needs without changing graphics drivers.
 (define %intel-rpl-p-gpu-hwdb-service
-  (udev-hardware-service
-   'intel-rpl-p-gpu
-   (udev-hardware
-    "60-intel-rpl-p-gpu.hwdb"
-    "pci:v00008086d0000A7A8*\n ID_MODEL_FROM_DATABASE=Raptor Lake-P [UHD Graphics]\n")))
+  (udev-hardware-service 'intel-rpl-p-gpu
+                         (udev-hardware "60-intel-rpl-p-gpu.hwdb"
+                          "pci:v00008086d0000A7A8*
+ ID_MODEL_FROM_DATABASE=Raptor Lake-P [UHD Graphics]
+")))
 
 ;; Pure-Wayland 的 modeset 设备节点缺口：pinned nonguix 的
 ;; 90-nvidia.rules 只在 add|bind 时调 `nvidia-modprobe`
@@ -163,15 +166,14 @@
 ;; nvidia-service-type 已安装的 /usr/bin/nvidia-modprobe（与上游规则
 ;; 同一路径）。节点已存在时命令为 no-op，对 Xorg 机器无影响。
 (define %nvidia-modeset-udev-rule-contents
-  (string-append
-   "ACTION==\"add|bind\", ATTR{vendor}==\"0x10de\", "
-   "ATTR{class}==\"0x03[0-9]*\", DRIVER==\"nvidia\", "
-   "RUN+=\"/usr/bin/nvidia-modprobe -m\"\n"))
+  (string-append "ACTION==\"add|bind\", ATTR{vendor}==\"0x10de\", "
+                 "ATTR{class}==\"0x03[0-9]*\", DRIVER==\"nvidia\", "
+                 "RUN+=\"/usr/bin/nvidia-modprobe -m\"\n"))
 
 (define %nvidia-modeset-udev-service
-  (udev-rules-service
-   'nvidia-modeset
-   (udev-rule "90-nvidia-modeset.rules" %nvidia-modeset-udev-rule-contents)))
+  (udev-rules-service 'nvidia-modeset
+                      (udev-rule "90-nvidia-modeset.rules"
+                                 %nvidia-modeset-udev-rule-contents)))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; PRIME Render Offload policy（中性数据，单一 authority）
@@ -194,8 +196,8 @@
 ;; managed override 经此投影，变量语义仍归本 authority）。
 (define %prime-offload-environment-strings
   (map (lambda (entry)
-         (string-append (car entry) "=" (cdr entry)))
-       %prime-offload-environment))
+         (string-append (car entry) "="
+                        (cdr entry))) %prime-offload-environment))
 
 ;; Flatpak 侧的 NVIDIA adapter（docs/architecture/flatpak.md）：target 是
 ;; 全局 selection 里的 logical names，不是本模块的选择——Flatpak
@@ -203,13 +205,14 @@
 ;; 把这份 overlay 传给 flatpak-home-services，对 managed override
 ;; 追加 PRIME 环境；非 NVIDIA host 传空 overlay。
 (define %flatpak-prime-environment-overrides
-  `((aagl . ,%prime-offload-environment-strings)
-    (steam . ,%prime-offload-environment-strings)))
+  `((aagl unquote %prime-offload-environment-strings)
+    (steam unquote %prime-offload-environment-strings)))
 
 (define (shell-variable-name? s)
   "S 是合法 POSIX shell 变量名（策略数据防注入；允许下划线开头，
 如 __NV_PRIME_RENDER_OFFLOAD）。"
-  (and (string? s) (> (string-length s) 0)
+  (and (string? s)
+       (> (string-length s) 0)
        (or (char-alphabetic? (string-ref s 0))
            (char=? (string-ref s 0) #\_))
        (string-every (lambda (c)
@@ -223,8 +226,8 @@
 不安全字符串注入生成的 wrapper 脚本）。"
   (and (string? s)
        (string-every (lambda (c)
-                       (not (memv c '(#\" #\' #\$ #\` #\newline #\space))))
-                     s)))
+                       (not (memv c
+                                  '(#\" #\' #\$ #\` #\newline #\space)))) s)))
 
 (define (valid-prime-offload-environment-entry? entry)
   "(NAME . VALUE) 对且两者安全（见上）。"
@@ -234,8 +237,7 @@
 
 (unless (every valid-prime-offload-environment-entry?
                %prime-offload-environment)
-  (error "invalid PRIME offload environment entry"
-         %prime-offload-environment))
+  (error "invalid PRIME offload environment entry" %prime-offload-environment))
 
 (define (prime-run-script)
   "生成 host prime-run wrapper 脚本文本（纯函数，供测试静态断言）。
@@ -263,36 +265,51 @@ generation 稳定；nvda 缺失时 fail-loud（绝不静默退回 Intel）。
     layer（__VK_LAYER_NV_optimus）。
 其余（GBM/EGL external platform/VAAPI/VDPAU）按 nvda 自身
 native-search-paths 契约作用域投影。"
-  (string-append
-   "#!/bin/sh\n"
-   "# Host PRIME render offload wrapper — (guixcfg system graphics nvidia).\n"
-   "# Policy env from %prime-offload-environment (single authority);\n"
-   "# NVIDIA userspace resolved from the current system profile's nvda\n"
-   "# via the nvidia-smi symlink (no store literals, generation-stable).\n"
-   "# All variables are scoped to the launched command only.\n"
-   "NVDA_SMI=$(readlink -f /run/current-system/profile/bin/nvidia-smi) || {\n"
-   "  echo \"prime-run: NVIDIA driver not found in system profile\" >&2\n"
+  (string-append "#!/bin/sh\n"
+   "# Host PRIME render offload wrapper — (guixcfg system graphics nvidia).
+"
+   "# Policy env from %prime-offload-environment (single authority);
+"
+   "# NVIDIA userspace resolved from the current system profile's nvda
+"
+   "# via the nvidia-smi symlink (no store literals, generation-stable).
+"
+   "# All variables are scoped to the launched command only.
+"
+   "NVDA_SMI=$(readlink -f /run/current-system/profile/bin/nvidia-smi) || {
+"
+   "  echo \"prime-run: NVIDIA driver not found in system profile\" >&2
+"
    "  exit 1\n"
    "}\n"
-   "NVDA_PREFIX=$(dirname \"$(dirname \"$NVDA_SMI\")\")\n"
+   "NVDA_PREFIX=$(dirname \"$(dirname \"$NVDA_SMI\")\")
+"
    "NVDA_LIB=\"$NVDA_PREFIX/lib\"\n"
    "NVDA_SHARE=\"$NVDA_PREFIX/share\"\n"
    "\n"
    ;; PRIME policy（与 pinned nonguix nvidia-prime 1.0-5 语义一致）。
    (string-join (map (lambda (entry)
-                       (string-append "export " (car entry) "=" (cdr entry)))
-                     %prime-offload-environment)
+                       (string-append "export "
+                                      (car entry) "="
+                                      (cdr entry))) %prime-offload-environment)
                 "\n")
    "\n"
    ;; Guix host projection：nvda（glvnd + mesa-for-nvda + NVIDIA
    ;; userspace）作用域注入。
-   "export LD_LIBRARY_PATH=\"$NVDA_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\"\n"
-   "export XDG_DATA_DIRS=\"$NVDA_SHARE${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}\"\n"
-   "export __EGL_VENDOR_LIBRARY_DIRS=\"$NVDA_SHARE/glvnd/egl_vendor.d${__EGL_VENDOR_LIBRARY_DIRS:+:$__EGL_VENDOR_LIBRARY_DIRS}\"\n"
-   "export __EGL_EXTERNAL_PLATFORM_CONFIG_DIRS=\"$NVDA_SHARE/egl/egl_external_platform.d${__EGL_EXTERNAL_PLATFORM_CONFIG_DIRS:+:$__EGL_EXTERNAL_PLATFORM_CONFIG_DIRS}\"\n"
-   "export GBM_BACKENDS_PATH=\"$NVDA_LIB/gbm${GBM_BACKENDS_PATH:+:$GBM_BACKENDS_PATH}\"\n"
-   "export LIBVA_DRIVERS_PATH=\"$NVDA_LIB/dri${LIBVA_DRIVERS_PATH:+:$LIBVA_DRIVERS_PATH}\"\n"
-   "export VDPAU_DRIVER_PATH=\"$NVDA_LIB/vdpau${VDPAU_DRIVER_PATH:+:$VDPAU_DRIVER_PATH}\"\n"
+   "export LD_LIBRARY_PATH=\"$NVDA_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\"
+"
+   "export XDG_DATA_DIRS=\"$NVDA_SHARE${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}\"
+"
+   "export __EGL_VENDOR_LIBRARY_DIRS=\"$NVDA_SHARE/glvnd/egl_vendor.d${__EGL_VENDOR_LIBRARY_DIRS:+:$__EGL_VENDOR_LIBRARY_DIRS}\"
+"
+   "export __EGL_EXTERNAL_PLATFORM_CONFIG_DIRS=\"$NVDA_SHARE/egl/egl_external_platform.d${__EGL_EXTERNAL_PLATFORM_CONFIG_DIRS:+:$__EGL_EXTERNAL_PLATFORM_CONFIG_DIRS}\"
+"
+   "export GBM_BACKENDS_PATH=\"$NVDA_LIB/gbm${GBM_BACKENDS_PATH:+:$GBM_BACKENDS_PATH}\"
+"
+   "export LIBVA_DRIVERS_PATH=\"$NVDA_LIB/dri${LIBVA_DRIVERS_PATH:+:$LIBVA_DRIVERS_PATH}\"
+"
+   "export VDPAU_DRIVER_PATH=\"$NVDA_LIB/vdpau${VDPAU_DRIVER_PATH:+:$VDPAU_DRIVER_PATH}\"
+"
    "\n"
    "exec \"$@\"\n"))
 
@@ -304,39 +321,42 @@ native-search-paths 契约作用域投影。"
 ;; profile，wrapper 无需引用）。
 (define %prime-run-wrapper
   (package
-   (name "prime-run")
-   (version "1.0")
-   (source #f)
-   (build-system trivial-build-system)
-   (arguments
-    (list
-     #:modules '((guix build utils))
-     #:builder
-     #~(begin
-        (use-modules (guix build utils))
-        (mkdir-p (string-append #$output "/bin"))
-        (copy-file #$(plain-file "prime-run" (prime-run-script))
-                   (string-append #$output "/bin/prime-run"))
-        (chmod (string-append #$output "/bin/prime-run") #o555))))
-   (home-page
-    "https://gitlab.archlinux.org/archlinux/packaging/packages/nvidia-prime")
-   (synopsis "Scoped NVIDIA PRIME render offload launcher")
-   (description
-    "Host capability wrapper around the NVIDIA PRIME render offload
+    (name "prime-run")
+    (version "1.0")
+    (source
+     #f)
+    (build-system trivial-build-system)
+    (arguments
+     (list
+      #:modules '((guix build utils))
+      #:builder
+      #~(begin
+          (use-modules (guix build utils))
+          (mkdir-p (string-append #$output "/bin"))
+          (copy-file #$(plain-file "prime-run"
+                                   (prime-run-script))
+                     (string-append #$output "/bin/prime-run"))
+          (chmod (string-append #$output "/bin/prime-run") #o555))))
+    (home-page
+     "https://gitlab.archlinux.org/archlinux/packaging/packages/nvidia-prime")
+    (synopsis "Scoped NVIDIA PRIME render offload launcher")
+    (description
+     "Host capability wrapper around the NVIDIA PRIME render offload
 environment (semantics of the upstream nvidia-prime package).  It
 resolves the @code{nvda} userspace from the current system profile and
 runs COMMAND with NVIDIA-only GL/EGL/Vulkan vendor selection, scoped
 to that command.  The default Intel iGPU desktop is unaffected.")
-   (license license:gpl3+)))
+    (license license:gpl3+)))
 
 (define* (nvidia-system-transformation os
-                                       #:key (enabled? %nvidia-adapter-enabled?)
+                                       #:key (enabled?
+                                              %nvidia-adapter-enabled?)
                                        (driver %nvidia-driver)
                                        (open-source-kernel-module? #t)
                                        (kernel-mode-setting? #t)
                                        (configure-xorg? #f)
                                        (dynamic-boost? #t))
-         "Thin adapter over Nonguix: map this repo's machine policy to
+  "Thin adapter over Nonguix: map this repo's machine policy to
 nonguix-transformation-nvidia.  Returns OS unchanged when DISABLED? is #f
 (VM / Intel-only machines: zero NVIDIA contribution).
 
@@ -344,30 +364,28 @@ The kernel is never chosen or replaced here: the transformation inherits
 OS's kernel field untouched, so %kernel from (guixcfg system
 kernel-platform) remains the single kernel authority; the NVIDIA module is
 built against it via linux-module-build-system's #:linux keyword."
-          (if enabled?
-              (let* ((transform
-                      (nonguix-transformation-nvidia
-                       #:driver driver
-                       #:open-source-kernel-module? open-source-kernel-module?
-                       #:kernel-mode-setting? kernel-mode-setting?
-                       #:configure-xorg? configure-xorg?
-                       #:dynamic-boost? dynamic-boost?))
-                     (nvidia-only
-                      (transform
-                       (operating-system
-                        (inherit os)
-                        (packages '())
-                        (services '())
-                        (kernel-arguments
-                         (append nvidia-kernel-arguments
-                                 (operating-system-user-kernel-arguments os)))))))
-                (operating-system
-                 (inherit os)
-                 (kernel-arguments
-                  (operating-system-user-kernel-arguments nvidia-only))
-                 (services
-                  (append (operating-system-user-services nvidia-only)
-                          (list %intel-rpl-p-gpu-hwdb-service
-                                %nvidia-modeset-udev-service)
-                          (operating-system-user-services os)))))
-              os))
+  (if enabled?
+      (let* ((transform (nonguix-transformation-nvidia #:driver driver
+                         #:open-source-kernel-module?
+                         open-source-kernel-module?
+                         #:kernel-mode-setting? kernel-mode-setting?
+                         #:configure-xorg? configure-xorg?
+                         #:dynamic-boost? dynamic-boost?))
+             (nvidia-only (transform (operating-system
+                                       (inherit os)
+                                       (packages '())
+                                       (services
+                                        '())
+                                       (kernel-arguments (append
+                                                          nvidia-kernel-arguments
+                                                          (operating-system-user-kernel-arguments
+                                                           os)))))))
+        (operating-system
+          (inherit os)
+          (kernel-arguments (operating-system-user-kernel-arguments
+                             nvidia-only))
+          (services
+           (append (operating-system-user-services nvidia-only)
+                   (list %intel-rpl-p-gpu-hwdb-service
+                         %nvidia-modeset-udev-service)
+                   (operating-system-user-services os))))) os))

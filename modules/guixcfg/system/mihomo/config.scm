@@ -21,64 +21,75 @@
 ;;; (guixcfg system mihomo service) 的 %mihomo-secrets 声明）。
 
 (define-module (guixcfg system mihomo config)
-               #:use-module (srfi srfi-13) ; string-contains、string-suffix?、string-drop-right
-               #:use-module (ice-9 string-fun) ; string-replace-substring（非 SRFI-13）
-               #:use-module (ice-9 match)
-               #:export (%mihomo-subscription-placeholder
-                         %mihomo-nm-dnsmasq-uid-placeholder
-                         %mihomo-secret-path
-                         %mihomo-runtime-dir
-                         %mihomo-runtime-config-path
-                         compose-mihomo-config
-                         count-substring))
+  #:use-module (srfi srfi-13) ;string-contains、string-suffix?、string-drop-right
+  #:use-module (ice-9 string-fun) ;string-replace-substring（非 SRFI-13）
+  #:use-module (ice-9 match)
+  #:export (%mihomo-subscription-placeholder
+            %mihomo-nm-dnsmasq-uid-placeholder
+            %mihomo-secret-path
+            %mihomo-runtime-dir
+            %mihomo-runtime-config-path
+            compose-mihomo-config
+            count-substring))
 
-(define %mihomo-subscription-placeholder "@@MIHOMO_SUBSCRIPTION_URL@@")
+(define %mihomo-subscription-placeholder
+  "@@MIHOMO_SUBSCRIPTION_URL@@")
 
 ;; NetworkManager dnsmasq 的稳定 UID 占位符。service 层以
 ;; (guixcfg system dns nm-dnsmasq) 的 %nm-dnsmasq-uid 传入——
 ;; 保持本模块无 gnu/guix 依赖（generated runtime 闭包最小）。
-(define %mihomo-nm-dnsmasq-uid-placeholder "@@MIHOMO_NM_DNSMASQ_UID@@")
+(define %mihomo-nm-dnsmasq-uid-placeholder
+  "@@MIHOMO_NM_DNSMASQ_UID@@")
 
 (define %mihomo-secret-path
   "/run/guixcfg-secrets-ordinary/system/mihomo-subscription.url")
 
-(define %mihomo-runtime-dir "/run/mihomo")
+(define %mihomo-runtime-dir
+  "/run/mihomo")
 
-(define %mihomo-runtime-config-path "/run/mihomo/config.yaml")
+(define %mihomo-runtime-config-path
+  "/run/mihomo/config.yaml")
 
 (define (count-substring s sub)
   "SUB 在 S 中出现的次数（SRFI-13 string-contains 循环；不依赖
 string-count——它只数字符不数子串）。"
-  (let loop ((start 0) (n 0))
+  (let loop
+    ((start 0)
+     (n 0))
     (let ((i (string-contains s sub start)))
       (if i
-        (loop (+ i (string-length sub)) (+ n 1))
-        n))))
+          (loop (+ i
+                   (string-length sub))
+                (+ n 1)) n))))
 
 (define (strip-one-trailing-newline s)
   "移除 S 末尾的【单个】LF 或 CRLF（age 解密产物常见尾换行）。
 双换行只移除一个——残留换行随后被 control-char 检查 fail closed。"
   (cond
-    ((string-suffix? "\r\n" s) (string-drop-right s 2))
-    ((string-suffix? "\n" s) (string-drop-right s 1))
+    ((string-suffix? "\r\n" s)
+     (string-drop-right s 2))
+    ((string-suffix? "\n" s)
+     (string-drop-right s 1))
     (else s)))
 
 (define (yaml-double-quote-escape s)
   "严格 YAML 双引号转义：反斜杠、双引号；tab 一并转义。调用方保证
 输入无 CR/LF/NUL（compose 先行 fail closed）——其余字符原样保留
 （URL 字符集内无其它需要转义的 C0 控制符；若未来出现再收紧）。"
-  (let loop ((chars (string->list s)) (out '()))
+  (let loop
+    ((chars (string->list s))
+     (out '()))
     (match chars
-           (() (list->string (reverse out)))
-           ((#\\ . rest)
-            (loop rest (cons* #\\ #\\ out)))
-           ;; 累加顺序是倒序：输出 "\"" 需先 quote 后 backslash。
-           ((#\" . rest)
-            (loop rest (cons* #\" #\\ out)))
-           ((#\tab . rest)
-            (loop rest (cons* #\t #\\ out)))
-           ((ch . rest)
-            (loop rest (cons ch out))))))
+      (() (list->string (reverse out)))
+      ((#\\ . rest) (loop rest
+                          (cons* #\\ #\\ out)))
+      ;; 累加顺序是倒序：输出 "\"" 需先 quote 后 backslash。
+      ((#\" . rest) (loop rest
+                          (cons* #\" #\\ out)))
+      ((#\tab . rest) (loop rest
+                            (cons* #\t #\\ out)))
+      ((ch . rest) (loop rest
+                         (cons ch out))))))
 
 (define* (compose-mihomo-config template secret-raw
                                 #:optional (nm-dnsmasq-uid #f))
@@ -90,24 +101,22 @@ config 文本。可选 NM-DNSMASQ-UID（整数）启用 `tun.exclude-uid` 占位
 之外地暴露 secret。"
   (let* ((url (strip-one-trailing-newline secret-raw))
          (template* (if nm-dnsmasq-uid
-                      (begin
-                        (unless (= (count-substring
-                                    template %mihomo-nm-dnsmasq-uid-placeholder)
-                                   1)
-                          (throw 'mihomo-config-error
-                                 "nm-dnsmasq uid placeholder must appear exactly once"))
-                        (string-replace-substring
-                         template %mihomo-nm-dnsmasq-uid-placeholder
-                         (number->string nm-dnsmasq-uid)))
-                      template)))
+                        (begin
+                          (unless (= (count-substring template
+                                      %mihomo-nm-dnsmasq-uid-placeholder) 1)
+                            (throw 'mihomo-config-error
+                             "nm-dnsmasq uid placeholder must appear exactly once"))
+                          (string-replace-substring template
+                           %mihomo-nm-dnsmasq-uid-placeholder
+                           (number->string nm-dnsmasq-uid))) template)))
     (when (or (string-contains url "\r")
               (string-contains url "\n")
-              (string-contains url (string #\nul)))
+              (string-contains url
+                               (string #\nul)))
       (throw 'mihomo-config-error
-        "subscription URL contains CR, LF or NUL after trailing-newline strip"))
+       "subscription URL contains CR, LF or NUL after trailing-newline strip"))
     (unless (= (count-substring template* %mihomo-subscription-placeholder) 1)
       (throw 'mihomo-config-error
-        "template placeholder must appear exactly once"))
-    (string-replace-substring template*
-                              %mihomo-subscription-placeholder
+             "template placeholder must appear exactly once"))
+    (string-replace-substring template* %mihomo-subscription-placeholder
                               (yaml-double-quote-escape url))))

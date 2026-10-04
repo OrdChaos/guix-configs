@@ -25,40 +25,38 @@
 ;;; 机从 NVMe 启动，必须显式保留 nvme0n1。
 
 (define-module (guixcfg system power)
-               #:use-module (gnu services)            ; service、simple-service
-               #:use-module (gnu services base)       ; udev-rules-service、file->udev-rule
-               #:use-module (gnu services dbus)       ; dbus-root-service-type、polkit-service-type
-               #:use-module (gnu services pm)         ; tlp-service-type、tlp-configuration
-               #:use-module (gnu services shepherd)   ; shepherd-service
-               #:use-module (gnu packages glib)       ; glib（gdbus：TLP -> tlp-pd 回调）
-               #:use-module (guix gexp)               ; file-append、program-file、mixed-text-file
-               #:use-module (virelith packages tlp)   ; tlp-with-pd
-               #:export (%laptop-tlp-configuration
-                         %platform-profile-sync-service
-                         %laptop-power-services))
+  #:use-module (gnu services) ;service、simple-service
+  #:use-module (gnu services base) ;udev-rules-service、file->udev-rule
+  #:use-module (gnu services dbus) ;dbus-root-service-type、polkit-service-type
+  #:use-module (gnu services pm) ;tlp-service-type、tlp-configuration
+  #:use-module (gnu services shepherd) ;shepherd-service
+  #:use-module (gnu packages glib) ;glib（gdbus：TLP -> tlp-pd 回调）
+  #:use-module (guix gexp) ;file-append、program-file、mixed-text-file
+  #:use-module (virelith packages tlp) ;tlp-with-pd
+  #:export (%laptop-tlp-configuration %platform-profile-sync-service
+                                      %laptop-power-services))
 
 ;; laptop TLP 机器策略。字段语义以 pinned Guix (gnu services pm) 为准；
 ;; 变更这里即改变整机 AC/BAT 功耗行为。
 (define %laptop-tlp-configuration
-  (tlp-configuration
-   (tlp tlp-with-pd)
-   ;; intel_pstate EPP：插电放开性能（performance），离电偏向省电
-   ;; （balance_power）。其余 AC/BAT 差异（PCIe ASPM、SATA ALPM、disk
-   ;; APM、WiFi/audio power save、sched-powersave、EPB）沿用 TLP/
-   ;; Guix record 的成熟默认（AC 性能、BAT 省电），不重复声明。
-   (cpu-energy-perf-policy-on-ac "performance")
-   (cpu-energy-perf-policy-on-bat "balance_power")
-   ;; 睿频是 CPU 功耗的主要来源；离电关闭。
-   (cpu-boost-on-ac? #t)
-   (cpu-boost-on-bat? #f)
-   ;; TLP 的 Guix record 默认在 AC 写 RUNTIME_PM=on，会覆盖 Nonguix
-   ;; NVIDIA service 的 power/control=auto udev policy，使 Ada dGPU 无法
-   ;; RTD3。两种供电状态均保持 auto；nvidia 不得加入 driver blacklist。
-   (runtime-pm-on-ac "auto")
-   (runtime-pm-on-bat "auto")
-   (runtime-pm-all? #t)
-   ;; 本机启动盘是 NVMe（Guix record 默认只有 "sda"）。
-   (disks-devices '("nvme0n1" "sda"))))
+  (tlp-configuration (tlp tlp-with-pd)
+                     ;; intel_pstate EPP：插电放开性能（performance），离电偏向省电
+                     ;; （balance_power）。其余 AC/BAT 差异（PCIe ASPM、SATA ALPM、disk
+                     ;; APM、WiFi/audio power save、sched-powersave、EPB）沿用 TLP/
+                     ;; Guix record 的成熟默认（AC 性能、BAT 省电），不重复声明。
+                     (cpu-energy-perf-policy-on-ac "performance")
+                     (cpu-energy-perf-policy-on-bat "balance_power")
+                     ;; 睿频是 CPU 功耗的主要来源；离电关闭。
+                     (cpu-boost-on-ac? #t)
+                     (cpu-boost-on-bat? #f)
+                     ;; TLP 的 Guix record 默认在 AC 写 RUNTIME_PM=on，会覆盖 Nonguix
+                     ;; NVIDIA service 的 power/control=auto udev policy，使 Ada dGPU 无法
+                     ;; RTD3。两种供电状态均保持 auto；nvidia 不得加入 driver blacklist。
+                     (runtime-pm-on-ac "auto")
+                     (runtime-pm-on-bat "auto")
+                     (runtime-pm-all? #t)
+                     ;; 本机启动盘是 NVMe（Guix record 默认只有 "sda"）。
+                     (disks-devices '("nvme0n1" "sda"))))
 
 ;; tlp-pd：常驻 root 服务，claim PPD 的 system bus name。必须在
 ;; dbus-system 之后启动（否则 claim name 失败）。wrapper（virelith
@@ -66,17 +64,22 @@
 ;; 调 SyncProfile 更新 PPD D-Bus 状态，所以显式提供 glib/bin。系统 profile
 ;; 本身不含 gdbus，缺少它会导致硬件 profile 已变、Noctalia 却显示旧值。
 (define %tlp-pd-shepherd-service
-  (shepherd-service
-   (documentation "TLP profiles daemon (org.freedesktop.UPower.PowerProfiles API).")
-   (provision '(tlp-pd))
-   (requirement '(dbus-system))
-   (start #~(make-forkexec-constructor
-             (list #$(file-append tlp-with-pd "/sbin/tlp-pd"))
-             #:environment-variables
-             (list (string-append "PATH="
-                                  #$(file-append (gexp-input glib "bin") "/bin")
-                                  ":/run/current-system/profile/bin"))))
-   (stop #~(make-kill-destructor))))
+  (shepherd-service (documentation
+                     "TLP profiles daemon (org.freedesktop.UPower.PowerProfiles API).")
+                    (provision '(tlp-pd))
+                    (requirement '(dbus-system))
+                    (start #~(make-forkexec-constructor (list #$(file-append
+                                                                 tlp-with-pd
+                                                                 "/sbin/tlp-pd"))
+                                                        #:environment-variables
+                                                        (list (string-append
+                                                               "PATH="
+                                                               #$(file-append (gexp-input
+                                                                               glib
+                                                                               "bin")
+                                                                  "/bin")
+                                                               ":/run/current-system/profile/bin"))))
+                    (stop #~(make-kill-destructor))))
 
 ;; fn+q（EC 热模式）→ 桌面面板同步的 THIN ADAPTER（docs/architecture/
 ;; power.md）。硬件渠道：Lenovo Legion 的 fn+q 由 lenovo-wmi-gamezone（本机
@@ -90,41 +93,50 @@
 ;; _ON_SAV=low-power）：low-power↔power-saver、balanced↔balanced、
 ;; performance/max-power→performance；custom 不映射（保持面板不动）。
 (define %platform-profile-sync-program
-  (program-file
-   "platform-profile-sync"
-   #~(begin
-       (use-modules (ice-9 rdelim))          ; read-line
-       (define (read-platform-profile)
-         (call-with-input-file "/sys/firmware/acpi/platform_profile"
-           (lambda (port)
-             (let ((line (read-line port)))
-               (if (eof-object? line) "" line)))))
-       (define (tlp-profile platform-profile)
-         (cond ((string=? platform-profile "low-power") "power-saver")
-               ((string=? platform-profile "balanced") "balanced")
-               ((string=? platform-profile "performance") "performance")
-               ((string=? platform-profile "max-power") "performance")
-               (else #f)))
-       (let ((profile (tlp-profile (read-platform-profile))))
-         (when profile
-           (system* #$(file-append (gexp-input glib "bin") "/bin/gdbus")
-                    "call" "-y"
-                    "-d" "org.freedesktop.UPower.PowerProfiles"
-                    "-o" "/org/freedesktop/UPower/PowerProfiles"
-                    "-m" "org.freedesktop.UPower.PowerProfiles.SyncProfile"
-                    profile))
-         (exit 0)))))
+  (program-file "platform-profile-sync"
+                #~(begin
+                    (use-modules (ice-9 rdelim)) ;read-line
+                    (define (read-platform-profile)
+                      (call-with-input-file "/sys/firmware/acpi/platform_profile"
+                        (lambda (port)
+                          (let ((line (read-line port)))
+                            (if (eof-object? line) "" line)))))
+                    (define (tlp-profile platform-profile)
+                      (cond
+                        ((string=? platform-profile "low-power")
+                         "power-saver")
+                        ((string=? platform-profile "balanced")
+                         "balanced")
+                        ((string=? platform-profile "performance")
+                         "performance")
+                        ((string=? platform-profile "max-power")
+                         "performance")
+                        (else #f)))
+                    (let ((profile (tlp-profile (read-platform-profile))))
+                      (when profile
+                        (system* #$(file-append (gexp-input glib "bin")
+                                                "/bin/gdbus")
+                         "call"
+                         "-y"
+                         "-d"
+                         "org.freedesktop.UPower.PowerProfiles"
+                         "-o"
+                         "/org/freedesktop/UPower/PowerProfiles"
+                         "-m"
+                         "org.freedesktop.UPower.PowerProfiles.SyncProfile"
+                         profile))
+                      (exit 0)))))
 
 (define %platform-profile-sync-udev-rule
-  (file->udev-rule
-   "90-power-profile-sync.rules"
-   (mixed-text-file
-    "90-power-profile-sync.rules"
-    "# (guixcfg system power) reflect EC/fn+q platform-profile changes\n"
-    "# into tlp-pd's PowerProfiles ActiveProfile for the desktop panel.\n"
-    "ACTION==\"change\", SUBSYSTEM==\"platform-profile\", RUN+=\""
-    %platform-profile-sync-program
-    "\"\n")))
+  (file->udev-rule "90-power-profile-sync.rules"
+                   (mixed-text-file "90-power-profile-sync.rules"
+                    "# (guixcfg system power) reflect EC/fn+q platform-profile changes
+"
+                    "# into tlp-pd's PowerProfiles ActiveProfile for the desktop panel.
+"
+                    "ACTION==\"change\", SUBSYSTEM==\"platform-profile\", RUN+=\""
+                    %platform-profile-sync-program
+                    "\"\n")))
 
 (define %platform-profile-sync-service
   (udev-rules-service 'power-profile-sync %platform-profile-sync-udev-rule))
@@ -144,5 +156,4 @@
         (simple-service 'tlp-pd-dbus-policy dbus-root-service-type
                         (list tlp-with-pd))
         (simple-service 'tlp-pd-polkit-action polkit-service-type
-                        (list tlp-with-pd))
-        %platform-profile-sync-service))
+                        (list tlp-with-pd)) %platform-profile-sync-service))

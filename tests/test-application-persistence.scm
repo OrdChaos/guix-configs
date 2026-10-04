@@ -24,96 +24,114 @@
 
 ;; ── synthetic rule（测试专用；mechanism 验证）────────────────
 (define rule
-  (application-persistence-rule
-   (name 'synthetic-test)
-   (backing "synthetic-test/state")
-   (consumer ".config/synthetic-test")
-   (exposure 'bind-directory)
-   (lifecycle 'application-owned)))
+  (application-persistence-rule (name 'synthetic-test)
+                                (backing "synthetic-test/state")
+                                (consumer ".config/synthetic-test")
+                                (exposure 'bind-directory)
+                                (lifecycle 'application-owned)))
 
 (define seeded-rule
-  (application-persistence-rule
-   (name 'seeded-test)
-   (backing "seeded-test/state")
-   (consumer ".local/state/seeded-test")
-   (seeds `(("settings.toml"
-             ,(plain-file "settings.toml" "[shell]\nsetup_wizard_enabled = false\n"))))))
+  (application-persistence-rule (name 'seeded-test)
+                                (backing "seeded-test/state")
+                                (consumer ".local/state/seeded-test")
+                                (seeds `(("settings.toml" ,(plain-file
+                                                            "settings.toml"
+                                                            "[shell]\nsetup_wizard_enabled = false\n"))))))
 
 (test-assert "valid rule passes validation"
              (valid-application-persistence-rule? rule))
 
 ;; ── path validation：拒绝 .. / 绝对路径 / 空 ────────────────
-(for-each
- (lambda (bad-backing)
-   (test-assert (string-append "reject backing " bad-backing)
-                (not (valid-application-persistence-rule?
-                      (application-persistence-rule
-                       (name 'bad) (backing bad-backing)
-                       (consumer ".config/x"))))))
- '("" ".." "../x" "a/../b" "a/.." "/absolute" "data-nobackup/../x"))
+(for-each (lambda (bad-backing)
+            (test-assert (string-append "reject backing " bad-backing)
+                         (not (valid-application-persistence-rule? (application-persistence-rule
+                                                                    (name 'bad)
+                                                                    (backing
+                                                                     bad-backing)
+                                                                    (consumer
+                                                                     ".config/x"))))))
+          '("" ".."
+            "../x"
+            "a/../b"
+            "a/.."
+            "/absolute"
+            "data-nobackup/../x"))
 
-(for-each
- (lambda (bad-consumer)
-   (test-assert (string-append "reject consumer " bad-consumer)
-                (not (valid-application-persistence-rule?
-                      (application-persistence-rule
-                       (name 'bad) (backing "x")
-                       (consumer bad-consumer))))))
- '("" ".." "../x" "a/../b" "a/.." "/absolute"))
+(for-each (lambda (bad-consumer)
+            (test-assert (string-append "reject consumer " bad-consumer)
+                         (not (valid-application-persistence-rule? (application-persistence-rule
+                                                                    (name 'bad)
+                                                                    (backing
+                                                                     "x")
+                                                                    (consumer
+                                                                     bad-consumer))))))
+          '("" ".." "../x" "a/../b" "a/.." "/absolute"))
 
 ;; ── 拒绝整目录 consumer（.config/.local/.local/share/.cache 作为
 ;;    整体；其下应用子目录合法——见 persistence.md）────────────
-(for-each
- (lambda (whole)
-   (test-assert (string-append "reject whole-dir consumer " whole)
-                (not (valid-application-persistence-rule?
-                      (application-persistence-rule
-                       (name 'bad) (backing "x") (consumer whole))))))
- '(".config" ".local" ".local/share" ".cache"))
+(for-each (lambda (whole)
+            (test-assert (string-append "reject whole-dir consumer " whole)
+                         (not (valid-application-persistence-rule? (application-persistence-rule
+                                                                    (name 'bad)
+                                                                    (backing
+                                                                     "x")
+                                                                    (consumer
+                                                                     whole))))))
+          '(".config" ".local" ".local/share" ".cache"))
 
 ;; 全局目录下的应用子目录是合法精确 consumer（任务契约：禁止的是
 ;; “整体”持久化；.config/<app>、.local/share/<app> 是目标模式）
 (test-assert "consumer under .config/<app> is valid"
-             (valid-application-persistence-rule?
-              (application-persistence-rule
-               (name 'ok) (backing "x") (consumer ".config/some-app"))))
+             (valid-application-persistence-rule? (application-persistence-rule
+                                                   (name 'ok)
+                                                   (backing "x")
+                                                   (consumer
+                                                    ".config/some-app"))))
 (test-assert "consumer under .local/share/<app> is valid"
-             (valid-application-persistence-rule?
-              (application-persistence-rule
-               (name 'ok) (backing "x") (consumer ".local/share/some-app"))))
+             (valid-application-persistence-rule? (application-persistence-rule
+                                                   (name 'ok)
+                                                   (backing "x")
+                                                   (consumer
+                                                    ".local/share/some-app"))))
 
 ;; ── exposure / lifecycle 只允许声明值 ───────────────────────
 (test-assert "reject unknown exposure"
-             (not (valid-application-persistence-rule?
-                   (application-persistence-rule
-                    (name 'bad) (backing "x") (consumer ".config/x")
-                    (exposure 'symlink)))))
+             (not (valid-application-persistence-rule? (application-persistence-rule
+                                                        (name 'bad)
+                                                        (backing "x")
+                                                        (consumer ".config/x")
+                                                        (exposure 'symlink)))))
 (test-assert "reject unknown lifecycle"
-             (not (valid-application-persistence-rule?
-                   (application-persistence-rule
-                    (name 'bad) (backing "x") (consumer ".config/x")
-                    (lifecycle 'seed-once)))))
+             (not (valid-application-persistence-rule? (application-persistence-rule
+                                                        (name 'bad)
+                                                        (backing "x")
+                                                        (consumer ".config/x")
+                                                        (lifecycle 'seed-once)))))
 
 ;; ── bind-file exposure：schema / validation ──────────────────
 (define bind-file-rule
-  (application-persistence-rule
-   (name 'bind-file-test)
-   (backing "synthetic-test/state.json")   ; backing = regular file 相对路径
-   (consumer ".config/synthetic-test/state.json") ; consumer = regular file
-   (exposure 'bind-file)
-   (lifecycle 'application-owned)))
+  (application-persistence-rule (name 'bind-file-test)
+                                (backing "synthetic-test/state.json") ;backing = regular file 相对路径
+                                (consumer ".config/synthetic-test/state.json") ;consumer = regular file
+                                (exposure 'bind-file)
+                                (lifecycle 'application-owned)))
 
 (test-assert "bind-file is a legal exposure (passes validation)"
              (valid-application-persistence-rule? bind-file-rule))
-(test-assert "bind-file rule with seeds is rejected (seeds are \
-backing-directory-relative)"
-             (not (valid-application-persistence-rule?
-                   (application-persistence-rule
-                    (name 'bad) (backing "x/state.json")
-                    (consumer ".config/x/state.json")
-                    (exposure 'bind-file)
-                    (seeds `(("a.toml"
-                              . ,(plain-file "s" "x"))))))))
+(test-assert
+ "bind-file rule with seeds is rejected (seeds are backing-directory-relative)"
+ (not (valid-application-persistence-rule? (application-persistence-rule (name 'bad)
+                                                                         (backing
+                                                                          "x/state.json")
+                                                                         (consumer
+                                                                          ".config/x/state.json")
+                                                                         (exposure 'bind-file)
+                                                                         (seeds `
+                                                                          (("a.toml"
+                                                                            unquote
+                                                                            (plain-file
+                                                                             "s"
+                                                                             "x"))))))))
 
 ;; ── bind-file 的 bind file-system 生成语义 ──────────────────
 ;; 必须生成 file→file bind：source/target 与 bind-directory 同构，
@@ -121,64 +139,63 @@ backing-directory-relative)"
 ;; directory；regular-file 挂载点由 activation 预建——pinned Guix
 ;; mount-file-system 对 bind mount + non-directory source 原生自动
 ;; 创建 regular-file target 作为第二层防御）。
-(define file-mounts (application-persistence-file-systems
-                     (list bind-file-rule) "alice"))
+(define file-mounts
+  (application-persistence-file-systems (list bind-file-rule) "alice"))
 (test-assert "bind-file rule produces one bind mount"
-             (= 1 (length file-mounts)))
-(define file-fs (car file-mounts))
+             (= 1
+                (length file-mounts)))
+(define file-fs
+  (car file-mounts))
 (test-equal "bind-file bind source is /persist/data-app/<backing file>"
             "/persist/data-app/synthetic-test/state.json"
             (file-system-device file-fs))
 (test-equal "bind-file bind target is /home/<user>/<consumer file>"
             "/home/alice/.config/synthetic-test/state.json"
             (file-system-mount-point file-fs))
-(test-equal "bind-file bind type none"
-            "none" (file-system-type file-fs))
+(test-equal "bind-file bind type none" "none"
+            (file-system-type file-fs))
 (test-assert "bind-file bind-mount flag set"
-             (memq 'bind-mount (file-system-flags file-fs)))
-(test-assert "bind-file disables create-mount-point? (regular-file mount \
-point, not directory)"
-             (not (file-system-create-mount-point? file-fs)))
+             (memq 'bind-mount
+                   (file-system-flags file-fs)))
+(test-assert
+ "bind-file disables create-mount-point? (regular-file mount point, not directory)"
+ (not (file-system-create-mount-point? file-fs)))
 (test-assert "bind-file keeps desktop metadata options (gvfs integration)"
-             (string-contains (file-system-options file-fs)
-                              "x-gvfs-trash"))
+             (string-contains (file-system-options file-fs) "x-gvfs-trash"))
 
 ;; ── coexistence：同一 application 里 bind-file 与 bind-directory ──
 (define coexist-mounts
-  (application-persistence-file-systems
-   (list bind-file-rule rule) "alice"))
-(test-equal "bind-file and bind-directory rules coexist in one mapping"
-            2 (length coexist-mounts))
+  (application-persistence-file-systems (list bind-file-rule rule) "alice"))
+(test-equal "bind-file and bind-directory rules coexist in one mapping" 2
+            (length coexist-mounts))
 (test-assert "coexistence preserves per-rule create-mount-point? semantics"
-             (let ((flags (map file-system-create-mount-point?
-                               coexist-mounts)))
-               (and (member #t flags) (member #f flags))))
+             (let ((flags (map file-system-create-mount-point? coexist-mounts)))
+               (and (member #t flags)
+                    (member #f flags))))
 (test-assert "coexistence sources stay under /persist/data-app"
              (every (lambda (m)
                       (string-prefix? "/persist/data-app/"
-                                      (file-system-device m)))
-                    coexist-mounts))
+                                      (file-system-device m))) coexist-mounts))
 
 ;; ── bind-file activation 生成：regular-file 原语在场 ────────
 (test-assert "bind-file activation gexp can be generated"
-             (let ((gexp (application-persistence-activation
-                          (list bind-file-rule) "alice")))
+             (let (#~(application-persistence-activation (list bind-file-rule)
+                                                         "alice"))
                (and (gexp? gexp)
                     (pair? (gexp->approximate-sexp gexp)))))
-(test-assert "bind-file activation creates regular files (no directory \
-backing for the file rule)"
-             (let ((s (object->string
-                       (gexp->approximate-sexp
-                        (application-persistence-activation
-                         (list bind-file-rule) "alice")))))
-               (and (string-contains s "state.json")
-                    (string-contains s "call-with-output-file")
-                    (string-contains s "stat:type"))))
+(test-assert
+ "bind-file activation creates regular files (no directory backing for the file rule)"
+ (let ((s (object->string (gexp->approximate-sexp (application-persistence-activation
+                                                   (list bind-file-rule)
+                                                   "alice")))))
+   (and (string-contains s "state.json")
+        (string-contains s "call-with-output-file")
+        (string-contains s "stat:type"))))
 (test-assert "bind-file activation still carries consumer-parent machinery"
-             (let ((s (object->string
-                       (gexp->approximate-sexp
-                        (application-persistence-activation
-                         (list bind-file-rule) "alice")))))
+             (let ((s (object->string (gexp->approximate-sexp (application-persistence-activation
+                                                               (list
+                                                                bind-file-rule)
+                                                               "alice")))))
                (and (string-contains s "ensure-home-parent-directories!")
                     (string-contains s "chown"))))
 
@@ -187,44 +204,61 @@ backing for the file rule)"
              (valid-application-persistence-rule? seeded-rule))
 ;; 非法 seed：空 / .. 逃逸 / 绝对路径 / marker 后缀冲突 /
 ;; 非 file-like source——全部 fail closed
-(for-each
- (lambda (bad-target)
-   (test-assert (string-append "reject seed target " bad-target)
-                (not (valid-application-persistence-rule?
-                      (application-persistence-rule
-                       (name 'bad) (backing "x") (consumer ".config/x")
-                       (seeds `((,bad-target
-                                 . ,(plain-file "s" "x")))))))))
- '("" ".." "../x" "a/../b" "a/.." "/absolute" "x.seed-provided"))
+(for-each (lambda (bad-target)
+            (test-assert (string-append "reject seed target " bad-target)
+                         (not (valid-application-persistence-rule? (application-persistence-rule
+                                                                    (name 'bad)
+                                                                    (backing
+                                                                     "x")
+                                                                    (consumer
+                                                                     ".config/x")
+                                                                    (seeds `((,bad-target
+                                                                              unquote
+                                                                              
+                                                                              (plain-file
+                                                                               "s"
+                                                                               "x")))))))))
+          '("" ".."
+            "../x"
+            "a/../b"
+            "a/.."
+            "/absolute"
+            "x.seed-provided"))
 (test-assert "reject seed spec that is not a pair"
-             (not (valid-application-persistence-rule?
-                   (application-persistence-rule
-                    (name 'bad) (backing "x") (consumer ".config/x")
-                    (seeds '(("settings.toml")))))))
+             (not (valid-application-persistence-rule? (application-persistence-rule
+                                                        (name 'bad)
+                                                        (backing "x")
+                                                        (consumer ".config/x")
+                                                        (seeds '(("settings.toml")))))))
 (test-assert "reject non-file-like seed source"
-             (not (valid-application-persistence-rule?
-                   (application-persistence-rule
-                    (name 'bad) (backing "x") (consumer ".config/x")
-                    (seeds '(("settings.toml" . "not-a-file-like")))))))
+             (not (valid-application-persistence-rule? (application-persistence-rule
+                                                        (name 'bad)
+                                                        (backing "x")
+                                                        (consumer ".config/x")
+                                                        (seeds '(("settings.toml" . "not-a-file-like")))))))
 
 ;; seed 目标必须落在 backing 内（backing/consumer 校验已保证），
 ;; 且不引入独立白名单：seed 只针对首次初始化，目录持久化仍是
 ;; 整个 consumer（bind directory）。
 ;; ── bind file-system 生成 ───────────────────────────────────
-(define mounts (application-persistence-file-systems (list rule) "alice"))
+(define mounts
+  (application-persistence-file-systems (list rule) "alice"))
 (test-assert "one bind mount per rule"
-             (= 1 (length mounts)))
-(define fs (car mounts))
+             (= 1
+                (length mounts)))
+(define fs
+  (car mounts))
 (test-equal "bind source is /persist/data-app/<backing>"
             "/persist/data-app/synthetic-test/state"
             (file-system-device fs))
 (test-equal "bind target is /home/<user>/<consumer>"
             "/home/alice/.config/synthetic-test"
             (file-system-mount-point fs))
-(test-equal "bind type none"
-            "none" (file-system-type fs))
+(test-equal "bind type none" "none"
+            (file-system-type fs))
 (test-assert "bind-mount flag set"
-             (memq 'bind-mount (file-system-flags fs)))
+             (memq 'bind-mount
+                   (file-system-flags fs)))
 (test-assert "create-mount-point? set"
              (file-system-create-mount-point? fs))
 
@@ -232,54 +266,51 @@ backing for the file rule)"
              (every (lambda (m)
                       (not (string-contains (file-system-device m)
                                             "data-nobackup")))
-                    (application-persistence-file-systems
-                     (list rule
-                           (application-persistence-rule
-                            (name 'r2) (backing "other")
-                            (consumer ".local/state/x")))
-                     "alice")))
+                    (application-persistence-file-systems (list rule
+                                                                (application-persistence-rule
+                                                                 (name 'r2)
+                                                                 (backing
+                                                                  "other")
+                                                                 (consumer
+                                                                  ".local/state/x")))
+                                                          "alice")))
 
 ;; ── activation 可生成（backing 创建 + consumer parent ownership）─
 (test-assert "activation gexp can be generated"
-             (let ((gexp (application-persistence-activation
-                          (list rule) "alice")))
+             (let (#~(application-persistence-activation (list rule) "alice"))
                (and (gexp? gexp)
                     (pair? (gexp->approximate-sexp gexp)))))
 
 (test-assert "activation references /persist/data-app and consumer parent"
-             (let ((s (object->string
-                       (gexp->approximate-sexp
-                        (application-persistence-activation
-                         (list rule) "alice")))))
+             (let ((s (object->string (gexp->approximate-sexp (application-persistence-activation
+                                                               (list rule)
+                                                               "alice")))))
                (and (string-contains s "/persist/data-app")
                     (string-contains s "synthetic-test")
                     (string-contains s "mkdir-p")
                     (string-contains s "chown"))))
 
 ;; ── seed-once 接线：activation 含 seed 目标 / marker / 状态机 ─
-(test-assert "seeded activation references seed target, marker and state machine"
-             (let ((s (object->string
-                       (gexp->approximate-sexp
-                        (application-persistence-activation
-                         (list seeded-rule) "alice")))))
-               (and (string-contains s "seeded-test/state")
-                    (string-contains s "settings.toml")
-                    (string-contains s ".seed-provided")
-                    (string-contains s "seed-once-file!")
-                    (string-contains s "chown"))))
+(test-assert
+ "seeded activation references seed target, marker and state machine"
+ (let ((s (object->string (gexp->approximate-sexp (application-persistence-activation
+                                                   (list seeded-rule) "alice")))))
+   (and (string-contains s "seeded-test/state")
+        (string-contains s "settings.toml")
+        (string-contains s ".seed-provided")
+        (string-contains s "seed-once-file!")
+        (string-contains s "chown"))))
 (test-assert "unseeded activation carries no seed machinery"
-             (let ((s (object->string
-                       (gexp->approximate-sexp
-                        (application-persistence-activation
-                         (list rule) "alice")))))
+             (let ((s (object->string (gexp->approximate-sexp (application-persistence-activation
+                                                               (list rule)
+                                                               "alice")))))
                (not (string-contains s "seed-once-file!"))))
 
 ;; ── 无 copy/sync 实现 ───────────────────────────────────────
 (test-assert "no copy/sync primitives in generated artifacts"
-             (let ((s (object->string
-                       (gexp->approximate-sexp
-                        (application-persistence-activation
-                         (list rule) "alice")))))
+             (let ((s (object->string (gexp->approximate-sexp (application-persistence-activation
+                                                               (list rule)
+                                                               "alice")))))
                (and (not (string-contains s "copy-file"))
                     (not (string-contains s "copy-recursively"))
                     (not (string-contains s "rsync")))))

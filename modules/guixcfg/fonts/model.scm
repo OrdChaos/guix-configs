@@ -11,11 +11,11 @@
 ;;; (guixcfg fonts fontconfig-policy)。
 
 (define-module (guixcfg fonts model)
-               #:use-module (gnu packages fonts)     ; font-google-noto-*
-               #:use-module (gnu packages fontutils) ; fontconfig、font-gnu-unifont
-               #:use-module (virelith packages fonts) ; mi-sans-global、maple-mono-*
-               #:use-module (virelith packages fonts-windows) ; font-microsoft-win11-fod-hans、font-microsoft-win11-office-core
-               #:export (%fonts))
+  #:use-module (gnu packages fonts) ;font-google-noto-*
+  #:use-module (gnu packages fontutils) ;fontconfig、font-gnu-unifont
+  #:use-module (virelith packages fonts) ;mi-sans-global、maple-mono-*
+  #:use-module (virelith packages fonts-windows) ;font-microsoft-win11-fod-hans、font-microsoft-win11-office-core
+  #:export (%fonts))
 
 ;; 字体集合（profile 层：决定"有哪些字体"）。
 ;; 自有 channel：MiSans Global（简体主字体 + script 变体）、

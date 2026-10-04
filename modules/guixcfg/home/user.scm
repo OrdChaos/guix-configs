@@ -24,20 +24,19 @@
 ;;;     home reconfigure -L modules modules/guixcfg/home/user.scm
 
 (define-module (guixcfg home user)
-               #:use-module (gnu home)              ; home-environment
-               #:use-module (guixcfg apps model)
-               #:use-module (guixcfg apps registry)
-               #:use-module (guixcfg apps selection) ; application-configuration-selections->home-services
-               #:use-module (guixcfg home xdg)      ; %xdg-default-apps-service、%xdg-user-dirs-service
-               #:use-module (guixcfg home fonts)    ; %fonts、%fontconfig-service、%home-fonts-xdg-link-service
-               #:use-module (guixcfg home environment) ; %session-environment-service
-               #:use-module (guixcfg home assets)   ; %user-assets-service
-                #:use-module (guixcfg flatpak service) ; flatpak-home-services（desktop + XDG_DATA_DIRS）
-               #:use-module (guixcfg gsettings home-service) ; %gsettings-packages、gsettings-reconcile-service
-               #:use-module (guixcfg gsettings model) ; gsettings-desired-state（desired state 聚合）
-               #:use-module (guixcfg users user) ; %primary-user、user-profile-home-directory
-               #:export (guix-home
-                         %guix-home))
+  #:use-module (gnu home) ;home-environment
+  #:use-module (guixcfg apps model)
+  #:use-module (guixcfg apps registry)
+  #:use-module (guixcfg apps selection) ;application-configuration-selections->home-services
+  #:use-module (guixcfg home xdg) ;%xdg-default-apps-service、%xdg-user-dirs-service
+  #:use-module (guixcfg home fonts) ;%fonts、%fontconfig-service、%home-fonts-xdg-link-service
+  #:use-module (guixcfg home environment) ;%session-environment-service
+  #:use-module (guixcfg home assets) ;%user-assets-service
+  #:use-module (guixcfg flatpak service) ;flatpak-home-services（desktop + XDG_DATA_DIRS）
+  #:use-module (guixcfg gsettings home-service) ;%gsettings-packages、gsettings-reconcile-service
+  #:use-module (guixcfg gsettings model) ;gsettings-desired-state（desired state 聚合）
+  #:use-module (guixcfg users user) ;%primary-user、user-profile-home-directory
+  #:export (guix-home %guix-home))
 
 ;; composition root：application registry → 聚合 desired GSettings
 ;; → parameterized service（generic 服务不读全局 inventory——见
@@ -47,7 +46,7 @@
 
 (define* (guix-home #:key (application-configuration-selections '())
                     (flatpak-environment-overrides '()))
-         "构造 home-environment：registry 应用聚合 + 统一策略服务。
+  "构造 home-environment：registry 应用聚合 + 统一策略服务。
 HOST/profile 的 application configuration variant selections 经
 APPLICATION-CONFIGURATION-SELECTIONS（<application-configuration-
 selection> 列表）贡献（generic mechanism，host 只做 logical
@@ -55,37 +54,36 @@ selection，不知道文件/路径）。FLATPAK-ENVIRONMENT-OVERRIDES 是
 硬件 adapter 投影（logical name → 'VAR=VALUE' 列表，如 NVIDIA
 PRIME）——全局 Flatpak selection 本身跨设备一致，差异只在此叠加；
 详见 docs/architecture/flatpak.md（driver overlays）。"
-         (home-environment
-          (packages (append %fonts
-                            %gsettings-packages   ; gsettings/dconf CLI（GSettings 投影机制自备 runtime 依赖）
-                            (applications-home-packages %applications)))
-          (services (append (list %xdg-default-apps-service
-                                  %xdg-user-dirs-service
-                                  %fontconfig-service
-                                  %home-fonts-xdg-link-service
-                                  %session-environment-service
-                                  %user-assets-service
-                                  ;; 登录/热激活后的 GSettings→dconf 投影
-                                  ;; one-shot（desired state + HOME 事实
-                                  ;; 由本 composition 层显式传入）。
-                                  (gsettings-reconcile-service
-                                   (%gsettings-desired-state)
-                                   (user-profile-home-directory
-                                    %primary-user)))
-                             ;; Flatpak Home 集成（desktop + XDG_DATA_DIRS
-                             ;; exports；managed override 由 system activation
-                             ;; 投影到 persistent installation）。
-                            (flatpak-home-services
-                             #:environment-overrides
-                             flatpak-environment-overrides)
-                            (application-configuration-selections->home-services
-                             application-configuration-selections)
-                            (applications-home-services %applications)))))
+  (home-environment
+    (packages (append %fonts %gsettings-packages ;gsettings/dconf CLI（GSettings 投影机制自备 runtime 依赖）
+                      (applications-home-packages %applications)))
+    (services
+     (append (list %xdg-default-apps-service
+                   %xdg-user-dirs-service
+                   %fontconfig-service
+                   %home-fonts-xdg-link-service
+                   %session-environment-service
+                   %user-assets-service
+                   ;; 登录/热激活后的 GSettings→dconf 投影
+                   ;; one-shot（desired state + HOME 事实
+                   ;; 由本 composition 层显式传入）。
+                   (gsettings-reconcile-service (%gsettings-desired-state)
+                                                (user-profile-home-directory
+                                                 %primary-user)))
+             ;; Flatpak Home 集成（desktop + XDG_DATA_DIRS
+             ;; exports；managed override 由 system activation
+             ;; 投影到 persistent installation）。
+             (flatpak-home-services #:environment-overrides
+                                    flatpak-environment-overrides)
+             (application-configuration-selections->home-services
+              application-configuration-selections)
+             (applications-home-services %applications)))))
 
 ;; 默认 home（host-agnostic）：VM 及其它无特殊 selection 的组装点
 ;; 直接使用；需要 variant 的组装点调用
 ;; (guix-home #:application-configuration-selections ...)。
-(define %guix-home (guix-home))
+(define %guix-home
+  (guix-home))
 
 ;; 末尾裸表达式：guix home 的入口文件约定（取最后一个表达式）。
 %guix-home

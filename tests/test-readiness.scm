@@ -4,10 +4,10 @@
 
 (use-modules (gnu services)
              (gnu services shepherd)
-             (gnu system pam)           ; pam-service 访问器
+             (gnu system pam) ;pam-service 访问器
              (guixcfg system readiness)
-             (guixcfg system session-gate) ; gate 唯一 authority
-             (ice-9 rdelim)             ; read-string（源码 authority 断言）
+             (guixcfg system session-gate) ;gate 唯一 authority
+             (ice-9 rdelim) ;read-string（源码 authority 断言）
              (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64))
@@ -20,30 +20,38 @@
   (car (service-value svc)))
 
 (define (read-source file)
-  (call-with-input-file file (lambda (p) (read-string p))))
+  (call-with-input-file file
+    (lambda (p)
+      (read-string p))))
 
 ;; persistent-state-ready：file-systems 后，检查 persist 关键路径
 (let ((s (shepherd-of (persistent-state-ready-service))))
   (test-assert "persistent-state-ready provision"
-               (member 'persistent-state-ready (shepherd-service-provision s)))
+               (member 'persistent-state-ready
+                       (shepherd-service-provision s)))
   (test-assert "persistent-state-ready after file-systems"
-               (member 'file-systems (shepherd-service-requirement s)))
+               (member 'file-systems
+                       (shepherd-service-requirement s)))
   (test-assert "persistent-state-ready one-shot"
                (shepherd-service-one-shot? s)))
 
 ;; home-ready：薄包装（上游 provision 固定）
 (let ((s (shepherd-of (home-ready-service 'guix-home-user))))
   (test-assert "home-ready provision"
-               (member 'home-ready (shepherd-service-provision s)))
+               (member 'home-ready
+                       (shepherd-service-provision s)))
   (test-assert "home-ready after home service"
-               (member 'guix-home-user (shepherd-service-requirement s))))
+               (member 'guix-home-user
+                       (shepherd-service-requirement s))))
 
 ;; session-infra-ready：elogind 后
 (let ((s (shepherd-of (session-infra-ready-service))))
   (test-assert "session-infra-ready provision"
-               (member 'session-infra-ready (shepherd-service-provision s)))
+               (member 'session-infra-ready
+                       (shepherd-service-provision s)))
   (test-assert "session-infra-ready after elogind"
-               (member 'elogind (shepherd-service-requirement s))))
+               (member 'elogind
+                       (shepherd-service-requirement s))))
 
 ;; interactive-session-ready：纯 barrier——四个 prerequisite +
 ;; one-shot + 不依赖业务细节
@@ -52,21 +60,22 @@
               %interactive-session-requirements
               (shepherd-service-requirement s))
   (test-assert "interactive barrier provision"
-               (member 'interactive-session-ready (shepherd-service-provision s)))
+               (member 'interactive-session-ready
+                       (shepherd-service-provision s)))
   (test-assert "interactive barrier one-shot"
                (shepherd-service-one-shot? s)))
 
 ;; 组合：readiness-services 四个服务齐全（persistent-state、home、
 ;; session-infra、interactive-session barrier）
-(test-equal "readiness-services composition"
-            4 (length (readiness-services 'guix-home-user)))
+(test-equal "readiness-services composition" 4
+            (length (readiness-services 'guix-home-user)))
 
 ;; ── login gate ────────────────────────────────────────────────
 ;; gate 的 path/close/open 唯一 authority 是 (guixcfg system
 ;; session-gate)；readiness 只消费（activation 关闭 + PAM 横切
 ;; 仅 login/sshd）。
-(test-equal "gate path is project-owned"
-            "/run/guixcfg/session-not-ready" %session-gate-path)
+(test-equal "gate path is project-owned" "/run/guixcfg/session-not-ready"
+            %session-gate-path)
 (test-equal "gate path authority is the session-gate module"
             %session-gate-path %login-gate-path)
 (test-equal "gate path builder honors directory injection"
@@ -84,7 +93,8 @@
                                     "modules/guixcfg/system/reconfigure.scm")
                                    "session-not-ready")))
 
-(define gate-pam-svc (login-gate-pam-service))
+(define gate-pam-svc
+  (login-gate-pam-service))
 ;; simple-service 的 value 即 extension compute 的结果（pam-extension 列表）
 (define gate-transformer
   (pam-extension-transformer (car (service-value gate-pam-svc))))
@@ -97,9 +107,12 @@
 (let ((sshd-pam (gate-transformer (pam-service (name "sshd"))))
       (login-pam (gate-transformer (pam-service (name "login"))))
       (sudo-pam (gate-transformer (pam-service (name "sudo")))))
-  (test-assert "gate applies to sshd" (pam-has-nologin? sshd-pam))
-  (test-assert "gate applies to login" (pam-has-nologin? login-pam))
-  (test-assert "gate does NOT apply to sudo" (not (pam-has-nologin? sudo-pam)))
+  (test-assert "gate applies to sshd"
+               (pam-has-nologin? sshd-pam))
+  (test-assert "gate applies to login"
+               (pam-has-nologin? login-pam))
+  (test-assert "gate does NOT apply to sudo"
+               (not (pam-has-nologin? sudo-pam)))
   (test-assert "gate entry uses project-owned file"
                (any (lambda (e)
                       (and (string=? (pam-entry-module e) "pam_nologin.so")

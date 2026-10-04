@@ -19,9 +19,8 @@
 ;;; 禁止：复制 username 常量、硬编码用户名。
 
 (define-module (guixcfg users facts)
-               #:use-module (guix records)
-               #:export (user-profile
-                         user-profile?
+  #:use-module (guix records)
+  #:export (user-profile user-profile?
                          user-profile-name
                          user-profile-uid
                          user-profile-group
@@ -33,27 +32,27 @@
                          %primary-user))
 
 (define-record-type* <user-profile> user-profile make-user-profile
-                     user-profile?
-                     (name                user-profile-name)                 ; string
-                     (uid                 user-profile-uid)                  ; integer
-                     (group               user-profile-group)                ; string
-                     (supplementary-groups user-profile-supplementary-groups) ; list of strings
-                     (shell               user-profile-shell                 ; file-like
-                                          (default #f))
-                     (home-directory      user-profile-home-directory)       ; string
-                     (comment             user-profile-comment)              ; string
-                     (password-secret     user-profile-password-secret))     ; symbol（logical name）
+  user-profile?
+  (name user-profile-name) ;string
+  (uid user-profile-uid) ;integer
+  (group user-profile-group) ;string
+  (supplementary-groups user-profile-supplementary-groups) ;list of strings
+  (shell user-profile-shell ;file-like
+         (default #f))
+  (home-directory user-profile-home-directory) ;string
+  (comment user-profile-comment) ;string
+  (password-secret user-profile-password-secret))
+ ; symbol（logical name）
 
 ;; 当前仓库是 root + one primary user 的单用户设计。
 (define %primary-user
-  (user-profile
-   (name "ordchaos")
-   (uid 1000)
-   (group "users")
-   (supplementary-groups '("wheel" "netdev" "kvm"))
-   (home-directory "/home/ordchaos")
-   (comment "序炁")
-   ;; 密码 hash 是 install secret（colocate users/secrets/，
-   ;; 见本目录 user-password.hash.age），
-   ;; 由 installer 在 LUKS 建立后注入目标系统 shadow；这里只保留逻辑名。
-   (password-secret 'primary-user-password)))
+  (user-profile (name "ordchaos")
+                (uid 1000)
+                (group "users")
+                (supplementary-groups '("wheel" "netdev" "kvm"))
+                (home-directory "/home/ordchaos")
+                (comment "序炁")
+                ;; 密码 hash 是 install secret（colocate users/secrets/，
+                ;; 见本目录 user-password.hash.age），
+                ;; 由 installer 在 LUKS 建立后注入目标系统 shadow；这里只保留逻辑名。
+                (password-secret 'primary-user-password)))

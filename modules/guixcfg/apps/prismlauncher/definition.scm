@@ -34,11 +34,10 @@
 ;;; 不含数十 GB 游戏内容。仓库不 seed cfg（dual authority 非法）。
 
 (define-module (guixcfg apps prismlauncher definition)
-               #:use-module (virelith packages prismlauncher)
-               #:use-module (guixcfg apps model)
-               #:use-module (guixcfg system application-persistence)
-               #:export (%prismlauncher
-                         %prismlauncher-desktop-entry))
+  #:use-module (virelith packages prismlauncher)
+  #:use-module (guixcfg apps model)
+  #:use-module (guixcfg system application-persistence)
+  #:export (%prismlauncher %prismlauncher-desktop-entry))
 
 ;; Prism 的 XDG desktop entry 名（virelith 包 share/applications/ 实际
 ;; 构建产物核实）。纯数据常量：供统一 XDG 策略模块引用，本模块不决定
@@ -47,13 +46,12 @@
   "org.prismlauncher.PrismLauncher.desktop")
 
 (define %prismlauncher
-  (application
-   (name 'prismlauncher)
-   (home-packages (list prismlauncher))
-   (persistence
-    (list (application-persistence-rule
-           (name 'data)
-           (backing "prismlauncher/data")
-           (consumer ".local/share/PrismLauncher")
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))))))
+  (application (name 'prismlauncher)
+               (home-packages (list prismlauncher))
+               (persistence (list (application-persistence-rule (name 'data)
+                                                                (backing
+                                                                 "prismlauncher/data")
+                                                                (consumer
+                                                                 ".local/share/PrismLauncher")
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))))))

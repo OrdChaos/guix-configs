@@ -32,25 +32,27 @@
 ;;; 服务注册时的临时 module 里解析），会报 unbound variable。
 
 (define-module (guixcfg services ephemeral-root)
-               #:use-module (guixcfg storage model)
-               #:use-module (guixcfg storage root-generation)
-               #:use-module (guixcfg boot layout)         ; %esp-mount-point
-               #:use-module (guixcfg utils module-closure) ; guixcfg-module-select?
-               #:use-module (gnu services)                 ; simple-service
-               #:use-module (gnu services shepherd)        ; shepherd-service
-               #:use-module (gnu system pam)  ; pam-root-service-type、pam-extension、pam-entry
-               #:use-module (gnu packages linux)           ; btrfs-progs
-               #:use-module (guix gexp)
-               #:use-module (guix modules)                 ; source-module-closure
-               #:export (ephemeral-root-services
-                         ephemeral-root-confirm-program)) ; 测试需要真实执行
+  #:use-module (guixcfg storage model)
+  #:use-module (guixcfg storage root-generation)
+  #:use-module (guixcfg boot layout) ;%esp-mount-point
+  #:use-module (guixcfg utils module-closure) ;guixcfg-module-select?
+  #:use-module (gnu services) ;simple-service
+  #:use-module (gnu services shepherd) ;shepherd-service
+  #:use-module (gnu system pam) ;pam-root-service-type、pam-extension、pam-entry
+  #:use-module (gnu packages linux) ;btrfs-progs
+  #:use-module (guix gexp)
+  #:use-module (guix modules) ;source-module-closure
+  #:export (ephemeral-root-services ephemeral-root-confirm-program))
+ ; 测试需要真实执行
 
 ;; 运行系统上 @persist-system 的挂载点（单一 authority：
 ;; (guixcfg storage model) 的 persist-mount-point——禁止重复 literal）。
-(define %persist-system-mount (persist-mount-point "@persist-system"))
+(define %persist-system-mount
+  (persist-mount-point "@persist-system"))
 
 ;; 清理时临时挂载 Btrfs 顶层的位置。
-(define %btrfs-top-mount "/run/guixcfg-btrfs-top")
+(define %btrfs-top-mount
+  "/run/guixcfg-btrfs-top")
 
 (define (ephemeral-root-confirm-program)
   "confirm 程序：root-state trying→ok + Guix 轴 promote。由 greetd
@@ -59,106 +61,177 @@ close_session 也会执行——门在程序内）。也可人工直接调用（
 PAM_TYPE 时正常工作）。幂等：boot-state 已记录当前 generation 为
 last-good 时跳过 promote——登录路径每次图形登录都会触发本程序，
 不能每次重写 ESP/boot-state。"
-  (program-file
-   "ephemeral-root-confirm"
-   (with-imported-modules
-    (source-module-closure '((guixcfg storage root-generation)
-                             (guixcfg boot boot-state)
-                             (guixcfg boot recovery))
-                           #:select? guixcfg-module-select?)
-    #~(begin
-       (use-modules (guixcfg storage root-generation)
-                    (guixcfg boot boot-state)
-                    (guixcfg boot recovery))
-       ;; pam_exec 在 open_session 与 close_session 都会调用本程序
-       ;; （PAM_TYPE 环境变量区分）——只在 open 时工作。无 PAM_TYPE
-       ;; = 人工/测试直接调用。
-       (let ((pam-type (getenv "PAM_TYPE")))
-         (when (and pam-type (not (string=? pam-type "open_session")))
-           (exit 0)))
-       ;; Btrfs 轴：current root generation → last-good。
-       (let ((path (state-file-path #$%persist-system-mount)))
-         (when (file-exists? path)
-           (let ((state (read-state path)))
-             (when (eq? (root-state-boot-status state) 'trying)
-               (write-state! path (confirm-boot state))
-               (format #t "ephemeral-root: @root-~a confirmed as last-good~%"
-                       (root-state-current-generation state))))))
-       ;; Guix 轴：boot-state 注册表记录的 last-good generation
-       ;; （v2 alist / v1 整数兼容；缺失为 #f）。
-       (define (recorded-last-good-generation)
-         (let ((alist (read-boot-state-alist %boot-states-path)))
-           (and alist
-                (let ((lg (assq-ref alist 'last-good)))
-                  (if (and (list? lg) (assq 'generation lg))
-                    (assq-ref lg 'generation)
-                    lg)))))
-       ;; 部署成功 ≠ 启动成功 ≠ 登录可用：promote Recovery
-       ;; candidate（验证 identity → GC root → artifact → 菜单）并
-       ;; 记录 Boot State 的 last-good（Guix 轴，最终 commit）。
-       (let ((n (current-system-generation)))
-         (cond
-           ((not n)
-            (format #t "boot-state: cannot determine current Guix generation; skipping~%"))
-           ((equal? n (recorded-last-good-generation))
-            (format #t "boot-state: Guix generation ~a already last-good; skipping~%" n))
-           (else
-            (promote-recovery! #$%esp-mount-point n (current-kernel-command-line))
-            (format #t "boot-state: Guix generation ~a confirmed as last-good~%" n))))))))
+  (program-file "ephemeral-root-confirm"
+                (with-imported-modules (source-module-closure '((guixcfg
+                                                                 storage
+                                                                 root-generation)
+                                                                (guixcfg boot
+                                                                 boot-state)
+                                                                (guixcfg boot
+                                                                 recovery))
+                                        #:select? guixcfg-module-select?)
+                                       #~(begin
+                                           (use-modules (guixcfg storage
+                                                         root-generation)
+                                                        (guixcfg boot
+                                                                 boot-state)
+                                                        (guixcfg boot recovery))
+                                           ;; pam_exec 在 open_session 与 close_session 都会调用本程序
+                                           ;; （PAM_TYPE 环境变量区分）——只在 open 时工作。无 PAM_TYPE
+                                           ;; = 人工/测试直接调用。
+                                           (let ((pam-type (getenv "PAM_TYPE")))
+                                             (when (and pam-type
+                                                        (not (string=?
+                                                              pam-type
+                                                              "open_session")))
+                                               (exit 0)))
+                                           ;; Btrfs 轴：current root generation → last-good。
+                                           (let ((path (state-file-path #$%persist-system-mount)))
+                                             (when (file-exists? path)
+                                               (let ((state (read-state path)))
+                                                 (when (eq? (root-state-boot-status
+                                                             state)
+                                                            'trying)
+                                                   (write-state! path
+                                                                 (confirm-boot
+                                                                  state))
+                                                   (format #t
+                                                    "ephemeral-root: @root-~a confirmed as last-good~%"
+                                                    (root-state-current-generation
+                                                     state))))))
+                                           ;; Guix 轴：boot-state 注册表记录的 last-good generation
+                                           ;; （v2 alist / v1 整数兼容；缺失为 #f）。
+                                           (define (recorded-last-good-generation)
+                                             (let ((alist (read-boot-state-alist
+                                                           %boot-states-path)))
+                                               (and alist
+                                                    (let ((lg (assq-ref alist
+                                                                        'last-good)))
+                                                      (if (and (list? lg)
+                                                               (assq 'generation
+                                                                     lg))
+                                                          (assq-ref lg
+                                                                    'generation)
+                                                          lg)))))
+                                           ;; 部署成功 ≠ 启动成功 ≠ 登录可用：promote Recovery
+                                           ;; candidate（验证 identity → GC root → artifact → 菜单）并
+                                           ;; 记录 Boot State 的 last-good（Guix 轴，最终 commit）。
+                                           (let ((n (current-system-generation)))
+                                             (cond
+                                               ((not n)
+                                                (format #t
+                                                 "boot-state: cannot determine current Guix generation; skipping~%"))
+                                               ((equal? n
+                                                        (recorded-last-good-generation))
+                                                (format #t
+                                                 "boot-state: Guix generation ~a already last-good; skipping~%"
+                                                 n))
+                                               (else (promote-recovery! #$%esp-mount-point
+                                                                        n
+                                                                        (current-kernel-command-line))
+                                                     (format #t
+                                                      "boot-state: Guix generation ~a confirmed as last-good~%"
+                                                      n))))))))
 
 (define (ephemeral-root-cleanup-program keep)
   "KEEP 是保留的旧 root generation 数量（host policy）。"
-  (program-file
-   "ephemeral-root-cleanup"
-   ;; closure seeds 与 runtime use-modules 对应：srfi-1（filter-map）显式
-   ;; 列出，不依赖 guix build utils 传递；ice-9 ftw 为 guile 自带模块。
-   (with-imported-modules
-    (source-module-closure '((guixcfg storage root-generation)
-                             (guix build syscalls)  ; mount、umount
-                             (guix build utils)   ; mkdir-p
-                             (srfi srfi-1))      ; filter-map
-                           #:select? guixcfg-module-select?)
-    #~(begin
-       (use-modules (guixcfg storage root-generation)
-                    (guixcfg storage model)
-                    (guix build syscalls)
-                    ((guix build utils) #:hide (delete))  ; mkdir-p
-                    (srfi srfi-1)       ; filter-map
-                    (ice-9 ftw))        ; scandir（不在 Guile core，在 ftw 里）
-       (let ((state-path (state-file-path #$%persist-system-mount))
-             (top #$%btrfs-top-mount)
-             (mapper #$%luks-mapper-path)
-             (btrfs (string-append #$btrfs-progs "/bin/btrfs")))
-         (if (not (file-exists? state-path))
-           (format #t "ephemeral-root: state file missing; skipping cleanup~%")
-           (let ((state (read-state state-path)))
-             (let ((mounted? #f))
-               (dynamic-wind
-                (lambda ()
-                  (mkdir-p top)
-                  (mount mapper top "btrfs" 0 "subvolid=5")
-                  (set! mounted? #t))
-                (lambda ()
-                  (let* ((names (or (scandir top) '()))
-                         (existing (filter-map parse-root-generation names))
-                         (victims (generations-to-delete existing state
-                                                         #$keep)))
-                    ;; invoke 在任意删除失败时立即抛错；只有全部成功后才
-                    ;; prune metadata，状态不会谎称仍存在的子卷已被删除。
-                    (for-each
-                     (lambda (n)
-                       (format #t "ephemeral-root: deleting old generation ~a~%"
-                               (root-generation-name n))
-                       (invoke btrfs "subvolume" "delete"
-                               (string-append top "/"
-                                              (root-generation-name n))))
-                     victims)
-                    (let ((remaining (lset-difference = existing victims)))
-                      (write-state! state-path
-                                    (prune-created-at state remaining)))))
-                (lambda ()
-                  (when mounted?
-                    (umount top))))))))))))
+  (program-file "ephemeral-root-cleanup"
+                ;; closure seeds 与 runtime use-modules 对应：srfi-1（filter-map）显式
+                ;; 列出，不依赖 guix build utils 传递；ice-9 ftw 为 guile 自带模块。
+                (with-imported-modules (source-module-closure '((guixcfg
+                                                                 storage
+                                                                 root-generation)
+                                                                (guix build
+                                                                 syscalls) ;mount、umount
+                                                                (guix build
+                                                                      utils) ;mkdir-p
+                                                                (srfi srfi-1)) ;filter-map
+                                        #:select? guixcfg-module-select?)
+                                       #~(begin
+                                           (use-modules (guixcfg storage
+                                                         root-generation)
+                                                        (guixcfg storage model)
+                                                        (guix build syscalls)
+                                                        ((guix build utils)
+                                                         #:hide (delete)) ;mkdir-p
+                                                        (srfi srfi-1) ;filter-map
+                                                        (ice-9 ftw)) ;scandir（不在 Guile core，在 ftw 里）
+                                           (let ((state-path (state-file-path #$%persist-system-mount))
+                                                 (top #$%btrfs-top-mount)
+                                                 (mapper #$%luks-mapper-path)
+                                                 (btrfs (string-append #$btrfs-progs
+                                                         "/bin/btrfs")))
+                                             (if (not (file-exists? state-path))
+                                                 (format #t
+                                                  "ephemeral-root: state file missing; skipping cleanup~%")
+                                                 (let ((state (read-state
+                                                               state-path)))
+                                                   (let ((mounted? #f))
+                                                     (dynamic-wind (lambda ()
+                                                                     (mkdir-p
+                                                                      top)
+                                                                     (mount
+                                                                      mapper
+                                                                      top
+                                                                      "btrfs"
+                                                                      0
+                                                                      "subvolid=5")
+                                                                     (set!
+                                                                      mounted?
+                                                                      #t))
+                                                                   (lambda ()
+                                                                     (let* ((names
+                                                                             (or
+                                                                              (scandir
+                                                                               top)
+                                                                              '()))
+                                                                            (existing
+                                                                             (filter-map
+                                                                              parse-root-generation
+                                                                              names))
+                                                                            (victims
+                                                                             (generations-to-delete
+                                                                              existing
+                                                                              state
+                                                                              #$keep)))
+                                                                       ;; invoke 在任意删除失败时立即抛错；只有全部成功后才
+                                                                       ;; prune metadata，状态不会谎称仍存在的子卷已被删除。
+                                                                       (for-each (lambda 
+                                                                                         (n)
+                                                                                   
+                                                                                   (format
+                                                                                    #t
+                                                                                    "ephemeral-root: deleting old generation ~a~%"
+                                                                                    
+                                                                                    (root-generation-name
+                                                                                     n))
+                                                                                   
+                                                                                   (invoke
+                                                                                    btrfs
+                                                                                    "subvolume"
+                                                                                    "delete"
+                                                                                    
+                                                                                    (string-append
+                                                                                     top
+                                                                                     "/"
+                                                                                     
+                                                                                     (root-generation-name
+                                                                                      n))))
+                                                                        victims)
+                                                                       (let ((remaining
+                                                                              (lset-difference
+                                                                               =
+                                                                               existing
+                                                                               victims)))
+                                                                         (write-state!
+                                                                          state-path
+                                                                          (prune-created-at
+                                                                           state
+                                                                           remaining)))))
+                                                                   (lambda ()
+                                                                     (when mounted?
+                                                                       (umount
+                                                                        top))))))))))))
 
 ;; greetd PAM session hook：成功图形登录后才确认 last-good。
 ;; pam-extension transformer（login-gate 同款横切机制）只作用
@@ -167,35 +240,38 @@ last-good 时跳过 promote——登录路径每次图形登录都会触发本�
 ;; 失败不阻塞会话（confirm 幂等，下次登录重试）。
 (define (ephemeral-root-confirm-pam-service)
   (simple-service 'ephemeral-root-confirm-pam pam-root-service-type
-                  (list (pam-extension
-                         (transformer
-                          (lambda (pam)
-                            (if (string=? (pam-service-name pam) "greetd")
-                              (pam-service
-                               (inherit pam)
-                               (session
-                                (append
-                                 (pam-service-session pam)
-                                 (list
-                                  (pam-entry
-                                   (control "optional")
-                                   (module "pam_exec.so")
-                                   (arguments
-                                    (list
-                                     (ephemeral-root-confirm-program))))))))
-                              pam)))))))
+                  (list (pam-extension (transformer (lambda (pam)
+                                                      (if (string=? (pam-service-name
+                                                                     pam)
+                                                                    "greetd")
+                                                          (pam-service (inherit
+                                                                        pam)
+                                                                       (session
+                                                                        (append
+                                                                         (pam-service-session
+                                                                          pam)
+                                                                         (list
+                                                                          (pam-entry
+                                                                           (control
+                                                                            "optional")
+                                                                           (module
+                                                                            "pam_exec.so")
+                                                                           (arguments
+                                                                            (list
+                                                                             (ephemeral-root-confirm-program))))))))
+                                                          pam)))))))
 
 (define* (one-shot-program-service name program documentation
                                    #:key (requirement '(user-processes)))
-         "运行 PROGRAM 一次的 shepherd 服务。"
-         (shepherd-service
-          (provision (list name))
-          (requirement requirement)
-          (one-shot? #t)
-          (respawn? #f)                 ; 一次性语义，不 respawn
-          (documentation documentation)
-          (start #~(lambda () (zero? (system* #$program))))
-          (stop #~(const #f))))
+  "运行 PROGRAM 一次的 shepherd 服务。"
+  (shepherd-service (provision (list name))
+                    (requirement requirement)
+                    (one-shot? #t)
+                    (respawn? #f) ;一次性语义，不 respawn
+                    (documentation documentation)
+                    (start #~(lambda ()
+                               (zero? (system* #$program))))
+                    (stop #~(const #f))))
 
 (define (ephemeral-root-services keep)
   "无状态根的全部用户态服务。KEEP 是保留的旧 generation 数量。
@@ -205,11 +281,8 @@ shepherd one-shot，锚定 persistent-state-ready（状态文件所在子卷
 文件读写竞争；此前 confirm/cleanup 同在 user-processes 的先后序
 约束随 confirm 移走而消失）。"
   (list (ephemeral-root-confirm-pam-service)
-        (simple-service 'ephemeral-root-cleanup
-                        shepherd-root-service-type
-                        (list (one-shot-program-service
-                               'ephemeral-root-cleanup
+        (simple-service 'ephemeral-root-cleanup shepherd-root-service-type
+                        (list (one-shot-program-service 'ephemeral-root-cleanup
                                (ephemeral-root-cleanup-program keep)
-                               "Delete old @root-N subvolumes beyond the \
-configured retention."
+                               "Delete old @root-N subvolumes beyond the configured retention."
                                #:requirement '(persistent-state-ready))))))

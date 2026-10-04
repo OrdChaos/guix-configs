@@ -24,60 +24,82 @@
 
 (test-group "target device validation (docs/architecture/storage.md)"
             (test-assert "good device passes all checks"
-                         (null? (validate-target %good-facts %vm-storage-policy)))
-            
+                         (null? (validate-target %good-facts
+                                                 %vm-storage-policy)))
+
             (test-equal "unresolvable by-id rejected"
                         '(resolvable-by-id)
-                        (failure-names (validate-target (device-facts (inherit %good-facts)
-                                                                      (by-id #f))
+                        (failure-names (validate-target (device-facts (inherit
+                                                                       %good-facts)
+                                                                      (by-id
+                                                                             #f))
                                                         %vm-storage-policy)))
-            
+
             (test-equal "partition device rejected"
                         '(whole-disk)
-                        (failure-names (validate-target (device-facts (inherit %good-facts)
-                                                                      (path "/dev/vda1")
-                                                                      (type "part")
-                                                                      (partition? #t))
+                        (failure-names (validate-target (device-facts (inherit
+                                                                       %good-facts)
+                                                                      (path
+                                                                       "/dev/vda1")
+                                                                      (type
+                                                                       "part")
+                                                                      (partition?
+                                                                       #t))
                                                         %vm-storage-policy)))
-            
+
             (test-equal "non-partition block device rejected unless TYPE=disk"
-                        '(whole-disk)
-                        (failure-names (validate-target (device-facts (inherit %good-facts)
-                                                                      (path "/dev/sr0")
-                                                                      (type "rom"))
-                                                        %vm-storage-policy)))
-            
+             '(whole-disk)
+             (failure-names (validate-target (device-facts (inherit
+                                                            %good-facts)
+                                                           (path "/dev/sr0")
+                                                           (type "rom"))
+                                             %vm-storage-policy)))
+
             (test-equal "mounted device rejected"
                         '(not-mounted)
-                        (failure-names (validate-target (device-facts (inherit %good-facts)
-                                                                      (mounted? #t))
+                        (failure-names (validate-target (device-facts (inherit
+                                                                       %good-facts)
+                                                                      (mounted?
+                                                                       #t))
                                                         %vm-storage-policy)))
-            
+
             (test-equal "current system disk rejected"
                         '(not-system-disk)
-                        (failure-names (validate-target (device-facts (inherit %good-facts)
-                                                                      (system-disk? #t))
+                        (failure-names (validate-target (device-facts (inherit
+                                                                       %good-facts)
+                                                                      (system-disk?
+                                                                       #t))
                                                         %vm-storage-policy)))
-            
+
             (test-equal "LiveCD media rejected"
                         '(not-live-media)
-                        (failure-names (validate-target (device-facts (inherit %good-facts)
-                                                                      (live-media? #t))
+                        (failure-names (validate-target (device-facts (inherit
+                                                                       %good-facts)
+                                                                      (live-media?
+                                                                       #t))
                                                         %vm-storage-policy)))
-            
+
             (test-equal "undersized device rejected"
                         '(sufficient-size)
-                        (failure-names (validate-target (device-facts (inherit %good-facts)
-                                                                      (size (gib 8)))
+                        (failure-names (validate-target (device-facts (inherit
+                                                                       %good-facts)
+                                                                      (size (gib
+                                                                             8)))
                                                         %vm-storage-policy)))
-            
+
             (test-assert "multiple violations reported together"
-                         (let ((failures (validate-target (device-facts (inherit %good-facts)
-                                                                        (by-id #f)
-                                                                        (type "part")
-                                                                        (partition? #t)
-                                                                        (mounted? #t)
-                                                                        (size (gib 4)))
+                         (let ((failures (validate-target (device-facts (inherit
+                                                                         %good-facts)
+                                                                        (by-id
+                                                                         #f)
+                                                                        (type
+                                                                         "part")
+                                                                        (partition?
+                                                                         #t)
+                                                                        (mounted?
+                                                                         #t)
+                                                                        (size (gib
+                                                                               4)))
                                                           %vm-storage-policy)))
                            (>= (length failures) 4))))
 
@@ -87,25 +109,34 @@
             (test-assert "built-in Laptop policy valid"
                          (null? (validate-policy
                                  %lenovo-legion-y7000p-storage-policy)))
-            
+
             (test-equal "ESP outside 2-4 GiB range"
                         '(esp-size-in-range)
-                        (failure-names (validate-policy
-                                        (host-storage-policy (inherit %vm-storage-policy)
-                                                             (esp-size (gib 1))))))
-            
+                        (failure-names (validate-policy (host-storage-policy (inherit
+                                                                              %vm-storage-policy)
+                                                                             (esp-size
+                                                                              (gib
+                                                                               1))))))
+
             (test-equal "keep generations below 2"
                         '(keep-at-least-two)
-                        (failure-names (validate-policy
-                                        (host-storage-policy (inherit %vm-storage-policy)
-                                                             (keep-root-generations 1)))))
-            
+                        (failure-names (validate-policy (host-storage-policy (inherit
+                                                                              %vm-storage-policy)
+                                                                             (keep-root-generations
+                                                                              1)))))
+
             (test-equal "disk minimum too small for layout"
                         '(disk-fits-layout)
-                        (failure-names (validate-policy
-                                        (host-storage-policy (inherit %vm-storage-policy)
-                                                             (esp-size (gib 4))
-                                                             (min-disk-size (gib 10))
-                                                             (swapfile-size (gib 8)))))))
+                        (failure-names (validate-policy (host-storage-policy (inherit
+                                                                              %vm-storage-policy)
+                                                                             (esp-size
+                                                                              (gib
+                                                                               4))
+                                                                             (min-disk-size
+                                                                              (gib
+                                                                               10))
+                                                                             (swapfile-size
+                                                                              (gib
+                                                                               8)))))))
 
 (test-end)

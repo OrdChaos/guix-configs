@@ -17,11 +17,15 @@
 (test-begin "network-manager-persistence")
 
 (define (mount-at os path)
-  (find (lambda (fs) (string=? path (file-system-mount-point fs)))
+  (find (lambda (fs)
+          (string=? path
+                    (file-system-mount-point fs)))
         (operating-system-file-systems os)))
 
-(define %consumer %network-manager-system-connections-directory)
-(define %backing %network-manager-connections-backing-directory)
+(define %consumer
+  %network-manager-system-connections-directory)
+(define %backing
+  %network-manager-connections-backing-directory)
 (define %lenovo-legion-y7000p-mount
   (mount-at %lenovo-legion-y7000p-os %consumer))
 
@@ -41,13 +45,10 @@
 (test-assert "VM does not persist NetworkManager profiles"
              (not (mount-at %vm-os %consumer)))
 (test-assert "volatile NetworkManager state is not persisted"
-             (not (mount-at %lenovo-legion-y7000p-os
-                            "/var/lib/NetworkManager")))
+             (not (mount-at %lenovo-legion-y7000p-os "/var/lib/NetworkManager")))
 
 (define %ownership-source
-  (object->string
-   (gexp->approximate-sexp
-    (network-manager-connections-ownership-activation))))
+  (object->string (gexp->approximate-sexp (network-manager-connections-ownership-activation))))
 
 (test-assert "ownership activation covers backing and consumer"
              (and (string-contains %ownership-source %backing)
@@ -63,25 +64,28 @@
                   (not (string-contains %ownership-source "chmod-recursive"))))
 
 (define %shepherd-services
-  (shepherd-configuration-services
-   (service-value
-    (fold-services (operating-system-services %lenovo-legion-y7000p-os)
-                   #:target-type shepherd-root-service-type))))
+  (shepherd-configuration-services (service-value (fold-services (operating-system-services
+                                                                  %lenovo-legion-y7000p-os)
+                                                   #:target-type
+                                                   shepherd-root-service-type))))
 
 (define (service-providing provision)
   (find (lambda (service)
-          (memq provision (shepherd-service-provision service)))
-        %shepherd-services))
+          (memq provision
+                (shepherd-service-provision service))) %shepherd-services))
 
-(define %network-manager (service-providing 'NetworkManager))
-(define %user-processes (service-providing 'user-processes))
-(define %file-systems (service-providing 'file-systems))
+(define %network-manager
+  (service-providing 'NetworkManager))
+(define %user-processes
+  (service-providing 'user-processes))
+(define %file-systems
+  (service-providing 'file-systems))
 (define %connection-mount
-  (service-providing
-   'file-system-/etc/NetworkManager/system-connections))
+  (service-providing 'file-system-/etc/NetworkManager/system-connections))
 
 (test-assert "ordering services are present"
-             (and %network-manager %user-processes %file-systems %connection-mount))
+             (and %network-manager %user-processes %file-systems
+                  %connection-mount))
 (test-assert "NetworkManager starts after user-processes"
              (memq 'user-processes
                    (shepherd-service-requirement %network-manager)))

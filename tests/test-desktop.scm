@@ -27,26 +27,26 @@
 
 (use-modules (guixcfg hosts vm)
              (guixcfg system desktop)
-             (guixcfg system common) ; %common-services（PK1）
+             (guixcfg system common) ;%common-services（PK1）
              (guixcfg system graphics nvidia)
              (guixcfg system kernel-platform)
-             (guixcfg system machine-state-persistence) ; valid-machine-state-persistence-rule?（G3）
-             (guixcfg system noctalia-greeter) ; %noctalia-greeter-persistence-rule、%noctalia-greeter-state-dir（G1b/G3）
-             (guixcfg users user)    ; %primary-user（mount point 推导）
-             (virelith services noctalia-greeter) ; noctalia-greeter-service-type、noctalia-greeter-configuration-state-directory（G1b）
+             (guixcfg system machine-state-persistence) ;valid-machine-state-persistence-rule?（G3）
+             (guixcfg system noctalia-greeter) ;%noctalia-greeter-persistence-rule、%noctalia-greeter-state-dir（G1b/G3）
+             (guixcfg users user) ;%primary-user（mount point 推导）
+             (virelith services noctalia-greeter) ;noctalia-greeter-service-type、noctalia-greeter-configuration-state-directory（G1b）
              (gnu services)
-             (gnu services base)   ; greetd-service-type、mingetty-service-type
-             (gnu services desktop) ; elogind-service-type
-             (gnu services shepherd) ; shepherd-root-service-type
-             (gnu services dbus)    ; polkit-service-type（PK：polkit authority）
-             (gnu system)          ; operating-system-*
-             (gnu system file-systems)  ; file-system-device、file-system-mount-point
-             (gnu system pam)      ; unix-pam-service、pam-entry-module/arguments
-             (guix gexp)           ; program-file?（G1）
-             (guix packages)       ; package-name
-             (nongnu packages linux) ; linux（nonguix）
+             (gnu services base) ;greetd-service-type、mingetty-service-type
+             (gnu services desktop) ;elogind-service-type
+             (gnu services shepherd) ;shepherd-root-service-type
+             (gnu services dbus) ;polkit-service-type（PK：polkit authority）
+             (gnu system) ;operating-system-*
+             (gnu system file-systems) ;file-system-device、file-system-mount-point
+             (gnu system pam) ;unix-pam-service、pam-entry-module/arguments
+             (guix gexp) ;program-file?（G1）
+             (guix packages) ;package-name
+             (nongnu packages linux) ;linux（nonguix）
              (ice-9 rdelim)
-             (guix build utils)       ; find-files（PK2 rules.d 扫描）
+             (guix build utils) ;find-files（PK2 rules.d 扫描）
              (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64))
@@ -60,11 +60,11 @@
 
 (define (all-shepherd-services)
   "%vm-os 的 shepherd root 服务列表。"
-  (service-value
-   (os-service shepherd-root-service-type)))
+  (service-value (os-service shepherd-root-service-type)))
 
 ;; greetd 记录访问器未从 (gnu services base) 导出，经模块内绑定访问。
-(define greetd-terminals (@ (gnu services base) greetd-terminals))
+(define greetd-terminals
+  (@ (gnu services base) greetd-terminals))
 (define greetd-allow-empty-passwords?
   (@ (gnu services base) greetd-allow-empty-passwords?))
 (define greetd-terminal-vt
@@ -92,7 +92,8 @@
 
 (define (os-services-of-type type)
   "扫描 %vm-os 的 services 列表（不 fold——mingetty 等多实例类型）。"
-  (filter (lambda (svc) (eq? (service-kind svc) type))
+  (filter (lambda (svc)
+            (eq? (service-kind svc) type))
           (operating-system-services %vm-os)))
 
 (test-begin "desktop")
@@ -102,7 +103,8 @@
              (let ((cfg (service-value (os-service greetd-service-type))))
                (and (pair? (greetd-terminals cfg))
                     (any (lambda (tc)
-                           (string=? "1" (greetd-terminal-vt tc)))
+                           (string=? "1"
+                                     (greetd-terminal-vt tc)))
                          (greetd-terminals cfg)))))
 
 ;; D1b：greetd 会话不得在官方 wrapper 之前 source profiles——
@@ -112,43 +114,46 @@
 ;; settings-only（FileChooser 不可用，loupe "no interface"）。
 ;; 契约：source-profile? #f，profile 改由 bash -l 自行 source
 ;; （desktop.scm 头注释 "source-profile? #f" 审计）。
-(test-assert "D1b: greetd session does not pre-source profiles (XDG_SESSION_TYPE reaches dbus)"
-             (let* ((cfg (service-value (os-service greetd-service-type)))
-                    (tc (find (lambda (tc)
-                                (string=? "1" (greetd-terminal-vt tc)))
-                              (greetd-terminals cfg))))
-               (not (greetd-source-profile? tc))))
+(test-assert
+ "D1b: greetd session does not pre-source profiles (XDG_SESSION_TYPE reaches dbus)"
+ (let* ((cfg (service-value (os-service greetd-service-type)))
+        (tc (find (lambda (tc)
+                    (string=? "1"
+                              (greetd-terminal-vt tc)))
+                  (greetd-terminals cfg))))
+   (not (greetd-source-profile? tc))))
 
 ;; ── D2：greetd gated by interactive-session-ready ──────────
 (test-assert "D2: greetd tty1 requires interactive-session-ready"
              (let* ((cfg (service-value (os-service greetd-service-type)))
                     (tc (find (lambda (tc)
-                                (string=? "1" (greetd-terminal-vt tc)))
+                                (string=? "1"
+                                          (greetd-terminal-vt tc)))
                               (greetd-terminals cfg))))
                (member 'interactive-session-ready
-                       ((@ (gnu services base) greetd-extra-shepherd-requirement)
+                       ((@ (gnu services base)
+                           greetd-extra-shepherd-requirement)
                         tc))))
 
 ;; ── D3：tty1 归 greetd，mingetty fallback 在 tty2+ 且 gated ──
 (test-assert "D3: no mingetty on tty1 (greetd owns it)"
              (not (any (lambda (svc)
                          (string=? "tty1"
-                                   (mingetty-configuration-tty
-                                    (service-value svc))))
+                                   (mingetty-configuration-tty (service-value
+                                                                svc))))
                        (os-services-of-type mingetty-service-type))))
 
 (test-assert "D3: mingetty fallback present on tty2"
              (any (lambda (svc)
                     (string=? "tty2"
-                              (mingetty-configuration-tty
-                               (service-value svc))))
+                              (mingetty-configuration-tty (service-value svc))))
                   (os-services-of-type mingetty-service-type)))
 
 (test-assert "D3: fallback mingetty gated by interactive-session-ready"
              (any (lambda (svc)
                     (member 'interactive-session-ready
-                            (mingetty-configuration-shepherd-requirement
-                             (service-value svc))))
+                            (mingetty-configuration-shepherd-requirement (service-value
+                                                                          svc))))
                   (os-services-of-type mingetty-service-type)))
 
 ;; ── D4：无 autologin、空密码禁用 ───────────────────────────
@@ -160,16 +165,18 @@
                       (greetd-terminals cfg))))
 
 (test-assert "D4: empty passwords disabled"
-             (not (greetd-allow-empty-passwords?
-                   (service-value (os-service greetd-service-type)))))
+             (not (greetd-allow-empty-passwords? (service-value (os-service
+                                                                 greetd-service-type)))))
 
 ;; ── LG：last-good promote 时机（成功图形登录后）─────────────
 ;; pam-configuration 访问器未导出，经模块内绑定（同 GK 组
 ;; test-gnome-keyring 的模式）。
 (define pam-configuration-services
-  (module-ref (resolve-module '(gnu system pam)) 'pam-configuration-services))
+  (module-ref (resolve-module '(gnu system pam))
+              'pam-configuration-services))
 (define pam-configuration-transformers
-  (module-ref (resolve-module '(gnu system pam)) 'pam-configuration-transformers))
+  (module-ref (resolve-module '(gnu system pam))
+              'pam-configuration-transformers))
 
 (define %pam-cfg
   (service-value (fold-services (operating-system-services %vm-os)
@@ -178,10 +185,13 @@
 (define (final-pam-service name)
   "应用全部 transformers 后的 NAME PAM service（/etc/pam.d/NAME
 的实际内容）。"
-  (let ((svc (find (lambda (s) (string=? name (pam-service-name s)))
+  (let ((svc (find (lambda (s)
+                     (string=? name
+                               (pam-service-name s)))
                    (pam-configuration-services %pam-cfg))))
     (and svc
-         ((apply compose identity (pam-configuration-transformers %pam-cfg))
+         ((apply compose identity
+                 (pam-configuration-transformers %pam-cfg))
           svc))))
 
 (define (pam-exec-confirm-entry? entry)
@@ -189,8 +199,7 @@
   (and (string-contains (object->string (pam-entry-module entry))
                         "pam_exec.so")
        (any (lambda (arg)
-              (string-contains (object->string arg)
-                               "ephemeral-root-confirm"))
+              (string-contains (object->string arg) "ephemeral-root-confirm"))
             (pam-entry-arguments entry))))
 
 (test-assert "LG1: greetd PAM session runs confirm via pam_exec"
@@ -211,8 +220,7 @@
              (not (any (lambda (svc)
                          (member 'ephemeral-root-confirm
                                  (shepherd-service-provision svc)))
-                       (shepherd-configuration-services
-                        (all-shepherd-services)))))
+                       (shepherd-configuration-services (all-shepherd-services)))))
 
 (test-assert "LG2: cleanup anchored at persistent-state-ready (pre-login)"
              (any (lambda (svc)
@@ -220,8 +228,7 @@
                                  (shepherd-service-provision svc))
                          (equal? '(persistent-state-ready)
                                  (shepherd-service-requirement svc))))
-                  (shepherd-configuration-services
-                   (all-shepherd-services))))
+                  (shepherd-configuration-services (all-shepherd-services))))
 
 ;; ── D5：elogind 仍是 session authority ─────────────────────
 (test-assert "D5: elogind service present in %vm-os"
@@ -235,7 +242,8 @@
 ;; 侧栏不出现卷（2026-09 实测，desktop.scm 文件头"可移动介质"）。
 ;; 断言语义：恰一个官方 udisks 服务实例（不重复声明）。
 (test-assert "D9: exactly one udisks2 service (removable media backend)"
-             (= 1 (length (os-services-of-type udisks-service-type))))
+             (= 1
+                (length (os-services-of-type udisks-service-type))))
 
 ;; ── HOME provenance（exact pinned source audit）────────────
 ;; 契约（desktop.scm 头注释 + docs/architecture/graphics.md）：
@@ -276,30 +284,33 @@
 (define (tty1-terminal)
   "tty1 greetd terminal 配置记录。"
   (let ((cfg (service-value (os-service greetd-service-type))))
-    (find (lambda (tc) (string=? "1" (greetd-terminal-vt tc)))
+    (find (lambda (tc)
+            (string=? "1"
+                      (greetd-terminal-vt tc)))
           (greetd-terminals cfg))))
 
-(test-assert "G1: default-session-command is the channel greetd-noctalia-session helper"
-             (let ((cmd (greetd-default-session-command (tty1-terminal))))
-               ;; channel helper = program-file wrapper（非裸
-               ;; file-append 直接启动 upstream script；wrapper 以
-               ;; 真实 script 路径为 argv0 exec——$0 语义保留）。
-               (and (program-file? cmd)
-                    (not (greetd-agreety-session? cmd)))))
+(test-assert
+ "G1: default-session-command is the channel greetd-noctalia-session helper"
+ (let ((cmd (greetd-default-session-command (tty1-terminal))))
+   ;; channel helper = program-file wrapper（非裸
+   ;; file-append 直接启动 upstream script；wrapper 以
+   ;; 真实 script 路径为 argv0 exec——$0 语义保留）。
+   (and (program-file? cmd)
+        (not (greetd-agreety-session? cmd)))))
 
-(test-assert "G1: helper is the noctalia-greeter-session wrapper (channel entry point)"
-             ;; helper 内部以真实 script 路径为 argv0 exec 属 channel
-             ;; 实现（构建产物中验证）；配置侧断言入口身份 = channel
-             ;; wrapper，而非裸 file-append / agreety。
-             (let ((cmd (greetd-default-session-command (tty1-terminal))))
-               (and (program-file? cmd)
-                    (string-contains (program-file-name cmd)
-                                     "noctalia-greeter-session"))))
+(test-assert
+ "G1: helper is the noctalia-greeter-session wrapper (channel entry point)"
+ ;; helper 内部以真实 script 路径为 argv0 exec 属 channel
+ ;; 实现（构建产物中验证）；配置侧断言入口身份 = channel
+ ;; wrapper，而非裸 file-append / agreety。
+ (let ((cmd (greetd-default-session-command (tty1-terminal))))
+   (and (program-file? cmd)
+        (string-contains (program-file-name cmd) "noctalia-greeter-session"))))
 
-(test-assert "G1b: noctalia-greeter-service-type instantiated (channel integration)"
-             (let ((cfg (os-service noctalia-greeter-service-type)))
-               (and cfg #t)))
-
+(test-assert
+ "G1b: noctalia-greeter-service-type instantiated (channel integration)"
+ (let ((cfg (os-service noctalia-greeter-service-type)))
+   (and cfg #t)))
 
 (test-assert "G2: system profile carries the repo-owned session data package"
              (let* ((folded (fold-services (operating-system-services %vm-os)
@@ -312,9 +323,8 @@
              (any (lambda (fs)
                     (and (string=? "/persist/system/state/noctalia-greeter"
                                    (file-system-device fs))
-                         (string=?
-                          "/var/lib/noctalia-greeter"
-                          (file-system-mount-point fs))))
+                         (string=? "/var/lib/noctalia-greeter"
+                                   (file-system-mount-point fs))))
                   (operating-system-file-systems %vm-os)))
 
 (test-assert "G3: greeter persistence rule passes machine-state validation"
@@ -326,37 +336,41 @@
                                            #:login-uid? #t
                                            #:allow-empty-passwords? #f))
                     (env-entry (find (lambda (e)
-                                       (string-contains
-                                        (pam-entry-module e) "pam_env"))
+                                       (string-contains (pam-entry-module e)
+                                                        "pam_env"))
                                      (pam-service-session pam))))
                (and env-entry
                     (null? (pam-entry-arguments env-entry)))))
 
 (test-assert "H4: default session runs as the greeter-only user"
-             (string=? "greeter" (greetd-default-session-user (tty1-terminal))))
+             (string=? "greeter"
+                       (greetd-default-session-user (tty1-terminal))))
 
 ;; ── D8：application persistence production wiring（mpv 第一个
 ;;     真实 rule：host assembly 消费 applications-persistence）──
 (test-assert "D8: mpv state bind mount declared in %vm-os"
              (any (lambda (fs)
-                    (and (string=?
-                          (string-append (user-profile-home-directory
-                                          %primary-user)
-                                         "/.local/state/mpv")
-                          (file-system-mount-point fs))
+                    (and (string=? (string-append (user-profile-home-directory
+                                                   %primary-user)
+                                                  "/.local/state/mpv")
+                                   (file-system-mount-point fs))
                          (string=? "/persist/data-app/mpv/state"
                                    (file-system-device fs))))
                   (operating-system-file-systems %vm-os)))
 
-(test-assert "D8: application-persistence activation service present in %vm-os"
-             (any (lambda (svc)
-                    (eq? 'application-persistence
-                         (service-type-name (service-kind svc))))
-                  (operating-system-services %vm-os)))
+(test-assert
+ "D8: application-persistence activation service present in %vm-os"
+ (any (lambda (svc)
+        (eq? 'application-persistence
+             (service-type-name (service-kind svc))))
+      (operating-system-services %vm-os)))
 
 ;; ── NV1：NVIDIA adapter 默认 disabled/identity ─────────────
-(test-assert "NV1: disabled path is identity (VM / Intel-only machines unaffected)"
-             (eq? %vm-os (nvidia-system-transformation %vm-os #:enabled? #f)))
+(test-assert
+ "NV1: disabled path is identity (VM / Intel-only machines unaffected)"
+ (eq? %vm-os
+      (nvidia-system-transformation %vm-os
+                                    #:enabled? #f)))
 
 ;; ── NV2：VM OS 无 proprietary NVIDIA 包 ────────────────────
 (test-assert "NV2: %vm-os packages contain no nvidia stack"
@@ -370,22 +384,31 @@
              ;; 层断言：host/desktop/adapter 都没有引入 nouveau（Guix
              ;; 默认 args 仅 modprobe.blacklist=usbmouse,usbkbd + quiet）。
              (let ((s (call-with-input-file "modules/guixcfg/hosts/vm.scm"
-                                            (lambda (p) (read-string p)))))
+                        (lambda (p)
+                          (read-string p)))))
                (not (string-contains s "nouveau"))))
 
 ;; ── NV4：desktop/niri 模块无 vendor layer leak ─────────────
 (define %vendor-words
   ;; 注意："xe" 作为独立 token 才相关（i915/xe），不单独列出——
   ;; 会误匹配 execl 等子串；"i915" 已覆盖 Intel driver 路径。
-  '("nvidia" "nouveau" "nvda" "virtio_gpu" "i915" "renderD"
-             "/dev/dri" "card0" "card1"))
+  '("nvidia" "nouveau"
+    "nvda"
+    "virtio_gpu"
+    "i915"
+    "renderD"
+    "/dev/dri"
+    "card0"
+    "card1"))
 
 (define (text-contains-any? text words)
-  (any (lambda (w) (string-contains text w)) words))
+  (any (lambda (w)
+         (string-contains text w)) words))
 
 (test-assert "NV4: desktop.scm has no vendor-specific references"
              (let ((s (call-with-input-file "modules/guixcfg/system/desktop.scm"
-                                            (lambda (p) (read-string p)))))
+                        (lambda (p)
+                          (read-string p)))))
                (not (text-contains-any? s %vendor-words))))
 
 (test-assert "NV4: niri common config has no DRM node / output name"
@@ -393,11 +416,12 @@
              ;; 只允许出现在 host 贡献的 host.kdl（laptop），
              ;; application-owned 的 common.kdl 必须无 vendor 泄漏。
              (let ((s (call-with-input-file "modules/guixcfg/apps/niri/common.kdl"
-                                            (lambda (p) (read-string p)))))
+                        (lambda (p)
+                          (read-string p)))))
                (not (text-contains-any? s
                                         (append %vendor-words
-                                                '("Virtual-1" "eDP-1"
-                                                              "DP-1" "HDMI-A-1"))))))
+                                                '("Virtual-1" "eDP-1" "DP-1"
+                                                  "HDMI-A-1"))))))
 
 ;; ── NV6：kernel 仍由 kernel-platform 拥有 ──────────────────
 (test-assert "NV6: %vm-os kernel is still %kernel (kernel-platform owns it)"
@@ -409,9 +433,9 @@
              ;; transformation 的映射；不实例化 nvidia-service-type、
              ;; 不复制 Nonguix 的 blacklist/firmware/udev/PRIME/Mesa
              ;; 实现。
-             (let ((s (call-with-input-file
-                       "modules/guixcfg/system/graphics/nvidia.scm"
-                       (lambda (p) (read-string p)))))
+             (let ((s (call-with-input-file "modules/guixcfg/system/graphics/nvidia.scm"
+                        (lambda (p)
+                          (read-string p)))))
                ;; 负向断言检查代码形式（头注释里作为"由
                ;; transformation 负责"的说明性提及是合法的）。
                (and (string-contains s "nonguix-transformation-nvidia")
@@ -420,18 +444,20 @@
 ;; ── NV8：无全局 PRIME/DRM 环境变量 ─────────────────────────
 (test-assert "NV8: niri common config has no global PRIME/DRM env vars"
              (let ((s (call-with-input-file "modules/guixcfg/apps/niri/common.kdl"
-                                            (lambda (p) (read-string p)))))
+                        (lambda (p)
+                          (read-string p)))))
                (not (text-contains-any? s
                                         '("PRIME" "WLR_DRM_DEVICES"
-                                                  "GBM_BACKEND" "WLR_RENDERER"
-                                                  "WLR_BACKENDS")))))
+                                          "GBM_BACKEND" "WLR_RENDERER"
+                                          "WLR_BACKENDS")))))
 
 (test-assert "NV8: desktop.scm sets no global vendor env vars"
              (let ((s (call-with-input-file "modules/guixcfg/system/desktop.scm"
-                                            (lambda (p) (read-string p)))))
+                        (lambda (p)
+                          (read-string p)))))
                (not (text-contains-any? s
                                         '("PRIME" "WLR_DRM_DEVICES"
-                                                  "GBM_BACKEND" "__GLX_VENDOR")))))
+                                          "GBM_BACKEND" "__GLX_VENDOR")))))
 
 ;; ── PK：polkit system authority（Phase A；docs/architecture/
 ;; desktop-authentication.md）───────────────────────────────
@@ -441,7 +467,8 @@
 ;; polkit-gnome 只是 graphical session agent（apps/polkit-gnome，
 ;; niri spawn-at-startup + ~/.local/bin wrapper）——不拥有 polkit。
 (test-assert "PK1: exactly one polkit authority in %vm-os"
-             (= 1 (length (os-services-of-type polkit-service-type))))
+             (= 1
+                (length (os-services-of-type polkit-service-type))))
 
 (test-assert "PK1: polkit service is explicitly declared in common services"
              (let* ((common (map (compose service-type-name service-kind)
@@ -454,27 +481,29 @@
   (module-ref (resolve-module '(gnu services dbus))
               'polkit-configuration-actions))
 
-(test-assert "PK2: polkit action/rules contributions come only from elogind
+(test-assert
+ "PK2: polkit action/rules contributions come only from elogind
 + upstream wheel admin rule + NetworkManager + noctalia-greeter + udisks
 (no custom rules)"
-             (let* ((folded (fold-services (operating-system-services %vm-os)
-                                           #:target-type polkit-service-type))
-                    (actions (%polkit-configuration-actions
-                              (service-value folded))))
-               ;; 5 = elogind + polkit-wheel + NetworkManager（NM 的
-               ;; polkit actions——2026-08-25 VM 网络换 NetworkManager
-               ;; 引入，Guix 官方 service 自带，非仓库 custom rules）
-               ;; + noctalia-greeter（channel package 自带
-               ;; org.noctalia.greeter.apply-appearance policy，经官方
-               ;; polkit-service-type extension 暴露——elogind 同款
-               ;; 组合，非手工 symlink/复制 policy）+ udisks（官方
-               ;; udisks-service-type 的 org.freedesktop.UDisks2 policy，
-               ;; 可移动介质挂载授权）。
-               (= 5 (length actions))))
+ (let* ((folded (fold-services (operating-system-services %vm-os)
+                               #:target-type polkit-service-type))
+        (actions (%polkit-configuration-actions (service-value folded))))
+   ;; 5 = elogind + polkit-wheel + NetworkManager（NM 的
+   ;; polkit actions——2026-08-25 VM 网络换 NetworkManager
+   ;; 引入，Guix 官方 service 自带，非仓库 custom rules）
+   ;; + noctalia-greeter（channel package 自带
+   ;; org.noctalia.greeter.apply-appearance policy，经官方
+   ;; polkit-service-type extension 暴露——elogind 同款
+   ;; 组合，非手工 symlink/复制 policy）+ udisks（官方
+   ;; udisks-service-type 的 org.freedesktop.UDisks2 policy，
+   ;; 可移动介质挂载授权）。
+   (= 5
+      (length actions))))
 
 (test-assert "PK2: upstream polkit-wheel admin identity is used"
              (any (lambda (svc)
-                    (eq? 'polkit-wheel (service-type-name (service-kind svc))))
+                    (eq? 'polkit-wheel
+                         (service-type-name (service-kind svc))))
                   (operating-system-services %vm-os)))
 
 ;; polkit 内部 accessor 未导出；经顶层 define 绑定（编译环境内联
@@ -484,28 +513,30 @@
               'polkit-configuration-actions))
 
 (test-assert "PK2: repo modules declare no custom /etc/polkit-1 rules"
-             (let ((s (string-join
-                       (map (lambda (f)
-                              (call-with-input-file f
-                                                    (lambda (p) (read-string p))))
-                            (find-files "modules/guixcfg" "\\.scm$"))
-                       "\n")))
+             (let ((s (string-join (map (lambda (f)
+                                          (call-with-input-file f
+                                            (lambda (p)
+                                              (read-string p))))
+                                        (find-files "modules/guixcfg"
+                                                    "\\.scm$")) "\n")))
                (not (string-contains s "rules.d"))))
 
 (test-assert "PK3: polkit-gnome starts once, from the graphical session only"
              ;; 拆分后 spawn 位于 common.kdl——扫描全部 niri kdl
              ;; 文件（config.kdl 入口 / common.kdl 通用 / host.kdl
              ;; host 贡献）确保恰好一次。
-             (let ((s (string-join
-                       (map (lambda (f)
-                              (call-with-input-file f
-                                                    (lambda (p) (read-string p))))
-                            (find-files "modules/guixcfg/apps/niri" "\\.kdl$"))
-                       "\n")))
-               (= 1 (length (filter (lambda (line)
-                                      (string-contains line
-                                                       "spawn-at-startup \"polkit-gnome-authentication-agent-1\""))
-                                    (string-split s #\newline))))))
+             (let ((s (string-join (map (lambda (f)
+                                          (call-with-input-file f
+                                            (lambda (p)
+                                              (read-string p))))
+                                        (find-files
+                                         "modules/guixcfg/apps/niri" "\\.kdl$"))
+                                   "\n")))
+               (= 1
+                  (length (filter (lambda (line)
+                                    (string-contains line
+                                     "spawn-at-startup \"polkit-gnome-authentication-agent-1\""))
+                                  (string-split s #\newline))))))
 
 (test-assert "PK3: no boot shepherd service provisions the polkit agent"
              ;; 不用文本扫描：guix-home-user 服务里嵌着整个
@@ -513,7 +544,8 @@
              ;; 出现）；正确断言是 provision 名——agent 不是系统
              ;; daemon，boot shepherd 图里没有任何 polkit-gnome 服务。
              (let* ((folded (fold-services (operating-system-services %vm-os)
-                                           #:target-type shepherd-root-service-type))
+                                           #:target-type
+                                           shepherd-root-service-type))
                     (cfg (service-value folded)))
                (not (any (lambda (svc)
                            (any (lambda (p)

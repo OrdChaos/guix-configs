@@ -3,19 +3,19 @@
 ;;; 内容（per-app 断言已删除——加应用不应要求改测试）。
 
 (use-modules (guixcfg home user)
-             (guixcfg home fonts)        ; %fonts、%home-fonts-xdg-link-service
-             (guixcfg gsettings home-service) ; %gsettings-packages（packages 组合断言）
+             (guixcfg home fonts) ;%fonts、%home-fonts-xdg-link-service
+             (guixcfg gsettings home-service) ;%gsettings-packages（packages 组合断言）
              (guixcfg apps model)
              (guixcfg apps registry)
              (gnu home)
-             (gnu home services)        ; home-files-service-type
-             (gnu home services fontutils) ; home-fontconfig-service-type
-             (gnu home services xdg)    ; home-xdg-mime-applications-service-type
-             (gnu services)              ; service-kind、service-type-extensions、service-extension-target
-             (gnu packages fontutils)   ; fontconfig
-             (guix packages)          ; package-name
+             (gnu home services) ;home-files-service-type
+             (gnu home services fontutils) ;home-fontconfig-service-type
+             (gnu home services xdg) ;home-xdg-mime-applications-service-type
+             (gnu services) ;service-kind、service-type-extensions、service-extension-target
+             (gnu packages fontutils) ;fontconfig
+             (guix packages) ;package-name
              (srfi srfi-1)
-             (srfi srfi-13)           ; string-prefix?、string-drop
+             (srfi srfi-13) ;string-prefix?、string-drop
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -26,9 +26,10 @@
 ;; 形式，如 (list glib "bin")——apps/gtk 的 gsettings CLI）。
 (test-assert "home packages only contain normal-user CLI tools"
              (every (lambda (p)
-                      (not (member (package-name (if (package? p) p (car p)))
+                      (not (member (package-name (if (package? p) p
+                                                     (car p)))
                                    '("cryptsetup" "btrfs-progs" "tpm2-tools"
-                                                  "sbkeysync" "efibootmgr"))))
+                                     "sbkeysync" "efibootmgr"))))
                     (home-environment-packages %guix-home)))
 
 ;; 薄 assembly：services 是 registry 贡献 + 策略服务的超集
@@ -37,7 +38,8 @@
 (test-assert "home services include every registry service"
              (every (lambda (s)
                       (any (lambda (h)
-                             (eq? (service-kind h) (service-kind s)))
+                             (eq? (service-kind h)
+                                  (service-kind s)))
                            (home-environment-services %guix-home)))
                     (applications-home-services %applications)))
 
@@ -79,10 +81,10 @@
 (test-assert "home fonts xdg link service composed into %guix-home"
              %fonts-xdg-link-svc)
 
-
 (test-assert "home fonts xdg link targets are safe home-relative paths"
              (every (lambda (entry)
-                      (and (string-prefix? ".local/share/fonts/" (car entry))
+                      (and (string-prefix? ".local/share/fonts/"
+                                           (car entry))
                            (not (string-contains (car entry) ".."))))
                     (service-value %fonts-xdg-link-svc)))
 

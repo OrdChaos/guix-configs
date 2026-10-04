@@ -6,20 +6,20 @@
 ;;; backstop、ownership 边界（host 只做 logical selection）。
 ;;; 框架级测试（合成 fixture 经 #:apps 注入 + 真实 niri/laptop）。
 
-(use-modules (guix store)         ; %store（合成 XDG lower）
+(use-modules (guix store) ;%store（合成 XDG lower）
              (guix monads)
              (guix derivations)
-             (guix gexp)              ; plain-file、local-file
+             (guix gexp) ;plain-file、local-file
              (guix records)
-             (gnu home)              ; home-environment
-             (gnu home services)     ; home-files-service-type
-             (gnu services)          ; simple-service、service-kind、service-value
+             (gnu home) ;home-environment
+             (gnu home services) ;home-files-service-type
+             (gnu services) ;simple-service、service-kind、service-value
              (guixcfg apps model)
-             (guixcfg apps registry) ; %applications（校验权威）
+             (guixcfg apps registry) ;%applications（校验权威）
              (guixcfg apps selection)
              (guixcfg hosts lenovo-legion-y7000p)
-             (ice-9 rdelim)          ; read-string
-             (ice-9 ftw)             ; scandir
+             (ice-9 rdelim) ;read-string
+             (ice-9 ftw) ;scandir
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -29,13 +29,12 @@
 
 ;; ── selection record：只携带 logical 字段 ────────────────────
 (define sample-selection
-  (application-configuration-selection
-   (application 'niri)
-   (variant 'laptop)))
+  (application-configuration-selection (application 'niri)
+                                       (variant 'laptop)))
 
 (test-assert "selection carries no file/path fields (logical only)"
-             (let ((fields (record-type-fields
-                            (record-type-descriptor sample-selection))))
+             (let ((fields (record-type-fields (record-type-descriptor
+                                                sample-selection))))
                (and (member 'application fields)
                     (member 'variant fields)
                     (not (member 'path fields))
@@ -46,20 +45,25 @@
 (test-assert "laptop selections are logical (niri, laptop)"
              (equal? '((niri laptop))
                      (map (lambda (s)
-                            (list (application-configuration-selection-application s)
-                                  (application-configuration-selection-variant s)))
-                          %lenovo-legion-y7000p-application-configuration-selections)))
+                            (list (application-configuration-selection-application
+                                   s)
+                                  (application-configuration-selection-variant
+                                   s)))
+                      %lenovo-legion-y7000p-application-configuration-selections)))
 (test-assert "Lenovo host contains no target path"
              (let ((s (call-with-input-file "modules/guixcfg/hosts/lenovo-legion-y7000p.scm"
-                                            (lambda (p) (read-string p)))))
+                        (lambda (p)
+                          (read-string p)))))
                (not (string-contains s "niri/host.kdl"))))
 (test-assert "Lenovo host contains no source file path"
              (let ((s (call-with-input-file "modules/guixcfg/hosts/lenovo-legion-y7000p.scm"
-                                            (lambda (p) (read-string p)))))
+                        (lambda (p)
+                          (read-string p)))))
                (not (string-contains s ".kdl"))))
 (test-assert "Lenovo host does not use local-file"
              (let ((s (call-with-input-file "modules/guixcfg/hosts/lenovo-legion-y7000p.scm"
-                                            (lambda (p) (read-string p)))))
+                        (lambda (p)
+                          (read-string p)))))
                (not (string-contains s "local-file"))))
 
 ;; ── 解析：laptop selection → 配置文件贡献 ────────────────────
@@ -68,214 +72,240 @@
    %lenovo-legion-y7000p-application-configuration-selections))
 
 (test-assert "laptop selection resolves to exactly one service"
-             (= 1 (length laptop-svcs)))
+             (= 1
+                (length laptop-svcs)))
 (test-assert "resolved service extends home-files (with .config prefix)"
-             (eq? (service-extension-target
-                   (car (service-type-extensions (service-kind (car laptop-svcs)))))
+             (eq? (service-extension-target (car (service-type-extensions (service-kind
+                                                                           (car
+                                                                            laptop-svcs)))))
                   home-files-service-type))
-(test-assert "resolved contribution is .config/niri/host.kdl with an opaque source"
-             (let ((entry (car (service-value (car laptop-svcs)))))
-               (and (string=? ".config/niri/host.kdl" (car entry))
-                    (file-like? (cadr entry)))))
+(test-assert
+ "resolved contribution is .config/niri/host.kdl with an opaque source"
+ (let ((entry (car (service-value (car laptop-svcs)))))
+   (and (string=? ".config/niri/host.kdl"
+                  (car entry))
+        (file-like? (cadr entry)))))
 
 ;; ── empty selection：无贡献（VM 语义）────────────────────────
 (test-equal "empty selection list yields no services"
-            '() (application-configuration-selections->home-services '()))
+            '()
+            (application-configuration-selections->home-services '()))
 
 ;; ── 校验：未知 application → fail fast ───────────────────────
 (test-assert "unknown application rejected"
              (catch #t
-               (lambda ()
-                 (application-configuration-selections->home-services
-                  (list (application-configuration-selection
-                         (application 'no-such-app)
-                         (variant 'laptop))))
-                 #f)
-               (lambda (key . args) #t)))
+                    (lambda ()
+                      (application-configuration-selections->home-services (list
+                                                                            (application-configuration-selection
+                                                                             (application 'no-such-app)
+                                                                             (variant 'laptop))))
+                      #f)
+                    (lambda (key . args)
+                      #t)))
 
 ;; ── 校验：未声明 variant → fail fast（错误含 app + variant）───
 (test-assert "undeclared variant rejected"
              (catch #t
-               (lambda ()
-                 (application-configuration-selections->home-services
-                  (list (application-configuration-selection
-                         (application 'niri)
-                         (variant 'no-such-variant))))
-                 #f)
-               (lambda (key . args) #t)))
+                    (lambda ()
+                      (application-configuration-selections->home-services (list
+                                                                            (application-configuration-selection
+                                                                             (application 'niri)
+                                                                             (variant 'no-such-variant))))
+                      #f)
+                    (lambda (key . args)
+                      #t)))
 
 ;; ── 校验：target 必须是安全 ~/.config 相对路径（合成 apps）───
 (define %synthetic-app
-  (application
-   (name 'synthetic)
-   (configuration-variants
-    (list (application-configuration-variant
-           (name 'base)
-           (files `(("synthetic/config.ini"
-                     ,(plain-file "config.ini" "x=1\n")))))))))
+  (application (name 'synthetic)
+               (configuration-variants (list (application-configuration-variant
+                                              (name 'base)
+                                              (files `(("synthetic/config.ini" ,
+                                                        (plain-file
+                                                         "config.ini" "x=1\n")))))))))
 
 (define %synthetic-app-bad
-  (application
-   (name 'synthetic)
-   (configuration-variants
-    (list (application-configuration-variant
-           (name 'base)
-           (files (list (list "/etc/host.conf" (plain-file "h" "")))))))))
+  (application (name 'synthetic)
+               (configuration-variants (list (application-configuration-variant
+                                              (name 'base)
+                                              (files (list (list
+                                                            "/etc/host.conf"
+                                                            (plain-file "h" "")))))))))
 
 (define %synthetic-app-escape
-  (application
-   (name 'synthetic)
-   (configuration-variants
-    (list (application-configuration-variant
-           (name 'base)
-           (files (list (list "../escape.conf" (plain-file "e" "")))))))))
+  (application (name 'synthetic)
+               (configuration-variants (list (application-configuration-variant
+                                              (name 'base)
+                                              (files (list (list
+                                                            "../escape.conf"
+                                                            (plain-file "e" "")))))))))
 
 (test-assert "absolute target path rejected"
              (catch #t
-               (lambda ()
-                 (application-configuration-selections->home-services
-                  (list (application-configuration-selection
-                         (application 'synthetic)
-                         (variant 'base)))
-                  #:apps (list %synthetic-app-bad))
-                 #f)
-               (lambda (key . args) #t)))
+                    (lambda ()
+                      (application-configuration-selections->home-services (list
+                                                                            (application-configuration-selection
+                                                                             (application 'synthetic)
+                                                                             (variant 'base)))
+                                                                           #:apps
+                                                                           (list
+                                                                            %synthetic-app-bad))
+                      #f)
+                    (lambda (key . args)
+                      #t)))
 
 (test-assert "parent-escape target path rejected"
              (catch #t
-               (lambda ()
-                 (application-configuration-selections->home-services
-                  (list (application-configuration-selection
-                         (application 'synthetic)
-                         (variant 'base)))
-                  #:apps (list %synthetic-app-escape))
-                 #f)
-               (lambda (key . args) #t)))
+                    (lambda ()
+                      (application-configuration-selections->home-services (list
+                                                                            (application-configuration-selection
+                                                                             (application 'synthetic)
+                                                                             (variant 'base)))
+                                                                           #:apps
+                                                                           (list
+                                                                            %synthetic-app-escape))
+                      #f)
+                    (lambda (key . args)
+                      #t)))
 
 ;; ── 多文件 variant：一个 variant 贡献多个文件 ────────────────
 (define %multi-file-app
-  (application
-   (name 'multi)
-   (configuration-variants
-    (list (application-configuration-variant
-           (name 'dual)
-           (files `(("multi/a.conf" ,(plain-file "a.conf" "a=1\n"))
-                    ("multi/b.conf" ,(plain-file "b.conf" "b=2\n")))))))))
+  (application (name 'multi)
+               (configuration-variants (list (application-configuration-variant
+                                              (name 'dual)
+                                              (files `(("multi/a.conf" ,(plain-file
+                                                                         "a.conf"
+                                                                         "a=1\n"))
+                                                       ("multi/b.conf" ,(plain-file
+                                                                         "b.conf"
+                                                                         "b=2\n")))))))))
 
 (define multi-svcs
-  (application-configuration-selections->home-services
-   (list (application-configuration-selection
-          (application 'multi)
-          (variant 'dual)))
-   #:apps (list %multi-file-app)))
+  (application-configuration-selections->home-services (list (application-configuration-selection
+                                                              (application 'multi)
+                                                              (variant 'dual)))
+                                                       #:apps (list
+                                                               %multi-file-app)))
 
 (test-assert "single variant may contribute multiple files"
-             (let ((paths (map car (service-value (car multi-svcs)))))
+             (let ((paths (map car
+                               (service-value (car multi-svcs)))))
                (and (member ".config/multi/a.conf" paths)
                     (member ".config/multi/b.conf" paths))))
 
 ;; ── 冲突语义：同一最终 target path 只能有一个 owner ─────────
 (define %conflict-app-a
-  (application
-   (name 'conflict-a)
-   (configuration-variants
-    (list (application-configuration-variant
-           (name 'v1)
-           (files `(("shared/x.conf" ,(plain-file "a" "a")))))))))
+  (application (name 'conflict-a)
+               (configuration-variants (list (application-configuration-variant
+                                              (name 'v1)
+                                              (files `(("shared/x.conf" ,(plain-file
+                                                                          "a"
+                                                                          "a")))))))))
 
 (define %conflict-app-b
-  (application
-   (name 'conflict-b)
-   (configuration-variants
-    (list (application-configuration-variant
-           (name 'v2)
-           (files `(("shared/x.conf" ,(plain-file "b" "b")))))))))
+  (application (name 'conflict-b)
+               (configuration-variants (list (application-configuration-variant
+                                              (name 'v2)
+                                              (files `(("shared/x.conf" ,(plain-file
+                                                                          "b"
+                                                                          "b")))))))))
 
 (test-assert "duplicate target across selections rejected before lowering"
              (catch #t
-               (lambda ()
-                 (application-configuration-selections->home-services
-                  (list (application-configuration-selection
-                         (application 'conflict-a)
-                         (variant 'v1))
-                        (application-configuration-selection
-                         (application 'conflict-b)
-                         (variant 'v2)))
-                  #:apps (list %conflict-app-a %conflict-app-b))
-                 #f)
-               (lambda (key . args) #t)))
+                    (lambda ()
+                      (application-configuration-selections->home-services (list
+                                                                            (application-configuration-selection
+                                                                             (application 'conflict-a)
+                                                                             (variant 'v1))
+                                                                            (application-configuration-selection
+                                                                             (application 'conflict-b)
+                                                                             (variant 'v2)))
+                                                                           #:apps
+                                                                           (list
+                                                                            %conflict-app-a
+                                                                            %conflict-app-b))
+                      #f)
+                    (lambda (key . args)
+                      #t)))
 
 ;; 同一 variant 内两个文件撞同一 target 也冲突
 (define %self-conflict-app
-  (application
-   (name 'self-conflict)
-   (configuration-variants
-    (list (application-configuration-variant
-           (name 'v1)
-           (files `(("dup/f.conf" ,(plain-file "a" "a"))
-                    ("dup/f.conf" ,(plain-file "b" "b")))))))))
+  (application (name 'self-conflict)
+               (configuration-variants (list (application-configuration-variant
+                                              (name 'v1)
+                                              (files `(("dup/f.conf" ,(plain-file
+                                                                       "a" "a"))
+                                                       ("dup/f.conf" ,(plain-file
+                                                                       "b" "b")))))))))
 
 (test-assert "duplicate target within one variant rejected"
              (catch #t
-               (lambda ()
-                 (application-configuration-selections->home-services
-                  (list (application-configuration-selection
-                         (application 'self-conflict)
-                         (variant 'v1)))
-                  #:apps (list %self-conflict-app))
-                 #f)
-               (lambda (key . args) #t)))
+                    (lambda ()
+                      (application-configuration-selections->home-services (list
+                                                                            (application-configuration-selection
+                                                                             (application 'self-conflict)
+                                                                             (variant 'v1)))
+                                                                           #:apps
+                                                                           (list
+                                                                            %self-conflict-app))
+                      #f)
+                    (lambda (key . args)
+                      #t)))
 
 ;; ── lower：variant 文件安装到正确 XDG 路径且内容保真 ─────────
 (define (lower-home services)
   "lower + build 一个无包合成 home，返回输出目录。"
   (let* ((store (open-connection))
-         (home (home-environment (packages '()) (services services)))
-         (drv (run-with-store store (lower-object home))))
-    (build-derivations store (list drv))
+         (home (home-environment
+                 (packages '())
+                 (services
+                  services)))
+         (drv (run-with-store store
+                              (lower-object home))))
+    (build-derivations store
+                       (list drv))
     (derivation->output-path drv)))
 
 (define %laptop-kdl-content
   (call-with-input-file "modules/guixcfg/apps/niri/variants/laptop.kdl"
-                        (lambda (p) (read-string p))))
+    (lambda (p)
+      (read-string p))))
 
 (define %lowered-laptop
-  (lower-home
-   (application-configuration-selections->home-services
-    %lenovo-legion-y7000p-application-configuration-selections)))
+  (lower-home (application-configuration-selections->home-services
+               %lenovo-legion-y7000p-application-configuration-selections)))
 
 (test-assert "laptop variant file installed under niri XDG config dir"
-             (file-exists?
-              (string-append %lowered-laptop
-                             "/files/.config/niri/host.kdl")))
-(test-assert "installed variant content matches the niri-owned source byte-for-byte"
-             (equal? %laptop-kdl-content
-                     (call-with-input-file
-                      (string-append %lowered-laptop
-                                     "/files/.config/niri/host.kdl")
-                      (lambda (p) (read-string p)))))
+             (file-exists? (string-append %lowered-laptop
+                                          "/files/.config/niri/host.kdl")))
+(test-assert
+ "installed variant content matches the niri-owned source byte-for-byte"
+ (equal? %laptop-kdl-content
+         (call-with-input-file (string-append %lowered-laptop
+                                              "/files/.config/niri/host.kdl")
+           (lambda (p)
+             (read-string p)))))
 
 ;; ── Guix Home backstop：跨贡献方（variant vs app 自身）同路径 ──
 ;; Guix 的 assert-no-duplicates 在 lower 时对合并后的完整文件列表
 ;; 查重——复用官方机制，不重复实现另一套冲突系统。
 (test-assert "cross-contributor duplicate target fails at lower time"
              (catch #t
-               (lambda ()
-                 (lower-home
-                  (append
-                   (application-configuration-selections->home-services
-                    (list (application-configuration-selection
-                           (application 'synthetic)
-                           (variant 'base)))
-                    #:apps (list %synthetic-app))
-                   (list (simple-service 'app-own-config
-                                         home-files-service-type
-                                         `((".config/synthetic/config.ini"
-                                            ,(plain-file "own.ini" "own")))))))
-                 #f)
-               (lambda (key . args)
-                 (or (string-contains (object->string args) "duplicate")
-                     (string-contains (object->string args)
-                                      "synthetic/config.ini")))))
+                    (lambda ()
+                      (lower-home (append (application-configuration-selections->home-services
+                                           (list (application-configuration-selection
+                                                  (application 'synthetic)
+                                                  (variant 'base)))
+                                           #:apps (list %synthetic-app))
+                                          (list (simple-service 'app-own-config
+                                                 home-files-service-type
+                                                 `((".config/synthetic/config.ini" ,
+                                                    (plain-file "own.ini"
+                                                                "own")))))))
+                      #f)
+                    (lambda (key . args)
+                      (or (string-contains (object->string args) "duplicate")
+                          (string-contains (object->string args)
+                                           "synthetic/config.ini")))))
 
 (test-end "selection")

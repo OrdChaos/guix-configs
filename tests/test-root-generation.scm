@@ -18,122 +18,146 @@
 (test-group "state alist serialization"
             (test-equal "state->alist -> alist->state roundtrip"
                         (state->alist %sample-state)
-                        (state->alist (alist->state (state->alist %sample-state))))
-            
+                        (state->alist (alist->state (state->alist
+                                                     %sample-state))))
+
             (test-equal "default fields optional (created-at/source-template)"
-                        '()
-                        (root-state-created-at
-                         (alist->state '((next-generation . 1)
-                                         (current-generation . 0)
-                                         (last-good-generation . #f)
-                                         (boot-status . first-boot)))))
-            
+             '()
+             (root-state-created-at (alist->state '((next-generation . 1)
+                                                    (current-generation . 0)
+                                                    (last-good-generation . #f)
+                                                    (boot-status . first-boot)))))
+
             ;; T10：旧状态文件里的未知/废弃字段（历史选择器从未写入
             ;; state 文件，但保持宽容读取）——被忽略，不重新生成旧
             ;; 菜单语义。
             (test-equal "unknown legacy fields ignored"
                         'ok
-                        (root-state-boot-status
-                         (alist->state '((next-generation . 2)
-                                         (current-generation . 1)
-                                         (last-good-generation . 1)
-                                         (boot-status . ok)
-                                         (previous-roots . (0 1))
-                                         (history-index . 1)))))
-            
+                        (root-state-boot-status (alist->state '((next-generation . 2)
+                                                                (current-generation . 1)
+                                                                (last-good-generation . 1)
+                                                                (boot-status . ok)
+                                                                (previous-roots
+                                                                 0 1)
+                                                                (history-index . 1)))))
+
             (test-error "missing required fields throw" #t
                         (alist->state '((next-generation . 1))))
-            
+
             (test-error "invalid boot-status throws" #t
                         (alist->state '((next-generation . 1)
                                         (current-generation . 0)
                                         (last-good-generation . #f)
                                         (boot-status . bogus))))
-            
+
             (test-error "non-integer next-generation throws" #t
                         (alist->state '((next-generation . "1")
                                         (current-generation . 0)
                                         (last-good-generation . #f)
                                         (boot-status . ok))))
-            
+
             (test-equal "state file path joins @persist-system mount point"
-                        "/btrfs-top/@persist-system/root-generations/state.scm"
-                        (state-file-path "/btrfs-top/@persist-system")))
+             "/btrfs-top/@persist-system/root-generations/state.scm"
+             (state-file-path "/btrfs-top/@persist-system")))
 
 ;;; ── 启动模式解析（公开 boot model 只有 normal/recovery）
 
 (test-group "rootmode= parsing"
-            (test-eq "normal" 'normal
+            (test-eq "normal"
+                     'normal
                      (boot-mode-kind (parse-boot-mode "normal")))
-            (test-eq "recovery" 'recovery
+            (test-eq "recovery"
+                     'recovery
                      (boot-mode-kind (parse-boot-mode "recovery")))
-            (test-assert "rejects unknown value" (not (parse-boot-mode "bogus")))
+            (test-assert "rejects unknown value"
+                         (not (parse-boot-mode "bogus")))
             ;; 历史选择器已删除（previous:K / keep:N 不再是 boot mode）：
             ;; 必须 fail closed，绝不静默回退。
-            (test-assert "rejects previous:1" (not (parse-boot-mode "previous:1")))
-            (test-assert "rejects keep" (not (parse-boot-mode "keep")))
-            (test-assert "rejects keep:3" (not (parse-boot-mode "keep:3"))))
+            (test-assert "rejects previous:1"
+                         (not (parse-boot-mode "previous:1")))
+            (test-assert "rejects keep"
+                         (not (parse-boot-mode "keep")))
+            (test-assert "rejects keep:3"
+                         (not (parse-boot-mode "keep:3"))))
 
 ;;; ── 启动决策
 
-(define %installed (initial-state 1000))   ; 装完未启动：current=0, next=1
+(define %installed
+  (initial-state 1000))
+ ; 装完未启动：current=0, next=1
 
 (test-group "plan-boot"
             (test-group "first boot uses install-time @root-0 (section 17.4)"
-                        (let ((plan (plan-boot %installed %default-boot-mode 2000)))
-                          (test-equal "targets @root-0"
-                                      "@root-0" (boot-plan-target-subvolume plan))
+                        (let ((plan (plan-boot %installed %default-boot-mode
+                                               2000)))
+                          (test-equal "targets @root-0" "@root-0"
+                                      (boot-plan-target-subvolume plan))
                           (test-assert "no snapshot created"
-                                       (not (boot-plan-create-from-template? plan)))
+                                       (not (boot-plan-create-from-template?
+                                             plan)))
                           (test-eq "state set to trying"
                                    'trying
-                                   (root-state-boot-status
-                                    (boot-plan-state-after plan)))))
-            
-            (test-group "normal boot creates generation from template (section 17.5)"
-                        (let* ((running (confirm-boot %installed))  ; 模拟已确认
-                                                                    (plan (plan-boot running %default-boot-mode 3000))
-                                                                    (after (boot-plan-state-after plan)))
-                          (test-equal "targets @root-1"
-                                      "@root-1" (boot-plan-target-subvolume plan))
-                          (test-assert "snapshot from template required"
-                                       (boot-plan-create-from-template? plan))
-                          (test-equal "next advances to 2"
-                                      2 (root-state-next-generation after))
-                          (test-equal "current becomes 1"
-                                      1 (root-state-current-generation after))
-                          (test-equal "last-good stays 0"
-                                      0 (root-state-last-good-generation after))
-                          (test-equal "created-at records new generation"
-                                      3000 (assq-ref (root-state-created-at after) 1))))
-            
+                                   (root-state-boot-status (boot-plan-state-after
+                                                            plan)))))
+
+            (test-group
+             "normal boot creates generation from template (section 17.5)"
+             (let* ((running (confirm-boot %installed))
+                     ;模拟已确认
+                    (plan (plan-boot running %default-boot-mode 3000))
+                    (after (boot-plan-state-after plan)))
+               (test-equal "targets @root-1" "@root-1"
+                           (boot-plan-target-subvolume plan))
+               (test-assert "snapshot from template required"
+                            (boot-plan-create-from-template? plan))
+               (test-equal "next advances to 2" 2
+                           (root-state-next-generation after))
+               (test-equal "current becomes 1" 1
+                           (root-state-current-generation after))
+               (test-equal "last-good stays 0" 0
+                           (root-state-last-good-generation after))
+               (test-equal "created-at records new generation" 3000
+                           (assq-ref (root-state-created-at after) 1))))
+
             (test-group "Recovery mode"
-                        (let ((plan (plan-boot %sample-state (parse-boot-mode "recovery") 4000)))
+                        (let ((plan (plan-boot %sample-state
+                                               (parse-boot-mode "recovery")
+                                               4000)))
                           (test-equal "returns to last-good (@root-1)"
-                                      "@root-1" (boot-plan-target-subvolume plan))
+                                      "@root-1"
+                                      (boot-plan-target-subvolume plan))
                           (test-assert "no snapshot created"
-                                       (not (boot-plan-create-from-template? plan))))
+                                       (not (boot-plan-create-from-template?
+                                             plan))))
                         ;; T5/T9：Recovery 不创建 root、non-advancing——
                         ;; next/last-good 都不变。
-                        (let* ((plan (plan-boot %sample-state (parse-boot-mode "recovery") 4000))
+                        (let* ((plan (plan-boot %sample-state
+                                                (parse-boot-mode "recovery")
+                                                4000))
                                (after (boot-plan-state-after plan)))
-                          (test-equal "Recovery does not advance next"
-                                      3 (root-state-next-generation after))
-                          (test-equal "Recovery does not rotate last-good"
-                                      1 (root-state-last-good-generation after))
-                          (test-equal "Recovery reuses previous confirmed root"
-                                      1 (root-state-current-generation after)))
+                          (test-equal "Recovery does not advance next" 3
+                                      (root-state-next-generation after))
+                          (test-equal "Recovery does not rotate last-good" 1
+                                      (root-state-last-good-generation after))
+                          (test-equal
+                           "Recovery reuses previous confirmed root" 1
+                           (root-state-current-generation after)))
                         (test-error "no last-good throws" #t
-                                    (plan-boot %installed (parse-boot-mode "recovery") 4000))))
+                                    (plan-boot %installed
+                                               (parse-boot-mode "recovery")
+                                               4000))))
 
 ;;; ── 用户态确认
 
 (test-group "confirm-boot"
             (let ((confirmed (confirm-boot %sample-state)))
-              (test-equal "current promoted to last-good"
-                          2 (root-state-last-good-generation confirmed))
-              (test-eq "state set to ok" 'ok (root-state-boot-status confirmed))
-              (test-equal "next unchanged" 3 (root-state-next-generation confirmed))))
+              (test-equal "current promoted to last-good" 2
+                          (root-state-last-good-generation confirmed))
+              (test-eq "state set to ok"
+                       'ok
+                       (root-state-boot-status confirmed))
+              (test-equal "next unchanged" 3
+                          (root-state-next-generation confirmed))))
 
 ;;; ── 清理
 
@@ -143,17 +167,19 @@
             (test-equal "keep=1: keeps newest 4, deletes (0 3)"
                         '(0 3)
                         (generations-to-delete '(0 1 2 3 4) %sample-state 1))
-            
+
             (test-equal "nothing deleted when keep large enough"
                         '()
                         (generations-to-delete '(0 1 2) %sample-state 5))
-            
+
             (test-equal "current/last-good never deleted even when oldest"
                         '(3)
                         (generations-to-delete '(2 1 3)
                                                (root-state (next-generation 4)
-                                                           (current-generation 2)
-                                                           (last-good-generation 1)
+                                                           (current-generation
+                                                            2)
+                                                           (last-good-generation
+                                                            1)
                                                            (boot-status 'ok))
                                                0)))
 
@@ -168,54 +194,62 @@
                  (number->string (getpid)) ".scm"))
 
 (test-group "write-state!/read-state"
-            (dynamic-wind
-             (const #t)
-             (lambda ()
-               ;; 首次写入
-               (write-state! %tmp-state %sample-state)
-               (test-equal "written then read back"
-                           (state->alist %sample-state)
-                           (state->alist (read-state %tmp-state)))
-               
-               ;; 覆盖写入：旧内容成为 .prev
-               (let ((newer (confirm-boot %sample-state)))
-                 (write-state! %tmp-state newer)
-                 (test-eq "new state read after overwrite"
-                          'ok (root-state-boot-status (read-state %tmp-state)))
-                 
-                 ;; 主文件损坏（模拟断电半截文件）→ 回退 .prev
-                 (call-with-output-file %tmp-state
-                                        (lambda (port) (display "((broken" port)))
-                 (test-eq "falls back to .prev when main file corrupt"
-                          'trying
-                          (root-state-boot-status (read-state %tmp-state))))
-               
-               ;; 主文件不存在但 .prev 在 → 也能读
-               (delete-file %tmp-state)
-               (test-eq "falls back to .prev when main file missing"
-                        'trying
-                        (root-state-boot-status (read-state %tmp-state)))
-               
-               ;; 都不在 → 报错
-               (delete-file (string-append %tmp-state ".prev"))
-               (test-error "throws when all missing" #t (read-state %tmp-state)))
-             (lambda ()
-               (false-if-exception (delete-file %tmp-state))
-               (false-if-exception
-                (delete-file (string-append %tmp-state ".prev")))
-               (false-if-exception
-                (delete-file (string-append %tmp-state ".new"))))))
+            (dynamic-wind (const #t)
+                          (lambda ()
+                            ;; 首次写入
+                            (write-state! %tmp-state %sample-state)
+                            (test-equal "written then read back"
+                                        (state->alist %sample-state)
+                                        (state->alist (read-state %tmp-state)))
+
+                            ;; 覆盖写入：旧内容成为 .prev
+                            (let ((newer (confirm-boot %sample-state)))
+                              (write-state! %tmp-state newer)
+                              (test-eq "new state read after overwrite"
+                                       'ok
+                                       (root-state-boot-status (read-state
+                                                                %tmp-state)))
+
+                              ;; 主文件损坏（模拟断电半截文件）→ 回退 .prev
+                              (call-with-output-file %tmp-state
+                                (lambda (port)
+                                  (display "((broken" port)))
+                              (test-eq
+                               "falls back to .prev when main file corrupt"
+                               'trying
+                               (root-state-boot-status (read-state %tmp-state))))
+
+                            ;; 主文件不存在但 .prev 在 → 也能读
+                            (delete-file %tmp-state)
+                            (test-eq
+                             "falls back to .prev when main file missing"
+                             'trying
+                             (root-state-boot-status (read-state %tmp-state)))
+
+                            ;; 都不在 → 报错
+                            (delete-file (string-append %tmp-state ".prev"))
+                            (test-error "throws when all missing" #t
+                                        (read-state %tmp-state)))
+                          (lambda ()
+                            (false-if-exception (delete-file %tmp-state))
+                            (false-if-exception (delete-file (string-append
+                                                              %tmp-state
+                                                              ".prev")))
+                            (false-if-exception (delete-file (string-append
+                                                              %tmp-state
+                                                              ".new"))))))
 
 (test-group "prune-created-at"
-            (let ((pruned (prune-created-at %sample-state '(1 2))))
+            (let ((pruned (prune-created-at %sample-state
+                                            '(1 2))))
               (test-equal "keeps metadata only for existing generations"
                           '((2 . 200) (1 . 100))
                           (root-state-created-at pruned))
-              (test-equal "other fields unchanged"
-                          3 (root-state-next-generation pruned)))
+              (test-equal "other fields unchanged" 3
+                          (root-state-next-generation pruned)))
             (test-equal "created-at cleared when all deleted"
                         '()
-                        (root-state-created-at
-                         (prune-created-at %sample-state '()))))
+                        (root-state-created-at (prune-created-at %sample-state
+                                                '()))))
 
 (test-end)

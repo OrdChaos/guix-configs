@@ -4,18 +4,22 @@
 
 (use-modules (guixcfg utils home-path)
              (guixcfg utils paths)
-             (guix build utils)    ; mkdir-p、delete-file-recursively
-             (ice-9 ftw)           ; mkdtemp
+             (guix build utils) ;mkdir-p、delete-file-recursively
+             (ice-9 ftw) ;mkdtemp
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
 
 (test-begin "home-path")
 
-(define %tmp-root (mkdtemp "/tmp/guixcfg-home-path-XXXXXX"))
-(define %home (string-append %tmp-root "/home/user"))
-(define %uid (getuid))
-(define %gid (getgid))
+(define %tmp-root
+  (mkdtemp "/tmp/guixcfg-home-path-XXXXXX"))
+(define %home
+  (string-append %tmp-root "/home/user"))
+(define %uid
+  (getuid))
+(define %gid
+  (getgid))
 
 (mkdir-p %home)
 
@@ -33,8 +37,10 @@
 (test-assert "multi-level: leaf not created"
              (not (file-exists? (string-append %home "/.local/share/keyrings"))))
 (test-assert "multi-level: parents owned by target uid"
-             (and (= %uid (stat:uid (stat (string-append %home "/.local"))))
-                  (= %uid (stat:uid (stat (string-append %home "/.local/share"))))))
+             (and (= %uid
+                     (stat:uid (stat (string-append %home "/.local"))))
+                  (= %uid
+                     (stat:uid (stat (string-append %home "/.local/share"))))))
 
 ;; ── HOME 本身不被处理（存在、owner 未被改动到其它值）─────────
 (test-assert "HOME directory untouched"
@@ -45,7 +51,8 @@
 (test-assert "idempotent: second call keeps parents"
              (and (file-exists? (string-append %home "/.local"))
                   (file-exists? (string-append %home "/.local/share"))
-                  (not (file-exists? (string-append %home "/.local/share/keyrings")))))
+                  (not (file-exists? (string-append %home
+                                                    "/.local/share/keyrings")))))
 
 ;; 多层已存在 + 新层混合：已有层保留、新层补建
 (ensure-home-parent-directories! %home "a/b/c" %uid %gid)
@@ -56,16 +63,17 @@
 ;; ── defensive：绝对路径 consumer 拒绝（避免前导空段 chown HOME）──
 (test-assert "absolute consumer rejected"
              (catch #t
-               (lambda ()
-                 (ensure-home-parent-directories! %home "/etc/x" %uid %gid)
-                 #f)
-               (lambda (key . args) #t)))
+                    (lambda ()
+                      (ensure-home-parent-directories! %home "/etc/x" %uid
+                                                       %gid) #f)
+                    (lambda (key . args)
+                      #t)))
 (test-assert "empty consumer rejected"
              (catch #t
-               (lambda ()
-                 (ensure-home-parent-directories! %home "" %uid %gid)
-                 #f)
-               (lambda (key . args) #t)))
+                    (lambda ()
+                      (ensure-home-parent-directories! %home "" %uid %gid) #f)
+                    (lambda (key . args)
+                      #t)))
 
 (test-assert "relative path permits dots inside a path segment"
              (valid-relative-path? "profiles/foo..bar/config"))

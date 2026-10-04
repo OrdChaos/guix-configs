@@ -37,24 +37,23 @@
 ;;; 生产参考：modules/guixcfg/flatpak/applications/qq/definition.scm。
 
 (define-module (guixcfg flatpak applications app definition)
-               #:use-module (guixcfg flatpak model) ; flatpak-application
-               #:export (%flatpak-app))
+  #:use-module (guixcfg flatpak model) ;flatpak-application
+  #:export (%flatpak-app))
 
 (define %flatpak-app
-  (flatpak-application
-   (name 'app)                       ; symbol：logical name（selection 的键；registry 里唯一）
-   (id "org.example.App")            ; Flatpak app-id（≥2 个 '.' 段；Flathub 页面核实）
-   (remote 'flathub)                 ; registry 声明的 remote logical name
-   (branch "stable")                 ; Flatpak ref branch
-   ;; (update-policy 'track-branch)  ; 默认；pin 例外：
-   ;;                                 ; (update-policy (list 'flatpak-commit-pin
-   ;;                                 ;                    "0123..."))
-   ;; (override-policy 'external)    ; 默认；repo 管理时：
-   ;;                                 ; (override-policy
-   ;;                                 ;   (list 'managed-overrides
-   ;;                                 ;         (flatpak-override
-   ;;                                 ;           (sockets '("wayland"))
-   ;;                                 ;           ...)))
-   ;; (extra-persistence              ; 默认 ~/.var/app/<id> 之外的例外
-   ;;  '((".local/share/wechat" "wechat/share")))  ; (consumer backing)
-   ))
+  (flatpak-application (name 'app) ;symbol：logical name（selection 的键；registry 里唯一）
+                       (id "org.example.App") ;Flatpak app-id（≥2 个 '.' 段；Flathub 页面核实）
+                       (remote 'flathub) ;registry 声明的 remote logical name
+                       (branch "stable") ;Flatpak ref branch
+                       ;; (update-policy 'track-branch)  ; 默认；pin 例外：
+                       ;; ; (update-policy (list 'flatpak-commit-pin
+                       ;; ;                    "0123..."))
+                       ;; (override-policy 'external)    ; 默认；repo 管理时：
+                       ;; ; (override-policy
+                       ;; ;   (list 'managed-overrides
+                       ;; ;         (flatpak-override
+                       ;; ;           (sockets '("wayland"))
+                       ;; ;           ...)))
+                       ;; (extra-persistence              ; 默认 ~/.var/app/<id> 之外的例外
+                       ;; '((".local/share/wechat" "wechat/share")))  ; (consumer backing)
+                       ))

@@ -15,38 +15,36 @@
 ;;; 看不到半完成状态。
 
 (define-module (guixcfg system readiness)
-               #:use-module (gnu services)              ; simple-service
-               #:use-module (gnu services shepherd)   ; shepherd-service、user-processes-service-type
-               #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
-               #:use-module (guixcfg system session-gate) ; login gate 唯一 authority（path/close/open/message）
-               #:use-module (gnu system pam)           ; pam-extension、pam-entry、pam-service
-               #:use-module (gnu services base)        ; mingetty-service-type
-               #:use-module (guix gexp)
-               #:export (persistent-state-ready-service
-                         home-ready-service
-                         session-infra-ready-service
-                         interactive-session-ready-service
-                         readiness-services
-                         login-gate-pam-service
-                         login-gate-services
-                         %login-gate-path
-                         %interactive-session-requirements
-                         %persistent-state-paths))
+  #:use-module (gnu services) ;simple-service
+  #:use-module (gnu services shepherd) ;shepherd-service、user-processes-service-type
+  #:use-module (guixcfg storage model) ;persist-mount-point（/persist 语义路径 authority）
+  #:use-module (guixcfg system session-gate) ;login gate 唯一 authority（path/close/open/message）
+  #:use-module (gnu system pam) ;pam-extension、pam-entry、pam-service
+  #:use-module (gnu services base) ;mingetty-service-type
+  #:use-module (guix gexp)
+  #:export (persistent-state-ready-service home-ready-service
+                                           session-infra-ready-service
+                                           interactive-session-ready-service
+                                           readiness-services
+                                           login-gate-pam-service
+                                           login-gate-services
+                                           %login-gate-path
+                                           %interactive-session-requirements
+                                           %persistent-state-paths))
 
 ;; interactive-session-ready 的四个 prerequisite
 ;; （docs/architecture/accounts-sessions.md（Readiness DAG））。
 (define %interactive-session-requirements
-  '(account-state-ready
-    interactive-secrets-ready
-    home-ready
-    session-infra-ready))
+  '(account-state-ready interactive-secrets-ready home-ready
+                        session-infra-ready))
 
 ;; login gate 文件：存在即拒绝普通 interactive 登录（pam_nologin 语义；
 ;; root 豁免是 pam_nologin 的标准行为——保留 console recovery 路径）。
 ;; 兼容导出名；唯一权威定义在 (guixcfg system session-gate)——
 ;; boot 关闭端（activation）、barrier 开启端、live reconfigure
 ;; 关闭/打开端、PAM 段全部引用该模块，不再各自拼路径。
-(define %login-gate-path %session-gate-path)
+(define %login-gate-path
+  %session-gate-path)
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; persistent-state-ready：file-systems 的就绪 + 关键持久路径在位
@@ -68,20 +66,17 @@
 （/persist 及 accounts/keys 子路径；这些是后续 account projection
 与 secret 解密的前提）。"
   (simple-service 'persistent-state-ready shepherd-root-service-type
-                  (list (shepherd-service
-                         (provision '(persistent-state-ready))
-                         (requirement '(file-systems))
-                         (one-shot? #t)
-                         (respawn? #f) ; 一次性语义，不 respawn
-                         (documentation
-                          "Persistent boot-critical state is mounted and \
-available (provides persistent-state-ready).")
-                         (start
-                          #~(lambda ()
-                              (and #$@(map (lambda (p)
-                                             #~(file-exists? #$p))
-                                           %persistent-state-paths))))
-                         (stop #~(const #f))))))
+                  (list (shepherd-service (provision '(persistent-state-ready))
+                                          (requirement '(file-systems))
+                                          (one-shot? #t)
+                                          (respawn? #f) ;一次性语义，不 respawn
+                                          (documentation
+                                           "Persistent boot-critical state is mounted and available (provides persistent-state-ready).")
+                                          (start #~(lambda ()
+                                                     (and #$@(map (lambda (p)
+                                                                    #~(file-exists? #$p))
+                                                              %persistent-state-paths))))
+                                          (stop #~(const #f))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; home-ready / session-infra-ready：对上游服务的薄包装（上游
@@ -93,32 +88,28 @@ available (provides persistent-state-ready).")
 home-ready——表示当前 system generation 的 Home 已投影到 ephemeral
 $HOME（不要求 user Shepherd 运行）。"
   (simple-service 'home-ready shepherd-root-service-type
-                  (list (shepherd-service
-                         (provision '(home-ready))
-                         (requirement (list home-provision))
-                         (one-shot? #t)
-                         (respawn? #f) ; 一次性语义，不 respawn
-                         (documentation
-                          "Home projection for the current system \
-generation is complete (provides home-ready).")
-                         (start #~(const #t))
-                         (stop #~(const #f))))))
+                  (list (shepherd-service (provision '(home-ready))
+                                          (requirement (list home-provision))
+                                          (one-shot? #t)
+                                          (respawn? #f) ;一次性语义，不 respawn
+                                          (documentation
+                                           "Home projection for the current system generation is complete (provides home-ready).")
+                                          (start #~(const #t))
+                                          (stop #~(const #f))))))
 
 (define (session-infra-ready-service)
   "elogind 完成启动后 provision session-infra-ready——系统已能正确
 创建 user session（XDG_RUNTIME_DIR 创建能力、seat/session 基础
 设施）。不含 PipeWire/portal 等 login 后服务。"
   (simple-service 'session-infra-ready shepherd-root-service-type
-                  (list (shepherd-service
-                         (provision '(session-infra-ready))
-                         (requirement '(elogind))
-                         (one-shot? #t)
-                         (respawn? #f) ; 一次性语义，不 respawn
-                         (documentation
-                          "Session infrastructure (elogind/PAM substrate) \
-is ready (provides session-infra-ready).")
-                         (start #~(const #t))
-                         (stop #~(const #f))))))
+                  (list (shepherd-service (provision '(session-infra-ready))
+                                          (requirement '(elogind))
+                                          (one-shot? #t)
+                                          (respawn? #f) ;一次性语义，不 respawn
+                                          (documentation
+                                           "Session infrastructure (elogind/PAM substrate) is ready (provides session-infra-ready).")
+                                          (start #~(const #t))
+                                          (stop #~(const #f))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; interactive-session-ready：纯 join barrier（systemd target 角色，
@@ -132,24 +123,22 @@ home-ready、session-infra-ready 全部成功后 provision
 interactive-session-ready 并原子打开 login gate
 （删除 (guixcfg system session-gate) 权威路径的 gate 文件）。"
   (simple-service 'interactive-session-ready shepherd-root-service-type
-                  (list (shepherd-service
-                         (provision '(interactive-session-ready))
-                         (requirement %interactive-session-requirements)
-                         (one-shot? #t)
-                         (respawn? #f) ; 一次性语义，不 respawn
-                         (documentation
-                          "All interactive prerequisites are ready; opens \
-the login gate (provides interactive-session-ready).")
-                         (start
-                          #~(lambda ()
-                              ;; open 契约 = (guixcfg system session-gate)
-                              ;; 的 session-gate-open!；gexp 内以其
-                              ;; 权威路径的原始 delete-file 表达（同一
-                              ;; 事实、同一语义，不复制实现）。
-                              (false-if-exception
-                               (delete-file #$(session-gate-path)))
-                              #t))
-                         (stop #~(const #f))))))
+                  (list (shepherd-service (provision '(interactive-session-ready))
+                                          (requirement
+                                           %interactive-session-requirements)
+                                          (one-shot? #t)
+                                          (respawn? #f) ;一次性语义，不 respawn
+                                          (documentation
+                                           "All interactive prerequisites are ready; opens the login gate (provides interactive-session-ready).")
+                                          (start #~(lambda ()
+                                                     ;; open 契约 = (guixcfg system session-gate)
+                                                     ;; 的 session-gate-open!；gexp 内以其
+                                                     ;; 权威路径的原始 delete-file 表达（同一
+                                                     ;; 事实、同一语义，不复制实现）。
+                                                     (false-if-exception (delete-file #$
+                                                                          (session-gate-path)))
+                                                     #t))
+                                          (stop #~(const #f))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 组合入口：host 挂一组 readiness 服务。
@@ -183,23 +172,31 @@ interactive-session-ready 之前不启动（gate 语义等价）。使用
 pam-extension transformer（横切机制，同 elogind 的 pam_elogind
 注入模式）。"
   (simple-service 'login-gate-pam pam-root-service-type
-                  (list (pam-extension
-                         (transformer
-                          (lambda (pam)
-                            (if (member (pam-service-name pam)
-                                        '("login" "sshd"))
-                              (pam-service
-                               (inherit pam)
-                               (account
-                                (cons (pam-entry
-                                       (control "required")
-                                       (module "pam_nologin.so")
-                                       (arguments
-                                        (list (string-append
-                                               "file="
-                                               (session-gate-path)))))
-                                      (pam-service-account pam))))
-                              pam)))))))
+                  (list (pam-extension (transformer (lambda (pam)
+                                                      (if (member (pam-service-name
+                                                                   pam)
+                                                                  '("login"
+                                                                    "sshd"))
+                                                          (pam-service (inherit
+                                                                        pam)
+                                                                       (account
+                                                                        (cons (pam-entry
+                                                                               (control
+                                                                                "required")
+                                                                               
+                                                                               (module
+                                                                                "pam_nologin.so")
+                                                                               
+                                                                               (arguments
+                                                                                (list
+                                                                                 (string-append
+                                                                                  "file="
+                                                                                  
+                                                                                  (session-gate-path)))))
+                                                                              
+                                                                              (pam-service-account
+                                                                               pam))))
+                                                          pam)))))))
 
 (define (login-gate-services)
   "login gate 完整组合：activation（boot 早期关 gate）+ PAM 横切

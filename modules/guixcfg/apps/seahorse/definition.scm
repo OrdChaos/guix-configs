@@ -17,12 +17,11 @@
 ;;; seahorse 生成。
 
 (define-module (guixcfg apps seahorse definition)
-               #:use-module (gnu packages gnome) ; seahorse
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:export (%seahorse))
+  #:use-module (gnu packages gnome) ;seahorse
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:export (%seahorse))
 
 (define %seahorse
-  (application
-   (name 'seahorse)
-   (home-packages (list seahorse))))
+  (application (name 'seahorse)
+               (home-packages (list seahorse))))

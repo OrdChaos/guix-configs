@@ -38,21 +38,20 @@
 ;;; Home file 或 seed 从仓库派生（详见 flatpak.md（AAGL config））。
 
 (define-module (guixcfg flatpak applications aagl definition)
-                #:use-module (guixcfg flatpak model)
-                #:use-module (guixcfg system gaming)
-                #:export (%flatpak-aagl))
+  #:use-module (guixcfg flatpak model)
+  #:use-module (guixcfg system gaming)
+  #:export (%flatpak-aagl))
 
 (define %flatpak-aagl
-  (flatpak-application
-   (name 'aagl)
-   (id "moe.launcher.an-anime-game-launcher")
-   (remote 'flathub)
-   (branch "stable")
-   (update-policy 'track-branch)
-   (override-policy
-    (list 'managed-overrides
-           (flatpak-override
-            (sockets (list "wayland"))
-            (filesystems (list %aagl-games-library-path))
-            (environment
-             '("GIT_EXEC_PATH=/app/libexec/git-core")))))))
+  (flatpak-application (name 'aagl)
+                       (id "moe.launcher.an-anime-game-launcher")
+                       (remote 'flathub)
+                       (branch "stable")
+                       (update-policy 'track-branch)
+                       (override-policy (list 'managed-overrides
+                                              (flatpak-override (sockets (list
+                                                                          "wayland"))
+                                                                (filesystems (list
+                                                                              %aagl-games-library-path))
+                                                                (environment '
+                                                                             ("GIT_EXEC_PATH=/app/libexec/git-core")))))))

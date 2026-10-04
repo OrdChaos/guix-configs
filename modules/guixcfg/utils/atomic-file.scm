@@ -9,18 +9,18 @@
 ;;; 内容才允许写入 .prev，避免把损坏主文件覆盖到最后一份好备份上。
 
 (define-module (guixcfg utils atomic-file)
-               #:export (fsync-path!
-                         atomic-replace-file!
-                         atomic-write-file!))
+  #:export (fsync-path! atomic-replace-file! atomic-write-file!))
 
 (define (fsync-path! path)
   "对 PATH 对应的文件或目录执行 fsync。
 任何 fsync 错误都向上传播；这里不能把 EIO 等真实持久化失败伪装成成功。"
   (let ((fd (open-fdes path O_RDONLY)))
-    (dynamic-wind
-     (lambda () #t)
-     (lambda () (fsync fd))
-     (lambda () (close-fdes fd)))))
+    (dynamic-wind (lambda ()
+                    #t)
+                  (lambda ()
+                    (fsync fd))
+                  (lambda ()
+                    (close-fdes fd)))))
 
 (define (fsync-parent-directory! path)
   "fsync PATH 的父目录，持久化 rename/unlink 等目录项变化。"
@@ -37,9 +37,9 @@ NEW 和 PATH 必须位于同一文件系统。"
   "调用 WRITER 把完整内容写入 PATH.new，再原子提交到 PATH。"
   (let ((new (string-append path ".new")))
     (call-with-output-file new
-                           (lambda (port)
-                             (writer port)
-                             ;; Guile 的 fsync(port) 会先 flush 端口缓冲区。
-                             (fsync port)))
+      (lambda (port)
+        (writer port)
+        ;; Guile 的 fsync(port) 会先 flush 端口缓冲区。
+        (fsync port)))
     (rename-file new path)
     (fsync-parent-directory! path)))

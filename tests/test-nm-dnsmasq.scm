@@ -19,14 +19,14 @@
 ;;;
 ;;; 不依赖公网、不构建 package（纯 record/gexp/字符串断言）。
 
-(use-modules (guix gexp)          ; local-file-absolute-file-name
-             (gnu services)       ; fold-services、service-value、service-type-name
-             (gnu services networking) ; network-manager-service-type 等
-             (gnu system)         ; operating-system-services
-             (gnu system accounts) ; user-account?、user-group?
-             (guixcfg hosts vm)   ; %vm-os
-             (guixcfg system mihomo service) ; %mihomo-template-file
-             (guixcfg system mihomo config)  ; compose-mihomo-config
+(use-modules (guix gexp) ;local-file-absolute-file-name
+             (gnu services) ;fold-services、service-value、service-type-name
+             (gnu services networking) ;network-manager-service-type 等
+             (gnu system) ;operating-system-services
+             (gnu system accounts) ;user-account?、user-group?
+             (guixcfg hosts vm) ;%vm-os
+             (guixcfg system mihomo service) ;%mihomo-template-file
+             (guixcfg system mihomo config) ;compose-mihomo-config
              (guixcfg system dns nm-dnsmasq)
              (srfi srfi-1)
              (srfi srfi-64))
@@ -35,22 +35,25 @@
 
 (test-begin "nm-dnsmasq")
 
-(define %os-services (operating-system-services %vm-os))
+(define %os-services
+  (operating-system-services %vm-os))
 
 (define (service-by-type-name name)
-  (find (lambda (svc) (eq? name (service-type-name (service-kind svc))))
-        %os-services))
+  (find (lambda (svc)
+          (eq? name
+               (service-type-name (service-kind svc)))) %os-services))
 
 (define (repo-file-text path)
-  (call-with-input-file path get-string-all))
+  (call-with-input-file path
+    get-string-all))
 
 ;; ── N1：NM dns backend ──────────────────────────────────────
-(define %nm-svc (service-by-type-name 'network-manager))
+(define %nm-svc
+  (service-by-type-name 'network-manager))
 
 (test-assert "N1: NetworkManager service present in %vm-os"
              (and %nm-svc #t))
-(test-equal "N1: NetworkManager DNS backend is dnsmasq"
-            "dnsmasq"
+(test-equal "N1: NetworkManager DNS backend is dnsmasq" "dnsmasq"
             (network-manager-configuration-dns (service-value %nm-svc)))
 
 ;; ── N2：dnsmasq 专用账号配置 ────────────────────────────────
@@ -59,18 +62,18 @@
 
 ;; ── N3：专用账号/组 ─────────────────────────────────────────
 (define %accounts
-  (service-value
-   (fold-services %os-services #:target-type account-service-type)))
+  (service-value (fold-services %os-services
+                                #:target-type account-service-type)))
 
 (test-assert "N3: nm-dnsmasq system group with explicit gid"
              (let ((g (find (lambda (x)
                               (and (user-group? x)
                                    (string=? %nm-dnsmasq-user
-                                             (user-group-name x))))
-                            %accounts)))
+                                             (user-group-name x)))) %accounts)))
                (and g
                     (user-group-system? g)
-                    (= %nm-dnsmasq-gid (user-group-id g)))))
+                    (= %nm-dnsmasq-gid
+                       (user-group-id g)))))
 (test-assert "N3: nm-dnsmasq system account with explicit stable uid"
              (let ((u (find (lambda (x)
                               (and (user-account? x)
@@ -79,8 +82,10 @@
                             %accounts)))
                (and u
                     (user-account-system? u)
-                    (= %nm-dnsmasq-uid (user-account-uid u))
-                    (string=? %nm-dnsmasq-user (user-account-group u)))))
+                    (= %nm-dnsmasq-uid
+                       (user-account-uid u))
+                    (string=? %nm-dnsmasq-user
+                              (user-account-group u)))))
 (test-assert "N3: nm-dnsmasq uid is in the system range and not uid 0"
              (and (> %nm-dnsmasq-uid 0)
                   (>= %nm-dnsmasq-uid 100)
@@ -95,27 +100,26 @@
              (not (service-by-type-name 'dnsmasq)))
 
 ;; ── N6：host 装配引用 nm-dnsmasq 配置 ───────────────────────
-(for-each
- (lambda (host-file)
-   (test-assert (string-append "N6: " host-file
-                               " wires dns=dnsmasq + nm-dnsmasq conf")
-                (let ((src (repo-file-text host-file)))
-                  (and (string-contains src "(dns \"dnsmasq\")")
-                       (string-contains src
-                                        "(nm-dnsmasq-dnsmasq-configuration-files)")))))
- '("modules/guixcfg/hosts/vm.scm"
-   "modules/guixcfg/hosts/lenovo-legion-y7000p.scm"))
+(for-each (lambda (host-file)
+            (test-assert (string-append "N6: " host-file
+                          " wires dns=dnsmasq + nm-dnsmasq conf")
+                         (let ((src (repo-file-text host-file)))
+                           (and (string-contains src "(dns \"dnsmasq\")")
+                                (string-contains src
+                                 "(nm-dnsmasq-dnsmasq-configuration-files)")))))
+          '("modules/guixcfg/hosts/vm.scm"
+            "modules/guixcfg/hosts/lenovo-legion-y7000p.scm"))
 
 ;; ── N7：mihomo 组合配置与 nm-dnsmasq UID 一致 ───────────────
 (define %composed
-  (compose-mihomo-config
-   (repo-file-text (local-file-absolute-file-name %mihomo-template-file))
-   "https://subscription.invalid/path\n"
-   %nm-dnsmasq-uid))
+  (compose-mihomo-config (repo-file-text (local-file-absolute-file-name
+                                          %mihomo-template-file))
+                         "https://subscription.invalid/path\n" %nm-dnsmasq-uid))
 
 (test-assert "N7: mihomo exclude-uid injects the nm-dnsmasq UID"
              (string-contains %composed
-                              (string-append "- " (number->string %nm-dnsmasq-uid))))
+                              (string-append "- "
+                                             (number->string %nm-dnsmasq-uid))))
 (test-assert "N7: mihomo direct-nameserver uses the system resolver"
              (string-contains %composed "direct-nameserver:\n    - system"))
 (test-assert "N7: fake-ip + dns-hijack present"
@@ -123,7 +127,8 @@
                   (string-contains %composed "- any:53")
                   (string-contains %composed "tcp://any:53")))
 (test-assert "N7: no unresolved placeholders remain"
-             (and (not (string-contains %composed "@@MIHOMO_SUBSCRIPTION_URL@@"))
+             (and (not (string-contains %composed
+                                        "@@MIHOMO_SUBSCRIPTION_URL@@"))
                   (not (string-contains %composed "@@MIHOMO_NM_DNSMASQ_UID@@"))))
 
 (test-end "nm-dnsmasq")

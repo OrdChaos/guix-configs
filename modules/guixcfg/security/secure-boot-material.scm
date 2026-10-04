@@ -1,9 +1,8 @@
 ;;; Secure Boot material inventory shared by installation and enrollment.
 
 (define-module (guixcfg security secure-boot-material)
-                #:export (%secure-boot-key-file-names
-                          %secure-boot-keystore-auth-paths
-                          %secure-boot-keystore-setup-esl-paths))
+  #:export (%secure-boot-key-file-names %secure-boot-keystore-auth-paths
+                                        %secure-boot-keystore-setup-esl-paths))
 
 (define %secure-boot-key-file-names
   '("PK.key" "PK.crt" "KEK.key" "KEK.crt" "db.key" "db.crt"))

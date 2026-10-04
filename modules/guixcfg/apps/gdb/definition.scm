@@ -7,6 +7,5 @@
   #:export (%gdb))
 
 (define %gdb
-  (application
-   (name 'gdb)
-   (home-packages (list gdb))))
+  (application (name 'gdb)
+               (home-packages (list gdb))))

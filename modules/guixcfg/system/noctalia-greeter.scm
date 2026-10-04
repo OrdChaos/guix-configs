@@ -31,25 +31,26 @@
 ;;; Shell Sync 控制 appearance——见 graphics.md）。
 
 (define-module (guixcfg system noctalia-greeter)
-               #:use-module (gnu packages bash)     ; bash（session Exec）
-               #:use-module (gnu services)          ; simple-service
-               #:use-module (guix build-system trivial)
-               #:use-module (guix gexp)             ; file-append
-               #:use-module ((guix licenses) #:prefix license:)
-               #:use-module (guix modules)          ; source-module-closure
-               #:use-module (guix packages)
-               #:use-module (guixcfg system machine-state-persistence) ; machine-state-persistence-rule、%machine-state-root
-               #:export (%noctalia-greeter-state-dir
-                         %noctalia-greeter-persistence-rule
-                         %noctalia-greeter-session-data
-                         noctalia-greeter-session-profile-service
-                         noctalia-greeter-backing-ownership-activation))
+  #:use-module (gnu packages bash) ;bash（session Exec）
+  #:use-module (gnu services) ;simple-service
+  #:use-module (guix build-system trivial)
+  #:use-module (guix gexp) ;file-append
+  #:use-module ((guix licenses)
+                #:prefix license:)
+  #:use-module (guix modules) ;source-module-closure
+  #:use-module (guix packages)
+  #:use-module (guixcfg system machine-state-persistence) ;machine-state-persistence-rule、%machine-state-root
+  #:export (%noctalia-greeter-state-dir %noctalia-greeter-persistence-rule
+            %noctalia-greeter-session-data
+            noctalia-greeter-session-profile-service
+            noctalia-greeter-backing-ownership-activation))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; State dir：/var/lib/noctalia-greeter（greeter.toml +
 ;;; sync.toml + 同步 wallpaper/output 状态）。
 
-(define %noctalia-greeter-state-dir "/var/lib/noctalia-greeter")
+(define %noctalia-greeter-state-dir
+  "/var/lib/noctalia-greeter")
 
 (define %noctalia-greeter-persistence-rule
   ;; mutable state 的 machine-state 持久化声明（backing 归
@@ -61,10 +62,9 @@
   ;; 语义：mount 后 consumer 可见 owner/mode = backing 的
   ;; owner/mode，两侧都必须 0750 greeter:greeter（channel
   ;; activation 不管理 backing）。
-  (machine-state-persistence-rule
-   (name 'noctalia-greeter)
-   (backing "noctalia-greeter")
-   (consumer %noctalia-greeter-state-dir)))
+  (machine-state-persistence-rule (name 'noctalia-greeter)
+                                  (backing "noctalia-greeter")
+                                  (consumer %noctalia-greeter-state-dir)))
 
 (define (noctalia-greeter-backing-ownership-activation)
   "activation gexp：只负责 persistence backing 侧
@@ -76,33 +76,29 @@
   read-passwd 解析 uid/gid，不硬编码；缺失 fail-closed。
   mkdir/chown/chmod 幂等、不触碰已存在内容（不覆盖/不迁移
   backing 数据，machine-state 不变量 4）。"
-  (with-imported-modules (source-module-closure
-                          '((gnu build accounts)   ; read-passwd、password-entry-*
-                                                   (guix build utils)
-                                                   (srfi srfi-1)))        ; find
+  (with-imported-modules (source-module-closure '((gnu build accounts)
+                                                   ;read-passwd、password-entry-*
+                                                  (guix build utils)
+                                                  (srfi srfi-1))) ;find
                          #~(begin
-                            (use-modules (gnu build accounts)
-                                         (guix build utils)
-                                         (srfi srfi-1))
-                            (let* ((backing
-                                    (string-append #$%machine-state-root
-                                                   "/noctalia-greeter"))
-                                   (greeter
-                                    (find (lambda (entry)
-                                            (string=?
-                                             (password-entry-name entry)
-                                             "greeter"))
-                                          (read-passwd "/etc/passwd"))))
-                              (unless greeter
-                                (error
-                                 "noctalia-greeter: greeter account missing \
-from /etc/passwd"))
-                              (mkdir-p backing)
-                              (chown backing
-                                     (password-entry-uid greeter)
-                                     (password-entry-gid greeter))
-                              (chmod backing #o750)
-                              #t))))
+                             (use-modules (gnu build accounts)
+                                          (guix build utils)
+                                          (srfi srfi-1))
+                             (let* ((backing (string-append #$%machine-state-root
+                                              "/noctalia-greeter"))
+                                    (greeter (find (lambda (entry)
+                                                     (string=? (password-entry-name
+                                                                entry)
+                                                               "greeter"))
+                                                   (read-passwd "/etc/passwd"))))
+                               (unless greeter
+                                 (error
+                                  "noctalia-greeter: greeter account missing from /etc/passwd"))
+                               (mkdir-p backing)
+                               (chown backing
+                                      (password-entry-uid greeter)
+                                      (password-entry-gid greeter))
+                               (chmod backing #o750) #t))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 登录会话发现：niri.desktop（system profile 发布）。
@@ -128,41 +124,41 @@ from /etc/passwd"))
   ;; pam.open_session 之前进入 PAM env，pam_elogind 读后按
   ;; wayland 注册会话。
   (package
-   (name "guixcfg-noctalia-greeter-sessions")
-   (version "0")
-   (source #f)
-   (build-system trivial-build-system)
-   (arguments
-    (list
-     ;; builder 环境：mkdir-p 需要 (guix build utils)——#:modules 入
-     ;; closure，body 内 use-modules 显式导入（gexp 不会自动导入）。
-     #:modules '((guix build utils))
-     #:builder
-     #~(begin
-        (use-modules (guix build utils))  ; mkdir-p
-        (mkdir-p (string-append #$output "/share/wayland-sessions"))
-        (call-with-output-file
-         (string-append #$output
-                        "/share/wayland-sessions/niri.desktop")
-         (lambda (port)
-           (display "[Desktop Entry]\n" port)
-           (display "Name=niri\n" port)
-           (display
-            "Comment=Scrollable-tiling Wayland compositor session \
-(Guix Home)\n"
-            port)
-           (format port "Exec=~a -l\n"
-                   #$(file-append bash "/bin/bash"))
-           (display "Type=Application\n" port)
-           (display "DesktopNames=niri\n" port))))))
-   (home-page "https://github.com/OrdChaos/guix-configs")
-   (synopsis "Wayland session entries for the noctalia-greeter login screen")
-   (description
-    "Provides share/wayland-sessions desktop entries so that the
+    (name "guixcfg-noctalia-greeter-sessions")
+    (version "0")
+    (source
+     #f)
+    (build-system trivial-build-system)
+    (arguments
+     (list
+      ;; builder 环境：mkdir-p 需要 (guix build utils)——#:modules 入
+      ;; closure，body 内 use-modules 显式导入（gexp 不会自动导入）。
+      #:modules '((guix build utils))
+      #:builder
+      #~(begin
+          (use-modules (guix build utils)) ;mkdir-p
+          (mkdir-p (string-append #$output "/share/wayland-sessions"))
+          (call-with-output-file (string-append #$output
+                                  "/share/wayland-sessions/niri.desktop")
+            (lambda (port)
+              (display "[Desktop Entry]\n" port)
+              (display "Name=niri\n" port)
+              (display
+               "Comment=Scrollable-tiling Wayland compositor session (Guix Home)
+"
+               port)
+              (format port "Exec=~a -l\n"
+                      #$(file-append bash "/bin/bash"))
+              (display "Type=Application\n" port)
+              (display "DesktopNames=niri\n" port))))))
+    (home-page "https://github.com/OrdChaos/guix-configs")
+    (synopsis "Wayland session entries for the noctalia-greeter login screen")
+    (description
+     "Provides share/wayland-sessions desktop entries so that the
 noctalia-greeter login screen can discover the host's Wayland sessions.
 The niri entry starts the user's login shell, letting Guix Home own the
 desktop session lifecycle.")
-   (license license:expat)))
+    (license license:expat)))
 
 (define (noctalia-greeter-session-profile-service)
   "把 repo-owned 会话发现数据（niri.desktop）发布到 system profile
@@ -170,6 +166,5 @@ desktop session lifecycle.")
   wayland-sessions 与 channel helper 的 XDG_DATA_DIRS 都指向它。
   noctalia-greeter package 本身的 profile 注入由 channel service
   负责，这里只贡献本仓库定义的登录 session。"
-  (simple-service 'noctalia-greeter-session-data
-                  profile-service-type
+  (simple-service 'noctalia-greeter-session-data profile-service-type
                   (list %noctalia-greeter-session-data)))

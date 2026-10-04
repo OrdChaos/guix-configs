@@ -48,28 +48,26 @@
 ;;; activation 恢复；不持久化、app 不是第二 authority。
 
 (define-module (guixcfg apps niri definition)
-               #:use-module (gnu home services)      ; home-shepherd-service-type
-               #:use-module (gnu home services desktop) ; home-dbus-service-type
-               #:use-module (gnu home services shepherd) ; shepherd-service
-               #:use-module (gnu packages freedesktop) ; xdg-desktop-portal*
-               #:use-module (gnu packages glib)      ; dbus
-               #:use-module (gnu packages gnome)     ; xdg-desktop-portal-gnome
-               #:use-module (gnu packages window-management) ; niri
-               #:use-module (gnu packages xorg)      ; xwayland-satellite
-               #:use-module (gnu services)           ; service、service-type
-               #:use-module (guix gexp)              ; local-file、gexp、program-file
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:export (%niri
-                         %niri-session-wrapper ; 测试（test-runtime-exec NI1 真实执行）
-                         home-niri-session-service-type))
+  #:use-module (gnu home services) ;home-shepherd-service-type
+  #:use-module (gnu home services desktop) ;home-dbus-service-type
+  #:use-module (gnu home services shepherd) ;shepherd-service
+  #:use-module (gnu packages freedesktop) ;xdg-desktop-portal*
+  #:use-module (gnu packages glib) ;dbus
+  #:use-module (gnu packages gnome) ;xdg-desktop-portal-gnome
+  #:use-module (gnu packages window-management) ;niri
+  #:use-module (gnu packages xorg) ;xwayland-satellite
+  #:use-module (gnu services) ;service、service-type
+  #:use-module (guix gexp) ;local-file、gexp、program-file
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:export (%niri %niri-session-wrapper ;测试（test-runtime-exec NI1 真实执行）
+                  home-niri-session-service-type))
 
 ;; guard marker 路径：$XDG_RUNTIME_DIR 下（Home Shepherd 必有；fallback
 ;; 用 /tmp，仅防御）。运行期求值（shepherd 进程内 getenv）——不能
 ;; 构建期拼接。
 (define %niri-logout-guard
-  #~(string-append (or (getenv "XDG_RUNTIME_DIR") "/tmp")
-                   "/niri-logout-guard"))
+  #~(string-append (or (getenv "XDG_RUNTIME_DIR") "/tmp") "/niri-logout-guard"))
 
 ;; niri 会话 wrapper（Guile 原生，非 bash 字符串——AGENT.md §3）：
 ;; fork+exec niri --session（绝对路径，不依赖 PATH），niri 退出后
@@ -81,56 +79,58 @@
 ;; 日志、不阻塞退出——benign。退出码保留 niri 的（信号退出按
 ;; bash $? 语义 128+signal）。
 (define %niri-session-wrapper
-  (program-file
-   "niri-session"
-   #~(begin
-      ;; 全部 binding 均为 Guile core（status:exit-val/term-sig 是
-      ;; libguile 内建导出，无需 (ice-9 posix)——program-file 的
-      ;; load path 不含 guile 模块树，非 core import 会失败）。
-      (define guard #$%niri-logout-guard)
-      ;; 清理上次 stop 竞态遗留的 guard marker。
-      (when (file-exists? guard)
-        (delete-file guard))
-      ;; Xwayland satellite 前置条件（2026-09 VM 实测根因）：niri
-      ;; 26.x 启动时对【已存在】的 /tmp/.X11-unix 要求 group+other
-      ;; 可写（mode & 0o022）+ sticky；但它自己创建目录时是
-      ;; mkdir(1777) & ~umask(022) = 1755——首次会话通过、重登录
-      ;; 时检查失败，Xwayland 集成被禁用（/tmp 不随用户会话清理，
-      ;; 目录跨登录残留 → "重启一次、重登录必坏"循环）。wrapper
-      ;; 每次会话启动前幂等收敛为 1777（sticky 防篡改；目录属主
-      ;; 无需变更——niri 接受 user-owned；root-owned 时 chmod 静默
-      ;; 失败，状态已正确）。
-      (false-if-exception (mkdir "/tmp/.X11-unix"))
-      (false-if-exception (chmod "/tmp/.X11-unix" #o1777))
-      (let ((pid (primitive-fork)))
-        (if (zero? pid)
-          ;; child：exec niri（file-append 绝对路径）。
-          (execl #$(file-append niri "/bin/niri") "niri" "--session")
-          (let* ((status (cdr (waitpid pid)))
-                 (code (if (status:term-sig status)
-                         (+ 128 (status:term-sig status))
-                         (status:exit-val status))))
-            (if (file-exists? guard)
-              ;; shepherd 主动 stop：只退出，不结束登录会话。
-              (delete-file guard)
-              (let ((session-id (getenv "XDG_SESSION_ID")))
-                (if session-id
-                  (catch 'system-error
-                    (lambda ()
-                      (let ((r (system* "loginctl"
-                                        "terminate-session"
-                                        session-id)))
-                        (unless (zero? r)
-                          (format (current-error-port)
-                                  "niri session: loginctl terminate-session failed (status ~a)~%"
-                                  r))))
-                    (lambda args
-                      (format (current-error-port)
-                              "niri session: loginctl terminate-session failed: ~a~%"
-                              (caddr args))))
-                  (format (current-error-port)
-                          "niri session: XDG_SESSION_ID unset, cannot terminate session~%"))))
-            (exit code)))))))
+  (program-file "niri-session"
+                #~(begin
+                    ;; 全部 binding 均为 Guile core（status:exit-val/term-sig 是
+                    ;; libguile 内建导出，无需 (ice-9 posix)——program-file 的
+                    ;; load path 不含 guile 模块树，非 core import 会失败）。
+                    (define guard
+                      #$%niri-logout-guard)
+                    ;; 清理上次 stop 竞态遗留的 guard marker。
+                    (when (file-exists? guard)
+                      (delete-file guard))
+                    ;; Xwayland satellite 前置条件（2026-09 VM 实测根因）：niri
+                    ;; 26.x 启动时对【已存在】的 /tmp/.X11-unix 要求 group+other
+                    ;; 可写（mode & 0o022）+ sticky；但它自己创建目录时是
+                    ;; mkdir(1777) & ~umask(022) = 1755——首次会话通过、重登录
+                    ;; 时检查失败，Xwayland 集成被禁用（/tmp 不随用户会话清理，
+                    ;; 目录跨登录残留 → "重启一次、重登录必坏"循环）。wrapper
+                    ;; 每次会话启动前幂等收敛为 1777（sticky 防篡改；目录属主
+                    ;; 无需变更——niri 接受 user-owned；root-owned 时 chmod 静默
+                    ;; 失败，状态已正确）。
+                    (false-if-exception (mkdir "/tmp/.X11-unix"))
+                    (false-if-exception (chmod "/tmp/.X11-unix" #o1777))
+                    (let ((pid (primitive-fork)))
+                      (if (zero? pid)
+                          ;; child：exec niri（file-append 绝对路径）。
+                          (execl #$(file-append niri "/bin/niri") "niri"
+                                 "--session")
+                          (let* ((status (cdr (waitpid pid)))
+                                 (code (if (status:term-sig status)
+                                           (+ 128
+                                              (status:term-sig status))
+                                           (status:exit-val status))))
+                            (if (file-exists? guard)
+                                ;; shepherd 主动 stop：只退出，不结束登录会话。
+                                (delete-file guard)
+                                (let ((session-id (getenv "XDG_SESSION_ID")))
+                                  (if session-id
+                                      (catch 'system-error
+                                             (lambda ()
+                                               (let ((r (system* "loginctl"
+                                                         "terminate-session"
+                                                         session-id)))
+                                                 (unless (zero? r)
+                                                   (format (current-error-port)
+                                                    "niri session: loginctl terminate-session failed (status ~a)~%"
+                                                    r))))
+                                             (lambda args
+                                               (format (current-error-port)
+                                                "niri session: loginctl terminate-session failed: ~a~%"
+                                                (caddr args))))
+                                      (format (current-error-port)
+                                       "niri session: XDG_SESSION_ID unset, cannot terminate session~%"))))
+                            (exit code)))))))
 
 (define (home-niri-session-shepherd-service config)
   "Return a shepherd service that runs Niri; on Niri exit the login
@@ -138,86 +138,90 @@ session is terminated (unless the service was stopped by shepherd).
 Thin fork of the official 'home-niri-shepherd-service' with the
 logout lifecycle: respawn? #f + wrapper that runs
 'loginctl terminate-session' after Niri exits."
-  (list (shepherd-service
-         (documentation
-          "Run Niri; terminate the login session when it exits.")
-         (provision '(niri))
-         (requirement '(dbus))
-         (respawn? #f)
-         (start #~(make-forkexec-constructor
-                   (list #$%niri-session-wrapper)
-                   #:environment-variables
-                   (append (list "DESKTOP_SESSION=niri"
-                                 "XDG_CURRENT_DESKTOP=niri"
-                                 "XDG_SESSION_DESKTOP=niri"
-                                 "XDG_SESSION_TYPE=wayland")
-                           (filter (negate
-                                    (lambda (str)
-                                      (string-prefix? "WAYLAND_DISPLAY=" str)))
-                                   (environ)))))
-         ;; 先写 guard marker（wrapper 检测到只退出不注销），再按官方
-         ;; make-kill-destructor 语义杀进程组。marker 写入失败（几乎
-         ;; 不可能）不阻塞 stop；残留 marker 由 wrapper 下次 start 时
-         ;; 清理。
-         (stop #~(lambda (pid . args)
-                   (let ((guard #$%niri-logout-guard))
-                     (false-if-exception
-                      (call-with-output-file guard
-                                             (lambda (port) #t)))
-                     (apply (make-kill-destructor) pid args)))))))
+  (list (shepherd-service (documentation
+                           "Run Niri; terminate the login session when it exits.")
+                          (provision '(niri))
+                          (requirement '(dbus))
+                          (respawn? #f)
+                          (start #~(make-forkexec-constructor (list #$%niri-session-wrapper)
+                                                              #:environment-variables
+                                                              (append (list
+                                                                       "DESKTOP_SESSION=niri"
+                                                                       "XDG_CURRENT_DESKTOP=niri"
+                                                                       "XDG_SESSION_DESKTOP=niri"
+                                                                       "XDG_SESSION_TYPE=wayland")
+                                                                      (filter (negate (lambda 
+                                                                                              (str)
+                                                                                        
+                                                                                        (string-prefix?
+                                                                                         "WAYLAND_DISPLAY="
+                                                                                         str)))
+                                                                              
+                                                                              (environ)))))
+                          ;; 先写 guard marker（wrapper 检测到只退出不注销），再按官方
+                          ;; make-kill-destructor 语义杀进程组。marker 写入失败（几乎
+                          ;; 不可能）不阻塞 stop；残留 marker 由 wrapper 下次 start 时
+                          ;; 清理。
+                          (stop #~(lambda (pid . args)
+                                    (let ((guard #$%niri-logout-guard))
+                                      (false-if-exception (call-with-output-file guard
+                                                            (lambda (port)
+                                                              #t)))
+                                      (apply (make-kill-destructor) pid args)))))))
 
 (define home-niri-session-service-type
-  (service-type
-   (name 'home-niri-session)
-   (extensions
-    (list (service-extension home-shepherd-service-type
-                             home-niri-session-shepherd-service)
-          (service-extension home-dbus-service-type
-                             (const '()))
-          (service-extension home-profile-service-type
-                             (lambda (config)
-                               (list dbus
-                                     niri
-                                     xdg-desktop-portal
-                                     xdg-desktop-portal-gnome
-                                     xdg-desktop-portal-gtk
-                                     xwayland-satellite)))))
-   (description
-    "Run Niri as the Wayland desktop session; terminating the login
+  (service-type (name 'home-niri-session)
+                (extensions (list (service-extension
+                                   home-shepherd-service-type
+                                   home-niri-session-shepherd-service)
+                                  (service-extension home-dbus-service-type
+                                                     (const '()))
+                                  (service-extension home-profile-service-type
+                                   (lambda (config)
+                                     (list dbus
+                                           niri
+                                           xdg-desktop-portal
+                                           xdg-desktop-portal-gnome
+                                           xdg-desktop-portal-gtk
+                                           xwayland-satellite)))))
+                (description
+                 "Run Niri as the Wayland desktop session; terminating the login
 session when Niri exits so that greetd returns to the greeter.")
-   (default-value #t)))
+                (default-value #t)))
 
 (define %niri
-  (application
-   (name 'niri)
-   (home-services
-    (list (service home-niri-session-service-type)
-          ;; 共享 sink（home-files）经 Guix native extension 贡献
-          ;; （simple-service → target；canonical target 由
-          ;; instantiate-missing-services 以 default '() 自动实例化
-          ;; ——见 AGENT.md §15 / docs/architecture/applications.md）。
-          (simple-service 'niri-config
-                          home-files-service-type
-                          `((".config/niri/config.kdl"
-                             ,(local-file "config.kdl" "niri-config.kdl"))
-                            (".config/niri/common.kdl"
-                             ,(local-file "common.kdl" "niri-common.kdl"))
-                            ;; portal backend policy（colocate 独立文件
-                            ;; niri-portals.conf；内容与理由见该文件头
-                            ;; 注释）。落在 ~/.config/xdg-desktop-portal/
-                            ;; niri-portals.conf——XDG_CURRENT_DESKTOP=
-                            ;; niri 时最高优先级，$XDG_CONFIG_HOME 优先于
-                            ;; $XDG_DATA_DIRS。
-                            (".config/xdg-desktop-portal/niri-portals.conf"
-                             ,(local-file "niri-portals.conf"
-                                          "niri-portals.conf"))))))
-   ;; 可选配置变体（application-owned）：'laptop 携带机器事实
-   ;; （DRM 选择、固定内屏输出），解析安装为 ~/.config/niri/host.kdl
-   ;; ——target 是完整 ~/.config 相对路径，与 application name 无
-   ;; 耦合；host 层只按 (niri, laptop) 选择。
-   (configuration-variants
-    (list (application-configuration-variant
-           (name 'laptop)
-           (files `(("niri/host.kdl"
-                     ,(local-file "variants/laptop.kdl"
-                                  "niri-laptop.kdl")))))))))
+  (application (name 'niri)
+               (home-services (list (service home-niri-session-service-type)
+                                    ;; 共享 sink（home-files）经 Guix native extension 贡献
+                                    ;; （simple-service → target；canonical target 由
+                                    ;; instantiate-missing-services 以 default '() 自动实例化
+                                    ;; ——见 AGENT.md §15 / docs/architecture/applications.md）。
+                                    (simple-service 'niri-config
+                                                    home-files-service-type
+                                                    `((".config/niri/config.kdl" ,
+                                                       (local-file
+                                                        "config.kdl"
+                                                        "niri-config.kdl"))
+                                                      (".config/niri/common.kdl" ,
+                                                       (local-file
+                                                        "common.kdl"
+                                                        "niri-common.kdl"))
+                                                      ;; portal backend policy（colocate 独立文件
+                                                      ;; niri-portals.conf；内容与理由见该文件头
+                                                      ;; 注释）。落在 ~/.config/xdg-desktop-portal/
+                                                      ;; niri-portals.conf——XDG_CURRENT_DESKTOP=
+                                                      ;; niri 时最高优先级，$XDG_CONFIG_HOME 优先于
+                                                      ;; $XDG_DATA_DIRS。
+                                                      (".config/xdg-desktop-portal/niri-portals.conf" ,
+                                                       (local-file
+                                                        "niri-portals.conf"
+                                                        "niri-portals.conf"))))))
+               ;; 可选配置变体（application-owned）：'laptop 携带机器事实
+               ;; （DRM 选择、固定内屏输出），解析安装为 ~/.config/niri/host.kdl
+               ;; ——target 是完整 ~/.config 相对路径，与 application name 无
+               ;; 耦合；host 层只按 (niri, laptop) 选择。
+               (configuration-variants (list (application-configuration-variant
+                                              (name 'laptop)
+                                              (files `(("niri/host.kdl" ,(local-file
+                                                                          "variants/laptop.kdl"
+                                                                          "niri-laptop.kdl")))))))))

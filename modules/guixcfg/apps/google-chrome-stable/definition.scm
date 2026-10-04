@@ -45,51 +45,51 @@
 ;;; 本模块不反向依赖 xdg。
 
 (define-module (guixcfg apps google-chrome-stable definition)
-                 #:use-module (nongnu packages chrome)   ; google-chrome-stable
-                 #:use-module (guix gexp)                 ; #~ / #$ / this-package-input
-                 #:use-module (guix records)
-                 #:use-module (guix packages)
-                 #:use-module (guix utils)                ; substitute-keyword-arguments
-                 #:use-module (gnu packages qt)           ; qtwayland / qtwayland-5
-                 #:use-module (guixcfg apps model)        ; application
-               #:use-module (guixcfg system application-persistence) ; rule
-               #:export (%google-chrome-stable
-                         %chrome-desktop-entry))
+  #:use-module (nongnu packages chrome) ;google-chrome-stable
+  #:use-module (guix gexp) ;#~ / #$ / this-package-input
+  #:use-module (guix records)
+  #:use-module (guix packages)
+  #:use-module (guix utils) ;substitute-keyword-arguments
+  #:use-module (gnu packages qt) ;qtwayland / qtwayland-5
+  #:use-module (guixcfg apps model) ;application
+  #:use-module (guixcfg system application-persistence) ;rule
+  #:export (%google-chrome-stable %chrome-desktop-entry))
 
 ;; Chrome stable 的 XDG desktop entry。纯数据常量：供统一 XDG 策略模块
 ;; 引用，不在此决定默认应用。
-(define %chrome-desktop-entry "google-chrome.desktop")
+(define %chrome-desktop-entry
+  "google-chrome.desktop")
 
 (define google-chrome-stable/fixed
-  (package/inherit
-   google-chrome-stable
-   (inputs
-    `(("qtwayland-6" ,qtwayland)
-      ("qtwayland-5" ,qtwayland-5)
-      ,@(package-inputs google-chrome-stable)))
-   (arguments
-    (substitute-keyword-arguments (package-arguments google-chrome-stable)
-      ((#:phases phases)
-       #~(modify-phases #$phases
-           ;; This applies only to Chrome's optional Qt integration shims, not
-           ;; to Chromium's Ozone Wayland backend.
-           (add-after 'install-wrapper 'add-qt-wayland-plugins
-             (lambda _
-               (wrap-program (string-append #$output "/bin/google-chrome")
-                 `("QT_PLUGIN_PATH" ":" prefix
-                   (,(string-append #$(this-package-input "qtwayland-6")
-                                    "/lib/qt6/plugins")
-                    ,(string-append #$(this-package-input "qtwayland-5")
-                                     "/lib/qt5/plugins"))))))))))))
+  (package/inherit google-chrome-stable
+    (inputs `(("qtwayland-6" ,qtwayland)
+              ("qtwayland-5" ,qtwayland-5)
+              ,@(package-inputs google-chrome-stable)))
+    (arguments (substitute-keyword-arguments (package-arguments
+                                              google-chrome-stable)
+                 ((#:phases phases)
+                  #~(modify-phases #$phases
+                      ;; This applies only to Chrome's optional Qt integration shims, not
+                      ;; to Chromium's Ozone Wayland backend.
+                      (add-after 'install-wrapper 'add-qt-wayland-plugins
+                        (lambda _
+                          (wrap-program (string-append #$output
+                                                       "/bin/google-chrome")
+                            `("QT_PLUGIN_PATH" ":" prefix
+                              (,(string-append #$(this-package-input
+                                                  "qtwayland-6")
+                                               "/lib/qt6/plugins") ,(string-append #$
+                                                                     (this-package-input
+                                                                      "qtwayland-5")
+                                                                     "/lib/qt5/plugins"))))))))))))
 
 (define %google-chrome-stable
-  (application
-   (name 'google-chrome-stable)
-   (home-packages (list google-chrome-stable/fixed))
-   (persistence
-    (list (application-persistence-rule
-           (name 'user-data)
-           (backing "google-chrome-stable/user-data") ; backing root 相对（persistence.md）
-           (consumer ".config/google-chrome")         ; HOME 相对（官方 User Data）
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))))))
+  (application (name 'google-chrome-stable)
+               (home-packages (list google-chrome-stable/fixed))
+               (persistence (list (application-persistence-rule (name 'user-data)
+                                                                (backing
+                                                                 "google-chrome-stable/user-data") ;backing root 相对（persistence.md）
+                                                                (consumer
+                                                                 ".config/google-chrome") ;HOME 相对（官方 User Data）
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))))))

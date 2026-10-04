@@ -54,49 +54,53 @@
 ;;; 已移除（双 hook owner 禁令同 §7）。
 
 (define-module (guixcfg apps noctalia definition)
-               #:use-module (virelith packages noctalia) ; noctalia（固定版本）
-               #:use-module (gnu home services)        ; home-files-service-type
-               #:use-module (gnu services)             ; simple-service
-               #:use-module (guix gexp)                ; local-file
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)       ; application
-               #:use-module (guixcfg system application-persistence) ; application-persistence-rule
-               #:export (%noctalia))
+  #:use-module (virelith packages noctalia) ;noctalia（固定版本）
+  #:use-module (gnu home services) ;home-files-service-type
+  #:use-module (gnu services) ;simple-service
+  #:use-module (guix gexp) ;local-file
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model) ;application
+  #:use-module (guixcfg system application-persistence) ;application-persistence-rule
+  #:export (%noctalia))
 
 (define %noctalia
-  (application
-   (name 'noctalia)
-   (home-packages (list noctalia))                 ; 用户 profile 包（service 自动贡献的不要重复）
-   (home-services
-    (list (simple-service 'noctalia-palettes
-                          home-files-service-type
-                          `((".config/noctalia/palettes/fluent-blue.json"
-                             ,(local-file "fluent-blue.json"
-                                          "noctalia-fluent-blue.json"))))
-          ;; GTK 动态配色模板（vendored；user template 的
-          ;; input_path——见头部 GTK 段）。
-          (simple-service 'noctalia-gtk-templates
-                          home-files-service-type
-                          `((".config/noctalia/templates/gtk3.css"
-                             ,(local-file "templates/gtk3.css"
-                                          "noctalia-gtk3.css"))
-                            (".config/noctalia/templates/gtk4.css"
-                             ,(local-file "templates/gtk4.css"
-                                          "noctalia-gtk4.css"))))))
-   (persistence
-    (list (application-persistence-rule
-           (name 'state)
-           (backing "noctalia/state")          ; persistence root 下相对路径
-           (consumer ".local/state/noctalia") ; 整个 XDG_STATE_HOME/noctalia（app-private）
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned)
-           ;; seed-once：首次初始化 settings.toml；此后 repo 永不触碰。
-           (seeds `(("settings.toml"
-                     ,(local-file "base-settings.toml" "noctalia-base-settings.toml")))))
-          ;; 用户运行时安装的插件（app-private，跨 boot 保留）。
-          (application-persistence-rule
-           (name 'plugins)
-           (backing "noctalia/plugins")             ; persistence root 下相对路径
-           (consumer ".local/share/noctalia/plugins") ; HOME 相对（app-private 插件目录）
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))))))
+  (application (name 'noctalia)
+               (home-packages (list noctalia)) ;用户 profile 包（service 自动贡献的不要重复）
+               (home-services (list (simple-service 'noctalia-palettes
+                                                    home-files-service-type
+                                                    `((".config/noctalia/palettes/fluent-blue.json" ,
+                                                       (local-file
+                                                        "fluent-blue.json"
+                                                        "noctalia-fluent-blue.json"))))
+                                    ;; GTK 动态配色模板（vendored；user template 的
+                                    ;; input_path——见头部 GTK 段）。
+                                    (simple-service 'noctalia-gtk-templates
+                                                    home-files-service-type
+                                                    `((".config/noctalia/templates/gtk3.css" ,
+                                                       (local-file
+                                                        "templates/gtk3.css"
+                                                        "noctalia-gtk3.css"))
+                                                      (".config/noctalia/templates/gtk4.css" ,
+                                                       (local-file
+                                                        "templates/gtk4.css"
+                                                        "noctalia-gtk4.css"))))))
+               (persistence (list (application-persistence-rule (name 'state)
+                                                                (backing
+                                                                 "noctalia/state") ;persistence root 下相对路径
+                                                                (consumer
+                                                                 ".local/state/noctalia") ;整个 XDG_STATE_HOME/noctalia（app-private）
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned)
+                                                                ;; seed-once：首次初始化 settings.toml；此后 repo 永不触碰。
+                                                                (seeds `(("settings.toml" ,
+                                                                          (local-file
+                                                                           "base-settings.toml"
+                                                                           "noctalia-base-settings.toml")))))
+                                  ;; 用户运行时安装的插件（app-private，跨 boot 保留）。
+                                  (application-persistence-rule (name 'plugins)
+                                                                (backing
+                                                                 "noctalia/plugins") ;persistence root 下相对路径
+                                                                (consumer
+                                                                 ".local/share/noctalia/plugins") ;HOME 相对（app-private 插件目录）
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))))))

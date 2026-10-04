@@ -16,31 +16,28 @@
 ;;; 无 declarative secrets、不拥有 system D-Bus。
 
 (define-module (guixcfg apps polkit-gnome definition)
-               #:use-module (gnu packages polkit) ; polkit-gnome
-               #:use-module (gnu home services)   ; home-files-service-type
-               #:use-module (gnu services)        ; service
-               #:use-module (guix gexp)           ; program-file、file-append
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:export (%polkit-gnome))
+  #:use-module (gnu packages polkit) ;polkit-gnome
+  #:use-module (gnu home services) ;home-files-service-type
+  #:use-module (gnu services) ;service
+  #:use-module (guix gexp) ;program-file、file-append
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:export (%polkit-gnome))
 
 (define %polkit-gnome
-  (application
-   (name 'polkit-gnome)
-   (home-packages (list polkit-gnome))
-   (home-services
-    (list (simple-service
-           'polkit-gnome-agent-wrapper
-           home-files-service-type
-           `((".local/bin/polkit-gnome-authentication-agent-1"
-              ,(program-file
-                "polkit-gnome-authentication-agent-1"
-                #~(execl #$(file-append polkit-gnome
-                                        "/libexec/polkit-gnome-authentication-agent-1")
-                         "polkit-gnome-authentication-agent-1")))))
-          ;; wrapper 可解析所需：~/.local/bin 进 session PATH
-          ;; （home-environment-variables 共享 sink 的 native extension）。
-          (simple-service
-           'polkit-gnome-path
-           home-environment-variables-service-type
-           '(("PATH" . "$HOME/.local/bin:$PATH")))))))
+  (application (name 'polkit-gnome)
+               (home-packages (list polkit-gnome))
+               (home-services (list (simple-service 'polkit-gnome-agent-wrapper
+                                                    home-files-service-type
+                                                    `((".local/bin/polkit-gnome-authentication-agent-1" ,
+                                                       (program-file
+                                                        "polkit-gnome-authentication-agent-1"
+                                                        #~(execl #$(file-append
+                                                                    polkit-gnome
+                                                                    "/libexec/polkit-gnome-authentication-agent-1")
+                                                           "polkit-gnome-authentication-agent-1")))))
+                                    ;; wrapper 可解析所需：~/.local/bin 进 session PATH
+                                    ;; （home-environment-variables 共享 sink 的 native extension）。
+                                    (simple-service 'polkit-gnome-path
+                                     home-environment-variables-service-type
+                                     '(("PATH" . "$HOME/.local/bin:$PATH")))))))

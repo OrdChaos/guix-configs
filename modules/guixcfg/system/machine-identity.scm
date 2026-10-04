@@ -43,16 +43,14 @@
 ;;; 时回退路径稳定生效）。
 
 (define-module (guixcfg system machine-identity)
-               #:use-module (gnu services)            ; simple-service
-               #:use-module (gnu packages glib)       ; dbus（dbus-uuidgen）
-               #:use-module (guix gexp)               ; gexp、file-append
-               #:use-module (guix modules)            ; source-module-closure
-               #:use-module (guixcfg storage model)   ; persist-mount-point（/persist 语义路径 authority）
-               #:use-module (guixcfg utils module-closure) ; guixcfg-module-select?
-               #:export (%machine-id-path
-                         %etc-machine-id-path
-                         machine-identity-activation
-                         machine-identity-service))
+  #:use-module (gnu services) ;simple-service
+  #:use-module (gnu packages glib) ;dbus（dbus-uuidgen）
+  #:use-module (guix gexp) ;gexp、file-append
+  #:use-module (guix modules) ;source-module-closure
+  #:use-module (guixcfg storage model) ;persist-mount-point（/persist 语义路径 authority）
+  #:use-module (guixcfg utils module-closure) ;guixcfg-module-select?
+  #:export (%machine-id-path %etc-machine-id-path machine-identity-activation
+                             machine-identity-service))
 
 ;; canonical machine-id：/persist/system 顶层的机器身份文件（与
 ;; boot-states.scm / facts/host.scm 同级；本模块拥有该路径）。
@@ -60,7 +58,8 @@
   (string-append (persist-mount-point "@persist-system") "/machine-id"))
 
 ;; /etc/machine-id 投影目标（FHS 固定位置，consumer 读取点）。
-(define %etc-machine-id-path "/etc/machine-id")
+(define %etc-machine-id-path
+  "/etc/machine-id")
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; activation 接线：在 D-Bus activation（dbus-uuidgen --ensure）
@@ -72,16 +71,19 @@
 machine-id。幂等：重复 activation / reconfigure / 每次 boot 结果
 不变。"
   (with-imported-modules (source-module-closure '((guixcfg utils machine-id))
-                                                #:select? guixcfg-module-select?)
+                                                #:select?
+                                                guixcfg-module-select?)
                          #~(begin
-                            (use-modules (guixcfg utils machine-id))
-                            (let ((canonical #$%machine-id-path))
-                              (ensure-machine-id!
-                               canonical
-                               (lambda ()
-                                 (generate-machine-id
-                                  (string-append #$(file-append dbus "/bin/dbus-uuidgen")))))
-                              (project-machine-id! canonical #$%etc-machine-id-path)))))
+                             (use-modules (guixcfg utils machine-id))
+                             (let ((canonical #$%machine-id-path))
+                               (ensure-machine-id! canonical
+                                                   (lambda ()
+                                                     (generate-machine-id (string-append #$
+                                                                           (file-append
+                                                                            dbus
+                                                                            "/bin/dbus-uuidgen")))))
+                               (project-machine-id! canonical
+                                                    #$%etc-machine-id-path)))))
 
 (define (machine-identity-service)
   "把 machine-id 初始化/恢复挂到系统 activation。必须排在 D-Bus

@@ -18,18 +18,17 @@
 ;;; niri 会话提供。
 
 (define-module (guixcfg apps loupe definition)
-               #:use-module (gnu packages gnome) ; loupe
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:export (%loupe
-                         %loupe-desktop-entry))
+  #:use-module (gnu packages gnome) ;loupe
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:export (%loupe %loupe-desktop-entry))
 
 ;; Loupe 的 XDG desktop entry（store 内实际构建产物
 ;; share/applications/ 核实）。纯数据常量：供统一 XDG 策略模块
 ;; 引用，不在此决定默认应用。
-(define %loupe-desktop-entry "org.gnome.Loupe.desktop")
+(define %loupe-desktop-entry
+  "org.gnome.Loupe.desktop")
 
 (define %loupe
-  (application
-   (name 'loupe)
-   (home-packages (list loupe))))
+  (application (name 'loupe)
+               (home-packages (list loupe))))

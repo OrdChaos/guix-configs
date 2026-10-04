@@ -29,9 +29,9 @@
 
 (use-modules (guixcfg hosts vm)
              (gnu services)
-             (gnu services base)     ; guix-service-type、guix-configuration
-             (gnu system)            ; operating-system-*
-             (guix gexp)             ; local-file?
+             (gnu services base) ;guix-service-type、guix-configuration
+             (gnu system) ;operating-system-*
+             (guix gexp) ;local-file?
              (ice-9 rdelim)
              (srfi srfi-1)
              (srfi srfi-13)
@@ -39,7 +39,8 @@
 
 (test-runner-current (test-runner-simple))
 
-(define %nonguix-substitute-url "https://substitutes.nonguix.org")
+(define %nonguix-substitute-url
+  "https://substitutes.nonguix.org")
 
 ;; nonguix 签名 key 的 Ed25519 指纹（nonguix README / signing-key.pub）。
 (define %nonguix-key-fingerprint
@@ -47,18 +48,23 @@
 
 ;; ── evaluated service graph 的 guix-daemon 配置 ─────────────
 (define %vm-guix-config
-  (service-value
-   (fold-services (operating-system-services %vm-os)
-                  #:target-type guix-service-type)))
+  (service-value (fold-services (operating-system-services %vm-os)
+                                #:target-type guix-service-type)))
 
 (define %vm-substitute-urls
   (guix-configuration-substitute-urls %vm-guix-config))
 
 (define (list-index pred lst)
-  (let loop ((rest lst) (i 0))
-    (cond ((null? rest) #f)
-          ((pred (car rest)) i)
-          (else (loop (cdr rest) (1+ i))))))
+  (let loop
+    ((rest lst)
+     (i 0))
+    (cond
+      ((null? rest)
+       #f)
+      ((pred (car rest))
+       i)
+      (else (loop (cdr rest)
+                  (1+ i))))))
 
 (test-begin "substitutes")
 
@@ -68,24 +74,27 @@
 
 (test-assert "T-S1: official Guix substitute URLs preserved"
              (and (member "https://ci.guix.gnu.org" %vm-substitute-urls)
-                  (member "https://bordeaux.guix.gnu.org"
-                          %vm-substitute-urls)))
+                  (member "https://bordeaux.guix.gnu.org" %vm-substitute-urls)))
 
 ;; ── T-S7：镜像优先、origin 兜底 ────────────────────────────
 (test-assert "T-S7: mirrors precede official servers; nonguix origin is last"
-             (let ((sjtu (list-index
-                          (lambda (u) (string=? u "https://mirror.sjtu.edu.cn/guix"))
-                          %vm-substitute-urls))
-                   (moe (list-index
-                         (lambda (u) (string=? u "https://cache-cdn.guix.moe"))
-                         %vm-substitute-urls))
-                   (ci (list-index
-                        (lambda (u) (string=? u "https://ci.guix.gnu.org"))
-                        %vm-substitute-urls))
-                   (nonguix (list-index
-                             (lambda (u) (string=? u %nonguix-substitute-url))
-                             %vm-substitute-urls)))
-               (and sjtu moe ci nonguix
+             (let ((sjtu (list-index (lambda (u)
+                                       (string=? u
+                                        "https://mirror.sjtu.edu.cn/guix"))
+                                     %vm-substitute-urls))
+                   (moe (list-index (lambda (u)
+                                      (string=? u "https://cache-cdn.guix.moe"))
+                                    %vm-substitute-urls))
+                   (ci (list-index (lambda (u)
+                                     (string=? u "https://ci.guix.gnu.org"))
+                                   %vm-substitute-urls))
+                   (nonguix (list-index (lambda (u)
+                                          (string=? u %nonguix-substitute-url))
+                                        %vm-substitute-urls)))
+               (and sjtu
+                    moe
+                    ci
+                    nonguix
                     (< sjtu ci)
                     (< moe ci)
                     (< ci nonguix))))
@@ -94,10 +103,10 @@
 (test-assert "T-S8: nonguix-key.pub exists with the expected fingerprint"
              (let ((key-file "modules/guixcfg/system/nonguix-key.pub"))
                (and (file-exists? key-file)
-                    (string-contains
-                     (call-with-input-file key-file
-                                           (lambda (p) (read-string p)))
-                     %nonguix-key-fingerprint))))
+                    (string-contains (call-with-input-file key-file
+                                       (lambda (p)
+                                         (read-string p)))
+                                     %nonguix-key-fingerprint))))
 
 (test-assert "T-S8: nonguix-key.pub is in guix-daemon authorized-keys"
              (find (lambda (f)
@@ -108,7 +117,8 @@
 ;; ── T-S5：channel policy != substitute policy ────────────────
 (test-assert "T-S5: channels.lock.scm contains no substitute URL"
              (let ((s (call-with-input-file "channels.lock.scm"
-                                            (lambda (p) (read-string p)))))
+                        (lambda (p)
+                          (read-string p)))))
                (not (string-contains s %nonguix-substitute-url))))
 
 (test-end "substitutes")

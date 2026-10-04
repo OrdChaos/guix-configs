@@ -9,21 +9,24 @@
 
 (let* ((dir (mkdtemp "/tmp/guixcfg-atomic-file-XXXXXX"))
        (path (string-append dir "/state.scm")))
-  (dynamic-wind
-   (lambda () #t)
-   (lambda ()
-     (atomic-write-file! path
-                         (lambda (port) (display "first\n" port)))
-     (test-equal "first commit writes main file"
-                 "first\n"
-                 (call-with-input-file path get-string-all))
-     
-     (atomic-write-file! path
-                         (lambda (port) (display "second\n" port)))
-     (test-equal "second commit atomically replaces main file"
-                 "second\n"
-                 (call-with-input-file path get-string-all)))
-   (lambda ()
-     (delete-file-recursively dir))))
+  (dynamic-wind (lambda ()
+                  #t)
+                (lambda ()
+                  (atomic-write-file! path
+                                      (lambda (port)
+                                        (display "first\n" port)))
+                  (test-equal "first commit writes main file" "first\n"
+                              (call-with-input-file path
+                                get-string-all))
+
+                  (atomic-write-file! path
+                                      (lambda (port)
+                                        (display "second\n" port)))
+                  (test-equal "second commit atomically replaces main file"
+                              "second\n"
+                              (call-with-input-file path
+                                get-string-all)))
+                (lambda ()
+                  (delete-file-recursively dir))))
 
 (test-end)

@@ -21,7 +21,7 @@
 
 (use-modules (guixcfg system install)
              (guixcfg system deploy)
-             (guixcfg utils repository-source) ; repository-root
+             (guixcfg utils repository-source) ;repository-root
              (ice-9 match)
              (ice-9 rdelim))
 
@@ -35,33 +35,37 @@
 
 (define (plan-command host device)
   (let ((root (repository-root)))
-    (let loop ((checks (install-preflight-checks root host device))
-               (failures 0))
+    (let loop
+      ((checks (install-preflight-checks root host device))
+       (failures 0))
       (if (null? checks)
-        (begin
-         (unless (zero? failures)
-           (format (current-error-port)
-                   "install preflight: ~a check(s) failed~%" failures)
-           (exit 1))
-         (for-each (lambda (line) (format #t "~a~%" line))
-                   (install-plan-lines
-                    (detect-install-state root host device)))
-         (exit 0))
-        (let* ((check (car checks))
-               (result ((cdr check))))
-          (match result
-                 (('ok . detail)
-                  (format #t "  [OK] ~a~a~%"
-                          (car check)
-                          (if detail (string-append ": " detail) "")))
-                 (('fail . detail)
-                  (format (current-error-port) "  [FAIL] ~a: ~a~%"
-                          (car check) detail))
-                 (_ #t))
-          (loop (cdr checks)
-                (+ failures (if (and (pair? result)
-                                     (eq? (car result) 'fail))
-                              1 0))))))))
+          (begin
+            (unless (zero? failures)
+              (format (current-error-port)
+                      "install preflight: ~a check(s) failed~%" failures)
+              (exit 1))
+            (for-each (lambda (line)
+                        (format #t "~a~%" line))
+                      (install-plan-lines (detect-install-state root host
+                                                                device)))
+            (exit 0))
+          (let* ((check (car checks))
+                 (result ((cdr check))))
+            (match result
+              (((quote ok) . detail) (format #t "  [OK] ~a~a~%"
+                                             (car check)
+                                             (if detail
+                                                 (string-append ": " detail)
+                                                 "")))
+              (((quote fail) . detail) (format (current-error-port)
+                                               "  [FAIL] ~a: ~a~%"
+                                               (car check) detail))
+              (_ #t))
+            (loop (cdr checks)
+                  (+ failures
+                     (if (and (pair? result)
+                              (eq? (car result)
+                                   'fail)) 1 0))))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; run（root 事务；确认 UI 归本 CLI——与 blueprint 的职责边界同：
@@ -70,7 +74,8 @@
 (define (confirm-device-ui state device)
   "破坏性确认：打印 §8 格式并逐字比对完整 DEVICE；EOF/其他输入一律
   返回 #f（→ 事务 exit 3）。"
-  (for-each (lambda (line) (format #t "~a~%" line))
+  (for-each (lambda (line)
+              (format #t "~a~%" line))
             (install-confirm-lines state))
   (force-output)
   (let ((input (read-line)))
@@ -85,34 +90,38 @@
             "install transaction requires root (effective UID 0)~%")
     (exit 1))
   (let ((root (repository-root)))
-    (let ((code
-           (install-transaction!
-            root host device
-            ;; exec 契约：cwd = 仓库根（本进程由 Blue 以仓库根启动）。
-            #:exec
-            (lambda (argv)
-              (format #t "  [exec] ~{ ~a~}~%" argv)
-              (status:exit-val (apply system* argv)))
-            #:on-confirm
-            (lambda (state)
-              (confirm-device-ui state device)))))
+    (let ((code (install-transaction! root
+                                      host
+                                      device
+                                      ;; exec 契约：cwd = 仓库根（本进程由 Blue 以仓库根启动）。
+                                      #:exec (lambda (argv)
+                                               (format #t "  [exec] ~{ ~a~}~%"
+                                                       argv)
+                                               (status:exit-val (apply system*
+                                                                 argv)))
+                                      #:on-confirm (lambda (state)
+                                                     (confirm-device-ui state
+                                                      device)))))
       ;; 只在完整 validate 成功后停止 install-time cow-store 并落盘；
       ;; 不 unmount、不 poweroff、不 reboot。
       (when (zero? code)
         (chdir "/root")
-        (for-each
-         (lambda (argv)
-           (let ((status (apply system* argv)))
-             (unless (zero? status)
-               (exit (or (status:exit-val status) 1)))))
-         (install-success-cleanup-commands)))
+        (for-each (lambda (argv)
+                    (let ((status (apply system* argv)))
+                      (unless (zero? status)
+                        (exit (or (status:exit-val status) 1)))))
+                  (install-success-cleanup-commands)))
       (exit code))))
 
 ;;; ────────────────────────────────────────────────────────────
 
 (match (cdr (command-line))
-       (("--" "plan" host device) (plan-command host device))
-       (("--" "run" host device) (run-command host device))
-       (("plan" host device) (plan-command host device))
-       (("run" host device) (run-command host device))
-       (_ (usage)))
+  (("--" "plan" host device)
+   (plan-command host device))
+  (("--" "run" host device)
+   (run-command host device))
+  (("plan" host device)
+   (plan-command host device))
+  (("run" host device)
+   (run-command host device))
+  (_ (usage)))

@@ -31,35 +31,34 @@
 ;;;     -e '(@ (guixcfg hosts lenovo-legion-y7000p) %lenovo-legion-y7000p-os)'
 
 (define-module (guixcfg hosts lenovo-legion-y7000p)
-               #:use-module (gnu)                          ; operating-system、user-account、service 等
-               #:use-module (gnu services base)            ; pam-limits-service-type
-               #:use-module (gnu services desktop)         ; upower-service-type
-               #:use-module (gnu system pam)               ; pam-limits-entry
-               #:use-module (gnu home)                     ; home-environment（laptop home 组装）
-               #:use-module (gnu services networking)      ; network-manager-service-type、wpa-supplicant-service-type
-               #:use-module (guixcfg storage model)          ; host-storage-policy-keep-root-generations
-               #:use-module ((guixcfg storage policies) #:prefix storage:)
-               #:use-module (guixcfg hosts common)         ; 共享 host composition algorithm
-               #:use-module (guixcfg inventory hosts)      ; Host ID → hostname 单一映射
-               #:use-module (guixcfg system graphics nvidia) ; nvidia-system-transformation（laptop 专属）
-               #:use-module (guixcfg system power)        ; TLP + tlp-pd（laptop 专属）
-               #:use-module (guixcfg system bluetooth)    ; BlueZ userspace + pairing state（laptop 专属）
-               #:use-module (guixcfg users user)           ; %primary-user（结构事实权威源）
-               #:use-module (guixcfg home user)            ; guix-home（挂入 system）
-               #:use-module (guixcfg security secrets)     ; secrets 部署机制
-               #:use-module (guixcfg apps registry)   ; %applications（secret composition root）
-               #:use-module (guixcfg apps model)      ; applications-secrets
-               #:use-module (guixcfg apps selection)  ; application-configuration-selection
-               #:use-module (guixcfg system machine-state-persistence) ; machine-state binds
-               #:use-module (guixcfg system network-manager-persistence) ; saved connection profiles
-               #:use-module (guixcfg system mihomo service) ; %mihomo-secrets、%mihomo-data-persistence-rule
-               #:use-module (guixcfg system dns nm-dnsmasq) ; dnsmasq 专用账号配置
-               #:export (%lenovo-legion-y7000p-storage-policy
-                         %lenovo-legion-y7000p-application-configuration-selections
-                         %lenovo-legion-y7000p-guix-home
-                         %lenovo-legion-y7000p-services
-                         %lenovo-legion-y7000p-user-services
-                         %lenovo-legion-y7000p-os))
+  #:use-module (gnu) ;operating-system、user-account、service 等
+  #:use-module (gnu services base) ;pam-limits-service-type
+  #:use-module (gnu services desktop) ;upower-service-type
+  #:use-module (gnu system pam) ;pam-limits-entry
+  #:use-module (gnu home) ;home-environment（laptop home 组装）
+  #:use-module (gnu services networking) ;network-manager-service-type、wpa-supplicant-service-type
+  #:use-module (guixcfg storage model) ;host-storage-policy-keep-root-generations
+  #:use-module ((guixcfg storage policies)
+                #:prefix storage:)
+  #:use-module (guixcfg hosts common) ;共享 host composition algorithm
+  #:use-module (guixcfg inventory hosts) ;Host ID → hostname 单一映射
+  #:use-module (guixcfg system graphics nvidia) ;nvidia-system-transformation（laptop 专属）
+  #:use-module (guixcfg system power) ;TLP + tlp-pd（laptop 专属）
+  #:use-module (guixcfg system bluetooth) ;BlueZ userspace + pairing state（laptop 专属）
+  #:use-module (guixcfg users user) ;%primary-user（结构事实权威源）
+  #:use-module (guixcfg home user) ;guix-home（挂入 system）
+  #:use-module (guixcfg security secrets) ;secrets 部署机制
+  #:use-module (guixcfg apps registry) ;%applications（secret composition root）
+  #:use-module (guixcfg apps model) ;applications-secrets
+  #:use-module (guixcfg apps selection) ;application-configuration-selection
+  #:use-module (guixcfg system machine-state-persistence) ;machine-state binds
+  #:use-module (guixcfg system network-manager-persistence) ;saved connection profiles
+  #:use-module (guixcfg system mihomo service) ;%mihomo-secrets、%mihomo-data-persistence-rule
+  #:use-module (guixcfg system dns nm-dnsmasq) ;dnsmasq 专用账号配置
+  #:export (%lenovo-legion-y7000p-storage-policy
+            %lenovo-legion-y7000p-application-configuration-selections
+            %lenovo-legion-y7000p-guix-home %lenovo-legion-y7000p-services
+            %lenovo-legion-y7000p-user-services %lenovo-legion-y7000p-os))
 
 ;; 保留 host 模块原有导出名；实际 policy 放在纯存储模块中，避免早期
 ;; disk-install 为取 policy 而加载完整 OS/UKI/channel 依赖。
@@ -70,9 +69,8 @@
 ;; "选什么"，不表达"装什么文件/装到哪里"——改变 niri 'laptop
 ;; variant 背后的文件或目标路径不要求修改这里。
 (define %lenovo-legion-y7000p-application-configuration-selections
-  (list (application-configuration-selection
-         (application 'niri)
-         (variant 'laptop))))
+  (list (application-configuration-selection (application 'niri)
+                                             (variant 'laptop))))
 
 ;; laptop 的 Guix Home 组合：默认 home + logical selections（由
 ;; generic resolver 解析为配置文件贡献）+ laptop-only host
@@ -82,15 +80,14 @@
 ;; adapter（%flatpak-prime-environment-overrides——只作用于
 ;; managed override，VM 传空 overlay 时不产生 __NV_* 变量）。
 (define %lenovo-legion-y7000p-guix-home
-  (let ((base (guix-home
-               #:application-configuration-selections
+  (let ((base (guix-home #:application-configuration-selections
                %lenovo-legion-y7000p-application-configuration-selections
                #:flatpak-environment-overrides
                %flatpak-prime-environment-overrides)))
     (home-environment
-     (inherit base)
-     (packages (cons %prime-run-wrapper
-                     (home-environment-packages base))))))
+      (inherit base)
+      (packages (cons %prime-run-wrapper
+                      (home-environment-packages base))))))
 
 ;; laptop 的 runtime secrets：mihomo（模块持有，所有设备共用）+
 ;; applications（registry 聚合）。无 VM 测试 sentinel（那是测试机专属）。
@@ -109,9 +106,9 @@
 ;;     state under /var/lib/NetworkManager stays ephemeral);
 ;;   - BlueZ pairing state (/var/lib/bluetooth).
 (define %laptop-machine-state-file-systems
-  (machine-state-persistence-file-systems
-   (list %network-manager-connections-persistence-rule
-         %laptop-bluetooth-persistence-rule)))
+  (machine-state-persistence-file-systems (list
+                                           %network-manager-connections-persistence-rule
+                                           %laptop-bluetooth-persistence-rule)))
 
 ;; Wine may exceed the inherited 4096 descriptor limit while streaming game
 ;; resources.  Set both limits so the graphical PAM session passes 65536 to
@@ -119,68 +116,67 @@
 (define %primary-user-pam-limits
   (list (pam-limits-entry (user-profile-name %primary-user)
                           'both
-                          'nofile
-                          65536)))
+                          'nofile 65536)))
 
 (define %lenovo-legion-y7000p-services
-  (append
-   (make-host-services
-    ;; 实机网络：NetworkManager（dnsmasq backend）+ 显式 wpa-supplicant。
-    ;; DNS 语义同 VM（docs/architecture/dns.md）：dnsmasq 127.0.0.1:53 →
-    ;; DHCP DNS，以专用稳定 UID 运行（mihomo TUN exclude-uid 引用）。
-    #:network-services
-    (list (service network-manager-service-type
-                   (network-manager-configuration
-                    (dns "dnsmasq")
-                    (dnsmasq-configuration-files
-                     (nm-dnsmasq-dnsmasq-configuration-files))))
-          (service wpa-supplicant-service-type))
-    #:keep-root-generations
-    (host-storage-policy-keep-root-generations
-     %lenovo-legion-y7000p-storage-policy)
-    #:persistent-mount-file-systems %persistent-mount-file-systems
-    ;; UPower publishes battery and charging state on the system bus for
-    ;; Noctalia.  It is a physical-laptop capability, not a VM service.
-    #:additional-system-services
-    (append (list (service upower-service-type)
-                  (service pam-limits-service-type %primary-user-pam-limits))
-            ;; TLP + tlp-pd（离电功耗控制 + PPD 兼容 D-Bus 接口）。
-            %laptop-power-services
-            ;; BlueZ userspace（bluetoothd + org.bluez + udev）。
-            %laptop-bluetooth-services))
-   ;; Activation precedes Shepherd's mounts and NetworkManager startup.
-   (list (network-manager-connections-persistence-service))))
+  (append (make-host-services
+           ;; 实机网络：NetworkManager（dnsmasq backend）+ 显式 wpa-supplicant。
+           ;; DNS 语义同 VM（docs/architecture/dns.md）：dnsmasq 127.0.0.1:53 →
+           ;; DHCP DNS，以专用稳定 UID 运行（mihomo TUN exclude-uid 引用）。
+           #:network-services (list (service network-manager-service-type
+                                             (network-manager-configuration (dns
+                                                                             "dnsmasq")
+                                                                            (dnsmasq-configuration-files
+                                                                             (nm-dnsmasq-dnsmasq-configuration-files))))
+                                    (service wpa-supplicant-service-type))
+           #:keep-root-generations (host-storage-policy-keep-root-generations
+                                    %lenovo-legion-y7000p-storage-policy)
+           #:persistent-mount-file-systems %persistent-mount-file-systems
+           ;; UPower publishes battery and charging state on the system bus for
+           ;; Noctalia.  It is a physical-laptop capability, not a VM service.
+           #:additional-system-services (append (list (service
+                                                       upower-service-type)
+                                                      (service
+                                                       pam-limits-service-type
+                                                       %primary-user-pam-limits))
+                                                ;; TLP + tlp-pd（离电功耗控制 + PPD 兼容 D-Bus 接口）。
+                                                %laptop-power-services
+                                                ;; BlueZ userspace（bluetoothd + org.bluez + udev）。
+                                                %laptop-bluetooth-services))
+          ;; Activation precedes Shepherd's mounts and NetworkManager startup.
+          (list (network-manager-connections-persistence-service))))
 
 ;; 完整 user services（不含 account-databases 投影本身）。
 (define %lenovo-legion-y7000p-user-services
-  (make-host-user-services
-   #:system-services %lenovo-legion-y7000p-services
-   #:application-persistence-rules
-   (host-application-persistence-rules)
-   #:flatpak-environment-overrides %flatpak-prime-environment-overrides
-   #:additional-machine-state-persistence-rules
-   (list %network-manager-connections-persistence-rule
-         %laptop-bluetooth-persistence-rule)
-   #:secrets %lenovo-legion-y7000p-secrets
-   #:home-environment %lenovo-legion-y7000p-guix-home))
+  (make-host-user-services #:system-services %lenovo-legion-y7000p-services
+                           #:application-persistence-rules (host-application-persistence-rules)
+                           #:flatpak-environment-overrides
+                           %flatpak-prime-environment-overrides
+                           #:additional-machine-state-persistence-rules (list
+                                                                         %network-manager-connections-persistence-rule
+                                                                         %laptop-bluetooth-persistence-rule)
+                           #:secrets %lenovo-legion-y7000p-secrets
+                           #:home-environment %lenovo-legion-y7000p-guix-home))
 
 ;; 基础 OS：与最终 %lenovo-legion-y7000p-os 完全相同，只是不含 account-databases
 ;; 投影与 NVIDIA transformation。仅用于折叠 account 列表。
 (define %os-without-account-databases
-  (make-base-host-operating-system
-   #:host-name (host-name-for-id "lenovo-legion-y7000p")
-   #:persistent-mount-file-systems %persistent-mount-file-systems
-   #:additional-machine-state-file-systems
-   %laptop-machine-state-file-systems
-   #:user-services %lenovo-legion-y7000p-user-services))
+  (make-base-host-operating-system #:host-name (host-name-for-id
+                                                "lenovo-legion-y7000p")
+                                   #:persistent-mount-file-systems
+                                   %persistent-mount-file-systems
+                                   #:additional-machine-state-file-systems
+                                   %laptop-machine-state-file-systems
+                                   #:user-services
+                                   %lenovo-legion-y7000p-user-services))
 
 ;; 最终 OS：account fold + machine-identity + account-databases 投影，
 ;; 最后套 NVIDIA adapter（只改 kernel-arguments/packages/services，
 ;; kernel/initrd/firmware 原样保留——%kernel 仍是被选内核）。
 (define %lenovo-legion-y7000p-os
-  (make-host-operating-system
-   %os-without-account-databases
-   #:final-transformation nvidia-system-transformation))
+  (make-host-operating-system %os-without-account-databases
+                              #:final-transformation
+                              nvidia-system-transformation))
 
 ;; 末尾裸表达式：让本文件同时是 guix system 的入口文件——
 ;; guix system init/reconfigure 加载文件时取最后一个顶层表达式的值

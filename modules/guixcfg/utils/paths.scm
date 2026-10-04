@@ -5,8 +5,8 @@
 ;;; §13 second-implementation trigger）。
 
 (define-module (guixcfg utils paths)
-               #:use-module (srfi srfi-13)  ; string-prefix?/string-contains/string-suffix?
-               #:export (valid-relative-path?))
+  #:use-module (srfi srfi-13) ;string-prefix?/string-contains/string-suffix?
+  #:export (valid-relative-path?))
 
 (define (valid-relative-path? p)
   "P 是否是合法的相对路径（非空、非绝对、无 .. 逃逸）。"

@@ -23,44 +23,49 @@
 (add-to-load-path (string-append (getcwd) "/modules"))
 
 (use-modules (guixcfg security enroll)
-             (guixcfg utils repository-source) ; repository-root
+             (guixcfg utils repository-source) ;repository-root
              (ice-9 match)
              (ice-9 rdelim))
 
 (define (usage)
   (format (current-error-port)
-          "usage: enroll-cli.scm -- firstboot-guard HOST | plan HOST | run HOST~%")
+   "usage: enroll-cli.scm -- firstboot-guard HOST | plan HOST | run HOST~%")
   (exit 1))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; plan（只读；user 态与 blue -n 共用）
 
 (define (run-checks checks prefix)
-  (let loop ((rest checks) (failures 0))
+  (let loop
+    ((rest checks)
+     (failures 0))
     (if (null? rest)
-      (begin
-       (unless (zero? failures)
-         (format (current-error-port) "~a: ~a check(s) failed~%"
-                 prefix failures)
-         (exit 1))
-       #t)
-      (let* ((check (car rest))
-             (result ((cdr check))))
-        (match result
-               (('ok . detail)
-                (format #t "  [OK] ~a~a~%" (car check)
-                        (if detail (string-append ": " detail) "")))
-               (('info . detail)
-                (format #t "  [--] ~a~a~%" (car check)
-                        (if detail (string-append ": " detail) "")))
-               (('fail . detail)
-                (format (current-error-port) "  [FAIL] ~a: ~a~%"
-                        (car check) detail))
-               (_ #t))
-        (loop (cdr rest)
-              (+ failures (if (and (pair? result)
-                                   (eq? (car result) 'fail))
-                            1 0)))))))
+        (begin
+          (unless (zero? failures)
+            (format (current-error-port) "~a: ~a check(s) failed~%" prefix
+                    failures)
+            (exit 1)) #t)
+        (let* ((check (car rest))
+               (result ((cdr check))))
+          (match result
+            (((quote ok) . detail) (format #t "  [OK] ~a~a~%"
+                                           (car check)
+                                           (if detail
+                                               (string-append ": " detail) "")))
+            (((quote info) . detail) (format #t "  [--] ~a~a~%"
+                                             (car check)
+                                             (if detail
+                                                 (string-append ": " detail)
+                                                 "")))
+            (((quote fail) . detail) (format (current-error-port)
+                                             "  [FAIL] ~a: ~a~%"
+                                             (car check) detail))
+            (_ #t))
+          (loop (cdr rest)
+                (+ failures
+                   (if (and (pair? result)
+                            (eq? (car result)
+                                 'fail)) 1 0)))))))
 
 (define (firstboot-guard-command host)
   (run-checks (firstboot-readonly-checks (repository-root) host)
@@ -70,10 +75,10 @@
 (define (plan-command host)
   (let ((root (repository-root)))
     (run-checks (enroll-readonly-checks root host) "enroll preflight")
-    (for-each
-     (lambda (line) (format #t "~a~%" line))
-     (enroll-plan-lines
-      (classify-enrollment-probes (collect-enrollment-probes)) host))
+    (for-each (lambda (line)
+                (format #t "~a~%" line))
+              (enroll-plan-lines (classify-enrollment-probes (collect-enrollment-probes))
+                                 host))
     (exit 0)))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -82,7 +87,8 @@
 (define (firmware-confirm-ui status)
   "固件写入确认：打印当前状态/计划操作/回滚影响并逐字比对 token；
   EOF/其他输入一律返回 #f（→ 事务 exit 3）。"
-  (for-each (lambda (line) (format #t "~a~%" line))
+  (for-each (lambda (line)
+              (format #t "~a~%" line))
             (firmware-confirm-lines status))
   (force-output)
   (let ((input (read-line)))
@@ -97,25 +103,29 @@
             "enroll transaction requires root (effective UID 0)~%")
     (exit 1))
   (let ((root (repository-root)))
-    (exit
-     (enroll-transaction!
-      root host
-      ;; exec 契约：cwd = 仓库根（本进程由 Blue 以仓库根启动）。
-      #:exec
-      (lambda (argv)
-        (format #t "  [exec] ~{ ~a~}~%" argv)
-        (status:exit-val (apply system* argv)))
-      #:on-firmware-confirm
-      (lambda (status)
-        (firmware-confirm-ui status))))))
+    (exit (enroll-transaction! root
+                               host
+                               ;; exec 契约：cwd = 仓库根（本进程由 Blue 以仓库根启动）。
+                               #:exec (lambda (argv)
+                                        (format #t "  [exec] ~{ ~a~}~%" argv)
+                                        (status:exit-val (apply system* argv)))
+                               #:on-firmware-confirm (lambda (status)
+                                                       (firmware-confirm-ui
+                                                        status))))))
 
 ;;; ────────────────────────────────────────────────────────────
 
 (match (cdr (command-line))
-       (("--" "firstboot-guard" host) (firstboot-guard-command host))
-       (("--" "plan" host) (plan-command host))
-       (("--" "run" host) (run-command host))
-       (("firstboot-guard" host) (firstboot-guard-command host))
-       (("plan" host) (plan-command host))
-       (("run" host) (run-command host))
-       (_ (usage)))
+  (("--" "firstboot-guard" host)
+   (firstboot-guard-command host))
+  (("--" "plan" host)
+   (plan-command host))
+  (("--" "run" host)
+   (run-command host))
+  (("firstboot-guard" host)
+   (firstboot-guard-command host))
+  (("plan" host)
+   (plan-command host))
+  (("run" host)
+   (run-command host))
+  (_ (usage)))

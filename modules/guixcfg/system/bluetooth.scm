@@ -22,26 +22,23 @@
 ;;; 机制，不新增第二套持久化框架）。
 
 (define-module (guixcfg system bluetooth)
-               #:use-module (gnu services)         ; service
-               #:use-module (gnu services desktop) ; bluetooth-service-type、bluetooth-configuration
-               #:use-module (guixcfg system machine-state-persistence)
-               #:export (%laptop-bluetooth-configuration
-                         %laptop-bluetooth-persistence-rule
-                         %laptop-bluetooth-services))
+  #:use-module (gnu services) ;service
+  #:use-module (gnu services desktop) ;bluetooth-service-type、bluetooth-configuration
+  #:use-module (guixcfg system machine-state-persistence)
+  #:export (%laptop-bluetooth-configuration %laptop-bluetooth-persistence-rule
+            %laptop-bluetooth-services))
 
 ;; auto-enable? #f → main.conf 的 [Policy] AutoEnable=false：bluetoothd 启动
 ;; 后控制器保持 powered-off，由用户在桌面控件里按需开启（默认关闭策略）。
 (define %laptop-bluetooth-configuration
-  (bluetooth-configuration
-   (auto-enable? #f)))
+  (bluetooth-configuration (auto-enable? #f)))
 
 ;; BlueZ pairing state：/persist/system/state/bluetooth → /var/lib/bluetooth
 ;; （root-owned machine state；consumer 是 daemon 运行期读取的标准位置）。
 (define %laptop-bluetooth-persistence-rule
-  (machine-state-persistence-rule
-   (name 'bluetooth)
-   (backing "bluetooth")
-   (consumer "/var/lib/bluetooth")))
+  (machine-state-persistence-rule (name 'bluetooth)
+                                  (backing "bluetooth")
+                                  (consumer "/var/lib/bluetooth")))
 
 ;; laptop Bluetooth system services（host 经 additional-system-services 消费）：
 ;;   - bluetoothd shepherd 服务；

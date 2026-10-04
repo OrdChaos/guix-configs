@@ -7,14 +7,17 @@
 ;;; home-packages 提供），捆绑二进制闲置不启动。
 
 (define-module (guixcfg apps vscode extensions rust-analyzer)
-  #:use-module (guix packages)          ; base32
-  #:use-module ((guix licenses) #:prefix license:)
+  #:use-module (guix packages) ;base32
+  #:use-module ((guix licenses)
+                #:prefix license:)
   #:use-module (virelith packages vscode-extensions)
   #:export (vscode-extension-rust-analyzer))
 
 (define-public vscode-extension-rust-analyzer
-  (vscode-marketplace-extension
-   "rust-lang" "rust-analyzer" "0.4.3070"
-   (base32 "1fryz4wjclyj3hmh5gwhq4sq7di4nc0pflqd27gw1i6ls4d6zi69")
-   #:target-platform "linux-x64"
-   #:license (list license:expat license:asl2.0)))
+  (vscode-marketplace-extension "rust-lang"
+                                "rust-analyzer"
+                                "0.4.3070"
+                                (base32
+                                 "1fryz4wjclyj3hmh5gwhq4sq7di4nc0pflqd27gw1i6ls4d6zi69")
+                                #:target-platform "linux-x64"
+                                #:license (list license:expat license:asl2.0)))

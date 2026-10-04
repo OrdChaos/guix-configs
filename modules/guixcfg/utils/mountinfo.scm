@@ -27,19 +27,18 @@
 ;;; 旧行，保留其他 owner 的条目；stale TARGET 随重建消失。
 
 (define-module (guixcfg utils mountinfo)
-               #:use-module (guix build utils)        ; mkdir-p
-               #:use-module (ice-9 rdelim)            ; read-string
-               #:use-module (srfi srfi-1)             ; filter、find、append-map、list-index
-               #:use-module (srfi srfi-13)            ; string-trim、string-split
-               #:export (%gvfs-utab-path
-                         %guixcfg-utab-ownership-marker
-                         mangle
-                         unmangle
-                         parse-mountinfo
-                         mountinfo-entries-for
-                         gvfs-utab-entries
-                         owned-entry?
-                         ensure-gvfs-utab!))
+  #:use-module (guix build utils) ;mkdir-p
+  #:use-module (ice-9 rdelim) ;read-string
+  #:use-module (srfi srfi-1) ;filter、find、append-map、list-index
+  #:use-module (srfi srfi-13) ;string-trim、string-split
+  #:export (%gvfs-utab-path %guixcfg-utab-ownership-marker
+                            mangle
+                            unmangle
+                            parse-mountinfo
+                            mountinfo-entries-for
+                            gvfs-utab-entries
+                            owned-entry?
+                            ensure-gvfs-utab!))
 
 ;; /run/mount/utab（libmount 的 user options 文件）。parameter 化供
 ;; 测试覆盖（真实路径每 boot 重建）。
@@ -57,24 +56,37 @@
 ;; 用同一规则。
 (define (mangle s)
   "按 libmount mangle 规则转义 S（空格/tab/换行/反斜杠 → \\oct）。"
-  (string-join
-   (map (lambda (ch)
-          (case ch
-            ((#\space) "\\040")
-            ((#\tab) "\\011")
-            ((#\newline) "\\012")
-            ((#\\) "\\134")
-            (else (string ch))))
-        (string->list s))
-   ""))
+  (string-join (map (lambda (ch)
+                      (case ch
+                        ((#\space)
+                         "\\040")
+                        ((#\tab)
+                         "\\011")
+                        ((#\newline)
+                         "\\012")
+                        ((#\\)
+                         "\\134")
+                        (else (string ch))))
+                    (string->list s)) ""))
 
 (define (octal-digit? c)
-  (memv c '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7)))
+  (memv c
+        '(#\0 #\1
+          #\2
+          #\3
+          #\4
+          #\5
+          #\6
+          #\7)))
 
 (define (unmangle s)
   "按 libmount mangle 规则解码 S（\\oct → 字符）。"
-  (let loop ((chars (string->list s)) (acc '()))
-    (cond ((null? chars) (list->string (reverse acc)))
+  (let loop
+    ((chars (string->list s))
+     (acc '()))
+    (cond
+      ((null? chars)
+       (list->string (reverse acc)))
       ((and (eq? (car chars) #\\)
             (pair? (cdr chars))
             (pair? (cddr chars))
@@ -83,15 +95,16 @@
             (octal-digit? (caddr chars))
             (octal-digit? (cadddr chars)))
        (loop (cddddr chars)
-             (cons (integer->char
-                    (+ (* 64 (- (char->integer (cadr chars))
-                                (char->integer #\0)))
-                       (* 8 (- (char->integer (caddr chars))
-                               (char->integer #\0)))
-                       (- (char->integer (cadddr chars))
-                          (char->integer #\0))))
-                   acc)))
-      (else (loop (cdr chars) (cons (car chars) acc))))))
+             (cons (integer->char (+ (* 64
+                                        (- (char->integer (cadr chars))
+                                           (char->integer #\0)))
+                                     (* 8
+                                        (- (char->integer (caddr chars))
+                                           (char->integer #\0)))
+                                     (- (char->integer (cadddr chars))
+                                        (char->integer #\0)))) acc)))
+      (else (loop (cdr chars)
+                  (cons (car chars) acc))))))
 
 ;; ── mountinfo 解析 ───────────────────────────────────────────
 ;; 行：ID PARENT MAJ:MIN ROOT MOUNTPOINT OPTIONS - FSTYPE SOURCE
@@ -101,11 +114,15 @@
 ...) 列表（已 unmangle）。"
   (map (lambda (line)
          (let ((fields (string-split line #\space)))
-           (let ((sep (list-index (lambda (f) (string=? f "-")) fields)))
-             (list (unmangle (list-ref fields 4))                 ; mount point
-                   (and sep (unmangle (list-ref fields (+ sep 2)))) ; source
-                   (unmangle (list-ref fields 3))))))            ; root
-       (filter (lambda (l) (not (string-null? (string-trim l))))
+           (let ((sep (list-index (lambda (f)
+                                    (string=? f "-")) fields)))
+             (list (unmangle (list-ref fields 4)) ;mount point
+                   (and sep
+                        (unmangle (list-ref fields
+                                            (+ sep 2)))) ;source
+                   (unmangle (list-ref fields 3)))))) ;root
+       (filter (lambda (l)
+                 (not (string-null? (string-trim l))))
                (string-split text #\newline))))
 
 (define (mountinfo-entries-for mounts)
@@ -115,18 +132,17 @@
 在 btrfs/subvolume 场景下不等于 mountinfo SOURCE/ROOT；merge_user_fs
 要求与 mountinfo 一致才合并）。找不到对应挂载的条目被丢弃（挂载
 尚未就位时安全）。"
-  (let ((entries (parse-mountinfo
-                  (call-with-input-file "/proc/self/mountinfo"
-                                        (lambda (p) (read-string p))))))
-    (append-map
-     (lambda (m)
-       (let ((target (cdr m)))
-         (let ((hit (find (lambda (e) (string=? (car e) target))
-                          entries)))
-           (if hit
-             (list (list (cadr hit) target (caddr hit)))
-             '()))))
-     mounts)))
+  (let ((entries (parse-mountinfo (call-with-input-file "/proc/self/mountinfo"
+                                    (lambda (p)
+                                      (read-string p))))))
+    (append-map (lambda (m)
+                  (let ((target (cdr m)))
+                    (let ((hit (find (lambda (e)
+                                       (string=? (car e) target)) entries)))
+                      (if hit
+                          (list (list (cadr hit) target
+                                      (caddr hit)))
+                          '())))) mounts)))
 
 ;; ── utab entry 生成与更新 ────────────────────────────────────
 (define (gvfs-utab-entries mounts-with-root options)
@@ -136,12 +152,16 @@ OPTIONS + ',' + %guixcfg-utab-ownership-marker）。ROOT/SOURCE 必须
 来自 mountinfo（mnt_table_merge_user_fs 要求与 mountinfo 一致才
 合并）。marker 是 ownership token，与 OPTIONS 的 desktop 语义分离。"
   (map (lambda (m)
-         (string-append "SRC=" (mangle (car m))
-                        " TARGET=" (mangle (cadr m))
-                        " ROOT=" (mangle (caddr m))
-                        " OPTS=" options
-                        "," %guixcfg-utab-ownership-marker))
-       mounts-with-root))
+         (string-append "SRC="
+                        (mangle (car m))
+                        " TARGET="
+                        (mangle (cadr m))
+                        " ROOT="
+                        (mangle (caddr m))
+                        " OPTS="
+                        options
+                        ","
+                        %guixcfg-utab-ownership-marker)) mounts-with-root))
 
 (define (owned-entry? line)
   "LINE 是否本服务负责的 utab 条目：解析其 OPTS= 字段，按 ',' 切分
@@ -155,8 +175,7 @@ OPTIONS + ',' + %guixcfg-utab-ownership-marker）。ROOT/SOURCE 必须
     (and opts-field
          (member %guixcfg-utab-ownership-marker
                  (string-split (substring opts-field
-                                          (string-length "OPTS="))
-                               #\,)))))
+                                          (string-length "OPTS=")) #\,)))))
 
 (define (ensure-gvfs-utab! entries)
   "重建 %gvfs-utab-path 中本服务负责的条目：删除旧的（marker-owned
@@ -166,21 +185,20 @@ OPTIONS + ',' + %guixcfg-utab-ownership-marker）。ROOT/SOURCE 必须
   (let ((path (%gvfs-utab-path)))
     (mkdir-p (dirname path))
     (let* ((existing (if (file-exists? path)
-                       (call-with-input-file path
-                                             (lambda (p) (read-string p)))
-                       ""))
+                         (call-with-input-file path
+                           (lambda (p)
+                             (read-string p))) ""))
            (kept (filter (lambda (line)
                            (not (owned-entry? line)))
                          (string-split existing #\newline)))
-           (new-content (string-join
-                         (append (filter (lambda (l)
-                                           (not (string-null? (string-trim l))))
-                                         kept)
-                                 entries)
-                         "\n")))
-      (unless (string=? new-content (string-trim-right existing))
+           (new-content (string-join (append (filter (lambda (l)
+                                                       (not (string-null? (string-trim
+                                                                           l))))
+                                                     kept) entries) "\n")))
+      (unless (string=? new-content
+                        (string-trim-right existing))
         (call-with-output-file path
-                               (lambda (p)
-                                 (display new-content p)
-                                 (newline p))))
+          (lambda (p)
+            (display new-content p)
+            (newline p))))
       (length entries))))

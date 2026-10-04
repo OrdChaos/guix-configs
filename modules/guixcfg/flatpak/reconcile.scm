@@ -25,50 +25,50 @@
 ;;; runtime 输出 English printable ASCII（AGENT.md §11）。
 
 (define-module (guixcfg flatpak reconcile)
-               #:use-module ((guix build utils) #:select (invoke which))
-               #:use-module (guixcfg utils process) ; invoke-capture（stdout 捕获）
-               #:use-module (guixcfg flatpak model)
-               #:use-module (guixcfg flatpak registry)
-               #:use-module (ice-9 format)
-               #:use-module (ice-9 match)
-               #:use-module (srfi srfi-1)  ; member、find、filter、filter-map
-               #:use-module (srfi srfi-13) ; string-split、string-tokenize、string-trim-both、string-prefix?
-               #:export (flatpak-binary
-                         flatpak-binary-candidates
-                         flatpak-remotes-alist
-                         flatpak-remote-by-name
-                         flatpak-check-remote!
-                         flatpak-bootstrap-remote!
-                         flatpak-ensure-remote!
-                         flatpak-replace-remote!
-                         flatpak-list-installed-apps
-                         flatpak-list-installed-runtime-refs
-                         flatpak-list-installed-refs
-                         flatpak-install-app!
-                         flatpak-install-extension!
-                         flatpak-installed-commit
-                         flatpak-sync
-                         flatpak-status
-                         flatpak-update
-                         flatpak-update-runtimes
-                         flatpak-remove
-                         flatpak-gc
-                         ;; Blue flatpak 命令的 invocation 契约与
-                         ;; dry-run plan（只读；不读 Blue state）
-                         %flatpak-actions
-                         flatpak-actions
-                         flatpak-validate-action-arguments
-                         flatpak-sync-plan
-                         flatpak-update-plan
-                         flatpak-update-runtimes-plan
-                         flatpak-remove-plan
-                         flatpak-replace-remote-plan
-                         flatpak-stale-extension-pins
-                         flatpak-gc-unpin-plan
-                         flatpak-gc-commands
-                         ;; GL driver 一致性（离线 doctor）
-                         flatpak-active-gl-drivers
-                         flatpak-gl-driver-status-lines))
+  #:use-module ((guix build utils)
+                #:select (invoke which))
+  #:use-module (guixcfg utils process) ;invoke-capture（stdout 捕获）
+  #:use-module (guixcfg flatpak model)
+  #:use-module (guixcfg flatpak registry)
+  #:use-module (ice-9 format)
+  #:use-module (ice-9 match)
+  #:use-module (srfi srfi-1) ;member、find、filter、filter-map
+  #:use-module (srfi srfi-13) ;string-split、string-tokenize、string-trim-both、string-prefix?
+  #:export (flatpak-binary flatpak-binary-candidates
+                           flatpak-remotes-alist
+                           flatpak-remote-by-name
+                           flatpak-check-remote!
+                           flatpak-bootstrap-remote!
+                           flatpak-ensure-remote!
+                           flatpak-replace-remote!
+                           flatpak-list-installed-apps
+                           flatpak-list-installed-runtime-refs
+                           flatpak-list-installed-refs
+                           flatpak-install-app!
+                           flatpak-install-extension!
+                           flatpak-installed-commit
+                           flatpak-sync
+                           flatpak-status
+                           flatpak-update
+                           flatpak-update-runtimes
+                           flatpak-remove
+                           flatpak-gc
+                           ;; Blue flatpak 命令的 invocation 契约与
+                           ;; dry-run plan（只读；不读 Blue state）
+                           %flatpak-actions
+                           flatpak-actions
+                           flatpak-validate-action-arguments
+                           flatpak-sync-plan
+                           flatpak-update-plan
+                           flatpak-update-runtimes-plan
+                           flatpak-remove-plan
+                           flatpak-replace-remote-plan
+                           flatpak-stale-extension-pins
+                           flatpak-gc-unpin-plan
+                           flatpak-gc-commands
+                           ;; GL driver 一致性（离线 doctor）
+                           flatpak-active-gl-drivers
+                           flatpak-gl-driver-status-lines))
 
 (define (flatpak-binary-candidates)
   ;; 有序候选：会话 PATH 解析优先（显式覆盖），随后 guix 标准安装
@@ -76,8 +76,7 @@
   ;; 声明于此）与用户 profile。
   (cons (which "flatpak")
         (list "/run/current-system/profile/bin/flatpak"
-              (string-append (getenv "HOME")
-                             "/.guix-profile/bin/flatpak"))))
+              (string-append (getenv "HOME") "/.guix-profile/bin/flatpak"))))
 
 (define (flatpak-binary)
   "flatpak 可执行文件绝对路径（工具入口把它注入 FLATPAK_BINARY，
@@ -89,21 +88,22 @@ install 时 desktop entry export 需要绝对路径）。ssh 非 login shell
 flatpak（Flatpak 子系统对所有 host 提供，缺失即异常）：全部候选
 缺失 → fail fast。"
   (or (find (lambda (path)
-              (and (string? path) (file-exists? path)))
+              (and (string? path)
+                   (file-exists? path)))
             (flatpak-binary-candidates))
-      (error "flatpak executable not found \
-(searched PATH, /run/current-system/profile and ~/.guix-profile); \
-install flatpak on this system first")))
+      (error
+       "flatpak executable not found (searched PATH, /run/current-system/profile and ~/.guix-profile); install flatpak on this system first")))
 
 ;;; ── remotes ────────────────────────────────────────────────
 
 (define (flatpak-remote-by-name name)
   "REMOTE name → <flatpak-remote>（registry 查表；未知名 fail-fast
 并列出可用名——remote-replace 的解析入口）。"
-  (or (find (lambda (r) (eq? name (flatpak-remote-name r)))
-            %flatpak-remotes)
-      (error "unknown flatpak remote"
-             name (map flatpak-remote-name %flatpak-remotes))))
+  (or (find (lambda (r)
+              (eq? name
+                   (flatpak-remote-name r))) %flatpak-remotes)
+      (error "unknown flatpak remote" name
+             (map flatpak-remote-name %flatpak-remotes))))
 
 (define (flatpak-remotes-alist)
   "已配置 user remotes 的 ((name . url) ...)（'flatpak remotes
@@ -111,14 +111,14 @@ install flatpak on this system first")))
   (map (lambda (line)
          (let ((tokens (string-tokenize line)))
            (if (>= (length tokens) 2)
-             (cons (car tokens) (cadr tokens))
-             (cons line ""))))
+               (cons (car tokens)
+                     (cadr tokens))
+               (cons line ""))))
        (filter (negate string-null?)
                (map string-trim-both
-                    (string-split
-                     (invoke-capture "flatpak" "remotes" "--user"
-                                     "--columns=name,url")
-                     #\newline)))))
+                    (string-split (invoke-capture "flatpak" "remotes" "--user"
+                                                  "--columns=name,url")
+                                  #\newline)))))
 
 (define (flatpak-check-remote! remote)
   "REMOTE 存在且 effective url == repository-url → #t；不存在 →
@@ -126,18 +126,25 @@ install flatpak on this system first")))
 静默修改 trust root。"
   (let* ((name (symbol->string (flatpak-remote-name remote)))
          (url (assoc-ref (flatpak-remotes-alist) name)))
-    (cond ((not url) #f)
-      ((string=? url (flatpak-remote-repository-url remote)) #t)
-      (else
-       (error (string-append
-               "Flatpak remote '" name
-               "' differs from the repository declaration.\n"
-               "Expected: " (flatpak-remote-repository-url remote)
-               "\n"
-               "Actual:   " url "\n\n"
-               "Refusing to modify an existing remote automatically.\n"
-               "Use an explicit remote maintenance operation \
-to replace or modify it."))))))
+    (cond
+      ((not url)
+       #f)
+      ((string=? url
+                 (flatpak-remote-repository-url remote))
+       #t)
+      (else (error (string-append "Flatpak remote '"
+                    name
+                    "' differs from the repository declaration.
+"
+                    "Expected: "
+                    (flatpak-remote-repository-url remote)
+                    "\n"
+                    "Actual:   "
+                    url
+                    "\n\n"
+                    "Refusing to modify an existing remote automatically.
+"
+                    "Use an explicit remote maintenance operation to replace or modify it."))))))
 
 (define (flatpak-remote-set-url! remote)
   "把 remote 的 effective URL 强制设为声明的 repository-url。
@@ -154,7 +161,7 @@ remote-ls 的 summary 抓取不会再次改写 URL。"
           (symbol->string (flatpak-remote-name remote))))
 
 (define* (flatpak-bootstrap-remote! remote)
-         "领域操作：从零建立 remote 并落定为声明状态——封装 pinned
+  "领域操作：从零建立 remote 并落定为声明状态——封装 pinned
 Flatpak 1.18.2 的 bootstrap 细节，调用方不需要理解：
     1. remote-add --from NAME DESCRIPTOR-URL
        （flatpak 下载官方 descriptor、导入其当前 GPGKey——trust
@@ -170,17 +177,21 @@ Partial-failure rollback：modify 失败时只删除【本次调用刚创建】
 的 remote（调用前提 = flatpak-check-remote! 为 #f），避免留下
 redirect 改写后的非声明状态等下次 sync 才发现 drift。绝不删除
 本操作之前已存在的 remote。"
-         (let ((name (symbol->string (flatpak-remote-name remote))))
-           (invoke "flatpak" "remote-add" "--user" "--if-not-exists"
-                   "--from" name
-                   (flatpak-remote-descriptor-url remote))
-           (catch #t
-             (lambda ()
-               (flatpak-remote-set-url! remote))
-             (lambda args
-               (false-if-exception
-                (invoke "flatpak" "remote-delete" "--user" name))
-               (apply throw args)))))
+  (let ((name (symbol->string (flatpak-remote-name remote))))
+    (invoke "flatpak"
+            "remote-add"
+            "--user"
+            "--if-not-exists"
+            "--from"
+            name
+            (flatpak-remote-descriptor-url remote))
+    (catch #t
+           (lambda ()
+             (flatpak-remote-set-url! remote))
+           (lambda args
+             (false-if-exception (invoke "flatpak" "remote-delete" "--user"
+                                         name))
+             (apply throw args)))))
 
 (define (flatpak-ensure-remote! remote)
   "remote 缺失 → flatpak-bootstrap-remote!（建立 + canonicalize）；
@@ -211,20 +222,20 @@ trust 边界仍在：命令本身是显式的 destructive acknowledgment，sync
 
 (define (flatpak-output->refs output)
   "把 flatpak list 的 application,branch 两列输出规范化为 id//branch。"
-  (delete-duplicates
-   (filter-map
-    (lambda (line)
-      (let ((tokens (string-tokenize line)))
-        (and (>= (length tokens) 2)
-             (string-append (car tokens) "//" (cadr tokens)))))
-    (filter (negate string-null?)
-            (map string-trim-both (string-split output #\newline))))
-   string=?))
+  (delete-duplicates (filter-map (lambda (line)
+                                   (let ((tokens (string-tokenize line)))
+                                     (and (>= (length tokens) 2)
+                                          (string-append (car tokens) "//"
+                                                         (cadr tokens)))))
+                                 (filter (negate string-null?)
+                                         (map string-trim-both
+                                              (string-split output #\newline))))
+                     string=?))
 
 (define (flatpak-list-refs . category-arguments)
-  (flatpak-output->refs
-   (apply invoke-capture "flatpak" "list" "--user"
-     (append category-arguments '("--columns=application,branch")))))
+  (flatpak-output->refs (apply invoke-capture "flatpak" "list" "--user"
+                               (append category-arguments
+                                       '("--columns=application,branch")))))
 
 (define (flatpak-list-installed-runtime-refs)
   "已安装 runtime 的 '<id>//<branch>' ref 列表（'flatpak list --user
@@ -240,13 +251,12 @@ trust 边界仍在：命令本身是显式的 destructive acknowledgment，sync
 (define (flatpak-installed-commit id)
   "已安装 app 的本地 commit（'flatpak info --user --show-commit'）；
 未安装/失败 → #f。"
-  (false-if-exception
-   (let ((out (string-trim-both
-               (invoke-capture "flatpak" "info" "--user" "--show-commit"
-                               id))))
-     (if (string-prefix? "Commit: " out)
-       (string-drop out (string-length "Commit: "))
-       out))))
+  (false-if-exception (let ((out (string-trim-both (invoke-capture "flatpak"
+                                                    "info" "--user"
+                                                    "--show-commit" id))))
+                        (if (string-prefix? "Commit: " out)
+                            (string-drop out
+                                         (string-length "Commit: ")) out))))
 
 ;;; ── sync（ensure only）─────────────────────────────────────
 
@@ -263,7 +273,12 @@ app pin 不隐含 runtime pin（不实现 dependency lockfile）。
   (let ((ref (flatpak-application-ref app))
         (remote (symbol->string (flatpak-application-remote app))))
     (format #t "Installing ~a from '~a'...~%" ref remote)
-    (invoke "flatpak" "install" "--user" "-y" remote ref)
+    (invoke "flatpak"
+            "install"
+            "--user"
+            "-y"
+            remote
+            ref)
     (let ((commit (flatpak-application-commit app)))
       (when commit
         (format #t "Deploying pinned commit ~a for ~a...~%" commit ref)
@@ -275,11 +290,17 @@ app pin 不隐含 runtime pin（不实现 dependency lockfile）。
   (let ((ref (flatpak-extension-ref ext))
         (remote (symbol->string (flatpak-extension-remote ext))))
     (format #t "Installing ~a from '~a'...~%" ref remote)
-    (invoke "flatpak" "install" "--user" "-y" remote ref)))
+    (invoke "flatpak"
+            "install"
+            "--user"
+            "-y"
+            remote
+            ref)))
 
 (define (flatpak-pin-extension! ext)
   "把声明的 extension ref 标为显式保留，防止 gc/autoprune 删除。"
-  (invoke "flatpak" "pin" "--user" (flatpak-extension-ref ext)))
+  (invoke "flatpak" "pin" "--user"
+          (flatpak-extension-ref ext)))
 
 (define (flatpak-list-pins)
   "当前 user installation 的 pin patterns（离线）。"
@@ -293,7 +314,7 @@ app pin 不隐含 runtime pin（不实现 dependency lockfile）。
                        (selection %flatpak-selection)
                        (extensions %flatpak-extensions)
                        (extension-selection '()))
-         "ensure declared remotes + ensure selected apps 与 selected
+  "ensure declared remotes + ensure selected apps 与 selected
 extensions installed。只增不删：不 update 已装、不 remove 未声明、
 不 gc。sync 对【全部 declared remotes】做 ensure（缺即 bootstrap——新
 remote 首次引入 sync 即自动建立；drift 则 fail-loud），不依赖
@@ -308,46 +329,45 @@ sync 对 selected extension 执行 `flatpak pin --user <ref>`，即使它
 逐项报告（含 no-op）：已收敛时也要有输出——静默成功与失败在
 终端上不可区分，且会诱导用户误以为必须 sudo（sudo 落到 root
 的 user installation 反而「有输出」）。"
-         ;; remotes：已声明 → no-op 行；缺失 → ensure（bootstrap
-         ;; 自打印 Adding…）。
-         (for-each (lambda (remote)
-                     (when (flatpak-check-remote! remote)
-                       (format #t "remote ~a: already declared (no-op)~%"
-                               (flatpak-remote-name remote))))
-                   remotes)
-         (for-each flatpak-ensure-remote! remotes)
-         (let* ((selected (flatpak-select-applications selection applications))
-                (installed (flatpak-list-installed-apps))
-                (missing (flatpak-reconcile-plan selected installed))
-                (selected-exts (flatpak-select-extensions
-                                extension-selection extensions))
-                (installed-refs (flatpak-list-installed-refs))
-                (pins (flatpak-list-pins))
-                (missing-exts (filter (lambda (ext)
-                                        (not (member (flatpak-extension-ref ext)
-                                                     installed-refs)))
-                                      selected-exts)))
-           (for-each (lambda (app)
-                       (when (member (flatpak-application-ref app) installed)
-                         (format #t "~a: already installed (no-op)~%"
-                                 (flatpak-application-ref app))))
-                     selected)
-           (for-each flatpak-install-app! missing)
-           (for-each (lambda (ext)
-                       (when (member (flatpak-extension-ref ext) installed-refs)
-                         (format #t "~a: already installed (no-op)~%"
-                                 (flatpak-extension-ref ext))))
-                     selected-exts)
-           (for-each flatpak-install-extension! missing-exts)
-           ;; 即使 ref 原先作为依赖安装，也将声明的 auxiliary ref
-           ;; 显式 pin，保证 `uninstall --unused` 不破坏 desired state。
-           (for-each flatpak-pin-extension!
-                     (filter (lambda (ext)
-                               (not (member (flatpak-extension-ref ext) pins)))
-                             selected-exts))
-           (format #t "sync complete: ~a remotes ensured, ~a application(s) + ~a extension(s) installed~%"
-                   (length remotes) (length missing) (length missing-exts))
-           missing))
+  ;; remotes：已声明 → no-op 行；缺失 → ensure（bootstrap
+  ;; 自打印 Adding…）。
+  (for-each (lambda (remote)
+              (when (flatpak-check-remote! remote)
+                (format #t "remote ~a: already declared (no-op)~%"
+                        (flatpak-remote-name remote)))) remotes)
+  (for-each flatpak-ensure-remote! remotes)
+  (let* ((selected (flatpak-select-applications selection applications))
+         (installed (flatpak-list-installed-apps))
+         (missing (flatpak-reconcile-plan selected installed))
+         (selected-exts (flatpak-select-extensions extension-selection
+                                                   extensions))
+         (installed-refs (flatpak-list-installed-refs))
+         (pins (flatpak-list-pins))
+         (missing-exts (filter (lambda (ext)
+                                 (not (member (flatpak-extension-ref ext)
+                                              installed-refs))) selected-exts)))
+    (for-each (lambda (app)
+                (when (member (flatpak-application-ref app) installed)
+                  (format #t "~a: already installed (no-op)~%"
+                          (flatpak-application-ref app)))) selected)
+    (for-each flatpak-install-app! missing)
+    (for-each (lambda (ext)
+                (when (member (flatpak-extension-ref ext) installed-refs)
+                  (format #t "~a: already installed (no-op)~%"
+                          (flatpak-extension-ref ext)))) selected-exts)
+    (for-each flatpak-install-extension! missing-exts)
+    ;; 即使 ref 原先作为依赖安装，也将声明的 auxiliary ref
+    ;; 显式 pin，保证 `uninstall --unused` 不破坏 desired state。
+    (for-each flatpak-pin-extension!
+              (filter (lambda (ext)
+                        (not (member (flatpak-extension-ref ext) pins)))
+                      selected-exts))
+    (format #t
+     "sync complete: ~a remotes ensured, ~a application(s) + ~a extension(s) installed~%"
+     (length remotes)
+     (length missing)
+     (length missing-exts))
+    missing))
 
 ;;; ── status ─────────────────────────────────────────────────
 
@@ -377,127 +397,137 @@ sync 对 selected extension 执行 `flatpak pin --user <ref>`，即使它
 
 (define (flatpak-ref-id ref)
   (let ((separator (string-contains ref "//")))
-    (if separator (substring ref 0 separator) ref)))
+    (if separator
+        (substring ref 0 separator) ref)))
 
 (define* (flatpak-gl-driver-status-lines active-drivers installed-refs
                                          #:key (require-gl32? #f))
-         "纯函数：ACTIVE-DRIVERS（nvidia-x-y-z 列表）× INSTALLED-REFS
+  "纯函数：ACTIVE-DRIVERS（nvidia-x-y-z 列表）× INSTALLED-REFS
 （全部已装 ref id）→ doctor 输出行（strings；无发散为空）。
 GL=org.freedesktop.Platform.GL.nvidia-*，GL32=...GL32.nvidia-*。"
-         (let* ((ids (map flatpak-ref-id installed-refs))
-                (gl-prefix "org.freedesktop.Platform.GL.nvidia-")
-                (gl32-prefix "org.freedesktop.Platform.GL32.nvidia-")
-                (gl32-ids (filter (lambda (id) (string-prefix? gl32-prefix id)) ids))
-                ;; 防御非 nvidia-* 条目（真实调用方
-                ;; flatpak-active-gl-drivers 已过滤；纯函数保持健壮）。
-                (nvidia-drivers (filter (lambda (driver)
-                                          (string-prefix? "nvidia-" driver))
-                                        active-drivers))
-                (expected (map (lambda (driver)
-                                 (string-drop driver (string-length "nvidia-")))
-                               nvidia-drivers))
-                (families (append (list (cons "GL" gl-prefix))
-                                  (if (or require-gl32? (pair? gl32-ids))
-                                    (list (cons "GL32" gl32-prefix))
-                                    '()))))
-           (append-map
-            (lambda (family)
-              (let* ((label (car family))
-                     (prefix (cdr family))
-                     (family-ids (filter (lambda (id) (string-prefix? prefix id)) ids))
-                     (missing (filter (lambda (version)
-                                        (not (member (string-append prefix version)
-                                                     family-ids)))
-                                      expected))
-                     (stale (filter (lambda (id)
-                                      (not (member (string-drop id
-                                                                (string-length prefix))
-                                                   expected)))
-                                    family-ids)))
-                (append
-                 (map (lambda (version)
-                        (format #f "~a driver mismatch: active nvidia-~a has no installed ~a extension.~%Fix: reboot (load the new kernel module), then run 'blue flatpak update-runtimes'."
-                                label version label))
-                      missing)
-                 (map (lambda (id)
-                        (format #f "stale ~a extension: ~a does not match the active driver.~%Fix: run 'blue flatpak gc' (autopruned refs)."
-                                label id))
-                      stale))))
-            families)))
+  (let* ((ids (map flatpak-ref-id installed-refs))
+         (gl-prefix "org.freedesktop.Platform.GL.nvidia-")
+         (gl32-prefix "org.freedesktop.Platform.GL32.nvidia-")
+         (gl32-ids (filter (lambda (id)
+                             (string-prefix? gl32-prefix id)) ids))
+         ;; 防御非 nvidia-* 条目（真实调用方
+         ;; flatpak-active-gl-drivers 已过滤；纯函数保持健壮）。
+         (nvidia-drivers (filter (lambda (driver)
+                                   (string-prefix? "nvidia-" driver))
+                                 active-drivers))
+         (expected (map (lambda (driver)
+                          (string-drop driver
+                                       (string-length "nvidia-")))
+                        nvidia-drivers))
+         (families (append (list (cons "GL" gl-prefix))
+                           (if (or require-gl32?
+                                   (pair? gl32-ids))
+                               (list (cons "GL32" gl32-prefix))
+                               '()))))
+    (append-map (lambda (family)
+                  (let* ((label (car family))
+                         (prefix (cdr family))
+                         (family-ids (filter (lambda (id)
+                                               (string-prefix? prefix id)) ids))
+                         (missing (filter (lambda (version)
+                                            (not (member (string-append prefix
+                                                          version) family-ids)))
+                                          expected))
+                         (stale (filter (lambda (id)
+                                          (not (member (string-drop id
+                                                                    (string-length
+                                                                     prefix))
+                                                       expected))) family-ids)))
+                    (append (map (lambda (version)
+                                   (format #f
+                                    "~a driver mismatch: active nvidia-~a has no installed ~a extension.~%Fix: reboot (load the new kernel module), then run 'blue flatpak update-runtimes'."
+                                    label version label)) missing)
+                            (map (lambda (id)
+                                   (format #f
+                                    "stale ~a extension: ~a does not match the active driver.~%Fix: run 'blue flatpak gc' (autopruned refs)."
+                                    label id)) stale)))) families)))
 
 (define* (flatpak-status #:key (refresh? #f)
                          (applications %flatpak-applications)
                          (selection %flatpak-selection)
                          (extensions %flatpak-extensions)
                          (extension-selection %flatpak-extension-selection))
-         "表格输出（catalog 顺序）。默认完全离线（本地 list/info +
+  "表格输出（catalog 顺序）。默认完全离线（本地 list/info +
 GL doctor）；REFRESH? 才 remote-info（失败显示 unknown，不修改
 状态、不破坏本地输出）。"
-         (let* ((selected (flatpak-select-applications selection applications))
-                (selected-exts (flatpak-select-extensions
-                                extension-selection extensions))
-                (installed (flatpak-list-installed-apps))
-                (installed-refs (flatpak-list-installed-refs)))
-           (format #t "NAME\tID\tSELECTED\tINSTALLED\tBRANCH\tDECLARED-COMMIT\tINSTALLED-COMMIT~@[~a~]~%"
-                   (if refresh? "\tREMOTE-COMMIT" ""))
-           (for-each
-            (lambda (app)
-              (let* ((id (flatpak-application-id app))
-                     (selected? (memq (flatpak-application-name app) selection))
-                     (ref (flatpak-application-ref app))
-                     (installed? (member ref installed))
-                     (installed-commit (and installed?
-                                            (flatpak-installed-commit ref)))
-                     (remote-commit
-                      (and refresh?
-                           (false-if-exception
-                            (string-trim-both
-                             (invoke-capture
-                              "flatpak" "remote-info" "--user" "--show-commit"
-                              (symbol->string (flatpak-application-remote app))
-                              (flatpak-application-ref app)))))))
-                (format #t "~a\t~a\t~a\t~a\t~a\t~a\t~a~@[~a~]~%"
-                        (flatpak-application-name app)
-                        id
-                        (if selected? "yes" "no")
-                        (if installed? "yes" "no")
-                        (flatpak-application-branch app)
-                        (or (flatpak-application-commit app) "-")
-                        (or installed-commit "-")
-                        (if refresh?
-                          (string-append "\t" (or remote-commit "unknown"))
-                          ""))))
-            applications)
-           ;; extension 表（auxiliary ref）。
-           (format #t "~%EXTENSION\tID\tSELECTED\tINSTALLED\tBRANCH~%")
-           (for-each
-            (lambda (ext)
-              (format #t "~a\t~a\t~a\t~a\t~a~%"
-                      (flatpak-extension-name ext)
-                      (flatpak-extension-id ext)
-                      (if (memq (flatpak-extension-name ext)
-                                extension-selection)
-                        "yes" "no")
-                      (if (member (flatpak-extension-ref ext) installed-refs)
-                        "yes" "no")
-                      (flatpak-extension-branch ext)))
-            extensions)
-           ;; GL driver doctor（离线）。
-           (let ((lines (flatpak-gl-driver-status-lines
-                         (flatpak-active-gl-drivers)
-                         installed-refs
-                         #:require-gl32?
-                         (or (any (lambda (app)
-                                    (string=? "com.valvesoftware.Steam"
-                                              (flatpak-application-id app)))
-                                  selected)
-                             (any (lambda (ref)
-                                    (string-prefix?
-                                     "com.valvesoftware.Steam//" ref))
-                                  installed)))))
-             (unless (null? lines)
-               (format #t "~%")
-               (for-each (lambda (line) (format #t "~a~%" line)) lines)))))
+  (let* ((selected (flatpak-select-applications selection applications))
+         (selected-exts (flatpak-select-extensions extension-selection
+                                                   extensions))
+         (installed (flatpak-list-installed-apps))
+         (installed-refs (flatpak-list-installed-refs)))
+    (format #t
+     "NAME\tID\tSELECTED\tINSTALLED\tBRANCH\tDECLARED-COMMIT\tINSTALLED-COMMIT~@[~a~]~%"
+     (if refresh? "\tREMOTE-COMMIT" ""))
+    (for-each (lambda (app)
+                (let* ((id (flatpak-application-id app))
+                       (selected? (memq (flatpak-application-name app)
+                                        selection))
+                       (ref (flatpak-application-ref app))
+                       (installed? (member ref installed))
+                       (installed-commit (and installed?
+                                              (flatpak-installed-commit ref)))
+                       (remote-commit (and refresh?
+                                           (false-if-exception (string-trim-both
+                                                                (invoke-capture
+                                                                 "flatpak"
+                                                                 "remote-info"
+                                                                 "--user"
+                                                                 "--show-commit"
+                                                                 (symbol->string
+                                                                  (flatpak-application-remote
+                                                                   app))
+                                                                 (flatpak-application-ref
+                                                                  app)))))))
+                  (format #t
+                          "~a\t~a\t~a\t~a\t~a\t~a\t~a~@[~a~]~%"
+                          (flatpak-application-name app)
+                          id
+                          (if selected? "yes" "no")
+                          (if installed? "yes" "no")
+                          (flatpak-application-branch app)
+                          (or (flatpak-application-commit app) "-")
+                          (or installed-commit "-")
+                          (if refresh?
+                              (string-append "\t"
+                                             (or remote-commit "unknown")) ""))))
+              applications)
+    ;; extension 表（auxiliary ref）。
+    (format #t "~%EXTENSION\tID\tSELECTED\tINSTALLED\tBRANCH~%")
+    (for-each (lambda (ext)
+                (format #t
+                        "~a\t~a\t~a\t~a\t~a~%"
+                        (flatpak-extension-name ext)
+                        (flatpak-extension-id ext)
+                        (if (memq (flatpak-extension-name ext)
+                                  extension-selection) "yes" "no")
+                        (if (member (flatpak-extension-ref ext) installed-refs)
+                            "yes" "no")
+                        (flatpak-extension-branch ext))) extensions)
+    ;; GL driver doctor（离线）。
+    (let ((lines (flatpak-gl-driver-status-lines (flatpak-active-gl-drivers)
+                                                 installed-refs
+                                                 #:require-gl32? (or (any (lambda 
+                                                                                  (app)
+                                                                            (string=?
+                                                                             "com.valvesoftware.Steam"
+                                                                             (flatpak-application-id
+                                                                              app)))
+                                                                      selected)
+                                                                     (any (lambda 
+                                                                                  (ref)
+                                                                            (string-prefix?
+                                                                             "com.valvesoftware.Steam//"
+                                                                             ref))
+                                                                      installed)))))
+      (unless (null? lines)
+        (format #t "~%")
+        (for-each (lambda (line)
+                    (format #t "~a~%" line)) lines)))))
 
 ;;; ── update ─────────────────────────────────────────────────
 
@@ -505,108 +535,122 @@ GL doctor）；REFRESH? 才 remote-info（失败显示 unknown，不修改
                          (selection %flatpak-selection)
                          (extensions %flatpak-extensions)
                          (extension-selection %flatpak-extension-selection))
-         "更新目标 = selection ∩ installed ∩ unpinned（commit #f）的
+  "更新目标 = selection ∩ installed ∩ unpinned（commit #f）的
 app + 已装且被选中的 extension ref（extension 只支持
 track-branch 进目标），显式 ref 列表逐个 update。绝无无参全
 installation update；commit pinned app 默认不进目标；无目标 →
 clean no-op。"
-         (let* ((installed (flatpak-list-installed-apps))
-                (app-targets
-                 (filter
-                  (lambda (app)
-                    (and (member (flatpak-application-ref app) installed)
-                         (not (flatpak-application-commit app))))
-                  (flatpak-select-applications selection applications)))
-                (installed-refs (flatpak-list-installed-refs))
-                (ext-targets
-                 (map flatpak-extension-ref
-                      (filter (lambda (ext)
-                                (member (flatpak-extension-ref ext)
-                                        installed-refs))
-                              (flatpak-select-extensions
-                               extension-selection extensions))))
-                (targets (append (map flatpak-application-ref app-targets)
-                                 ext-targets)))
-           (if (null? targets)
-             (format #t "No unpinned selected applications or extensions to update.~%")
-             (apply invoke "flatpak" "update" "--user" "-y" targets))))
+  (let* ((installed (flatpak-list-installed-apps))
+         (app-targets (filter (lambda (app)
+                                (and (member (flatpak-application-ref app)
+                                             installed)
+                                     (not (flatpak-application-commit app))))
+                              (flatpak-select-applications selection
+                                                           applications)))
+         (installed-refs (flatpak-list-installed-refs))
+         (ext-targets (map flatpak-extension-ref
+                           (filter (lambda (ext)
+                                     (member (flatpak-extension-ref ext)
+                                             installed-refs))
+                                   (flatpak-select-extensions
+                                    extension-selection extensions))))
+         (targets (append (map flatpak-application-ref app-targets)
+                          ext-targets)))
+    (if (null? targets)
+        (format #t
+         "No unpinned selected applications or extensions to update.~%")
+        (apply invoke
+               "flatpak"
+               "update"
+               "--user"
+               "-y"
+               targets))))
 
 (define (flatpak-update-runtimes)
   "显式更新已安装 runtimes（pinned 1.18.2 无'更新全部 runtime'的
 裸开关——先枚举再逐 ref）。无 runtime → clean no-op。"
   (let ((refs (flatpak-list-installed-runtime-refs)))
     (if (null? refs)
-      (format #t "No installed runtimes to update.~%")
-      (apply invoke "flatpak" "update" "--user" "-y" refs))))
+        (format #t "No installed runtimes to update.~%")
+        (apply invoke
+               "flatpak"
+               "update"
+               "--user"
+               "-y"
+               refs))))
 
 ;;; ── remove / gc ────────────────────────────────────────────
 
-(define* (flatpak-remove name #:key (applications %flatpak-applications))
-         "显式 uninstall（logical name，catalog fail-fast 解析）。只卸
+(define* (flatpak-remove name
+                         #:key (applications %flatpak-applications))
+  "显式 uninstall（logical name，catalog fail-fast 解析）。只卸
 ref：~/.var/app/<id> 数据与 persistence rule 保留（remove ≠ purge；
 catalog 删除是 purge 之后的 teardown 最后一步）。"
-         (let ((app (find (lambda (a) (eq? name (flatpak-application-name a)))
-                          applications)))
-           (unless app
-             (error "unknown flatpak application (remove takes a catalog \
-logical name)"
-                    name (map flatpak-application-name applications)))
-           (invoke "flatpak" "uninstall" "--user" "-y"
-                   (flatpak-application-ref app))
-           (format #t "Removed ~a (~a). User data under ~/.var/app/~a \
-is preserved.~%"
-                   name (flatpak-application-id app)
-                   (flatpak-application-id app))))
+  (let ((app (find (lambda (a)
+                     (eq? name
+                          (flatpak-application-name a))) applications)))
+    (unless app
+      (error
+       "unknown flatpak application (remove takes a catalog logical name)"
+       name
+       (map flatpak-application-name applications)))
+    (invoke "flatpak" "uninstall" "--user" "-y"
+            (flatpak-application-ref app))
+    (format #t
+            "Removed ~a (~a). User data under ~/.var/app/~a is preserved.~%"
+            name
+            (flatpak-application-id app)
+            (flatpak-application-id app))))
 
 (define* (flatpak-stale-extension-pins pins
-                                       #:key
-                                       (extensions %flatpak-extensions)
+                                       #:key (extensions %flatpak-extensions)
                                        (extension-selection
                                         %flatpak-extension-selection))
-         "PINS 中属于 catalog extension、但不再是 selected id//branch 的项。"
-         (define (pin-id+branch pin)
-           (if (string-prefix? "runtime/" pin)
-             (let ((parts (string-split pin #\/)))
-               (and (= 4 (length parts))
-                    (cons (cadr parts) (list-ref parts 3))))
-             (let ((separator (string-contains pin "//")))
-               (and separator
-                    (cons (substring pin 0 separator)
-                          (substring pin (+ separator 2)))))))
-         (let ((desired (map (lambda (ext)
-                               (cons (flatpak-extension-id ext)
-                                     (flatpak-extension-branch ext)))
-                             (flatpak-select-extensions extension-selection
-                                                        extensions)))
-               (managed-ids (map flatpak-extension-id extensions)))
-           (filter (lambda (pin)
-                     (let ((identity (pin-id+branch pin)))
-                       (and identity
-                            (member (car identity) managed-ids)
-                            (not (member identity desired equal?)))))
-                   pins)))
+  "PINS 中属于 catalog extension、但不再是 selected id//branch 的项。"
+  (define (pin-id+branch pin)
+    (if (string-prefix? "runtime/" pin)
+        (let ((parts (string-split pin #\/)))
+          (and (= 4
+                  (length parts))
+               (cons (cadr parts)
+                     (list-ref parts 3))))
+        (let ((separator (string-contains pin "//")))
+          (and separator
+               (cons (substring pin 0 separator)
+                     (substring pin
+                                (+ separator 2)))))))
+  (let ((desired (map (lambda (ext)
+                        (cons (flatpak-extension-id ext)
+                              (flatpak-extension-branch ext)))
+                      (flatpak-select-extensions extension-selection
+                                                 extensions)))
+        (managed-ids (map flatpak-extension-id extensions)))
+    (filter (lambda (pin)
+              (let ((identity (pin-id+branch pin)))
+                (and identity
+                     (member (car identity) managed-ids)
+                     (not (member identity desired equal?))))) pins)))
 
-(define* (flatpak-gc #:key
-                     (extensions %flatpak-extensions)
+(define* (flatpak-gc #:key (extensions %flatpak-extensions)
                      (extension-selection %flatpak-extension-selection))
-         "显式维护：orphan runtimes（uninstall --unused）+ installation
+  "显式维护：orphan runtimes（uninstall --unused）+ installation
 repair。不挂 boot/reconfigure/activation hook。先解除不再 selected
 或已换 branch 的 repository-managed extension pin。"
-         (for-each (lambda (pin)
-                     (invoke "flatpak" "pin" "--user" "--remove" pin))
-                   (flatpak-gc-unpin-plan
-                    #:extensions extensions
-                    #:extension-selection extension-selection))
-         (for-each (lambda (argv) (apply invoke argv)) (flatpak-gc-commands)))
+  (for-each (lambda (pin)
+              (invoke "flatpak" "pin" "--user" "--remove" pin))
+            (flatpak-gc-unpin-plan #:extensions extensions
+                                   #:extension-selection extension-selection))
+  (for-each (lambda (argv)
+              (apply invoke argv))
+            (flatpak-gc-commands)))
 
-(define* (flatpak-gc-unpin-plan
-          #:key (extensions %flatpak-extensions)
-          (extension-selection %flatpak-extension-selection))
-         "gc 前将解除的 repository-managed extension pin 列表（只读）。"
-         (flatpak-stale-extension-pins
-          (flatpak-list-pins)
-          #:extensions extensions
-          #:extension-selection extension-selection))
+(define* (flatpak-gc-unpin-plan #:key (extensions %flatpak-extensions)
+                                (extension-selection
+                                 %flatpak-extension-selection))
+  "gc 前将解除的 repository-managed extension pin 列表（只读）。"
+  (flatpak-stale-extension-pins (flatpak-list-pins)
+                                #:extensions extensions
+                                #:extension-selection extension-selection))
 
 ;;; ── Blue flatpak 命令的 invocation 契约与 dry-run plan ────────
 ;;;
@@ -618,8 +662,7 @@ repair。不挂 boot/reconfigure/activation hook。先解除不再 selected
 
 ;; action 注册表：name → 是否纯只读查询（只有 status）。
 (define %flatpak-actions
-  '((sync . #f)
-    (status . #t)
+  '((sync . #f) (status . #t)
     (update . #f)
     (update-runtimes . #f)
     (remove . #f)
@@ -635,74 +678,82 @@ repair。不挂 boot/reconfigure/activation hook。先解除不再 selected
 status 接受可选 --refresh；remove/remote-replace 恰好一个参数；其余
 零个。未知 action 不 fallback。"
   (match (cons action rest)
-         (("status") '(status ()))
-         (("status" "--refresh") '(status (refresh)))
-         (("sync") '(sync ()))
-         (("update") '(update ()))
-         (("update-runtimes") '(update-runtimes ()))
-         (("remove" name) `(remove (,name)))
-         (("remote-replace" name) `(remote-replace (,name)))
-         (("gc") '(gc ()))
-         (_ #f)))
+    (("status")
+     '(status ()))
+    (("status" "--refresh")
+     '(status (refresh)))
+    (("sync")
+     '(sync ()))
+    (("update")
+     '(update ()))
+    (("update-runtimes")
+     '(update-runtimes ()))
+    (("remove" name)
+     `(remove (,name)))
+    (("remote-replace" name)
+     `(remote-replace (,name)))
+    (("gc")
+     '(gc ()))
+    (_ #f)))
 
-(define* (flatpak-sync-plan remotes applications selection
+(define* (flatpak-sync-plan remotes
+                            applications
+                            selection
                             #:key (extensions %flatpak-extensions)
                             (extension-selection '()))
-         "sync 的只读 plan：remote 缺失清单 + 待安装 app/extension 清单
+  "sync 的只读 plan：remote 缺失清单 + 待安装 app/extension 清单
 （每项一行）。不修改任何状态；remote drift 由
 flatpak-check-remote! 照常 fail-loud（dry-run 也报 drift）。"
-         (append
-          (map (lambda (r)
+  (append (map (lambda (r)
                  (if (flatpak-check-remote! r)
-                   (format #f "remote ~a: already declared (no-op)"
-                           (flatpak-remote-name r))
-                   (format #f "would add remote ~a (descriptor ~a; transport ~a)"
-                           (flatpak-remote-name r)
-                           (flatpak-remote-descriptor-url r)
-                           (flatpak-remote-repository-url r))))
-               remotes)
+                     (format #f "remote ~a: already declared (no-op)"
+                             (flatpak-remote-name r))
+                     (format #f
+                      "would add remote ~a (descriptor ~a; transport ~a)"
+                      (flatpak-remote-name r)
+                      (flatpak-remote-descriptor-url r)
+                      (flatpak-remote-repository-url r)))) remotes)
           (map (lambda (app)
                  (format #f "would install ~a from ~a~a"
                          (flatpak-application-ref app)
                          (flatpak-application-remote app)
                          (if (flatpak-application-commit app)
-                           (format #f " (pin ~a)" (flatpak-application-commit app))
-                           "")))
-               (flatpak-reconcile-plan
-                (flatpak-select-applications selection applications)
-                (flatpak-list-installed-apps)))
+                             (format #f " (pin ~a)"
+                                     (flatpak-application-commit app)) "")))
+               (flatpak-reconcile-plan (flatpak-select-applications selection
+                                        applications)
+                                       (flatpak-list-installed-apps)))
           (let* ((installed-refs (flatpak-list-installed-refs))
                  (pins (flatpak-list-pins))
-                 (selected-exts
-                  (flatpak-select-extensions extension-selection extensions)))
-            (append
-             (map (lambda (ext)
-                    (format #f "would install extension ~a from ~a"
-                            (flatpak-extension-ref ext)
-                            (flatpak-extension-remote ext)))
-                  (filter (lambda (ext)
-                            (not (member (flatpak-extension-ref ext)
-                                         installed-refs)))
-                          selected-exts))
-             (map (lambda (ext)
-                    (format #f "would pin extension ~a"
-                            (flatpak-extension-ref ext)))
-                  (filter (lambda (ext)
-                            (not (member (flatpak-extension-ref ext) pins)))
-                          selected-exts))))))
+                 (selected-exts (flatpak-select-extensions extension-selection
+                                 extensions)))
+            (append (map (lambda (ext)
+                           (format #f "would install extension ~a from ~a"
+                                   (flatpak-extension-ref ext)
+                                   (flatpak-extension-remote ext)))
+                         (filter (lambda (ext)
+                                   (not (member (flatpak-extension-ref ext)
+                                                installed-refs)))
+                                 selected-exts))
+                    (map (lambda (ext)
+                           (format #f "would pin extension ~a"
+                                   (flatpak-extension-ref ext)))
+                         (filter (lambda (ext)
+                                   (not (member (flatpak-extension-ref ext)
+                                                pins))) selected-exts))))))
 
 (define* (flatpak-update-plan applications selection
                               #:key (extensions %flatpak-extensions)
                               (extension-selection
                                %flatpak-extension-selection))
-         "update 的只读 plan：selection ∩ installed ∩ unpinned 的 app ref +
+  "update 的只读 plan：selection ∩ installed ∩ unpinned 的 app ref +
 已装选中 extension 的 ref 列表。"
-         (let ((installed (flatpak-list-installed-apps))
-               (installed-refs (flatpak-list-installed-refs)))
-           (append
-            (map flatpak-application-ref
+  (let ((installed (flatpak-list-installed-apps))
+        (installed-refs (flatpak-list-installed-refs)))
+    (append (map flatpak-application-ref
                  (filter (lambda (app)
-                           (and (member (flatpak-application-ref app) installed)
+                           (and (member (flatpak-application-ref app)
+                                        installed)
                                 (not (flatpak-application-commit app))))
                          (flatpak-select-applications selection applications)))
             (map flatpak-extension-ref
@@ -718,11 +769,13 @@ flatpak-check-remote! 照常 fail-loud（dry-run 也报 drift）。"
 (define (flatpak-remove-plan name applications)
   "remove 的只读 plan：catalog 解析目标 app；未知 logical name 与
 remove 相同的 fail-fast（dry-run 也必须参数校验）。"
-  (or (find (lambda (a) (eq? name (flatpak-application-name a)))
-            applications)
-      (error "unknown flatpak application (remove takes a catalog \
-logical name)"
-             name (map flatpak-application-name applications))))
+  (or (find (lambda (a)
+              (eq? name
+                   (flatpak-application-name a))) applications)
+      (error
+       "unknown flatpak application (remove takes a catalog logical name)"
+       name
+       (map flatpak-application-name applications))))
 
 (define (flatpak-replace-remote-plan remote)
   "remote-replace 的只读 plan：当前 effective url（未配置 → #f）。"

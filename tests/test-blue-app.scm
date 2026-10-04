@@ -3,7 +3,7 @@
 ;;; package set。
 ;;; 由 tests/run-tests.scm 加载运行（从仓库根目录）。
 
-(use-modules (guixcfg apps registry)          ; %applications（启用事实源）
+(use-modules (guixcfg apps registry) ;%applications（启用事实源）
              (guixcfg apps blue definition)
              (srfi srfi-1)
              (srfi srfi-64))
@@ -13,6 +13,8 @@
 (test-begin "blue-app")
 
 (test-assert "registry enables blue exactly once"
-             (= 1 (count (lambda (a) (eq? a %blue)) %applications)))
+             (= 1
+                (count (lambda (a)
+                         (eq? a %blue)) %applications)))
 
 (test-end)

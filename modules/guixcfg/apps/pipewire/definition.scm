@@ -4,13 +4,12 @@
 ;;; upstream-boundaries.md）。
 
 (define-module (guixcfg apps pipewire definition)
-               #:use-module (gnu home services sound) ; home-pipewire-service-type
-               #:use-module (gnu services)            ; service
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:export (%pipewire))
+  #:use-module (gnu home services sound) ;home-pipewire-service-type
+  #:use-module (gnu services) ;service
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:export (%pipewire))
 
 (define %pipewire
-  (application
-   (name 'pipewire)
-   (home-services (list (service home-pipewire-service-type)))))
+  (application (name 'pipewire)
+               (home-services (list (service home-pipewire-service-type)))))

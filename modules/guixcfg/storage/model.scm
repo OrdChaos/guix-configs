@@ -6,49 +6,69 @@
 ;;; 具名字段构造、(default ...)、(inherit ...) 都由它提供。
 
 (define-module (guixcfg storage model)
-               #:use-module (guix records)  ; define-record-type*
-               #:use-module (srfi srfi-1)   ; find
-               #:use-module (srfi srfi-13)  ; 字符串工具（string-prefix? 等）
-               #:export (;; 单位换算
-                         gib
-                         ;; 固定命名事实（docs/architecture/storage.md（固定命名事实））
-                         %esp-partlabel %system-partlabel by-partlabel-path
-                         %esp-gpt-typecode %system-gpt-typecode
-                         %esp-filesystem-label %btrfs-filesystem-label
-                         %luks-label %luks-mapper-name %luks-mapper-path
-                         %esp-min-size %esp-max-size
-                         ;; host policy
-                         <host-storage-policy>
-                         host-storage-policy make-host-storage-policy host-storage-policy?
-                         host-storage-policy-name
-                         host-storage-policy-esp-size
-                         host-storage-policy-min-disk-size
-                         host-storage-policy-swapfile-size
-                         host-storage-policy-keep-root-generations
-                         ;; 持久子卷
-                         <subvolume>
-                         subvolume make-subvolume subvolume?
-                         subvolume-name subvolume-mount-point subvolume-options
-                         subvolume-mount-at-install?
-                         %persist-subvolumes
-                         persist-subvolume-name?
-                         persist-mount-point
-                         ;; root generation
-                         %root-installing-name %root-template-name
-                         %swap-subvolume-name
-                         root-generation-name parse-root-generation))
+  #:use-module (guix records) ;define-record-type*
+  #:use-module (srfi srfi-1) ;find
+  #:use-module (srfi srfi-13) ;字符串工具（string-prefix? 等）
+  #:export ( ;单位换算
+             gib
+            ;; 固定命名事实（docs/architecture/storage.md（固定命名事实））
+            %esp-partlabel
+            %system-partlabel
+            by-partlabel-path
+            %esp-gpt-typecode
+            %system-gpt-typecode
+            %esp-filesystem-label
+            %btrfs-filesystem-label
+            %luks-label
+            %luks-mapper-name
+            %luks-mapper-path
+            %esp-min-size
+            %esp-max-size
+            ;; host policy
+            <host-storage-policy>
+            host-storage-policy
+            make-host-storage-policy
+            host-storage-policy?
+            host-storage-policy-name
+            host-storage-policy-esp-size
+            host-storage-policy-min-disk-size
+            host-storage-policy-swapfile-size
+            host-storage-policy-keep-root-generations
+            ;; 持久子卷
+            <subvolume>
+            subvolume
+            make-subvolume
+            subvolume?
+            subvolume-name
+            subvolume-mount-point
+            subvolume-options
+            subvolume-mount-at-install?
+            %persist-subvolumes
+            persist-subvolume-name?
+            persist-mount-point
+            ;; root generation
+            %root-installing-name
+            %root-template-name
+            %swap-subvolume-name
+            root-generation-name
+            parse-root-generation))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 单位：全部尺寸统一用字节数（整数）表示，避免单位混乱。
 
-(define (gib n) (* n 1024 1024 1024))
+(define (gib n)
+  (* n 1024 1024 1024))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 固定命名事实（docs/architecture/storage.md（固定命名事实）：直接写进实现，不做配置项）。
 ;;; 启动和挂载优先使用这些语义名称，而不是安装时生成的 UUID。
 
-(define %esp-partlabel "esp")            ; GPT PARTLABEL：EFI 系统分区
-(define %system-partlabel "system")      ; GPT PARTLABEL：加密系统分区
+(define %esp-partlabel
+  "esp")
+ ; GPT PARTLABEL：EFI 系统分区
+(define %system-partlabel
+  "system")
+ ; GPT PARTLABEL：加密系统分区
 
 ;; PARTLABEL 对应的 udev 设备节点（/dev/disk/by-partlabel/ 是固定前缀）。
 (define (by-partlabel-path label)
@@ -56,21 +76,33 @@
   (string-append "/dev/disk/by-partlabel/" label))
 
 ;; GPT 分区类型码（sgdisk）：EF00 = EFI System，8309 = Linux LUKS。
-(define %esp-gpt-typecode "EF00")
-(define %system-gpt-typecode "8309")
+(define %esp-gpt-typecode
+  "EF00")
+(define %system-gpt-typecode
+  "8309")
 
-(define %esp-filesystem-label "ESP")     ; VFAT 卷标（惯例大写）
-(define %btrfs-filesystem-label "rootfs"); Btrfs 文件系统标签
-(define %luks-label "cryptroot")         ; LUKS2 头标签
-(define %luks-mapper-name "cryptroot")   ; device-mapper 名：/dev/mapper/cryptroot
+(define %esp-filesystem-label
+  "ESP")
+ ; VFAT 卷标（惯例大写）
+(define %btrfs-filesystem-label
+  "rootfs")
+ ; Btrfs 文件系统标签
+(define %luks-label
+  "cryptroot")
+ ; LUKS2 头标签
+(define %luks-mapper-name
+  "cryptroot")
+ ; device-mapper 名：/dev/mapper/cryptroot
 
 ;; LUKS mapper 设备路径（device-mapper 固定前缀 + 上面的语义名）。
 (define %luks-mapper-path
   (string-append "/dev/mapper/" %luks-mapper-name))
 
 ;; ESP 大小策略范围（docs/architecture/storage.md（磁盘布局）：2–4 GiB）。
-(define %esp-min-size (gib 2))
-(define %esp-max-size (gib 4))
+(define %esp-min-size
+  (gib 2))
+(define %esp-max-size
+  (gib 4))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; Host policy：真正因机器而不同的内容（docs/architecture/storage.md（持久子卷））。
@@ -85,34 +117,36 @@
 ;; 依赖，不会为了取得 policy 反向加载完整 host OS/UKI/channel 图。host 模块
 ;; 仍可重新导出对应 policy 作为最终组装点的兼容接口。
 
-(define-record-type* <host-storage-policy>
-                     host-storage-policy make-host-storage-policy
-                     host-storage-policy?
-                     (name                  host-storage-policy-name) ; vm / lenovo-legion-y7000p
-                     (esp-size              host-storage-policy-esp-size)              ; 字节，须在 2–4 GiB
-                     (min-disk-size         host-storage-policy-min-disk-size)         ; 字节，目标盘容量下限
-                     (swapfile-size         host-storage-policy-swapfile-size)         ; 字节
-                     (keep-root-generations host-storage-policy-keep-root-generations)) ; 保留的旧 root 数
+(define-record-type* <host-storage-policy> host-storage-policy
+                     make-host-storage-policy
+  host-storage-policy?
+  (name host-storage-policy-name) ;vm / lenovo-legion-y7000p
+  (esp-size host-storage-policy-esp-size) ;字节，须在 2–4 GiB
+  (min-disk-size host-storage-policy-min-disk-size) ;字节，目标盘容量下限
+  (swapfile-size host-storage-policy-swapfile-size) ;字节
+  (keep-root-generations host-storage-policy-keep-root-generations))
+ ; 保留的旧 root 数
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 持久子卷（docs/architecture/storage.md（持久子卷）：固定项目事实）。
 
-(define-record-type* <subvolume>
-                     subvolume make-subvolume
-                     subvolume?
-                     (name        subvolume-name)         ; Btrfs 子卷名，必须带 @persist- 前缀
-                     (mount-point subvolume-mount-point)  ; 挂载点
-                     (options     subvolume-options       ; 挂载选项列表，如 '("compress=zstd")
-                                  (default '()))
-                     ;; 安装期（init 之前）是否挂载到目标。
-                     ;; @persist-var-guix 必须为 #f：guix system init 会
-                     ;; delete-file-recursively 目标的 /var/guix，挂载点
-                     ;; 删不掉（EBUSY）导致注册不可靠；改为 init 后在
-                     ;; commit-root 里把内容收进子卷（见 storage/commit.scm）。
-                     (mount-at-install? subvolume-mount-at-install?
-                                        (default #t)))
+(define-record-type* <subvolume> subvolume make-subvolume
+  subvolume?
+  (name subvolume-name) ;Btrfs 子卷名，必须带 @persist- 前缀
+  (mount-point subvolume-mount-point) ;挂载点
+  (options subvolume-options ;挂载选项列表，如 '("compress=zstd")
+           (default '()))
+  ;; 安装期（init 之前）是否挂载到目标。
+  ;; @persist-var-guix 必须为 #f：guix system init 会
+  ;; delete-file-recursively 目标的 /var/guix，挂载点
+  ;; 删不掉（EBUSY）导致注册不可靠；改为 init 后在
+  ;; commit-root 里把内容收进子卷（见 storage/commit.scm）。
+  (mount-at-install? subvolume-mount-at-install?
+                     (default #t)))
 
-(define %swap-subvolume-name "@persist-swap")   ; swapfile 所在子卷（docs/architecture/storage.md（Swap））
+(define %swap-subvolume-name
+  "@persist-swap")
+ ; swapfile 所在子卷（docs/architecture/storage.md（Swap））
 
 ;; 固定的 8 个持久子卷。顺序即创建顺序。
 ;; 除 /gnu/store 和 /var/guix 外，挂载点一律位于 /persist。
@@ -123,7 +157,7 @@
                    (mount-point "/gnu/store"))
         (subvolume (name "@persist-var-guix")
                    (mount-point "/var/guix")
-                   (mount-at-install? #f))   ; init 后再收养，见 record 注释
+                   (mount-at-install? #f)) ;init 后再收养，见 record 注释
         (subvolume (name "@persist-system")
                    (mount-point "/persist/system"))
         (subvolume (name "@persist-data-app")
@@ -151,31 +185,36 @@
 各层都从这里取挂载点，禁止各自重复拼写 literal（AGENT.md §13；
 docs/architecture/storage.md）。注意参数名避开 accessor
 subvolume-name（遮蔽会 wrong-type-to-apply）。"
-  (subvolume-mount-point
-   (or (find (lambda (s) (string=? (subvolume-name s) name))
-             %persist-subvolumes)
-       (error "unknown persist subvolume" name))))
+  (subvolume-mount-point (or (find (lambda (s)
+                                     (string=? (subvolume-name s) name))
+                                   %persist-subvolumes)
+                             (error "unknown persist subvolume" name))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; Root generation 命名（docs/architecture/storage.md）。
 ;;; 不带 @persist- 前缀：它们是可替换的 root，不是长期状态。
 
-(define %root-installing-name "@root-installing")  ; 安装期工作 root
-(define %root-template-name    "@root-template")   ; 只读模板
+(define %root-installing-name
+  "@root-installing")
+ ; 安装期工作 root
+(define %root-template-name
+  "@root-template")
+ ; 只读模板
 
 (define (root-generation-name n)
   "第 N 个 root generation 的子卷名：@root-N（N 为非负整数，不补零）。"
-  (string-append "@root-" (number->string n)))
+  (string-append "@root-"
+                 (number->string n)))
 
 (define (parse-root-generation name)
   "若 NAME 是合法的 @root-N，返回整数 N；否则返回 #f。
 拒绝补零（@root-01）和非数字后缀（@root-template）。"
   (let ((prefix "@root-"))
     (if (string-prefix? prefix name)
-      (let ((digits (string-drop name (string-length prefix))))
-        (and (not (string-null? digits))
-             (string-every char-numeric? digits)
-             (or (string=? digits "0")
-                 (not (char=? (string-ref digits 0) #\0)))
-             (string->number digits)))
-      #f)))
+        (let ((digits (string-drop name
+                                   (string-length prefix))))
+          (and (not (string-null? digits))
+               (string-every char-numeric? digits)
+               (or (string=? digits "0")
+                   (not (char=? (string-ref digits 0) #\0)))
+               (string->number digits))) #f)))

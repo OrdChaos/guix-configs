@@ -7,6 +7,5 @@
   #:export (%qemu))
 
 (define %qemu
-  (application
-   (name 'qemu)
-   (home-packages (list qemu))))
+  (application (name 'qemu)
+               (home-packages (list qemu))))

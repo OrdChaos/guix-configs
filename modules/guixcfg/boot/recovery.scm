@@ -14,31 +14,29 @@
 ;;; last-good，不是第三个 A/B 槽。
 
 (define-module (guixcfg boot recovery)
-               #:use-module (guix build utils)       ; mkdir-p
-               #:use-module (guixcfg boot boot-state) ; write-boot-states!、protect-last-good!
-               #:use-module (guixcfg boot layout)     ; ESP 布局固定事实
-               #:use-module (guixcfg boot limine-menu) ; recovery-menu-entry-text（菜单文本单一来源）
-               #:use-module (guixcfg utils atomic-file) ; atomic-replace-file!、atomic-write-file!
-               #:use-module (rnrs bytevectors)        ; get-bytevector-all
-               #:use-module (ice-9 binary-ports)      ; get-bytevector-all
-               #:use-module (ice-9 rdelim)            ; read-line
-               #:use-module (srfi srfi-13)           ; string-contains
-               #:export (promote-recovery!
-                         candidate-meta
-                         add-recovery-menu-entry!))
+  #:use-module (guix build utils) ;mkdir-p
+  #:use-module (guixcfg boot boot-state) ;write-boot-states!、protect-last-good!
+  #:use-module (guixcfg boot layout) ;ESP 布局固定事实
+  #:use-module (guixcfg boot limine-menu) ;recovery-menu-entry-text（菜单文本单一来源）
+  #:use-module (guixcfg utils atomic-file) ;atomic-replace-file!、atomic-write-file!
+  #:use-module (rnrs bytevectors) ;get-bytevector-all
+  #:use-module (ice-9 binary-ports) ;get-bytevector-all
+  #:use-module (ice-9 rdelim) ;read-line
+  #:use-module (srfi srfi-13) ;string-contains
+  #:export (promote-recovery! candidate-meta add-recovery-menu-entry!))
 
 (define (read-all-string path)
   "读取整个文件为字符串（经字节读，不依赖 textual-ports）。"
   (utf8->string (call-with-input-file path
-                                      (lambda (p)
-                                        (get-bytevector-all p)))))
+                  (lambda (p)
+                    (get-bytevector-all p)))))
 
 (define (candidate-meta esp)
   "读取 ESP 上的 candidate 元数据（((system . S) (slot . A|B))）或 #f。"
   (let ((path (string-append esp "/" %esp-uki-directory "/candidate.scm")))
     (and (file-exists? path)
-         (false-if-exception
-          (call-with-input-file path read)))))
+         (false-if-exception (call-with-input-file path
+                               read)))))
 
 (define (add-recovery-menu-entry! esp)
   "limine.conf 缺 Recovery 入口时追加（指向稳定路径），原子替换。"
@@ -53,11 +51,13 @@
                                                         (recovery-menu-entry-text))
                                          port))))))))
 
-(define* (promote-recovery! esp generation command-line
+(define* (promote-recovery! esp
+                            generation
+                            command-line
                             #:key (current-system '%resolve)
                             (boot-states-path %boot-states-path)
                             (gc-root "/var/guix/gcroots/guixcfg"))
-         "把 ESP 上的 Recovery candidate 提升为正式 Recovery；GENERATION 与
+  "把 ESP 上的 Recovery candidate 提升为正式 Recovery；GENERATION 与
 COMMAND-LINE 是当前启动的 Guix generation 与确认 cmdline（boot-state
 写入用）。boot-state 总是记录当前确认的 last-good；candidate 与当前
 系统不一致时只跳过 artifact/菜单 promote（旧 Recovery 保持有效）。
@@ -66,40 +66,55 @@ fail-closed：/run/current-system 无法解析为有效 store identity 时
 绝不以“跳过”日志继续并写入无效 identity。
 CURRENT-SYSTEM/BOOT-STATES-PATH/GC-ROOT 为测试注入点（生产调用不传，
 分别解析 /run/current-system、用 %boot-states-path 与生产 GC root）。"
-         (let* ((current (if (eq? current-system '%resolve)
-                           (false-if-exception
-                            (canonicalize-path "/run/current-system"))
-                           current-system))
-                (meta (candidate-meta esp))
-                (candidate-system (and meta (assq-ref meta 'system)))
-                (match? (and current candidate-system
-                             (string=? candidate-system current))))
-           (unless (and current (string-prefix? "/gnu/store/" current))
-             (error "recovery: cannot resolve /run/current-system to a valid identity; \
-aborting confirm (fail-closed)"))
-           (when (and meta (not match?))
-             (format #t "recovery: candidate (~a) does not match current system (~a); skipping promote~%"
-                     candidate-system current))
-           ;; 2. GC root：保护当前确认的 last-good system（guix gc /
-           ;;    delete-generations 不回收 Recovery closure）。
-           (protect-last-good! current #:root gc-root)
-           (when match?
-             ;; 3. promote artifact（槽内 candidate → 稳定路径，原子替换）
-             (let* ((slot (assq-ref meta 'slot))
-                    ;; 部署脚本（(guixcfg boot uki)）写出的 slot 总是字符串
-                    ;;（"A"/"B"）。
-                    (slot-uki (string-append esp "/" %esp-uki-directory
-                                             "/" slot "/RECOVERY.EFI"))
-                    (stable-uki (string-append esp "/" %recovery-uki-esp-path)))
-               (if (file-exists? slot-uki)
-                 (begin
-                  (mkdir-p (dirname stable-uki))
-                  (atomic-replace-file! slot-uki stable-uki)
-                  (format #t "recovery: promoted ~a (slot ~a)~%" candidate-system slot))
-                 (format #t "recovery: candidate UKI missing (~a); skipping promote~%" slot-uki)))
-             ;; 4. limine.conf 加 Recovery 入口（如果缺）
-             (add-recovery-menu-entry! esp))
-           ;; 5. boot-state（最终 commit record；总是记录当前确认的 last-good）
-           (write-boot-states! boot-states-path generation command-line
-                               #:system current)
-           #t))
+  (let* ((current (if (eq? current-system
+                           '%resolve)
+                      (false-if-exception (canonicalize-path
+                                           "/run/current-system"))
+                      current-system))
+         (meta (candidate-meta esp))
+         (candidate-system (and meta
+                                (assq-ref meta
+                                          'system)))
+         (match? (and current candidate-system
+                      (string=? candidate-system current))))
+    (unless (and current
+                 (string-prefix? "/gnu/store/" current))
+      (error
+       "recovery: cannot resolve /run/current-system to a valid identity; aborting confirm (fail-closed)"))
+    (when (and meta
+               (not match?))
+      (format #t
+       "recovery: candidate (~a) does not match current system (~a); skipping promote~%"
+       candidate-system current))
+    ;; 2. GC root：保护当前确认的 last-good system（guix gc /
+    ;; delete-generations 不回收 Recovery closure）。
+    (protect-last-good! current
+                        #:root gc-root)
+    (when match?
+      ;; 3. promote artifact（槽内 candidate → 稳定路径，原子替换）
+      (let* ((slot (assq-ref meta
+                             'slot))
+             ;; 部署脚本（(guixcfg boot uki)）写出的 slot 总是字符串
+             ;; （"A"/"B"）。
+             (slot-uki (string-append esp
+                                      "/"
+                                      %esp-uki-directory
+                                      "/"
+                                      slot
+                                      "/RECOVERY.EFI"))
+             (stable-uki (string-append esp "/" %recovery-uki-esp-path)))
+        (if (file-exists? slot-uki)
+            (begin
+              (mkdir-p (dirname stable-uki))
+              (atomic-replace-file! slot-uki stable-uki)
+              (format #t "recovery: promoted ~a (slot ~a)~%" candidate-system
+                      slot))
+            (format #t
+             "recovery: candidate UKI missing (~a); skipping promote~%"
+             slot-uki)))
+      ;; 4. limine.conf 加 Recovery 入口（如果缺）
+      (add-recovery-menu-entry! esp))
+    ;; 5. boot-state（最终 commit record；总是记录当前确认的 last-good）
+    (write-boot-states! boot-states-path generation command-line
+                        #:system current)
+    #t))

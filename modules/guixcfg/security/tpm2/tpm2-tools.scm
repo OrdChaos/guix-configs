@@ -20,29 +20,30 @@
 ;;; 全部由 tpm2-tools 完成；Scheme 只编排。
 
 (define-module (guixcfg security tpm2 tpm2-tools)
-               #:use-module (guixcfg utils spawn)        ; spawn-wait、spawn-with-stdin、spawn-capture
-               #:use-module (guix records)            ; define-record-type*
-               #:use-module (rnrs bytevectors)        ; bytevector->u8-list
-               #:use-module (ice-9 binary-ports)      ; get-bytevector-all
-               #:use-module (srfi srfi-1)             ; append-map
-               #:use-module (srfi srfi-11)            ; let-values
-               #:export (;; 环境（内部 parameter/helper；initrd 的
-                         ;; tpm-unlock 消费 %tpm2-tools-tcti / with-tcti）
-                         %tpm2-tools-tcti
-                         with-tcti
-                         ;; 低层原语（按 tpm2-tools 命令一对一；
-                         ;; TCTI 一律显式传参，环境变量经子进程转发）
-                         tpm2-createprimary!
-                         tpm2-policy-pcr-digest!
-                         tpm2-create-sealed!
-                         tpm2-load-sealed!
-                         tpm2-policy-pcr-session!
-                         tpm2-unseal!
-                         tpm2-pcrread!
-                         tpm2-start-policy-session!
-                         tpm2-flush-session!
-                         ;; 辅助
-                         bytes->hex))
+  #:use-module (guixcfg utils spawn) ;spawn-wait、spawn-with-stdin、spawn-capture
+  #:use-module (guix records) ;define-record-type*
+  #:use-module (rnrs bytevectors) ;bytevector->u8-list
+  #:use-module (ice-9 binary-ports) ;get-bytevector-all
+  #:use-module (srfi srfi-1) ;append-map
+  #:use-module (srfi srfi-11) ;let-values
+  #:export ( ;环境（内部 parameter/helper；initrd 的
+            
+            ;; tpm-unlock 消费 %tpm2-tools-tcti / with-tcti）
+            %tpm2-tools-tcti
+            with-tcti
+            ;; 低层原语（按 tpm2-tools 命令一对一；
+            ;; TCTI 一律显式传参，环境变量经子进程转发）
+            tpm2-createprimary!
+            tpm2-policy-pcr-digest!
+            tpm2-create-sealed!
+            tpm2-load-sealed!
+            tpm2-policy-pcr-session!
+            tpm2-unseal!
+            tpm2-pcrread!
+            tpm2-start-policy-session!
+            tpm2-flush-session!
+            ;; 辅助
+            bytes->hex))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; TPM 环境
@@ -58,16 +59,16 @@
 ;;; 上层 enrollment/initrd 函数不感知 cleanup 细节（测试环境逻辑
 ;;; 集中在 adapter）。
 
-(define-record-type* <tpm2-environment>
-                     tpm2-environment make-tpm2-environment
-                     tpm2-environment?
-                     (tcti    tpm2-environment-tcti)
-                     (cleanup tpm2-environment-cleanup
-                              (default 'none)))
+(define-record-type* <tpm2-environment> tpm2-environment make-tpm2-environment
+  tpm2-environment?
+  (tcti tpm2-environment-tcti)
+  (cleanup tpm2-environment-cleanup
+           (default 'none)))
 
 ;; 生产 TCTI：内核 resource manager（initrd 与部署期同用）。
 ;; swtpm 测试时显式传 "swtpm:path=..." 覆盖。
-(define %tpm2-tools-tcti "device:/dev/tpmrm0")
+(define %tpm2-tools-tcti
+  "device:/dev/tpmrm0")
 
 (define %production-tpm2-environment
   (tpm2-environment (tcti %tpm2-tools-tcti)))
@@ -76,18 +77,19 @@
   (make-parameter %production-tpm2-environment))
 
 (define* (make-test-tpm2-environment tcti)
-         "direct swtpm TCTI 测试环境：每命令后 scoped flush transient objects。"
-         (tpm2-environment (tcti tcti) (cleanup 'transient)))
+  "direct swtpm TCTI 测试环境：每命令后 scoped flush transient objects。"
+  (tpm2-environment (tcti tcti)
+                    (cleanup 'transient)))
 
 (define (with-tcti tcti thunk)
   "在 TCTI 环境变量下执行 THUNK 并恢复原值。"
   (let ((old (getenv "TPM2TOOLS_TCTI")))
-    (dynamic-wind
-     (lambda () (setenv "TPM2TOOLS_TCTI" tcti))
-     thunk
-     (lambda ()
-       (if old (setenv "TPM2TOOLS_TCTI" old)
-         (unsetenv "TPM2TOOLS_TCTI"))))))
+    (dynamic-wind (lambda ()
+                    (setenv "TPM2TOOLS_TCTI" tcti)) thunk
+                  (lambda ()
+                    (if old
+                        (setenv "TPM2TOOLS_TCTI" old)
+                        (unsetenv "TPM2TOOLS_TCTI"))))))
 
 (define (tpm2-run-raw tcti . args)
   "以指定 TCTI 运行 tpm2-tools 命令；非零退出码抛错。不自动 flush。
@@ -98,7 +100,8 @@ spawn 为最终修复）。"
              (lambda ()
                (let ((status (apply spawn-wait args)))
                  (unless (zero? status)
-                   (error "tpm2-tools command failed" (car args) status))))))
+                   (error "tpm2-tools command failed"
+                          (car args) status))))))
 
 (define (tpm2-run tcti . args)
   "以指定 TCTI 运行 tpm2-tools 命令；非零退出码抛错。
@@ -112,23 +115,24 @@ transient 回收语义由 (current-tpm2-environment) 决定：
 （tpm2-flush-session! / dynamic-wind）。"
   (if (eq? (tpm2-environment-cleanup (current-tpm2-environment))
            'transient)
-    (begin
-     (apply tpm2-run-raw tcti args)
-     (false-if-exception
-      (apply tpm2-run-raw
-        (append (list tcti)
-                (list (string-append (dirname (car args))
-                                     "/tpm2_flushcontext")
-                      "-t")))))
-    (apply tpm2-run-raw tcti args)))
+      (begin
+        (apply tpm2-run-raw tcti args)
+        (false-if-exception (apply tpm2-run-raw
+                                   (append (list tcti)
+                                           (list (string-append (dirname (car
+                                                                          args))
+                                                  "/tpm2_flushcontext") "-t")))))
+      (apply tpm2-run-raw tcti args)))
 
 (define (tpm2-run-capture tcti . args)
   "同上，但捕获 stdout（用于读 PCR、摘要等），返回文本。"
   (with-tcti tcti
              (lambda ()
-               (let-values (((output status) (apply spawn-capture args)))
+               (let-values (((output status)
+                             (apply spawn-capture args)))
                            (unless (zero? status)
-                             (error "tpm2-tools command failed" (car args) status))
+                             (error "tpm2-tools command failed"
+                                    (car args) status))
                            (utf8->string output)))))
 
 ;;; ────────────────────────────────────────────────────────────
@@ -136,140 +140,197 @@ transient 回收语义由 (current-tpm2-environment) 决定：
 
 (define* (tpm2-createprimary! tcti tpm2-tools-bin
                               #:key (out "primary.ctx"))
-         "创建 SRK（owner hierarchy、RSA-2048、sha256 name）并保存 context。
+  "创建 SRK（owner hierarchy、RSA-2048、sha256 name）并保存 context。
 返回 context 文件路径。"
-         (let ((bin (string-append tpm2-tools-bin "/tpm2_createprimary")))
-           (tpm2-run tcti bin "-C" "o" "-G" "rsa2048" "-g" "sha256" "-c" out))
-         out)
+  (let ((bin (string-append tpm2-tools-bin "/tpm2_createprimary")))
+    (tpm2-run tcti
+              bin
+              "-C"
+              "o"
+              "-G"
+              "rsa2048"
+              "-g"
+              "sha256"
+              "-c"
+              out)) out)
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; PCR policy（trial session）
 
-(define* (tpm2-policy-pcr-digest! tcti tpm2-tools-bin pcr-value-file
+(define* (tpm2-policy-pcr-digest! tcti
+                                  tpm2-tools-bin
+                                  pcr-value-file
                                   #:key (pcr "sha256:7")
                                   (out "policy.pcr.digest"))
-         "TRIAL PolicyPCR：对指定 PCR 期望值（PCR-VALUE-FILE 为 tpm2_pcrread
+  "TRIAL PolicyPCR：对指定 PCR 期望值（PCR-VALUE-FILE 为 tpm2_pcrread
 的原始输出）生成 PolicyPCR digest。PCR7-only：默认 sha256:7。
 返回 digest 文件路径。"
-         (let ((bin (string-append tpm2-tools-bin "/tpm2_policypcr"))
-               (sess (string-append out ".session.ctx")))
-           (tpm2-run tcti (string-append tpm2-tools-bin "/tpm2_startauthsession")
-                     "-S" sess)
-           ;; 实测：-l "bank:index=值" 前向封印在 swtpm TCTI 下 0x1C4；
-           ;; -f <原始 pcr 值> + -l <bank:index> 正常。
-           (tpm2-run tcti bin "-S" sess "-L" out "-f" pcr-value-file "-l" pcr)
-           (tpm2-run tcti (string-append tpm2-tools-bin "/tpm2_flushcontext") sess)
-           out))
+  (let ((bin (string-append tpm2-tools-bin "/tpm2_policypcr"))
+        (sess (string-append out ".session.ctx")))
+    (tpm2-run tcti
+              (string-append tpm2-tools-bin "/tpm2_startauthsession") "-S"
+              sess)
+    ;; 实测：-l "bank:index=值" 前向封印在 swtpm TCTI 下 0x1C4；
+    ;; -f <原始 pcr 值> + -l <bank:index> 正常。
+    (tpm2-run tcti
+              bin
+              "-S"
+              sess
+              "-L"
+              out
+              "-f"
+              pcr-value-file
+              "-l"
+              pcr)
+    (tpm2-run tcti
+              (string-append tpm2-tools-bin "/tpm2_flushcontext") sess)
+    out))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; sealed object
 
-(define* (tpm2-create-sealed! tcti tpm2-tools-bin parent policy-digest-file
+(define* (tpm2-create-sealed! tcti
+                              tpm2-tools-bin
+                              parent
+                              policy-digest-file
                               secret
                               #:key (public-out "seal.pub")
                               (private-out "seal.priv"))
-         "创建带 POLICY-DIGEST-FILE 授权的 sealed object，密封 SECRET
+  "创建带 POLICY-DIGEST-FILE 授权的 sealed object，密封 SECRET
 （bytevector；字符串按 UTF-8 编码后密封，兼容调用方传 hex 字符串）。
 SECRET 经 stdin 传给 tpm2_create（--key-file 语义），不落盘、不进
 argv/environment。PARENT 是持久句柄或 context。
 注：invoke-with-bytevector-stdin 的 put-bytevector 只接受 bytevector，
 字符串直接传会在 guard 里被吞成空 stdin（T3 实测：sensitive data 为空
 且 sensitivedataorigin CLEAR → TPM_RC_ATTRIBUTES 0x2C2）。"
-         (let* ((bin (string-append tpm2-tools-bin "/tpm2_create"))
-                (secret-bv (if (bytevector? secret)
-                             secret
-                             (string->utf8 secret)))
-                ;; 实测：tpm2_create -L <文件> 在 swtpm TCTI 下 0x902；hex 正常。
-                ;; sealed attrs 必须显式指定为 0x492 = fixedtpm(0x2)|
-                ;; fixedparent(0x10)|adminwithpolicy(0x80)|noda(0x400)
-                ;; （TPM 2.0 spec TPMA_OBJECT 布局，tss/libtpms 一致；
-                ;; systemd-cryptenroll 的 sealed attrs 相同）。adminWithPolicy
-                ;; 必须置位——unseal 端用 policy session 授权。
-                ;; 注意：TPMA_OBJECT 的 bit0/bit3 是 reserved（shall be
-                ;; zero）；早期文档流传的 fixedTPM=bit0 位定义是错的，
-                ;; 按旧定义拼的 0x3b/0x1e1 之类 attrs 报 0x2E1 reserved
-                ;; bits（T3 实测）；5.7 不带 -a 的默认 sealed attrs
-                ;; （0x10452，含 restricted）对 keyedhash 非法，报 0x2C2。
-                (policy-hex (bytes->hex (call-with-input-file policy-digest-file
-                                                              get-bytevector-all))))
-           (with-tcti tcti
-                      (lambda ()
-                        (let ((status
-                               (spawn-with-stdin
-                                secret-bv bin "-C" parent
-                                "-u" public-out "-r" private-out
-                                "-L" policy-hex "-i" "-" "-g" "sha256"
-                                "-a" "0x492")))
-                          (unless (zero? status)
-                            (error "tpm2_create failed" status))))))
-         (values public-out private-out))
+  (let* ((bin (string-append tpm2-tools-bin "/tpm2_create"))
+         (secret-bv (if (bytevector? secret) secret
+                        (string->utf8 secret)))
+         ;; 实测：tpm2_create -L <文件> 在 swtpm TCTI 下 0x902；hex 正常。
+         ;; sealed attrs 必须显式指定为 0x492 = fixedtpm(0x2)|
+         ;; fixedparent(0x10)|adminwithpolicy(0x80)|noda(0x400)
+         ;; （TPM 2.0 spec TPMA_OBJECT 布局，tss/libtpms 一致；
+         ;; systemd-cryptenroll 的 sealed attrs 相同）。adminWithPolicy
+         ;; 必须置位——unseal 端用 policy session 授权。
+         ;; 注意：TPMA_OBJECT 的 bit0/bit3 是 reserved（shall be
+         ;; zero）；早期文档流传的 fixedTPM=bit0 位定义是错的，
+         ;; 按旧定义拼的 0x3b/0x1e1 之类 attrs 报 0x2E1 reserved
+         ;; bits（T3 实测）；5.7 不带 -a 的默认 sealed attrs
+         ;; （0x10452，含 restricted）对 keyedhash 非法，报 0x2C2。
+         (policy-hex (bytes->hex (call-with-input-file policy-digest-file
+                                   get-bytevector-all))))
+    (with-tcti tcti
+               (lambda ()
+                 (let ((status (spawn-with-stdin secret-bv
+                                                 bin
+                                                 "-C"
+                                                 parent
+                                                 "-u"
+                                                 public-out
+                                                 "-r"
+                                                 private-out
+                                                 "-L"
+                                                 policy-hex
+                                                 "-i"
+                                                 "-"
+                                                 "-g"
+                                                 "sha256"
+                                                 "-a"
+                                                 "0x492")))
+                   (unless (zero? status)
+                     (error "tpm2_create failed" status))))))
+  (values public-out private-out))
 
-(define* (tpm2-load-sealed! tcti tpm2-tools-bin parent public-file private-file
+(define* (tpm2-load-sealed! tcti
+                            tpm2-tools-bin
+                            parent
+                            public-file
+                            private-file
                             #:key (out "seal.ctx"))
-         "把 sealed object 载入 TPM，返回 context 文件路径。"
-         (let ((bin (string-append tpm2-tools-bin "/tpm2_load")))
-           (tpm2-run tcti bin "-C" parent "-u" public-file "-r" private-file
-                     "-c" out))
-         out)
+  "把 sealed object 载入 TPM，返回 context 文件路径。"
+  (let ((bin (string-append tpm2-tools-bin "/tpm2_load")))
+    (tpm2-run tcti
+              bin
+              "-C"
+              parent
+              "-u"
+              public-file
+              "-r"
+              private-file
+              "-c"
+              out)) out)
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; unseal（真实 policy session）
 
 (define* (tpm2-policy-pcr-session! tcti tpm2-tools-bin session-context
                                    #:key (pcr "sha256:7"))
-         "真实 policy session 的 PolicyPCR：以 TPM 实际 PCR 值计算。"
-         (let ((bin (string-append tpm2-tools-bin "/tpm2_policypcr")))
-           (tpm2-run tcti bin "-S" session-context "-l" pcr)))
+  "真实 policy session 的 PolicyPCR：以 TPM 实际 PCR 值计算。"
+  (let ((bin (string-append tpm2-tools-bin "/tpm2_policypcr")))
+    (tpm2-run tcti
+              bin
+              "-S"
+              session-context
+              "-l"
+              pcr)))
 
-(define* (tpm2-unseal! tcti tpm2-tools-bin seal-context session-context
+(define* (tpm2-unseal! tcti
+                       tpm2-tools-bin
+                       seal-context
+                       session-context
                        #:key (output #f))
-         "unseal。OUTPUT 非 #f 时明文写入该文件（仅测试/调试用）；
+  "unseal。OUTPUT 非 #f 时明文写入该文件（仅测试/调试用）；
 为 #f 时返回 (values port pid)——明文只流经管道，不落盘、不进
 argv/env、不进入 Scheme 字符串；调用方负责读完后 close-port 并
 wait-exit pid（spawn 路径，父进程不 fork——见 (guixcfg utils spawn)
 头部注释；pid 必须 wait，否则 zombie）。"
-         (let ((bin (string-append tpm2-tools-bin "/tpm2_unseal")))
-           (if output
-             (begin
-              (tpm2-run tcti bin "-c" seal-context
-                        "-p" (string-append "session:" session-context)
-                        "-o" output)
-              (values #f #f))
-             (with-tcti tcti
-                        (lambda ()
-                          (let* ((pair (pipe))
-                                 (pid (spawn bin
-                                             (list bin "-c" seal-context
-                                                   "-p" (string-append
-                                                         "session:" session-context))
-                                             #:search-path? #f
-                                             #:output (cdr pair))))
-                            (close-port (cdr pair))   ; 父进程不写子进程 stdout
-                            (values (car pair) pid)))))))
+  (let ((bin (string-append tpm2-tools-bin "/tpm2_unseal")))
+    (if output
+        (begin
+          (tpm2-run tcti
+                    bin
+                    "-c"
+                    seal-context
+                    "-p"
+                    (string-append "session:" session-context)
+                    "-o"
+                    output)
+          (values #f #f))
+        (with-tcti tcti
+                   (lambda ()
+                     (let* ((pair (pipe))
+                            (pid (spawn bin
+                                        (list bin "-c" seal-context "-p"
+                                              (string-append "session:"
+                                                             session-context))
+                                        #:search-path? #f
+                                        #:output (cdr pair))))
+                       (close-port (cdr pair)) ;父进程不写子进程 stdout
+                       (values (car pair) pid)))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; PCR 读写与清理
 
 (define* (tpm2-pcrread! tcti tpm2-tools-bin pcr
                         #:key (out #f))
-         "读取 PCR（如 \"sha256:7\"）。OUT 为 #f 时返回原始字节的 hex 字符串。"
-         (let ((bin (string-append tpm2-tools-bin "/tpm2_pcrread")))
-           (if out
-             (tpm2-run tcti bin pcr "-o" out)
-             (let* ((tmp (string-append "/tmp/guixcfg-pcr-" (number->string (getpid))))
-                    (hex (begin (tpm2-run tcti bin pcr "-o" tmp)
-                                (call-with-input-file tmp
-                                                      (lambda (p)
-                                                        (bytes->hex (get-bytevector-all p)))))))
-               (false-if-exception (delete-file tmp))
-               hex))))
+  "读取 PCR（如 \"sha256:7\"）。OUT 为 #f 时返回原始字节的 hex 字符串。"
+  (let ((bin (string-append tpm2-tools-bin "/tpm2_pcrread")))
+    (if out
+        (tpm2-run tcti bin pcr "-o" out)
+        (let* ((tmp (string-append "/tmp/guixcfg-pcr-"
+                                   (number->string (getpid))))
+               (hex (begin
+                      (tpm2-run tcti bin pcr "-o" tmp)
+                      (call-with-input-file tmp
+                        (lambda (p)
+                          (bytes->hex (get-bytevector-all p)))))))
+          (false-if-exception (delete-file tmp)) hex))))
 
 (define* (tpm2-start-policy-session! tcti tpm2-tools-bin
                                      #:key (out "policy.session.ctx"))
-         "启动真实 policy session 并保存 context。"
-         (let ((bin (string-append tpm2-tools-bin "/tpm2_startauthsession")))
-           (tpm2-run tcti bin "--policy-session" "-S" out))
-         out)
+  "启动真实 policy session 并保存 context。"
+  (let ((bin (string-append tpm2-tools-bin "/tpm2_startauthsession")))
+    (tpm2-run tcti bin "--policy-session" "-S" out)) out)
 
 (define (tpm2-flush-session! tcti tpm2-tools-bin session-context)
   "flush 指定 session（结束后清理）。"
@@ -284,5 +345,4 @@ wait-exit pid（spawn 路径，父进程不 fork——见 (guixcfg utils spawn)
   (string-join (map (lambda (b)
                       (string-append (number->string (quotient b 16) 16)
                                      (number->string (modulo b 16) 16)))
-                    (bytevector->u8-list bv))
-               ""))
+                    (bytevector->u8-list bv)) ""))

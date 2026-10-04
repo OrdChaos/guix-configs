@@ -2,34 +2,33 @@
 ;;; 对应 docs/operations/installation.md 与 docs/architecture/storage.md。
 
 (define-module (guixcfg storage install)
-               #:use-module (guixcfg storage model)
-               #:use-module (guixcfg storage plan)
-               #:use-module (guixcfg storage validate)
-               #:use-module (guixcfg storage device)
-               #:use-module (guixcfg storage partition)
-               #:use-module (guixcfg storage filesystem)
-               #:use-module (guixcfg storage subvolume)
-               #:use-module (guixcfg boot layout)      ; %esp-mount-point、%esp-luks-uuid-file
-               #:use-module (guixcfg boot device-resolver) ; normalize-luks-uuid
-               #:use-module (guixcfg utils atomic-file) ; atomic-write-file!
-               #:use-module (guix build utils)  ; mkdir-p
-               #:use-module (ice-9 format)
-               #:use-module (ice-9 rdelim)
-               #:use-module (srfi srfi-1)
-               #:export (run-install
-                         read-secret-line
-                         read-luks-passphrase!
-                         make-luks-passphrase-source
-                         ;; 安装编排层复用（blue install 的 disk / mount /
-                         ;; facts 阶段拆分；行为与 run-install 完全一致，
-                         ;; 只是把执行单元暴露给事务编排——见
-                         ;; (guixcfg system install)）
-                         %required-commands
-                         preflight-environment!
-                         execute-plan
-                         execute-mounts!
-                         write-machine-facts
-                         warn-if-store-in-ram))
+  #:use-module (guixcfg storage model)
+  #:use-module (guixcfg storage plan)
+  #:use-module (guixcfg storage validate)
+  #:use-module (guixcfg storage device)
+  #:use-module (guixcfg storage partition)
+  #:use-module (guixcfg storage filesystem)
+  #:use-module (guixcfg storage subvolume)
+  #:use-module (guixcfg boot layout) ;%esp-mount-point、%esp-luks-uuid-file
+  #:use-module (guixcfg boot device-resolver) ;normalize-luks-uuid
+  #:use-module (guixcfg utils atomic-file) ;atomic-write-file!
+  #:use-module (guix build utils) ;mkdir-p
+  #:use-module (ice-9 format)
+  #:use-module (ice-9 rdelim)
+  #:use-module (srfi srfi-1)
+  #:export (run-install read-secret-line
+                        read-luks-passphrase!
+                        make-luks-passphrase-source
+                        ;; 安装编排层复用（blue install 的 disk / mount /
+                        ;; facts 阶段拆分；行为与 run-install 完全一致，
+                        ;; 只是把执行单元暴露给事务编排——见
+                        ;; (guixcfg system install)）
+                        %required-commands
+                        preflight-environment!
+                        execute-plan
+                        execute-mounts!
+                        write-machine-facts
+                        warn-if-store-in-ram))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; LUKS passphrase 交互（docs/operations/installation.md）。
@@ -51,22 +50,23 @@ stty 属于 GNU coreutils，由 installer manifest 显式提供
   (format #t "~a" prompt)
   (force-output)
   (let ((line (if (isatty? (current-input-port))
-                (dynamic-wind
-                 (lambda ()
-                   (unless (zero? (system* "stty" "-echo"))
-                     (error "stty -echo failed (coreutils missing?); \
-refusing to echo password")))
-                 (lambda () (read-line))
-                 (lambda () (system* "stty" "echo")))
-                (read-line))))
-    (format #t "~%")
-    line))
+                  (dynamic-wind (lambda ()
+                                  (unless (zero? (system* "stty" "-echo"))
+                                    (error
+                                     "stty -echo failed (coreutils missing?); refusing to echo password")))
+                                (lambda ()
+                                  (read-line))
+                                (lambda ()
+                                  (system* "stty" "echo")))
+                  (read-line))))
+    (format #t "~%") line))
 
 (define (read-luks-passphrase!)
   "交互设置 LUKS recovery password：两次输入一致且非空，否则重试。
 TPM2 使用独立随机 credential/keyslot，本密码保留为人工 recovery
 password（docs/architecture/boot.md（TPM2））。"
-  (let loop ()
+  (let loop
+    ()
     (let ((a (read-secret-line "Set LUKS passphrase: "))
           (b (read-secret-line "Repeat LUKS passphrase: ")))
       (cond
@@ -85,8 +85,7 @@ password（docs/architecture/boot.md（TPM2））。"
     (lambda ()
       (or passphrase
           (let ((p (reader)))
-            (set! passphrase p)
-            p)))))
+            (set! passphrase p) p)))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 步骤分派：把 plan 步骤 id 映射到执行函数。
@@ -98,84 +97,143 @@ password（docs/architecture/boot.md（TPM2））。"
       (error "plan step missing argument" key)))
 
 (define %executors
-  `((confirm-target        . ,(lambda (d passphrase!) #t))    ; 人工确认在 execute-plan 前完成
-                                                              (wipe                  . ,(lambda (d passphrase!) (execute-wipe (detail-ref d 'device))))
-                                                              (partition             . ,(lambda (d passphrase!) (execute-partition (detail-ref d 'device)
-                                                                                                                                   (detail-ref d 'esp-size))))
-                                                              (wait-udev             . ,(lambda (d passphrase!) (execute-wait-udev (detail-ref d 'device))))
-                                                              (format-esp            . ,(lambda (d passphrase!)
-                                                                                          (execute-format-esp
-                                                                                           (target-partition-path (detail-ref d 'device) 1))))
-                                                              ;; LUKS passphrase 来自 apply session（luks-format 首次读取，
-                                                              ;; luks-open 复用同一值），经 stdin 传给 cryptsetup。
-                                                              (luks-format           . ,(lambda (d passphrase!)
-                                                                                          (execute-luks-format
-                                                                                           (target-partition-path (detail-ref d 'device) 2)
-                                                                                           (passphrase!))))
-                                                              (luks-open             . ,(lambda (d passphrase!)
-                                                                                          (catch #t
-                                                                                            (lambda ()
-                                                                                              (execute-luks-open
-                                                                                               (target-partition-path (detail-ref d 'device) 2)
-                                                                                               (passphrase!)))
-                                                                                            (lambda args
-                                                                                              (format (current-error-port)
-                                                                                                      "LUKS volume created but initial open failed; luksFormat will not be rerun.~%")
-                                                                                              (apply throw args)))))
-                                                              (format-btrfs          . ,(lambda (d passphrase!)
-                                                                                          (let ((mapper (detail-ref d 'device))
-                                                                                                (disk (detail-ref d 'target-disk)))
-                                                                                            (unless (device-on-disk? mapper disk)
-                                                                                              (error "LUKS mapper does not belong to confirmed target disk"
-                                                                                                     mapper disk))
-                                                                                            (execute-format-btrfs mapper))))
-                                                              (mount-top             . ,(lambda (d passphrase!) (execute-mount-top)))
-                                                              (make-subvolume        . ,(lambda (d passphrase!) (execute-make-subvolume (detail-ref d 'name))))
-                                                              ;; 与 make-subvolume 同一执行器；独立 step id 只是让计划更可读
-                                                              ;; （安装期 root 在计划里是单独一行）。
-                                                              (make-root-installing  . ,(lambda (d passphrase!) (execute-make-subvolume (detail-ref d 'name))))
-                                                              (make-swapfile         . ,(lambda (d passphrase!) (execute-make-swapfile (detail-ref d 'subvolume)
-                                                                                                                                       (detail-ref d 'size))))
-                                                              (unmount-top           . ,(lambda (d passphrase!) (execute-unmount-top)))
-                                                              (mount-root            . ,(lambda (d passphrase!) (execute-mount-root (detail-ref d 'name)
-                                                                                                                                    (detail-ref d 'target))))
-                                                              (mount-subvolume       . ,(lambda (d passphrase!) (execute-mount-subvolume (detail-ref d 'name)
-                                                                                                                                         (detail-ref d 'target)
-                                                                                                                                         (detail-ref d 'options))))
-                                                              (mount-esp             . ,(lambda (d passphrase!)
-                                                                                          (execute-mount-esp
-                                                                                           (target-partition-path (detail-ref d 'device) 1)
-                                                                                           (detail-ref d 'target))))
-                                                              (write-facts           . ,(lambda (d passphrase!)
-                                                                                          (write-machine-facts
-                                                                                           (detail-ref d 'target)
-                                                                                           (detail-ref d 'device))))
-                                                              (ready                 . ,(lambda (d passphrase!) #t))))
+  `((confirm-target unquote
+                    (lambda (d passphrase!)
+                      #t))
+     ;人工确认在 execute-plan 前完成
+    (wipe unquote
+          (lambda (d passphrase!)
+            (execute-wipe (detail-ref d
+                                      'device))))
+    (partition unquote
+               (lambda (d passphrase!)
+                 (execute-partition (detail-ref d
+                                                'device)
+                                    (detail-ref d
+                                                'esp-size))))
+    (wait-udev unquote
+               (lambda (d passphrase!)
+                 (execute-wait-udev (detail-ref d
+                                                'device))))
+    (format-esp unquote
+                (lambda (d passphrase!)
+                  (execute-format-esp (target-partition-path (detail-ref d
+                                                                         'device)
+                                                             1))))
+    ;; LUKS passphrase 来自 apply session（luks-format 首次读取，
+    ;; luks-open 复用同一值），经 stdin 传给 cryptsetup。
+    (luks-format unquote
+                 (lambda (d passphrase!)
+                   (execute-luks-format (target-partition-path (detail-ref d
+                                                                           'device)
+                                                               2)
+                                        (passphrase!))))
+    (luks-open unquote
+               (lambda (d passphrase!)
+                 (catch #t
+                        (lambda ()
+                          (execute-luks-open (target-partition-path (detail-ref
+                                                                     d
+                                                                     'device)
+                                                                    2)
+                                             (passphrase!)))
+                        (lambda args
+                          (format (current-error-port)
+                           "LUKS volume created but initial open failed; luksFormat will not be rerun.~%")
+                          (apply throw args)))))
+    (format-btrfs unquote
+                  (lambda (d passphrase!)
+                    (let ((mapper (detail-ref d
+                                              'device))
+                          (disk (detail-ref d
+                                            'target-disk)))
+                      (unless (device-on-disk? mapper disk)
+                        (error
+                         "LUKS mapper does not belong to confirmed target disk"
+                         mapper disk))
+                      (execute-format-btrfs mapper))))
+    (mount-top unquote
+               (lambda (d passphrase!)
+                 (execute-mount-top)))
+    (make-subvolume unquote
+                    (lambda (d passphrase!)
+                      (execute-make-subvolume (detail-ref d
+                                                          'name))))
+    ;; 与 make-subvolume 同一执行器；独立 step id 只是让计划更可读
+    ;; （安装期 root 在计划里是单独一行）。
+    (make-root-installing unquote
+                          (lambda (d passphrase!)
+                            (execute-make-subvolume (detail-ref d
+                                                                'name))))
+    (make-swapfile unquote
+                   (lambda (d passphrase!)
+                     (execute-make-swapfile (detail-ref d
+                                                        'subvolume)
+                                            (detail-ref d
+                                                        'size))))
+    (unmount-top unquote
+                 (lambda (d passphrase!)
+                   (execute-unmount-top)))
+    (mount-root unquote
+                (lambda (d passphrase!)
+                  (execute-mount-root (detail-ref d
+                                                  'name)
+                                      (detail-ref d
+                                                  'target))))
+    (mount-subvolume unquote
+                     (lambda (d passphrase!)
+                       (execute-mount-subvolume (detail-ref d
+                                                            'name)
+                                                (detail-ref d
+                                                            'target)
+                                                (detail-ref d
+                                                            'options))))
+    (mount-esp unquote
+               (lambda (d passphrase!)
+                 (execute-mount-esp (target-partition-path (detail-ref d
+                                                                       'device)
+                                                           1)
+                                    (detail-ref d
+                                                'target))))
+    (write-facts unquote
+                 (lambda (d passphrase!)
+                   (write-machine-facts (detail-ref d
+                                                    'target)
+                                        (detail-ref d
+                                                    'device))))
+    (ready unquote
+           (lambda (d passphrase!)
+             #t))))
 
 (define (execute-step step passphrase!)
-  (let ((executor (assq-ref %executors (plan-step-id step))))
+  (let ((executor (assq-ref %executors
+                            (plan-step-id step))))
     (unless executor
-      (error "unknown plan step" (plan-step-id step)))
+      (error "unknown plan step"
+             (plan-step-id step)))
     (executor (plan-step-detail step) passphrase!)))
 
 ;; mount 步骤（mount-top / mount-root / mount-subvolume / mount-esp）
 ;; 不需要 passphrase。安装编排层 resume 用：磁盘布局已存在、mount
 ;; 图尚未建立时（如安装中途重启了 LiveCD）只重放 mount 步骤。
 ;; LUKS 卷必须先打开（调用方负责 execute-luks-open）。
-(define %mount-step-ids '(mount-top mount-root mount-subvolume mount-esp))
+(define %mount-step-ids
+  '(mount-top mount-root mount-subvolume mount-esp))
 
 (define* (execute-mounts! plan)
-         "重放 PLAN 中的 mount 步骤（其余步骤跳过）。用于 resume 场景。"
-         (for-each (lambda (step)
-                     (when (memq (plan-step-id step) %mount-step-ids)
-                       (execute-step step (lambda () #t))))
-                   plan))
+  "重放 PLAN 中的 mount 步骤（其余步骤跳过）。用于 resume 场景。"
+  (for-each (lambda (step)
+              (when (memq (plan-step-id step) %mount-step-ids)
+                (execute-step step
+                              (lambda ()
+                                #t)))) plan))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 人工确认：必须输入完整设备路径（docs/architecture/storage.md）。
 
 (define (confirm-device! device)
-  (format #t "~%This will perform an IRREVERSIBLE DESTRUCTIVE operation on ~a.~%" device)
+  (format #t
+   "~%This will perform an IRREVERSIBLE DESTRUCTIVE operation on ~a.~%" device)
   (format #t "Enter the full device path ~a to confirm: " device)
   (force-output)
   (let ((input (read-line)))
@@ -187,9 +245,10 @@ password（docs/architecture/boot.md（TPM2））。"
 ;;; 失败即停（docs/architecture/storage.md）：
 ;;; 任何一步抛异常，立即报告并退出非零，不做任何自动清理或续跑。
 
-(define* (execute-plan plan #:key (passphrase-reader read-luks-passphrase!)
+(define* (execute-plan plan
+                       #:key (passphrase-reader read-luks-passphrase!)
                        (on-failure #f))
-         "逐步执行计划（失败即停）。
+  "逐步执行计划（失败即停）。
 LUKS passphrase 由 luks-format 步骤首次读取，luks-open 复用同一值；
 它只存在于本次 apply session（不进 plan、不落盘、不进 argv/env）。
 PASSPHRASE-READER 默认交互读取；也可是 age secret reader（installer
@@ -197,57 +256,74 @@ PASSPHRASE-READER 默认交互读取；也可是 age secret reader（installer
 见 tools/secrets.scm 与 docs/architecture/secrets.md）——两种来源共用 stdin 语义。
 ON-FAILURE 非 #f 时是 (lambda (key args) ...) 失败处理器：安装编排层
 用它分类失败阶段（默认行为不变：打印 + exit 1）。"
-         (let ((passphrase! (make-luks-passphrase-source passphrase-reader)))
-           (catch #t
-             (lambda ()
-               (for-each
-                (lambda (step n)
-                  (format #t "~%[~2d/~2d] ~a~%" n (length plan) (plan-step-summary step))
-                  (execute-step step passphrase!))
-                plan
-                (map (lambda (i) (+ i 1)) (iota (length plan))))
-               (format #t "~%Disk installation complete.~%"))
-             (lambda (key . args)
-               (if on-failure
+  (let ((passphrase! (make-luks-passphrase-source passphrase-reader)))
+    (catch #t
+           (lambda ()
+             (for-each (lambda (step n)
+                         (format #t "~%[~2d/~2d] ~a~%" n
+                                 (length plan)
+                                 (plan-step-summary step))
+                         (execute-step step passphrase!)) plan
+                       (map (lambda (i)
+                              (+ i 1))
+                            (iota (length plan))))
+             (format #t "~%Disk installation complete.~%"))
+           (lambda (key . args)
+             (if on-failure
                  (on-failure key args)
                  (begin
-                  (format (current-error-port)
-                          "~%Step failed; stopped immediately (incomplete operations will not continue automatically).~%error: ~s ~s~%"
-                          key args)
-                  (exit 1)))))))
+                   (format (current-error-port)
+                    "~%Step failed; stopped immediately (incomplete operations will not continue automatically).~%error: ~s ~s~%"
+                    key args)
+                   (exit 1)))))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 执行前环境检查：在任何破坏性操作之前拦下环境问题
 ;;; （root 权限、所需命令齐全、mapper 名未被占用、设备非只读）。
 
 (define %required-commands
-  '("sgdisk" "udevadm" "mkfs.vfat" "cryptsetup" "mkfs.btrfs"
-             "btrfs" "mount" "umount" "mkdir" "lsblk" "findmnt" "readlink"
-             "age" "herd" "sync"
-             ;; repo 复制阶段（installation.md 阶段 8：tar 两段复制 +
-             ;; chown -R 归还 USER ownership）
-             "tar" "chown"))
+  '("sgdisk" "udevadm"
+    "mkfs.vfat"
+    "cryptsetup"
+    "mkfs.btrfs"
+    "btrfs"
+    "mount"
+    "umount"
+    "mkdir"
+    "lsblk"
+    "findmnt"
+    "readlink"
+    "age"
+    "herd"
+    "sync"
+    ;; repo 复制阶段（installation.md 阶段 8：tar 两段复制 +
+    ;; chown -R 归还 USER ownership）
+    "tar"
+    "chown"))
 
 (define (preflight-environment! device)
   "检查安装环境本身；任何问题直接报错退出。"
   (unless (zero? (getuid))
     (error "apply requires root privileges"))
-  
-  (for-each
-   (lambda (cmd)
-     (unless (search-path (string-split (or (getenv "PATH") "") #\:) cmd)
-       (error "required command unavailable (check the manifest provides the installer environment)" cmd)))
-   %required-commands)
-  
+
+  (for-each (lambda (cmd)
+              (unless (search-path (string-split (or (getenv "PATH") "") #\:)
+                                   cmd)
+                (error
+                 "required command unavailable (check the manifest provides the installer environment)"
+                 cmd))) %required-commands)
+
   (when (file-exists? (string-append "/dev/mapper/" %luks-mapper-name))
-    (error "LUKS mapper name already in use (an unfinished or active installation may exist)"
-           %luks-mapper-name))
-  
+    (error
+     "LUKS mapper name already in use (an unfinished or active installation may exist)"
+     %luks-mapper-name))
+
   (let ((ro (first-command-line "lsblk" "-dno" "RO" device)))
     (when (equal? ro "1")
       (error "target device is read-only" device)))
-  
-  (format #t "environment checks passed (root, commands, mapper free, device writable).~%"))
+
+  (format #t
+   "environment checks passed (root, commands, mapper free, device writable).~%"))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 机器事实（docs/architecture/storage.md（固定命名事实））：安装时生成、可重新探测、不进 Git。
@@ -260,14 +336,13 @@ ON-FAILURE 非 #f 时是 (lambda (key args) ...) 失败处理器：安装编排�
 (define (write-machine-facts target device)
   "把安装时发现的机器事实写入 TARGET 下的 facts 文件与 ESP UUID 文件
 （原子写，不留半个文件）。调用时 ESP 已挂在 TARGET/%esp-mount-point。"
-  (let ((luks-uuid (first-command-line
-                    "cryptsetup" "luksUUID"
-                    (target-partition-path device 2))))
+  (let ((luks-uuid (first-command-line "cryptsetup" "luksUUID"
+                                       (target-partition-path device 2))))
     (unless luks-uuid
       (error "failed to read LUKS UUID" %system-partlabel))
-    (let ((facts `((luks-uuid . ,luks-uuid)))
-          (dir (string-append target (persist-mount-point "@persist-system")
-                              "/facts")))
+    (let ((facts `((luks-uuid unquote luks-uuid)))
+          (dir (string-append target
+                              (persist-mount-point "@persist-system") "/facts")))
       (mkdir-p dir)
       (atomic-write-file! (string-append dir "/host.scm")
                           (lambda (port)
@@ -280,8 +355,7 @@ ON-FAILURE 非 #f 时是 (lambda (key args) ...) 失败处理器：安装编排�
       (atomic-write-file! esp-file
                           (lambda (port)
                             (display (or (normalize-luks-uuid luks-uuid)
-                                         (error "invalid LUKS UUID"
-                                                luks-uuid))
+                                         (error "invalid LUKS UUID" luks-uuid))
                                      port)
                             (newline port)))
       (format #t "  ESP LUKS UUID file: ~a~%" esp-file))))
@@ -299,44 +373,47 @@ ON-FAILURE 非 #f 时是 (lambda (key args) ...) 失败处理器：安装编排�
       (format #t "  NOTE: /gnu/store is currently on the RAM disk (tmpfs).~%")
       (format #t "  Before running guix system init, run:~%")
       (format #t "~%    herd start cow-store /mnt~%")
-      (format #t "~%  Otherwise downloads and builds will fill the RAM disk.~%")
+      (format #t
+              "~%  Otherwise downloads and builds will fill the RAM disk.~%")
       (format #t "==================================================~%"))))
 
 ;;; ────────────────────────────────────────────────────────────
 ;;; 完整安装流程。
 
-(define* (run-install policy device #:key (passphrase-reader read-luks-passphrase!))
-         "把 DEVICE 安装成 POLICY 描述的布局。调用前需 root 权限。
+(define* (run-install policy device
+                      #:key (passphrase-reader read-luks-passphrase!))
+  "把 DEVICE 安装成 POLICY 描述的布局。调用前需 root 权限。
 PASSPHRASE-READER 透传给 execute-plan（交互或 age secret 来源）。"
-         ;; 0. 环境检查
-         (preflight-environment! device)
-         
-         ;; 1. policy 自校验
-         (let ((policy-failures (validate-policy policy)))
-           (unless (null? policy-failures)
-             (format (current-error-port) "host policy is invalid:~%")
-             (for-each (lambda (f)
-                         (format (current-error-port) "  - ~a~%" (check-failure-message f)))
-                       policy-failures)
-             (exit 1)))
-         
-         ;; 2. 探测并校验目标设备
-         (format #t "probing ~a ...~%" device)
-         (let ((failures (validate-target (probe-device device) policy)))
-           (unless (null? failures)
-             (format (current-error-port) "target device failed safety checks:~%")
-             (for-each (lambda (f)
-                         (format (current-error-port) "  - ~a~%" (check-failure-message f)))
-                       failures)
-             (exit 1)))
-         
-         ;; 3. 打印完整计划，人工确认
-         (let ((plan (storage-plan policy device)))
-           (display-plan plan)
-           (confirm-device! device)
-           
-           ;; 4. 逐步执行
-           (execute-plan plan #:passphrase-reader passphrase-reader)
-           
-           ;; 5. 若 store 还在内存盘，提醒先 cow-store 再 init
-           (warn-if-store-in-ram)))
+  ;; 0. 环境检查
+  (preflight-environment! device)
+
+  ;; 1. policy 自校验
+  (let ((policy-failures (validate-policy policy)))
+    (unless (null? policy-failures)
+      (format (current-error-port) "host policy is invalid:~%")
+      (for-each (lambda (f)
+                  (format (current-error-port) "  - ~a~%"
+                          (check-failure-message f))) policy-failures)
+      (exit 1)))
+
+  ;; 2. 探测并校验目标设备
+  (format #t "probing ~a ...~%" device)
+  (let ((failures (validate-target (probe-device device) policy)))
+    (unless (null? failures)
+      (format (current-error-port) "target device failed safety checks:~%")
+      (for-each (lambda (f)
+                  (format (current-error-port) "  - ~a~%"
+                          (check-failure-message f))) failures)
+      (exit 1)))
+
+  ;; 3. 打印完整计划，人工确认
+  (let ((plan (storage-plan policy device)))
+    (display-plan plan)
+    (confirm-device! device)
+
+    ;; 4. 逐步执行
+    (execute-plan plan
+                  #:passphrase-reader passphrase-reader)
+
+    ;; 5. 若 store 还在内存盘，提醒先 cow-store 再 init
+    (warn-if-store-in-ram)))

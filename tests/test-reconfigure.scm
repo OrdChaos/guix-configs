@@ -7,8 +7,8 @@
 ;;; transaction 的 gate 状态机与 exit code 契约（0/1/2）。
 
 (use-modules (guixcfg system reconfigure)
-             (guixcfg system session-gate) ; gate 唯一 authority（alias 完整性断言）
-             (guixcfg system deploy)      ; system-reconfigure-argv（断言 argv 形态）
+             (guixcfg system session-gate) ;gate 唯一 authority（alias 完整性断言）
+             (guixcfg system deploy) ;system-reconfigure-argv（断言 argv 形态）
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -16,15 +16,22 @@
 
 (test-begin "reconfigure")
 
-(define %base "/tmp/guixcfg-tx-test")
-(define %counter 0)
+(define %base
+  "/tmp/guixcfg-tx-test")
+(define %counter
+  0)
 
 (define (make-sandbox)
-  (set! %counter (1+ %counter))
-  (define dir (string-append %base "-" (number->string (getpid))
-                             "-" (number->string %counter)))
-  (define gate-dir (string-append dir "/gate"))
-  (define home-dir (string-append dir "/home"))
+  (set! %counter
+        (1+ %counter))
+  (define dir
+    (string-append %base "-"
+                   (number->string (getpid)) "-"
+                   (number->string %counter)))
+  (define gate-dir
+    (string-append dir "/gate"))
+  (define home-dir
+    (string-append dir "/home"))
   (mkdir dir)
   (mkdir gate-dir)
   (mkdir home-dir)
@@ -42,249 +49,309 @@
 (define (pivot home-dir)
   (string-append home-dir "/.guix-home.new"))
 
-(define %fake-store-home "/gnu/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-home")
+(define %fake-store-home
+  "/gnu/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-home")
 
 (define (safe-pivot! home-dir)
-  (symlink %fake-store-home (pivot home-dir)))
+  (symlink %fake-store-home
+           (pivot home-dir)))
 
 (define (ready-home! home-dir)
-  (symlink %fake-store-home (home-link home-dir)))
+  (symlink %fake-store-home
+           (home-link home-dir)))
 
 ;; readiness 使用 Shepherd protocol 的结构化状态。
-(define (all-services-ready? service) #t)
+(define (all-services-ready? service)
+  #t)
 
 (define shepherd-status-ready?
   (@@ (guixcfg system reconfigure) shepherd-status-ready?))
 
 (test-assert "structured running service is ready"
-             (shepherd-status-ready?
-              '((status running) (one-shot? #f)
-                                 (status-changes ((running . 20))) (startup-failures ()))))
+             (shepherd-status-ready? '((status running)
+                                       (one-shot? #f)
+                                       (status-changes ((running . 20)))
+                                       (startup-failures ()))))
 
 (test-assert "successfully completed one-shot is ready"
-             (shepherd-status-ready?
-              '((status stopped) (one-shot? #t)
-                                 (status-changes ((stopped . 20) (starting . 19)))
-                                 (startup-failures ()))))
+             (shepherd-status-ready? '((status stopped)
+                                       (one-shot? #t)
+                                       (status-changes ((stopped . 20)
+                                                        (starting . 19)))
+                                       (startup-failures ()))))
 
 (test-assert "never-started one-shot is not ready"
-             (not (shepherd-status-ready?
-                   '((status stopped) (one-shot? #t)
-                                      (status-changes ()) (startup-failures ())))))
+             (not (shepherd-status-ready? '((status stopped)
+                                            (one-shot? #t)
+                                            (status-changes ())
+                                            (startup-failures ())))))
 
 (test-assert "failed one-shot is not ready"
-             (not (shepherd-status-ready?
-                   '((status stopped) (one-shot? #t)
-                                      (status-changes ((stopped . 20) (starting . 19)))
-                                      (startup-failures (20))))))
+             (not (shepherd-status-ready? '((status stopped)
+                                            (one-shot? #t)
+                                            (status-changes ((stopped . 20)
+                                                             (starting . 19)))
+                                            (startup-failures (20))))))
 
 (define (expected-guix-argv)
   '("env" "GUILE_LOAD_PATH=/repo/modules"
-          "GUILE_LOAD_COMPILED_PATH=/repo/modules"
-          "guix" "time-machine" "-C" "/repo/channels.lock.scm" "--"
-          "system" "reconfigure" "--no-kexec"
-          "modules/guixcfg/hosts/vm.scm"))
+    "GUILE_LOAD_COMPILED_PATH=/repo/modules"
+    "guix"
+    "time-machine"
+    "-C"
+    "/repo/channels.lock.scm"
+    "--"
+    "system"
+    "reconfigure"
+    "--no-kexec"
+    "modules/guixcfg/hosts/vm.scm"))
 
 ;; ── 1. system reconfigure 失败 → gate 重开、Home 不动、exit 1 ──
 
 (let ((sandbox (make-sandbox))
       (log '()))
-  (define gate-dir (second sandbox))
-  (define home-dir (third sandbox))
+  (define gate-dir
+    (second sandbox))
+  (define home-dir
+    (third sandbox))
   (define result
-    (reconfigure-transaction!
-     "vm" "alice"
-     #:root "/repo"
-     #:gate-dir gate-dir
-     #:home-dir home-dir
-     #:run-command
-     (lambda (argv)
-       (set! log (cons argv log))
-       (if (equal? argv (expected-guix-argv)) 1 0))
-     #:service-ready? all-services-ready?
-     #:sleep-proc (lambda (s) #t)))
+    (reconfigure-transaction! "vm"
+                              "alice"
+                              #:root "/repo"
+                              #:gate-dir gate-dir
+                              #:home-dir home-dir
+                              #:run-command (lambda (argv)
+                                              (set! log
+                                                    (cons argv log))
+                                              (if (equal? argv
+                                                          (expected-guix-argv))
+                                                  1 0))
+                              #:service-ready? all-services-ready?
+                              #:sleep-proc (lambda (s)
+                                             #t)))
   (test-equal "system failure: exit code 1" 1 result)
-  (test-assert "system failure: gate reopened" (not (gate-closed? gate-dir)))
+  (test-assert "system failure: gate reopened"
+               (not (gate-closed? gate-dir)))
   (test-assert "system failure: Home untouched (no herd call)"
-               (not (any (lambda (argv) (equal? (car argv) "herd")) log))))
+               (not (any (lambda (argv)
+                           (equal? (car argv) "herd")) log))))
 
 ;; ── 2. unsafe stale pivot → system switched、gate CLOSED、exit 2 ──
 
 (let ((sandbox (make-sandbox))
       (log '()))
-  (define gate-dir (second sandbox))
-  (define home-dir (third sandbox))
+  (define gate-dir
+    (second sandbox))
+  (define home-dir
+    (third sandbox))
   (call-with-output-file (pivot home-dir)
-                         (lambda (p) (display "user data!\n" p)))
+    (lambda (p)
+      (display "user data!\n" p)))
   (define result
-    (reconfigure-transaction!
-     "vm" "alice"
-     #:root "/repo"
-     #:gate-dir gate-dir
-     #:home-dir home-dir
-     #:run-command (lambda (argv) (set! log (cons argv log)) 0)
-     #:service-ready? all-services-ready?
-     #:sleep-proc (lambda (s) #t)))
+    (reconfigure-transaction! "vm"
+                              "alice"
+                              #:root "/repo"
+                              #:gate-dir gate-dir
+                              #:home-dir home-dir
+                              #:run-command (lambda (argv)
+                                              (set! log
+                                                    (cons argv log)) 0)
+                              #:service-ready? all-services-ready?
+                              #:sleep-proc (lambda (s)
+                                             #t)))
   (test-equal "unsafe pivot: exit code 2" 2 result)
-  (test-assert "unsafe pivot: gate stays closed" (gate-closed? gate-dir))
-  (test-assert "unsafe pivot: file untouched" (file-exists? (pivot home-dir)))
+  (test-assert "unsafe pivot: gate stays closed"
+               (gate-closed? gate-dir))
+  (test-assert "unsafe pivot: file untouched"
+               (file-exists? (pivot home-dir)))
   (test-assert "unsafe pivot: only hot restart attempted"
                (every (lambda (argv)
-                        (equal? argv '("herd" "restart" "mihomo")))
+                        (equal? argv
+                                '("herd" "restart" "mihomo")))
                       (filter (lambda (argv)
-                                (equal? (car argv) "herd"))
-                              log))))
+                                (equal? (car argv) "herd")) log))))
 
 ;; ── 3. hot restart 失败（mihomo）→ gate CLOSED、exit 2 ──
 
 (let ((sandbox (make-sandbox)))
-  (define gate-dir (second sandbox))
-  (define home-dir (third sandbox))
+  (define gate-dir
+    (second sandbox))
+  (define home-dir
+    (third sandbox))
   (define result
-    (reconfigure-transaction!
-     "vm" "alice"
-     #:root "/repo"
-     #:gate-dir gate-dir
-     #:home-dir home-dir
-     #:run-command
-     (lambda (argv)
-       (if (and (equal? (car argv) "herd")
-                (equal? (cadr argv) "restart")
-                (equal? (caddr argv) "mihomo"))
-         1 0))
-     #:service-ready? all-services-ready?
-     #:sleep-proc (lambda (s) #t)))
+    (reconfigure-transaction! "vm"
+                              "alice"
+                              #:root "/repo"
+                              #:gate-dir gate-dir
+                              #:home-dir home-dir
+                              #:run-command (lambda (argv)
+                                              (if (and (equal? (car argv)
+                                                               "herd")
+                                                       (equal? (cadr argv)
+                                                               "restart")
+                                                       (equal? (caddr argv)
+                                                               "mihomo")) 1 0))
+                              #:service-ready? all-services-ready?
+                              #:sleep-proc (lambda (s)
+                                             #t)))
   (test-equal "hot restart failure: exit code 2" 2 result)
-  (test-assert "hot restart failure: gate stays closed" (gate-closed? gate-dir)))
+  (test-assert "hot restart failure: gate stays closed"
+               (gate-closed? gate-dir)))
 
 ;; ── 3b. hot restart 成功且先于 Home 热激活 ──
 
 (let ((sandbox (make-sandbox))
       (log '()))
-  (define gate-dir (second sandbox))
-  (define home-dir (third sandbox))
+  (define gate-dir
+    (second sandbox))
+  (define home-dir
+    (third sandbox))
   (ready-home! home-dir)
   (define result
-    (reconfigure-transaction!
-     "vm" "alice"
-     #:root "/repo"
-     #:gate-dir gate-dir
-     #:home-dir home-dir
-     #:run-command
-     (lambda (argv)
-       (set! log (cons argv log))
-       0)
-     #:service-ready? all-services-ready?
-     #:sleep-proc (lambda (s) #t)))
+    (reconfigure-transaction! "vm"
+                              "alice"
+                              #:root "/repo"
+                              #:gate-dir gate-dir
+                              #:home-dir home-dir
+                              #:run-command (lambda (argv)
+                                              (set! log
+                                                    (cons argv log)) 0)
+                              #:service-ready? all-services-ready?
+                              #:sleep-proc (lambda (s)
+                                             #t)))
   (test-equal "hot restart success: exit code 0" 0 result)
   (let ((restarts (reverse (filter (lambda (argv)
                                      (and (equal? (car argv) "herd")
-                                          (equal? (cadr argv) "restart")))
-                                   log))))
+                                          (equal? (cadr argv) "restart"))) log))))
     (test-equal "hot restart runs mihomo then guix-home"
                 '(("herd" "restart" "mihomo")
-                  ("herd" "restart" "guix-home-alice"))
-                restarts)))
+                  ("herd" "restart" "guix-home-alice")) restarts)))
 
 ;; ── 3c. Home herd restart 被拒 → gate CLOSED、exit 2 ──
 
 (let ((sandbox (make-sandbox)))
-  (define gate-dir (second sandbox))
-  (define home-dir (third sandbox))
+  (define gate-dir
+    (second sandbox))
+  (define home-dir
+    (third sandbox))
   (define result
-    (reconfigure-transaction!
-     "vm" "alice"
-     #:root "/repo"
-     #:gate-dir gate-dir
-     #:home-dir home-dir
-     #:run-command
-     (lambda (argv)
-       (if (and (equal? (car argv) "herd")
-                (equal? (cadr argv) "restart")
-                (string-prefix? "guix-home-" (caddr argv)))
-         1 0))
-     #:service-ready? all-services-ready?
-     #:sleep-proc (lambda (s) #t)))
+    (reconfigure-transaction! "vm"
+                              "alice"
+                              #:root "/repo"
+                              #:gate-dir gate-dir
+                              #:home-dir home-dir
+                              #:run-command (lambda (argv)
+                                              (if (and (equal? (car argv)
+                                                               "herd")
+                                                       (equal? (cadr argv)
+                                                               "restart")
+                                                       (string-prefix?
+                                                        "guix-home-"
+                                                        (caddr argv))) 1 0))
+                              #:service-ready? all-services-ready?
+                              #:sleep-proc (lambda (s)
+                                             #t)))
   (test-equal "home herd restart failure: exit code 2" 2 result)
-  (test-assert "home herd restart failure: gate stays closed" (gate-closed? gate-dir)))
+  (test-assert "home herd restart failure: gate stays closed"
+               (gate-closed? gate-dir)))
 
 ;; ── 4. Home activation 超时 → gate CLOSED、exit 2、轮询 30 次 ──
 
 (let ((sandbox (make-sandbox))
       (polls 0))
-  (define gate-dir (second sandbox))
-  (define home-dir (third sandbox))
+  (define gate-dir
+    (second sandbox))
+  (define home-dir
+    (third sandbox))
   (define result
-    (reconfigure-transaction!
-     "vm" "alice"
-     #:root "/repo"
-     #:gate-dir gate-dir
-     #:home-dir home-dir
-     #:run-command (lambda (argv) 0)
-     #:service-ready? all-services-ready?
-     #:sleep-proc (lambda (s) (set! polls (1+ polls)) #t)))
+    (reconfigure-transaction! "vm"
+                              "alice"
+                              #:root "/repo"
+                              #:gate-dir gate-dir
+                              #:home-dir home-dir
+                              #:run-command (lambda (argv)
+                                              0)
+                              #:service-ready? all-services-ready?
+                              #:sleep-proc (lambda (s)
+                                             (set! polls
+                                                   (1+ polls)) #t)))
   (test-equal "activation timeout: exit code 2" 2 result)
   (test-equal "activation timeout: 30 polls" 30 polls)
-  (test-assert "activation timeout: gate stays closed" (gate-closed? gate-dir)))
+  (test-assert "activation timeout: gate stays closed"
+               (gate-closed? gate-dir)))
 
 ;; ── 5. 本次失败 activation 产生 safe pivot → 清理、exit 2 ──
 
 (let ((sandbox (make-sandbox)))
-  (define gate-dir (second sandbox))
-  (define home-dir (third sandbox))
+  (define gate-dir
+    (second sandbox))
+  (define home-dir
+    (third sandbox))
   (define result
-    (reconfigure-transaction!
-     "vm" "alice"
-     #:root "/repo"
-     #:gate-dir gate-dir
-     #:home-dir home-dir
-     #:run-command (lambda (argv) 0)
-     #:service-ready? all-services-ready?
-     ;; 模拟 activation 失败残留 safe pivot（第一次 poll 时产生；
-     ;; lstat 判定存在——悬空 symlink 对 file-exists? 是 #f）
-     #:sleep-proc
-     (lambda (s)
-       (unless (false-if-exception (lstat (pivot home-dir)))
-         (safe-pivot! home-dir))
-       #t)))
+    (reconfigure-transaction! "vm"
+                              "alice"
+                              #:root "/repo"
+                              #:gate-dir gate-dir
+                              #:home-dir home-dir
+                              #:run-command (lambda (argv)
+                                              0)
+                              #:service-ready? all-services-ready?
+                              ;; 模拟 activation 失败残留 safe pivot（第一次 poll 时产生；
+                              ;; lstat 判定存在——悬空 symlink 对 file-exists? 是 #f）
+                              #:sleep-proc (lambda (s)
+                                             (unless (false-if-exception (lstat
+                                                                          (pivot
+                                                                           home-dir)))
+                                               (safe-pivot! home-dir)) #t)))
   (test-equal "failed-activation pivot: exit code 2" 2 result)
   (test-assert "failed-activation pivot: cleaned up"
                (not (file-exists? (pivot home-dir))))
-  (test-assert "failed-activation pivot: gate stays closed" (gate-closed? gate-dir)))
+  (test-assert "failed-activation pivot: gate stays closed"
+               (gate-closed? gate-dir)))
 
 ;; ── 6. readiness capability failed → gate CLOSED、exit 2 ──
 
 (let ((sandbox (make-sandbox)))
-  (define gate-dir (second sandbox))
-  (define home-dir (third sandbox))
+  (define gate-dir
+    (second sandbox))
+  (define home-dir
+    (third sandbox))
   (ready-home! home-dir)
   (define result
-    (reconfigure-transaction!
-     "vm" "alice"
-     #:root "/repo"
-     #:gate-dir gate-dir
-     #:home-dir home-dir
-     #:run-command (lambda (argv) 0)
-     #:service-ready?
-     (lambda (service)
-       (not (eq? service 'account-state-ready)))
-     #:sleep-proc (lambda (s) #t)))
+    (reconfigure-transaction! "vm"
+                              "alice"
+                              #:root "/repo"
+                              #:gate-dir gate-dir
+                              #:home-dir home-dir
+                              #:run-command (lambda (argv)
+                                              0)
+                              #:service-ready? (lambda (service)
+                                                 (not (eq? service
+                                                           'account-state-ready)))
+                              #:sleep-proc (lambda (s)
+                                             #t)))
   (test-equal "readiness failure: exit code 2" 2 result)
-  (test-assert "readiness failure: gate stays closed" (gate-closed? gate-dir)))
+  (test-assert "readiness failure: gate stays closed"
+               (gate-closed? gate-dir)))
 
 (let ((sandbox (make-sandbox)))
-  (define gate-dir (second sandbox))
-  (define home-dir (third sandbox))
+  (define gate-dir
+    (second sandbox))
+  (define home-dir
+    (third sandbox))
   (ready-home! home-dir)
   (define result
-    (reconfigure-transaction!
-     "vm" "alice"
-     #:root "/repo"
-     #:gate-dir gate-dir
-     #:home-dir home-dir
-     #:run-command (lambda (argv) 0)
-     #:service-ready? (lambda (service) #f)
-     #:sleep-proc (lambda (s) #t)))
+    (reconfigure-transaction! "vm"
+                              "alice"
+                              #:root "/repo"
+                              #:gate-dir gate-dir
+                              #:home-dir home-dir
+                              #:run-command (lambda (argv)
+                                              0)
+                              #:service-ready? (lambda (service)
+                                                 #f)
+                              #:sleep-proc (lambda (s)
+                                             #t)))
   (test-equal "readiness query failure: exit code 2" 2 result)
   (test-assert "readiness query failure: gate stays closed"
                (gate-closed? gate-dir)))
@@ -292,64 +359,78 @@
 ;; ── 7. 成功、Home 未变 → gate 重开、exit 0 ──
 
 (let ((sandbox (make-sandbox)))
-  (define gate-dir (second sandbox))
-  (define home-dir (third sandbox))
+  (define gate-dir
+    (second sandbox))
+  (define home-dir
+    (third sandbox))
   (ready-home! home-dir)
   (define result
-    (reconfigure-transaction!
-     "vm" "alice"
-     #:root "/repo"
-     #:gate-dir gate-dir
-     #:home-dir home-dir
-     #:run-command (lambda (argv) 0)
-     #:service-ready? all-services-ready?
-     #:sleep-proc (lambda (s) #t)))
+    (reconfigure-transaction! "vm"
+                              "alice"
+                              #:root "/repo"
+                              #:gate-dir gate-dir
+                              #:home-dir home-dir
+                              #:run-command (lambda (argv)
+                                              0)
+                              #:service-ready? all-services-ready?
+                              #:sleep-proc (lambda (s)
+                                             #t)))
   (test-equal "success unchanged: exit code 0" 0 result)
-  (test-assert "success unchanged: gate reopened" (not (gate-closed? gate-dir))))
+  (test-assert "success unchanged: gate reopened"
+               (not (gate-closed? gate-dir))))
 
 ;; ── 8. 成功、Home hot-switched → gate 重开、exit 0 ──
 
 (let ((sandbox (make-sandbox)))
-  (define gate-dir (second sandbox))
-  (define home-dir (third sandbox))
-  (ready-home! home-dir)          ; old home = aaaa
-  (define switched? #f)
+  (define gate-dir
+    (second sandbox))
+  (define home-dir
+    (third sandbox))
+  (ready-home! home-dir) ;old home = aaaa
+  (define switched?
+    #f)
   (define result
-    (reconfigure-transaction!
-     "vm" "alice"
-     #:root "/repo"
-     #:gate-dir gate-dir
-     #:home-dir home-dir
-     #:run-command (lambda (argv) 0)
-     #:service-ready? all-services-ready?
-     ;; 模拟激活期间 Home 链接被切换到新 generation
-     #:sleep-proc
-     (lambda (s)
-       (unless switched?
-         (set! switched? #t)
-         (delete-file (home-link home-dir))
-         (symlink "/gnu/store/cccccccccccccccccccccccccccccccc-home"
-                  (home-link home-dir)))
-       #t)))
+    (reconfigure-transaction! "vm"
+                              "alice"
+                              #:root "/repo"
+                              #:gate-dir gate-dir
+                              #:home-dir home-dir
+                              #:run-command (lambda (argv)
+                                              0)
+                              #:service-ready? all-services-ready?
+                              ;; 模拟激活期间 Home 链接被切换到新 generation
+                              #:sleep-proc (lambda (s)
+                                             (unless switched?
+                                               (set! switched? #t)
+                                               (delete-file (home-link
+                                                             home-dir))
+                                               (symlink
+                                                "/gnu/store/cccccccccccccccccccccccccccccccc-home"
+                                                (home-link home-dir))) #t)))
   (test-equal "success changed: exit code 0" 0 result)
-  (test-assert "success changed: gate reopened" (not (gate-closed? gate-dir))))
+  (test-assert "success changed: gate reopened"
+               (not (gate-closed? gate-dir))))
 
 (let ((sandbox (make-sandbox))
       (queries '()))
-  (define gate-dir (second sandbox))
-  (define home-dir (third sandbox))
+  (define gate-dir
+    (second sandbox))
+  (define home-dir
+    (third sandbox))
   (ready-home! home-dir)
-  (reconfigure-transaction!
-   "vm" "alice"
-   #:root "/repo"
-   #:gate-dir gate-dir
-   #:home-dir home-dir
-   #:run-command (lambda (argv) 0)
-   #:service-ready?
-   (lambda (service)
-     (set! queries (cons service queries))
-     #t)
-   #:sleep-proc (lambda (s) #t))
+  (reconfigure-transaction! "vm"
+                            "alice"
+                            #:root "/repo"
+                            #:gate-dir gate-dir
+                            #:home-dir home-dir
+                            #:run-command (lambda (argv)
+                                            0)
+                            #:service-ready? (lambda (service)
+                                               (set! queries
+                                                     (cons service queries))
+                                               #t)
+                            #:sleep-proc (lambda (s)
+                                           #t))
   (test-equal "readiness probes query every capability structurally"
               %readiness-capabilities
               (reverse queries)))

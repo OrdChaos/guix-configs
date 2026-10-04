@@ -31,31 +31,31 @@
 ;;;     本服务 fail loud（长驻 service 绝不 no-op 伪装 running）。
 
 (define-module (guixcfg apps gnome-keyring definition)
-               #:use-module (gnu packages gnome)    ; gnome-keyring
-               #:use-module (gnu home services shepherd) ; home-shepherd-service-type
-               #:use-module (gnu services)          ; service、simple-service
-               #:use-module (gnu services shepherd) ; shepherd-service
-               #:use-module (guix gexp)             ; program-file、file-append、local-file
-               #:use-module (guix records)
-               #:use-module (guixcfg apps model)
-               #:use-module (guixcfg system application-persistence)
-               #:use-module (guixcfg security secrets) ; secret-decl、runtime-secret-target
-               #:use-module (guixcfg users user)    ; %primary-user
-               #:export (%gnome-keyring))
+  #:use-module (gnu packages gnome) ;gnome-keyring
+  #:use-module (gnu home services shepherd) ;home-shepherd-service-type
+  #:use-module (gnu services) ;service、simple-service
+  #:use-module (gnu services shepherd) ;shepherd-service
+  #:use-module (guix gexp) ;program-file、file-append、local-file
+  #:use-module (guix records)
+  #:use-module (guixcfg apps model)
+  #:use-module (guixcfg system application-persistence)
+  #:use-module (guixcfg security secrets) ;secret-decl、runtime-secret-target
+  #:use-module (guixcfg users user) ;%primary-user
+  #:export (%gnome-keyring))
 
 ;; keyring master credential（stable credential，非 generation 配置）：
 ;; plaintext 绝不进入 repo/store/argv/env/log——runtime 只以 /run
 ;; 明文存在（用户明确接受）。normal reconfigure 不轮换；显式维护
 ;; 操作才允许（须先 rekey 现有 vault）。
 (define %gnome-keyring-master-secret
-  (secret-decl
-   (name 'gnome-keyring-master)
-   (scope 'user)                    ; deployment target：user runtime
-   (domain 'ordinary)               ; 失败绝不阻塞 greetd login
-   (source (local-file "secrets/master.age" "gnome-keyring-master.age"))
-   (target-name "gnome-keyring-master")
-   (owner-user (user-profile-name %primary-user))
-   (mode #o400)))
+  (secret-decl (name 'gnome-keyring-master)
+               (scope 'user) ;deployment target：user runtime
+               (domain 'ordinary) ;失败绝不阻塞 greetd login
+               (source (local-file "secrets/master.age"
+                                   "gnome-keyring-master.age"))
+               (target-name "gnome-keyring-master")
+               (owner-user (user-profile-name %primary-user))
+               (mode 256)))
 
 ;; runtime plaintext 目标（canonical convention 推导）：
 ;; /run/guixcfg-secrets-ordinary/users/<user>/gnome-keyring-master
@@ -71,77 +71,74 @@
 ;; secret 文件缺失 → 有界等待后重定向失败 → 服务失败（keyring
 ;; 不可用，登录不受影响——ordinary domain）。
 (define %gnome-keyring-session-wrapper
-  (program-file
-   "gnome-keyring-session"
-   #~(begin
-      (let ((control (string-append (or (getenv "XDG_RUNTIME_DIR") "")
-                                    "/keyring/control"))
-            (secret #$%gnome-keyring-master-target))
-        ;; 每用户单 daemon：control socket 已存在 = 已有活 daemon
-        ;; （AF_UNIX 绑定文件随持有进程退出由内核删除，存在 ≈ 存活；
-        ;; 正常 session 内只可能由本服务或 D-Bus activation fallback
-        ;; 的 daemon 持有）。长驻 service 若此时成功退出，shepherd
-        ;; 会看到服务立即终止——重新制造“daemon 脱离托管”的假象；
-        ;; 因此 fail loud：明确报错并退出 1，让 shepherd 置 failed。
-        (when (and (not (string-null? control))
-                   (file-exists? control))
-          (format (current-error-port)
-                  "gnome-keyring-session: control socket ~a already \
-exists; another live daemon owns this session's Secret Service~%"
-                  control)
-          (exit 1))
-        ;; master 明文文件依赖：boot 时 ordinary publisher 部署；
-        ;; reconfigure 升级期间可能滞后（旧 generation 的 deploy 不含
-        ;; 新 secret）——有界等待最多 60 秒自愈，避免启动即失败触发
-        ;; shepherd 终止处理的边缘路径。正常登录时文件早已存在，
-        ;; 第一次检查即通过（零延迟）。
-        (let loop ((tries 60))
-          (unless (file-exists? secret)
-            (if (zero? tries)
-              (exit 1)             ; fail closed：keyring 不可用
-              (begin (sleep 1) (loop (- tries 1))))))
-        ;; 密码经 stdin（fd 0 ← master 文件）注入；不出现于 argv/env
-        ;; （纯 guile fd 重定向，无 /bin/sh 依赖；open-fdes/dup2/
-        ;; close-fdes/execl 均为 guile core）。
-        (let ((fd (open-fdes secret O_RDONLY)))
-          (dup2 fd 0)
-          (close-fdes fd))
-        (execl #$(file-append gnome-keyring
-                              "/bin/gnome-keyring-daemon")
-               "gnome-keyring-daemon" "--foreground" "--unlock"
-               "--components=secrets")))))
+  (program-file "gnome-keyring-session"
+                #~(begin
+                    (let ((control (string-append (or (getenv
+                                                       "XDG_RUNTIME_DIR") "")
+                                                  "/keyring/control"))
+                          (secret #$%gnome-keyring-master-target))
+                      ;; 每用户单 daemon：control socket 已存在 = 已有活 daemon
+                      ;; （AF_UNIX 绑定文件随持有进程退出由内核删除，存在 ≈ 存活；
+                      ;; 正常 session 内只可能由本服务或 D-Bus activation fallback
+                      ;; 的 daemon 持有）。长驻 service 若此时成功退出，shepherd
+                      ;; 会看到服务立即终止——重新制造“daemon 脱离托管”的假象；
+                      ;; 因此 fail loud：明确报错并退出 1，让 shepherd 置 failed。
+                      (when (and (not (string-null? control))
+                                 (file-exists? control))
+                        (format (current-error-port)
+                         "gnome-keyring-session: control socket ~a already exists; another live daemon owns this session's Secret Service~%"
+                         control)
+                        (exit 1))
+                      ;; master 明文文件依赖：boot 时 ordinary publisher 部署；
+                      ;; reconfigure 升级期间可能滞后（旧 generation 的 deploy 不含
+                      ;; 新 secret）——有界等待最多 60 秒自愈，避免启动即失败触发
+                      ;; shepherd 终止处理的边缘路径。正常登录时文件早已存在，
+                      ;; 第一次检查即通过（零延迟）。
+                      (let loop
+                        ((tries 60))
+                        (unless (file-exists? secret)
+                          (if (zero? tries)
+                              (exit 1) ;fail closed：keyring 不可用
+                              (begin
+                                (sleep 1)
+                                (loop (- tries 1))))))
+                      ;; 密码经 stdin（fd 0 ← master 文件）注入；不出现于 argv/env
+                      ;; （纯 guile fd 重定向，无 /bin/sh 依赖；open-fdes/dup2/
+                      ;; close-fdes/execl 均为 guile core）。
+                      (let ((fd (open-fdes secret O_RDONLY)))
+                        (dup2 fd 0)
+                        (close-fdes fd))
+                      (execl #$(file-append gnome-keyring
+                                            "/bin/gnome-keyring-daemon")
+                             "gnome-keyring-daemon" "--foreground" "--unlock"
+                             "--components=secrets")))))
 
 (define %gnome-keyring
-  (application
-   (name 'gnome-keyring)
-   (home-packages (list gnome-keyring))
-   (home-services
-    (list (simple-service
-           'gnome-keyring-session
-           home-shepherd-service-type
-           (list (shepherd-service
-                  (documentation
-                   "GNOME Keyring Secret Service session daemon: start \
-exactly one daemon and unlock the login keyring with the \
-repository-owned master credential (runtime plaintext under /run). \
-Long-running service: Shepherd owns the daemon for the whole session.")
-                  (provision '(gnome-keyring-session))
-                  (requirement '(dbus)) ; session D-Bus 就绪后启动
-                  (respawn? #f) ; daemon 退出 = 会话结束，不 respawn（单 daemon 语义）
-                  (modules '((shepherd support))) ; %user-log-dir
-                  (start #~(make-forkexec-constructor
-                            (list #$%gnome-keyring-session-wrapper)
-                            #:log-file
-                            (string-append %user-log-dir
-                                           "/gnome-keyring-session.log")))
-                  (stop #~(make-kill-destructor)))))))
-   ;; 无 system-services：PAM 不再参与 keyring（/etc/pam.d/greetd
-   ;; 无 pam_gnome_keyring——测试 GK2/GK3 断言）。
-   (persistence
-    (list (application-persistence-rule
-           (name 'keyrings)
-           (backing "gnome-keyring/keyrings") ; backing root 相对（persistence.md）
-           (consumer ".local/share/keyrings") ; HOME 相对（XDG_DATA_HOME/keyrings）
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))))
-   (secrets (list %gnome-keyring-master-secret))))
+  (application (name 'gnome-keyring)
+               (home-packages (list gnome-keyring))
+               (home-services (list (simple-service 'gnome-keyring-session
+                                     home-shepherd-service-type
+                                     (list (shepherd-service (documentation
+                                                              "GNOME Keyring Secret Service session daemon: start exactly one daemon and unlock the login keyring with the repository-owned master credential (runtime plaintext under /run). Long-running service: Shepherd owns the daemon for the whole session.")
+                                                             (provision '(gnome-keyring-session))
+                                                             (requirement '(dbus)) ;session D-Bus 就绪后启动
+                                                             (respawn? #f) ;daemon 退出 = 会话结束，不 respawn（单 daemon 语义）
+                                                             (modules '((shepherd
+                                                                         support))) ;%user-log-dir
+                                                             (start #~(make-forkexec-constructor
+                                                                       (list #$%gnome-keyring-session-wrapper)
+                                                                       #:log-file
+                                                                       (string-append
+                                                                        %user-log-dir
+                                                                        "/gnome-keyring-session.log")))
+                                                             (stop #~(make-kill-destructor)))))))
+               ;; 无 system-services：PAM 不再参与 keyring（/etc/pam.d/greetd
+               ;; 无 pam_gnome_keyring——测试 GK2/GK3 断言）。
+               (persistence (list (application-persistence-rule (name 'keyrings)
+                                                                (backing
+                                                                 "gnome-keyring/keyrings") ;backing root 相对（persistence.md）
+                                                                (consumer
+                                                                 ".local/share/keyrings") ;HOME 相对（XDG_DATA_HOME/keyrings）
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))))
+               (secrets (list %gnome-keyring-master-secret))))
