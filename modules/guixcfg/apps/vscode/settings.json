@@ -18,9 +18,12 @@
     "git.confirmSync": false,
     "workbench.colorTheme": "Nord Light Brighter",
     "workbench.colorCustomizations": {
-        "editorBracketHighlight.foreground4": "#BF616A",
-        "editorBracketHighlight.foreground5": "#5E81AC",
-        "editorBracketHighlight.foreground6": "#B48EAD"
+        "editorBracketHighlight.foreground1": "#2C5D8F",
+        "editorBracketHighlight.foreground2": "#BF616A",
+        "editorBracketHighlight.foreground3": "#4C7A34",
+        "editorBracketHighlight.foreground4": "#8F5E9E",
+        "editorBracketHighlight.foreground5": "#B25B33",
+        "editorBracketHighlight.foreground6": "#0F7C85"
     },
     "window.zoomLevel": 0.6,
     "security.workspace.trust.enabled": false,
