@@ -30,5 +30,6 @@
     "chat.titleBar.openInAgentsWindow.enabled": false,
     "workbench.browser.showInTitleBar": false,
     "workbench.layoutControl.enabled": false,
-    "workbench.startupEditor": "none"
+    "workbench.startupEditor": "none",
+    "[scheme]": { "editor.autoIndent": "none" }
 }

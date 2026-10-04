@@ -25,6 +25,7 @@
   #:use-module (guixcfg flatpak applications aagl definition)
   #:use-module (guixcfg flatpak applications steam definition)
   #:use-module (guixcfg flatpak applications telegram definition)
+  #:use-module (guixcfg flatpak applications tuba definition)
   #:use-module (guixcfg flatpak applications discord definition)
   #:use-module (guixcfg flatpak applications thunderbird definition)
   #:use-module (guixcfg flatpak extensions gamescope definition)
@@ -58,6 +59,7 @@
         %flatpak-aagl
         %flatpak-steam
         %flatpak-telegram
+        %flatpak-tuba
         %flatpak-discord
         %flatpak-thunderbird))
 
@@ -71,6 +73,7 @@
        aagl
        steam
        telegram
+       tuba
        discord
        thunderbird))
 
