@@ -98,7 +98,7 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
   (root-state (next-generation 1)
               (current-generation 0)
               (last-good-generation #f)
-              (created-at `((0 unquote now)))
+              (created-at `((0 . ,now)))
               (boot-status 'first-boot)
               (source-template "@root-template")))
 
@@ -153,18 +153,18 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
 
 (define (state->alist state)
   "把 <root-state> 转成可 write 到状态文件的 alist。"
-  `((next-generation unquote
-                     (root-state-next-generation state))
-    (current-generation unquote
-                        (root-state-current-generation state))
-    (last-good-generation unquote
-                          (root-state-last-good-generation state))
-    (created-at unquote
-                (root-state-created-at state))
-    (boot-status unquote
-                 (root-state-boot-status state))
-    (source-template unquote
-                     (root-state-source-template state))))
+  `((next-generation .
+                     ,(root-state-next-generation state))
+    (current-generation .
+                        ,(root-state-current-generation state))
+    (last-good-generation .
+                          ,(root-state-last-good-generation state))
+    (created-at .
+                ,(root-state-created-at state))
+    (boot-status .
+                 ,(root-state-boot-status state))
+    (source-template .
+                     ,(root-state-source-template state))))
 
 (define (alist->state alist)
   "把状态文件读出的 alist 还原成 <root-state>；缺键或类型不对即报错。"
@@ -211,7 +211,7 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
 (define-record-type* <boot-mode> boot-mode make-boot-mode
   boot-mode?
   (kind boot-mode-kind))
- ; normal / recovery
+; normal / recovery
 
 (define %default-boot-mode
   (boot-mode (kind 'normal)))
@@ -268,8 +268,8 @@ NOW 是 Unix 时间（整数），作为 @root-0 的创建时间 metadata。"
                       (state-after (root-state (inherit state)
                                                (next-generation (+ n 1))
                                                (current-generation n)
-                                               (created-at (cons `(,n unquote
-                                                                   now)
+                                               (created-at (cons `(,n .
+                                                                   ,now)
                                                                  (root-state-created-at
                                                                   state)))
                                                (boot-status 'trying)))))))

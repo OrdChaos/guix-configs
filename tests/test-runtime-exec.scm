@@ -1209,7 +1209,7 @@ BOOT-STATUS 的 root-state（current=1，next=2，last-good=#f）。"
   "写一份 v2 boot-state（last-good generation = GENERATION）。"
   (call-with-output-file (string-append root "/persist/system/boot-states.scm")
     (lambda (p)
-      (write `((format-version . 2) (last-good (generation unquote generation)
+      (write `((format-version . 2) (last-good (generation . ,generation)
                                                (system . "/gnu/store/fake")
                                                (command-line . "root=/dev/fake")))
              p)

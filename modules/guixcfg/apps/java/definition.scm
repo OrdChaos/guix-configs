@@ -101,19 +101,19 @@
 ;; 不声明纯 JRE 包——Minecraft/modding/Gradle 需要完整 JDK）。
 (define %java8
   icedtea-8)
- ; Java 8（IcedTea 3.19.0）
+; Java 8（IcedTea 3.19.0）
 (define %java17
   openjdk17)
- ; 17.0.10
+; 17.0.10
 (define %java21
   openjdk21)
- ; 21.0.2
+; 21.0.2
 (define %java24
   openjdk24)
- ; 24.0.1
+; 24.0.1
 (define %java25
   openjdk25)
- ; 25.0.2
+; 25.0.2
 
 ;; 默认 Java：声明式选择。profile 的 java/javac 与 JAVA_HOME 都跟随
 ;; 这里；非默认版本 wrapper 与之无关。
@@ -177,5 +177,5 @@ store 路径在 build 期展开。该 output 的 store reference 由 profile 的
                                     ;; 探测；额外版本不覆盖它）。
                                     (simple-service 'java-home
                                      home-environment-variables-service-type
-                                     `(("JAVA_HOME" unquote
-                                        (java-home-gexp %default-java))))))))
+                                     `(("JAVA_HOME" .
+                                        ,(java-home-gexp %default-java))))))))

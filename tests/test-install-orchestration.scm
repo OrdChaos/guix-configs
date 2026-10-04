@@ -72,7 +72,7 @@
     (btrfs-rootfs . #t)
     (targets-mounted . #t)
     (top-mounted . #t)
-    (facts-file unquote %facts-file)
+    (facts-file . ,%facts-file)
     (luks-uuid . "11111111-1111-1111-1111-111111111111")
     (sb-keys . complete)
     (keystore . #t)

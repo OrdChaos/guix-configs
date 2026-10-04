@@ -79,24 +79,24 @@
 ;;; 序列化（alist 形式持久化，原子写；复用 atomic-file 的 .prev 回退）。
 
 (define (enrollment->alist e)
-  `((id unquote
-        (tpm2-enrollment-id e))
-    (keyslot unquote
-             (tpm2-enrollment-keyslot e))
-    (pcr-bank unquote
-              (tpm2-enrollment-pcr-bank e))
-    (pcr-list unquote
-              (tpm2-enrollment-pcr-list e))
+  `((id .
+        ,(tpm2-enrollment-id e))
+    (keyslot .
+             ,(tpm2-enrollment-keyslot e))
+    (pcr-bank .
+              ,(tpm2-enrollment-pcr-bank e))
+    (pcr-list .
+              ,(tpm2-enrollment-pcr-list e))
     ,@(if (tpm2-enrollment-pcr7 e)
-          `((pcr7 unquote
-                  (tpm2-enrollment-pcr7 e)))
+          `((pcr7 .
+                  ,(tpm2-enrollment-pcr7 e)))
           '())
-    (created unquote
-             (tpm2-enrollment-created e))
+    (created .
+             ,(tpm2-enrollment-created e))
     ,@(if (null? (tpm2-enrollment-notes e))
           '()
-          `((notes unquote
-                   (tpm2-enrollment-notes e))))))
+          `((notes .
+                   ,(tpm2-enrollment-notes e))))))
 
 (define (alist->enrollment alist)
   (let ((id (assq-ref alist
@@ -168,18 +168,18 @@
     (when previous
       (atomic-write-file! (string-append path ".prev")
                           (lambda (port)
-                            (write `((format-version unquote
-                                      %tpm2-state-format-version)
-                                     (enrollment unquote
-                                                 (enrollment->alist previous)))
+                            (write `((format-version .
+                                      ,%tpm2-state-format-version)
+                                     (enrollment .
+                                                 ,(enrollment->alist previous)))
                                    port)
                             (newline port))))
     (atomic-write-file! path
                         (lambda (port)
-                          (write `((format-version unquote
-                                                   %tpm2-state-format-version)
-                                   (enrollment unquote
-                                               (and enrollment
+                          (write `((format-version .
+                                                   ,%tpm2-state-format-version)
+                                   (enrollment .
+                                               ,(and enrollment
                                                     (enrollment->alist
                                                      enrollment)))) port)
                           (newline port)))))

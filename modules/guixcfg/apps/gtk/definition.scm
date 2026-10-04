@@ -69,7 +69,7 @@
   #:use-module (guixcfg apps model)
   #:use-module (guixcfg home appearance) ;共享外观事实
   #:export (%gtk %appearance-sync))
- ; 测试需要真实执行
+; 测试需要真实执行
 
 ;; gtk-{3,4}/gtk.css 唯一职责：导入 Noctalia 生成的动态配色
 ;; （同目录 noctalia.css）。与 stock hook 写入文本逐字节一致。
@@ -91,22 +91,22 @@
 ;; GSettings，不改写本文件）。
 (define %gtk3-settings
   (settings-ini "gtk3-settings.ini"
-                `(("gtk-theme-name" unquote %appearance-gtk-theme-light)
-                  ("gtk-icon-theme-name" unquote %appearance-icon-theme)
-                  ("gtk-cursor-theme-name" unquote %appearance-cursor-theme)
-                  ("gtk-cursor-theme-size" unquote
-                   (number->string %appearance-cursor-size))
-                  ("gtk-font-name" unquote %appearance-ui-font))))
+                `(("gtk-theme-name" . ,%appearance-gtk-theme-light)
+                  ("gtk-icon-theme-name" . ,%appearance-icon-theme)
+                  ("gtk-cursor-theme-name" . ,%appearance-cursor-theme)
+                  ("gtk-cursor-theme-size" .
+                   ,(number->string %appearance-cursor-size))
+                  ("gtk-font-name" . ,%appearance-ui-font))))
 
 ;; GTK4/libadwaita：无 gtk-theme-name（原生结构）；dark mode 走
 ;; portal color-scheme，不写 gtk-application-prefer-dark-theme。
 (define %gtk4-settings
   (settings-ini "gtk4-settings.ini"
-                `(("gtk-icon-theme-name" unquote %appearance-icon-theme)
-                  ("gtk-cursor-theme-name" unquote %appearance-cursor-theme)
-                  ("gtk-cursor-theme-size" unquote
-                   (number->string %appearance-cursor-size))
-                  ("gtk-font-name" unquote %appearance-ui-font))))
+                `(("gtk-icon-theme-name" . ,%appearance-icon-theme)
+                  ("gtk-cursor-theme-name" . ,%appearance-cursor-theme)
+                  ("gtk-cursor-theme-size" .
+                   ,(number->string %appearance-cursor-size))
+                  ("gtk-font-name" . ,%appearance-ui-font))))
 
 ;; runtime appearance 同步工具。全部 Guile core binding + gexp 内
 ;; 显式 import（AGENT.md §3 审计面）；gsettings 经会话 PATH 解析

@@ -289,10 +289,10 @@ rootmode=recovery 构建（并记录 system identity 到 candidate.scm）；
                                                (atomic-write-file!
                                                 candidate-meta
                                                 (lambda (port)
-                                                  (write `((system unquote
-                                                            candidate-system)
-                                                           (slot unquote
-                                                                 target-slot))
+                                                  (write `((system .
+                                                            ,candidate-system)
+                                                           (slot .
+                                                                 ,target-slot))
                                                          port)
                                                   (newline port)))))
 

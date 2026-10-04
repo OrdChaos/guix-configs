@@ -382,28 +382,28 @@ ENOENT 都被 scandir 折叠为 #f，存在性由 file-exists? 单独判定
 
 (define (collect-enrollment-probes)
   "收集 enrollment 相关可观察事实 → alist（纯分类的输入）。只读。"
-  `((tpm unquote
-         (tpm2-enrollment-status))
-    (firmware unquote
-              (secure-boot-firmware-state))
-    (sb-keys unquote
-             (sb-keys-complete?))
-    (keystore unquote
-              (keystore-complete?))
-    (facts unquote
-           (facts-ok?))
-    (efi-updatevar unquote
-                   (false-if-exception (file-exists? (efi-updatevar-binary))))
-    (tpm-device unquote
-                (file-exists? "/dev/tpmrm0"))
-    (tpm-artifacts unquote
-                   (esp-tpm2-artifacts-present?))
-    (current-system unquote
-                    (file-exists? "/run/current-system"))
-    (persist unquote
-             (file-exists? (persist-mount-point "@persist-system")))
-    (esp unquote
-         (file-exists? (string-append %esp-mount-point "/EFI/Guix")))))
+  `((tpm .
+         ,(tpm2-enrollment-status))
+    (firmware .
+              ,(secure-boot-firmware-state))
+    (sb-keys .
+             ,(sb-keys-complete?))
+    (keystore .
+              ,(keystore-complete?))
+    (facts .
+           ,(facts-ok?))
+    (efi-updatevar .
+                   ,(false-if-exception (file-exists? (efi-updatevar-binary))))
+    (tpm-device .
+                ,(file-exists? "/dev/tpmrm0"))
+    (tpm-artifacts .
+                   ,(esp-tpm2-artifacts-present?))
+    (current-system .
+                    ,(file-exists? "/run/current-system"))
+    (persist .
+             ,(file-exists? (persist-mount-point "@persist-system")))
+    (esp .
+         ,(file-exists? (string-append %esp-mount-point "/EFI/Guix")))))
 
 (define-record-type* <enrollment-status> enrollment-status
                      make-enrollment-status

@@ -205,8 +205,8 @@
 ;; 把这份 overlay 传给 flatpak-home-services，对 managed override
 ;; 追加 PRIME 环境；非 NVIDIA host 传空 overlay。
 (define %flatpak-prime-environment-overrides
-  `((aagl unquote %prime-offload-environment-strings)
-    (steam unquote %prime-offload-environment-strings)))
+  `((aagl . ,%prime-offload-environment-strings)
+    (steam . ,%prime-offload-environment-strings)))
 
 (define (shell-variable-name? s)
   "S 是合法 POSIX shell 变量名（策略数据防注入；允许下划线开头，

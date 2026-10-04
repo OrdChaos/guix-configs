@@ -46,44 +46,44 @@
              (plan-step (id 'confirm-target)
                         (summary
                          "Validate target device and require confirmation")
-                        (detail `((device unquote device))))
+                        (detail `((device . ,device))))
              (plan-step (id 'wipe)
                         (summary
                          "Wipe existing partition table and signatures from disk")
-                        (detail `((device unquote device))))
+                        (detail `((device . ,device))))
              ;; 一条 sgdisk 命令完成：GPT + ESP + 系统分区 + 类型码 + PARTLABEL。
              (plan-step (id 'partition)
                         (summary
                          "Create GPT, ESP partition and encrypted system partition")
-                        (detail `((device unquote device)
-                                  (esp-size unquote esp-size))))
+                        (detail `((device . ,device)
+                                  (esp-size . ,esp-size))))
              (plan-step (id 'wait-udev)
                         (summary "Wait for udev to expose new partition nodes")
-                        (detail `((device unquote device))))
+                        (detail `((device . ,device))))
              (plan-step (id 'format-esp)
                         (summary "Format ESP as VFAT")
-                        (detail `((device unquote device)
-                                  (partlabel unquote %esp-partlabel)
-                                  (label unquote %esp-filesystem-label))))
+                        (detail `((device . ,device)
+                                  (partlabel . ,%esp-partlabel)
+                                  (label . ,%esp-filesystem-label))))
              (plan-step (id 'luks-format)
                         (summary "Initialize LUKS2 (passphrase input)")
-                        (detail `((device unquote device)
-                                  (partlabel unquote %system-partlabel)
-                                  (label unquote %luks-label))))
+                        (detail `((device . ,device)
+                                  (partlabel . ,%system-partlabel)
+                                  (label . ,%luks-label))))
              (plan-step (id 'luks-open)
                         (summary "Open LUKS into device-mapper")
-                        (detail `((device unquote device)
-                                  (partlabel unquote %system-partlabel)
-                                  (mapper unquote %luks-mapper-name))))
+                        (detail `((device . ,device)
+                                  (partlabel . ,%system-partlabel)
+                                  (mapper . ,%luks-mapper-name))))
              (plan-step (id 'format-btrfs)
                         (summary "Format Btrfs on the encrypted volume")
-                        (detail `((device unquote mapper-path)
-                                  (target-disk unquote device)
-                                  (label unquote %btrfs-filesystem-label))))
+                        (detail `((device . ,mapper-path)
+                                  (target-disk . ,device)
+                                  (label . ,%btrfs-filesystem-label))))
              (plan-step (id 'mount-top)
                         (summary
                          "Temporarily mount Btrfs top level to create subvolumes")
-                        (detail `((device unquote mapper-path)))))
+                        (detail `((device . ,mapper-path)))))
 
             ;; 8 个固定持久子卷（顺序来自 model.scm）。
             (map (lambda (sv)
@@ -91,23 +91,23 @@
                               (summary (string-append
                                         "Create persistent subvolume "
                                         (subvolume-name sv)))
-                              (detail `((name unquote
-                                              (subvolume-name sv))))))
+                              (detail `((name .
+                                              ,(subvolume-name sv))))))
                  %persist-subvolumes)
 
             (list (plan-step (id 'make-root-installing)
                              (summary "Create install-time root subvolume")
-                             (detail `((name unquote %root-installing-name))))
+                             (detail `((name . ,%root-installing-name))))
                   (plan-step (id 'make-swapfile)
                              (summary
                               "Create Btrfs swapfile (NOCOW, no compression, preallocated)")
-                             (detail `((subvolume unquote %swap-subvolume-name)
-                                       (size unquote swap-size))))
+                             (detail `((subvolume . ,%swap-subvolume-name)
+                                       (size . ,swap-size))))
                   (plan-step (id 'unmount-top)
                              (summary "Unmount Btrfs top level"))
                   (plan-step (id 'mount-root)
                              (summary "Mount install-time root at /mnt")
-                             (detail `((name unquote %root-installing-name)
+                             (detail `((name . ,%root-installing-name)
                                        (target . "/mnt")))))
 
             ;; 每个持久子卷挂到 /mnt 下对应位置。
@@ -121,27 +121,27 @@
                                                       " at /mnt"
                                                       (subvolume-mount-point
                                                        sv)))
-                              (detail `((name unquote
-                                              (subvolume-name sv))
-                                        (target unquote
-                                                (string-append "/mnt"
+                              (detail `((name .
+                                              ,(subvolume-name sv))
+                                        (target .
+                                                ,(string-append "/mnt"
                                                                (subvolume-mount-point
                                                                 sv)))
-                                        (options unquote
-                                                 (subvolume-options sv))))))
+                                        (options .
+                                                 ,(subvolume-options sv))))))
                  (filter subvolume-mount-at-install? %persist-subvolumes))
 
             (list (plan-step (id 'mount-esp)
                              (summary "Mount ESP at /mnt/efi")
-                             (detail `((device unquote device)
-                                       (partlabel unquote %esp-partlabel)
+                             (detail `((device . ,device)
+                                       (partlabel . ,%esp-partlabel)
                                        (target . "/mnt/efi"))))
                   ;; 机器事实（docs/architecture/storage.md（固定命名事实））：LUKS UUID 等安装时生成的值，
                   ;; 必须在 guix system init 之前写入（配置在构建期读取它）。
                   (plan-step (id 'write-facts)
                              (summary
                               "Write machine facts file /persist/system/facts/host.scm")
-                             (detail `((device unquote device)
+                             (detail `((device . ,device)
                                        (target . "/mnt"))))
                   (plan-step (id 'ready)
                              (summary "Disk ready for guix system init"))))))

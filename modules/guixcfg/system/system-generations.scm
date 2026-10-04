@@ -189,22 +189,22 @@ MODE 是 'keep（按策略或 --keep N）或 'delete（--delete 显式集合）�
                         (error
                          "refusing to delete current/last-good generation" g)))
                     delete)
-          `((existing unquote existing)
-            (current unquote current)
-            (last-good unquote last-good)
+          `((existing . ,existing)
+            (current . ,current)
+            (last-good . ,last-good)
             (mode . delete)
             (keep . #f)
-            (to-delete unquote delete)))
+            (to-delete . ,delete)))
         (let ((keep (if keep keep
                         (keep-for-host host))))
           (unless (and (integer? keep)
                        (>= keep 0))
             (error "keep must be a non-negative integer" keep))
-          `((existing unquote existing)
-            (current unquote current)
-            (last-good unquote last-good)
+          `((existing . ,existing)
+            (current . ,current)
+            (last-good . ,last-good)
             (mode . keep)
-            (keep unquote keep)
-            (to-delete unquote
-                       (system-generations-to-delete existing current
+            (keep . ,keep)
+            (to-delete .
+                       ,(system-generations-to-delete existing current
                                                      last-good keep)))))))

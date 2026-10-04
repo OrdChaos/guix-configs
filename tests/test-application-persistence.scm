@@ -127,9 +127,8 @@
                                                                           ".config/x/state.json")
                                                                          (exposure 'bind-file)
                                                                          (seeds `
-                                                                          (("a.toml"
-                                                                            unquote
-                                                                            (plain-file
+                                                                          (("a.toml" .
+                                                                            ,(plain-file
                                                                              "s"
                                                                              "x"))))))))
 
@@ -212,10 +211,9 @@
                                                                      "x")
                                                                     (consumer
                                                                      ".config/x")
-                                                                    (seeds `((,bad-target
-                                                                              unquote
+                                                                    (seeds `((,bad-target .
                                                                               
-                                                                              (plain-file
+                                                                              ,(plain-file
                                                                                "s"
                                                                                "x")))))))))
           '("" ".."

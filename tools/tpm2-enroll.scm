@@ -506,18 +506,14 @@ unique 目录）；dynamic-wind 保证正常与异常路径都清理。"
                                                                       "/metadata.scm")
                                                                      (lambda (p)
                                                                        (write `
-                                                                        ((enrollment-id
-                                                                          unquote
-                                                                          id)
-                                                                         (keyslot
-                                                                          unquote
-                                                                          keyslot)
-                                                                         (pcr7
-                                                                          unquote
-                                                                          pcr7-hex)
-                                                                         (created
-                                                                          unquote
-                                                                          (current-time)))
+                                                                        ((enrollment-id .
+                                                                          ,id)
+                                                                         (keyslot .
+                                                                          ,keyslot)
+                                                                         (pcr7 .
+                                                                          ,pcr7-hex)
+                                                                         (created .
+                                                                          ,(current-time)))
                                                                         p)
                                                                        (newline
                                                                         p))))

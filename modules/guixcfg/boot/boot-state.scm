@@ -59,11 +59,11 @@
   "记录 LAST-GOOD Guix profile generation、SYSTEM store identity 与当次
 实际 COMMAND-LINE（已去除 rootmode=）。格式 v2；SYSTEM 是可选的
 identity 字段（生产调用方总是提供）。"
-  (let ((last-good `((generation unquote generation)
+  (let ((last-good `((generation . ,generation)
                      ,@(if system
-                           `((system unquote system))
+                           `((system . ,system))
                            '())
-                     (command-line unquote command-line))))
+                     (command-line . ,command-line))))
     (let ((previous (and (or (file-exists? path)
                              (file-exists? (string-append path ".prev")))
                          (false-if-exception (read-boot-state-alist path)))))
@@ -74,8 +74,8 @@ identity 字段（生产调用方总是提供）。"
                               (newline port))))
       (atomic-write-file! path
                           (lambda (port)
-                            (write `((format-version . 2) (last-good unquote
-                                                           last-good)) port)
+                            (write `((format-version . 2) (last-good .
+                                                           ,last-good)) port)
                             (newline port))))))
 
 (define (read-boot-state-alist path)

@@ -455,20 +455,27 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
          (mapper %luks-mapper-path)
          (keydir (install-keydir target))
          (user (user-profile-name %primary-user)))
-    `((partition-table unquote
-                       (or esp-partition sys-partition))
-      (luks-volume . #<<comment> str: ";; cryptsetup isLuks 用退出码表态（0 = 是 LUKS），stdout 无输出\n" margin?: #f>)
-      (luks-open unquote
-                 (file-exists? mapper))
-      (btrfs-rootfs unquote
-                    (and (file-exists? mapper)
+    `((partition-table .
+                       ,(or esp-partition sys-partition))
+      (luks-volume .
+                   ;; cryptsetup isLuks 用退出码表态（0 = 是 LUKS），stdout 无输出
+                   ;; ——绝不能用输出文本判断（resume 时误判 incompatible，实测）。
+                   ,(and sys-partition
+                         (let ((p (false-if-exception
+                                   (open-pipe* OPEN_READ "cryptsetup" "isLuks"
+                                               sys-partition))))
+                           (and p (zero? (status:exit-val (close-pipe p)))))))
+      (luks-open .
+                 ,(file-exists? mapper))
+      (btrfs-rootfs .
+                    ,(and (file-exists? mapper)
                          (let ((v (false-if-exception (first-command-line
                                                        "btrfs" "filesystem"
                                                        "show" mapper))))
                            (and v
                                 (string-contains v %btrfs-filesystem-label)))))
-      (targets-mounted unquote
-                       (and (let ((src (false-if-exception (first-command-line
+      (targets-mounted .
+                       ,(and (let ((src (false-if-exception (first-command-line
                                                             "findmnt" "-no"
                                                             "SOURCE" target))))
                               (and src
@@ -481,22 +488,22 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
                                                              %esp-mount-point)))))
                               (and src
                                    (not (string-null? src))))))
-      (top-mounted unquote
-                   (let ((r (false-if-exception (first-command-line "findmnt"
+      (top-mounted .
+                   ,(let ((r (false-if-exception (first-command-line "findmnt"
                                                  "-no" "TARGET"
                                                  %btrfs-top-mount))))
                      (and r
                           (not (string-null? r)))))
-      (facts-file unquote
-                  (and (file-exists? (install-facts-path target))
+      (facts-file .
+                  ,(and (file-exists? (install-facts-path target))
                        (install-facts-path target)))
-      (luks-uuid unquote
-                 (and sys-partition
+      (luks-uuid .
+                 ,(and sys-partition
                       (false-if-exception (first-command-line "cryptsetup"
                                                               "luksUUID"
                                                               sys-partition))))
-      (sb-keys unquote
-               (let ((n (count (lambda (f)
+      (sb-keys .
+               ,(let ((n (count (lambda (f)
                                  (file-exists? (string-append keydir "/" f)))
                                %sb-key-file-names)))
                  (cond
@@ -505,33 +512,33 @@ validate 不检查 keydir，直到 first boot 的 enroll 才暴露）。"
                    ((zero? n)
                     'none)
                    (else 'partial))))
-      (keystore unquote
-                (every (lambda (f)
+      (keystore .
+                ,(every (lambda (f)
                          (file-exists? (string-append keydir "/" f)))
                        %keystore-auth-paths))
-      (identity unquote
-                (file-exists? (install-identity-path target)))
-      (password-hash unquote
-                     (file-exists? (install-password-hash-path target user)))
-      (init-markers unquote
-                    (every (lambda (f)
+      (identity .
+                ,(file-exists? (install-identity-path target)))
+      (password-hash .
+                     ,(file-exists? (install-password-hash-path target user)))
+      (init-markers .
+                    ,(every (lambda (f)
                              (file-exists? (string-append target f)))
                            %init-markers))
-      (esp-markers unquote
-                   (every (lambda (f)
+      (esp-markers .
+                   ,(every (lambda (f)
                             (file-exists? (string-append target
                                                          %esp-mount-point f)))
                           %esp-markers))
-      (commit unquote
-              (let ((c (false-if-exception (commit-state))))
+      (commit .
+              ,(let ((c (false-if-exception (commit-state))))
                 (case c
                   ((committed)
                    'committed)
                   ((interrupted-after-rename not-committed)
                    'fresh)
                   (else 'unknown))))
-      (repo-copied unquote
-                   (repo-copy-present? target)))))
+      (repo-copied .
+                   ,(repo-copy-present? target)))))
 
 (define* (detect-install-state root host device)
   "探测 DEVICE 并分类安装阶段（只读）。返回 <install-state>。"

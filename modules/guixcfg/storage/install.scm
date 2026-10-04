@@ -97,39 +97,39 @@ password（docs/architecture/boot.md（TPM2））。"
       (error "plan step missing argument" key)))
 
 (define %executors
-  `((confirm-target unquote
-                    (lambda (d passphrase!)
+  `((confirm-target .
+                    ,(lambda (d passphrase!)
                       #t))
-     ;人工确认在 execute-plan 前完成
-    (wipe unquote
-          (lambda (d passphrase!)
+    ;; 人工确认在 execute-plan 前完成
+    (wipe .
+          ,(lambda (d passphrase!)
             (execute-wipe (detail-ref d
                                       'device))))
-    (partition unquote
-               (lambda (d passphrase!)
+    (partition .
+               ,(lambda (d passphrase!)
                  (execute-partition (detail-ref d
                                                 'device)
                                     (detail-ref d
                                                 'esp-size))))
-    (wait-udev unquote
-               (lambda (d passphrase!)
+    (wait-udev .
+               ,(lambda (d passphrase!)
                  (execute-wait-udev (detail-ref d
                                                 'device))))
-    (format-esp unquote
-                (lambda (d passphrase!)
+    (format-esp .
+                ,(lambda (d passphrase!)
                   (execute-format-esp (target-partition-path (detail-ref d
                                                                          'device)
                                                              1))))
     ;; LUKS passphrase 来自 apply session（luks-format 首次读取，
     ;; luks-open 复用同一值），经 stdin 传给 cryptsetup。
-    (luks-format unquote
-                 (lambda (d passphrase!)
+    (luks-format .
+                 ,(lambda (d passphrase!)
                    (execute-luks-format (target-partition-path (detail-ref d
                                                                            'device)
                                                                2)
                                         (passphrase!))))
-    (luks-open unquote
-               (lambda (d passphrase!)
+    (luks-open .
+               ,(lambda (d passphrase!)
                  (catch #t
                         (lambda ()
                           (execute-luks-open (target-partition-path (detail-ref
@@ -141,8 +141,8 @@ password（docs/architecture/boot.md（TPM2））。"
                           (format (current-error-port)
                            "LUKS volume created but initial open failed; luksFormat will not be rerun.~%")
                           (apply throw args)))))
-    (format-btrfs unquote
-                  (lambda (d passphrase!)
+    (format-btrfs .
+                  ,(lambda (d passphrase!)
                     (let ((mapper (detail-ref d
                                               'device))
                           (disk (detail-ref d
@@ -152,57 +152,57 @@ password（docs/architecture/boot.md（TPM2））。"
                          "LUKS mapper does not belong to confirmed target disk"
                          mapper disk))
                       (execute-format-btrfs mapper))))
-    (mount-top unquote
-               (lambda (d passphrase!)
+    (mount-top .
+               ,(lambda (d passphrase!)
                  (execute-mount-top)))
-    (make-subvolume unquote
-                    (lambda (d passphrase!)
+    (make-subvolume .
+                    ,(lambda (d passphrase!)
                       (execute-make-subvolume (detail-ref d
                                                           'name))))
     ;; 与 make-subvolume 同一执行器；独立 step id 只是让计划更可读
     ;; （安装期 root 在计划里是单独一行）。
-    (make-root-installing unquote
-                          (lambda (d passphrase!)
+    (make-root-installing .
+                          ,(lambda (d passphrase!)
                             (execute-make-subvolume (detail-ref d
                                                                 'name))))
-    (make-swapfile unquote
-                   (lambda (d passphrase!)
+    (make-swapfile .
+                   ,(lambda (d passphrase!)
                      (execute-make-swapfile (detail-ref d
                                                         'subvolume)
                                             (detail-ref d
                                                         'size))))
-    (unmount-top unquote
-                 (lambda (d passphrase!)
+    (unmount-top .
+                 ,(lambda (d passphrase!)
                    (execute-unmount-top)))
-    (mount-root unquote
-                (lambda (d passphrase!)
+    (mount-root .
+                ,(lambda (d passphrase!)
                   (execute-mount-root (detail-ref d
                                                   'name)
                                       (detail-ref d
                                                   'target))))
-    (mount-subvolume unquote
-                     (lambda (d passphrase!)
+    (mount-subvolume .
+                     ,(lambda (d passphrase!)
                        (execute-mount-subvolume (detail-ref d
                                                             'name)
                                                 (detail-ref d
                                                             'target)
                                                 (detail-ref d
                                                             'options))))
-    (mount-esp unquote
-               (lambda (d passphrase!)
+    (mount-esp .
+               ,(lambda (d passphrase!)
                  (execute-mount-esp (target-partition-path (detail-ref d
                                                                        'device)
                                                            1)
                                     (detail-ref d
                                                 'target))))
-    (write-facts unquote
-                 (lambda (d passphrase!)
+    (write-facts .
+                 ,(lambda (d passphrase!)
                    (write-machine-facts (detail-ref d
                                                     'target)
                                         (detail-ref d
                                                     'device))))
-    (ready unquote
-           (lambda (d passphrase!)
+    (ready .
+           ,(lambda (d passphrase!)
              #t))))
 
 (define (execute-step step passphrase!)
@@ -340,7 +340,7 @@ ON-FAILURE 非 #f 时是 (lambda (key args) ...) 失败处理器：安装编排�
                                        (target-partition-path device 2))))
     (unless luks-uuid
       (error "failed to read LUKS UUID" %system-partlabel))
-    (let ((facts `((luks-uuid unquote luks-uuid)))
+    (let ((facts `((luks-uuid . ,luks-uuid)))
           (dir (string-append target
                               (persist-mount-point "@persist-system") "/facts")))
       (mkdir-p dir)
