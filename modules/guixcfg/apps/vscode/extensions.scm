@@ -30,43 +30,10 @@
 ;;;     参考 virelith 模块头注释。
 
 (define-module (guixcfg apps vscode extensions)
-  #:use-module (gnu packages rust)      ; rust-analyzer
-  #:use-module (guix gexp)              ; #~ #$
   #:use-module (guix packages)          ; base32
-  #:use-module (guix utils)             ; substitute-keyword-arguments
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (virelith packages vscode-extensions)
   #:export (%vscode-extensions))
-
-;; Native extension 示例（也是本机制的唯一 native PoC）：
-;; rust-lang.rust-analyzer 的 linux-x64 VSIX 捆绑
-;; extension/server/rust-analyzer（FHS ELF，/lib64/ld-linux 解释器，
-;;; generic 解包后无法运行）。修复沿用 nixpkgs 对该扩展的处理思路
-;; （不试图 patch 41MB 的捆绑二进制，而是用 Guix 原生包替换）：
-;; 解包后将捆绑 server 替换为 rust-analyzer 包的 store 路径符号链接。
-;; 注意 settings.json 现有 "rust-analyzer.server.path": "rust-analyzer"
-;; （PATH 查找）优先于捆绑 server——此 override 是机制证明与兜底，
-;; 两条路径互不争抢。
-(define-public vscode-extension-rust-analyzer
-  (let ((base (vscode-marketplace-extension
-               "rust-lang" "rust-analyzer" "0.4.3070"
-               (base32 "1fryz4wjclyj3hmh5gwhq4sq7di4nc0pflqd27gw1i6ls4d6zi69")
-               #:target-platform "linux-x64"
-               #:license (list license:expat license:asl2.0))))
-    (package
-      (inherit base)
-      (inputs (list rust-analyzer))
-      (arguments
-       (substitute-keyword-arguments (package-arguments base)
-         ((#:phases phases)
-          #~(modify-phases #$phases
-              (add-after 'unpack 'replace-bundled-server
-                (lambda* (#:key inputs #:allow-other-keys)
-                  ;; 已在 unpack 阶段 chdir 进 extension/。
-                  (let ((server "server/rust-analyzer"))
-                    (delete-file server)
-                    (symlink (search-input-file inputs "/bin/rust-analyzer")
-                             server)))))))))))
 
 (define-public %vscode-extensions
   (list
@@ -89,4 +56,13 @@
    (vscode-marketplace-extension
     "huytd" "nord-light" "0.1.1"
     (base32 "13zvk5l5d4n8vjkn36r62n98n0nbcpxfz2ad2z325p337vg8cqdb"))
-   vscode-extension-rust-analyzer))
+   ;; rust-analyzer：linux-x64 variant（该扩展无 universal 变体——
+   ;; 捆绑 server/rust-analyzer FHS ELF 二进制）。无需 native patch：
+   ;; settings.json 的 "rust-analyzer.server.path": "rust-analyzer"
+   ;; 让扩展经 PATH 使用环境内的 rust-analyzer（apps/rust 的
+   ;; home-packages 提供），捆绑二进制闲置不启动。
+   (vscode-marketplace-extension
+    "rust-lang" "rust-analyzer" "0.4.3070"
+    (base32 "1fryz4wjclyj3hmh5gwhq4sq7di4nc0pflqd27gw1i6ls4d6zi69")
+    #:target-platform "linux-x64"
+    #:license (list license:expat license:asl2.0))))
