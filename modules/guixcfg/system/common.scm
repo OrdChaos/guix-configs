@@ -39,10 +39,6 @@
 ;; org.freedesktop.login1.service Exec 由 elogind-dbus-service 替换为
 ;; shepherd-sync）——拆除 wrapper 属第二步（另行确认后执行）。
 ;;
-;; Nonguix substitute trust（docs/architecture/overview.md（Nonguix
-;; integration））：guix-daemon 的 additive extension——官方 Guix
-;; substitutes 保留，追加 official Nonguix substitute URL + signing
-;; key。所有 host 共享同一 policy（不 per-host 重复）。
 ;; 桌面认证基础设施（docs/architecture/desktop-authentication.md）：
 ;; polkit 是 system authority（polkitd 经 system D-Bus activation 启动，
 ;; 无 shepherd 服务）。elogind 已经经其 service extension 隐式物化
@@ -53,9 +49,20 @@
 ;; （apps/polkit-gnome，niri spawn-at-startup + ~/.local/bin wrapper）
 ;; ——不在这里。
 ;;
-;; 第三方 substitute（substitutes.nonguix.org）已移除（2026-08-25）：
-;; guix-daemon 只信任官方 Guix substitute（bordeaux/ci，guix-service-
-;; type 默认），nonguix 包（linux-7.2/firmware/microcode）一律本地编译。
+;; Substitute policy（所有 host 共享，不 per-host 重复）：
+;;   substitute-urls 显式全列（镜像优先，官方兜底；显式列表而非
+;;   guix-extension 追加，因为顺序即优先级）：
+;;   - mirror.sjtu.edu.cn/guix：SJTU 镜像，官方 berlin 签名 narinfo
+;;     的纯镜像（实测 2026-10-04），免新密钥；
+;;   - cache-cdn.guix.moe：guix.moe 农场（2026-08-23 起与 Nonguix
+;;     合并运营）的 Cloudflare 镜像——narinfo 由源站直出、nar 经
+;;     nars.guix.moe（Cloudflare anycast，与代理出口区域无关）；
+;;     主线内容 berlin 签名，免新密钥；
+;;   - 官方 ci/bordeaux 兜底。
+;;   不授权 nonguix 签名 key（C1FD53E5…）：2026-08-25 决策不变，
+;;   nonguix 包（linux-7.2/firmware/microcode）一律本地编译；
+;;   镜像上 nonguix-key 签名的 narinfo 会因未授权被跳过并回退
+;;   官方源，行为安全。
 ;; 本地编译空间：显式声明 guix-daemon TMPDIR=/var/tmp（pinned
 ;; guix-configuration 的 tmpdir 字段 → shepherd 服务环境 TMPDIR=；
 ;; 默认 /tmp 是 7.7GB tmpfs，装不下内核编译的 ~11GB 中间产物——
@@ -63,7 +70,13 @@
 ;; 由 /etc/systemd/system/guix-daemon.service 的 Environment 单独配置。
 (define %common-services
   (list (service guix-service-type
-                 (guix-configuration (tmpdir "/var/tmp")))
+                 (guix-configuration
+                  (tmpdir "/var/tmp")
+                  (substitute-urls
+                   '("https://mirror.sjtu.edu.cn/guix"
+                     "https://cache-cdn.guix.moe"
+                     "https://ci.guix.gnu.org"
+                     "https://bordeaux.guix.gnu.org"))))
         (service elogind-service-type (elogind-configuration
                                        (elogind elogind-compat)))
         (service polkit-service-type)
