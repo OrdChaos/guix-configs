@@ -59,6 +59,7 @@
                #:use-module (guixcfg system machine-state-persistence) ; machine-state bind（mihomo providers）
                #:use-module (guixcfg system machine-identity) ; /etc/machine-id 持久化（先于 D-Bus activation）
                #:use-module (guixcfg system noctalia-greeter) ; noctalia-greeter machine-state bind + 系统集成
+               #:use-module (guixcfg system guix-cache) ; root guix 缓存 machine-state bind
                #:use-module (guixcfg system sudo policy) ; %sudoers-file（Defaults 声明：lecture/passprompt）
                #:use-module (guixcfg system profile policy) ; %system-profile（/etc/profile ownership）
                #:use-module (guixcfg system subids)   ; %subids-services（rootless userns 声明式前提）
@@ -101,7 +102,8 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
 (define %common-machine-state-file-systems
   (machine-state-persistence-file-systems
    (list %mihomo-data-persistence-rule
-         %noctalia-greeter-persistence-rule)))
+         %noctalia-greeter-persistence-rule
+         %guix-root-cache-persistence-rule)))
 
 ;;; ── TTY login prompt 的强语义（docs/architecture/accounts-sessions.md）
 ;;; login: 出现 = interactive-session-ready 已过——mingetty 延迟到
@@ -205,7 +207,8 @@ sentinel + mihomo + applications）；HOME-ENVIRONMENT 是挂入 system
                 ;; machine-state persistence（root-owned system state）。
                 (machine-state-persistence-service
                  (append (list %mihomo-data-persistence-rule
-                               %noctalia-greeter-persistence-rule)
+                               %noctalia-greeter-persistence-rule
+                               %guix-root-cache-persistence-rule)
                          additional-machine-state-persistence-rules))
                 ;; noctalia-greeter persistence backing 的 owner/mode
                 ;; （activation 先于 file-systems 挂载，与 channel
