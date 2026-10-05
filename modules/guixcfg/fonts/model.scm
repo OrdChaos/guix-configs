@@ -1,8 +1,8 @@
 ;;; 字体包集合事实（single source；docs/reference/repository-layout.md）。
 ;;;
 ;;; %fonts：profile 安装哪些字体（"有哪些字体"）——中立事实，由
-;;; Home profile（(guixcfg home fonts) 消费）、System profile
-;;; （(guixcfg system packages) 的 Flatpak sandbox 字体投影）、
+;;; Home profile（(guixcfg home fonts) 消费）、Flatpak 全局 override
+;;; 的资源闭包（(guixcfg flatpak service) 绑定 store 目录）、
 ;;; apps 层 adapter（onlyoffice 的 bwrap 字体投影）共同消费。
 ;;; system 层不允许 import home 层（layering inversion），因此事实
 ;;; 放在这个中立域模块。

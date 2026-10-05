@@ -208,7 +208,21 @@
                                                       (".config/gtk-3.0/gtk.css" ,%gtk-css-import)
                                                       (".config/gtk-4.0/settings.ini" ,%gtk4-settings)
                                                       (".config/gtk-4.0/gtk.css" ,%gtk-css-import)))
-                                    (simple-service 'gtk-appearance-sync-tool
-                                                    home-files-service-type
-                                                    `((".local/bin/appearance-sync" ,%appearance-sync)))
-                                    %appearance-reconcile-service))))
+          (simple-service 'gtk-appearance-sync-tool
+                          home-files-service-type
+                          `((".local/bin/appearance-sync"
+                             ,%appearance-sync)))
+          ;; 图标主题投影到 ~/.local/share/icons/<theme>（指向包目录，不是
+          ;; profile）：Flatpak 原生把 ~/.local/share/icons 挂到沙箱
+          ;; /run/host/user-share/icons（已在 XDG_DATA_DIRS），GTK 即可发现；
+          ;; 沙箱内该符号链由 flatpak 全局 override 绑定的资源包 store 目录
+          ;; 解析（见 (guixcfg flatpak service)）。
+          (simple-service 'gtk-icon-theme-xdg-link
+                          home-files-service-type
+                          (list (list (string-append ".local/share/icons/"
+                                                     %appearance-icon-theme)
+                                      (file-append
+                                       fluent-icon-theme
+                                       (string-append "/share/icons/"
+                                                      %appearance-icon-theme)))))
+          %appearance-reconcile-service))))

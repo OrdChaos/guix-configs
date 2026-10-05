@@ -28,16 +28,19 @@
 
 (define-module (guixcfg flatpak service)
   #:use-module (gnu home services) ;home-environment-variables-service-type、home-files-service-type
+  #:use-module (gnu packages fontutils) ;fontconfig（工具包，无 share/fonts，跳过）
   #:use-module (gnu services) ;simple-service、activation-service-type
   #:use-module (guix gexp) ;plain-file、mixed-text-file、file-append
   #:use-module (guix modules) ;source-module-closure
   #:use-module (srfi srfi-1) ;filter-map、append-map
   #:use-module (guixcfg flatpak model)
   #:use-module (guixcfg flatpak registry)
+  #:use-module (guixcfg fonts model) ;%fonts（Flatpak 资源闭包绑定）
   #:use-module (guixcfg home appearance) ;%appearance-cursor-theme/size（shared facts）
   #:use-module (guixcfg system application-persistence) ;application-persistence-rule
   #:use-module (guixcfg utils module-closure) ;guixcfg-module-select?
   #:use-module (virelith packages cursors) ;fluent-cursor-theme
+  #:use-module (virelith packages icons) ;fluent-icon-theme
   #:export (%flatpak-installation-persistence-rule
             %flatpak-overrides-directory
             %flatpak-global-override-file
@@ -160,62 +163,42 @@ external app 与未知 target fail closed）。"
                            (flatpak-selected-applications))))
 
 ;;; ── 全局 override（overrides/global）────────────────────────
-;;; X11（XWayland）应用在客户端经 libXcursor 解析光标主题，读
-;;; XCURSOR_PATH/XCURSOR_THEME。Flatpak 会转发 XCURSOR_THEME/XCURSOR_SIZE
-;;; 但【丢弃 XCURSOR_PATH】，且不暴露宿主 profile 的 share/icons（只提供
-;;; /run/host/fonts 与 runtime 的 /usr/share/icons/hicolor）——因此沙箱内
-;;; X11 应用找不到 Fluent 主题，回退为默认黑色光标；原生 XWayland 应用
-;;; 因宿主环境完整而正常。
-;;;
-;;; 修复：overrides/global 是 Flatpak 的全局 override（作用于全部应用，
-;;; 含 'external/user-owned 的应用——它们没有 managed override 文件）。
-;;; 只读暴露光标主题目录并把 XCURSOR_PATH 指向它（同时显式固定
-;;; XCURSOR_THEME/SIZE，使沙箱不依赖宿主 session env）。主题目录随
-;;; store 路径嵌入本文件 derivation，是 system closure 的输入（GC 安全）。
-(define %flatpak-cursor-theme-bundle
-  (computed-file "flatpak-cursor-theme-bundle"
-                 (with-imported-modules '((guix build utils))
-                                        #~(begin
-                                            (use-modules (guix build utils))
-                                            (let ((out #$output)
-                                                  (theme #$(file-append
-                                                            fluent-cursor-theme
-                                                            "/share/icons/Fluent-dark-cursors")))
-                                              (copy-recursively theme
-                                                                (string-append
-                                                                 out
-                                                                 "/Fluent-dark-cursors"))
-                                              ;; Chromium 的光标主题名优先级是 LinuxUi(GTK) → Xcursor.theme
-                                              ;; → "default"；沙箱内 GTK 默认返回 "Adwaita"。把常见回退名
-                                              ;; 软链到配置主题，避免回落到核心黑色字体指针。
-                                              (for-each (lambda (name)
-                                                          (symlink
-                                                           "Fluent-dark-cursors"
-                                                           (string-append out
-                                                            "/" name)))
-                                                        '("default" "Adwaita")))))))
+;;; 沙箱里的宿主资源（图标/光标/字体）都是指向 /gnu/store 的符号链：
+;;;   - 图标：宿主 ~/.local/share/icons/** 由 Flatpak 原生挂到
+;;;     /run/host/user-share/icons（该路径已在沙箱 XDG_DATA_DIRS）；
+;;;   - 字体：宿主 ~/.local/share/fonts/** 挂到 /run/host/user-fonts；
+;;;   - 光标：无原生通道，且 Flatpak 丢弃 XCURSOR_PATH、libXcursor 也不看
+;;;     XDG_DATA_DIRS。
+;;; 但沙箱没有 /gnu/store，符号链会悬空。于是 overrides/global（作用于
+;;; 全部应用，含 'external）只做两件事：
+;;;   1. [Context] filesystems：把资源【包】的 store 目录只读绑进沙箱，
+;;;      让 /run/host/user-share|user-fonts 里的符号链可解析——最小闭包，
+;;;      绝不绑整个 /gnu/store；
+;;;   2. [Environment]：固定光标主题/大小，并把 XCURSOR_PATH 指向光标包
+;;;      的 share/icons（libXcursor 的唯一生效通道）。
+;;; 不写 XDG_DATA_DIRS / FONTCONFIG_FILE：图标/字体走原生 /run/host 通道，
+;;; 避免覆盖 Flatpak 默认值（override 的 env 值不做 $VAR 展开）。
+;;; 资源包 store 路径随 lock 变化，是本文件 derivation 的输入（GC 安全）。
+(define %flatpak-resource-packages
+  ;; fontconfig 是工具包（无 share/fonts，农场结构性跳过），不绑。
+  (append (list fluent-icon-theme fluent-cursor-theme)
+          (delete fontconfig %fonts)))
 
 (define %flatpak-global-override-file
-  (mixed-text-file "flatpak-global-override"
-   "# (guixcfg flatpak service) global override for ALL apps (incl. 'external).
-"
-   "# X11/XWayland apps resolve the cursor theme client-side; expose it here.
-"
-   "[Context]\n"
-   "filesystems="
-   %flatpak-cursor-theme-bundle
-   ":ro;\n"
-   "\n"
-   "[Environment]\n"
-   "XCURSOR_THEME="
-   %appearance-cursor-theme
-   "\n"
-   "XCURSOR_SIZE="
-   (number->string %appearance-cursor-size)
-   "\n"
-   "XCURSOR_PATH="
-   %flatpak-cursor-theme-bundle
-   "\n"))
+  (apply mixed-text-file "flatpak-global-override"
+         (append
+          (list
+           "# (guixcfg flatpak service): bind host resource store dirs so\n"
+           "# in-sandbox symlinks into /gnu/store resolve; pin cursor env.\n"
+           "[Context]\n"
+           "filesystems=")
+          (append-map (lambda (package) (list package ":ro;"))
+                      %flatpak-resource-packages)
+          (list "\n\n[Environment]\n"
+                "XCURSOR_THEME=" %appearance-cursor-theme "\n"
+                "XCURSOR_SIZE=" (number->string %appearance-cursor-size) "\n"
+                "XCURSOR_PATH=" (file-append fluent-cursor-theme "/share/icons")
+                "\n"))))
 
 (define* (flatpak-overrides-activation environment-overrides
                                        #:key (global-override

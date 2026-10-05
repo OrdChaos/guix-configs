@@ -4,7 +4,7 @@
 ;;; 职责划分：
 ;;;   - %fonts 与 fontconfig 策略（SXML 数据）：中立事实层
 ;;;     (guixcfg fonts model) / (guixcfg fonts fontconfig-policy) 拥有
-;;;     （System profile 的 Flatpak 字体投影与
+;;;     （Flatpak 全局 override 的资源闭包与
 ;;;     ONLYOFFICE 兼容层等消费同一份；本模块不再持有定义）；
 ;;;   - 本模块只剩 Home 机制：home-fontconfig-service-type 服务包装
 ;;;     （snippet → $XDG_CONFIG_HOME/fontconfig/fonts.conf）与 XDG

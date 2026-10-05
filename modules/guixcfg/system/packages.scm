@@ -8,7 +8,6 @@
   #:use-module (gnu packages golang-crypto) ;age
   #:use-module (gnu packages package-management) ;flatpak
   #:use-module (gnu packages efi) ;efitools/sbsigntools（blue enroll 固件注册）
-  #:use-module (guixcfg fonts model) ;%fonts（shared fact；Flatpak sandbox 字体投影）
   #:export (%system-packages))
 
 (define %system-packages
@@ -30,10 +29,8 @@
           ;; 固件注册执行器（目标系统离线可用——不依赖
           ;; LiveCD manifest / channel fetch；
           ;; docs/architecture/boot.md（Secure Boot））
-          ;; 字体投影：pinned Guix flatpak 的 flatpak-fix-fonts-icons.patch
-          ;; 只把 /run/current-system/profile/share/fonts 暴露进 sandbox
-          ;; （Home profile 字体不可见）。同一份 (guixcfg fonts model) 事实、
-          ;; 零复制列表、无 system→home import（docs/architecture/
-          ;; flatpak.md（fonts））。
-          %fonts
+          ;; 字体不再投影到 system profile：Flatpak 走宿主
+          ;; ~/.local/share/fonts（原生 /run/host/user-fonts）+ 全局
+          ;; override 绑定的资源包 store 目录（docs/architecture/
+          ;; flatpak.md（fonts / 全局 override））。
           %base-packages))
