@@ -114,3 +114,15 @@
     
     --shade-color: rgba(0, 0, 0, 0.36);
 }
+
+/* Keep tooltips white with black text in both light and dark modes.
+ * Chromium's GTK theme also samples these tooltip and label colors. */
+tooltip.background {
+    background-color: #ffffff;
+    background-image: none;
+    color: #000000;
+}
+
+tooltip label {
+    color: #000000;
+}

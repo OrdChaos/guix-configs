@@ -65,3 +65,15 @@
 @define-color theme_unfocused_base_color @window_bg_color;
 @define-color theme_unfocused_selected_bg_color @accent_bg_color;
 @define-color theme_unfocused_selected_fg_color @accent_fg_color;
+
+/* Keep tooltips white with black text in both light and dark modes.
+ * Chromium's GTK theme also samples these tooltip and label colors. */
+tooltip.background {
+    background-color: #ffffff;
+    background-image: none;
+    color: #000000;
+}
+
+tooltip label {
+    color: #000000;
+}
