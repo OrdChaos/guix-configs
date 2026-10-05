@@ -35,16 +35,11 @@
         "editor.defaultFormatter": "lxl66566.anyformatter-vscode",
         "editor.formatOnSave": false
     },
-    "[guile]": {
-        "editor.defaultFormatter": "lxl66566.anyformatter-vscode",
-        "editor.formatOnSave": false
+    "files.associations": {
+        "*.scm": "scheme"
     },
     "anyformatter": {
         "scheme": {
-            "command": "guix style --whole-file",
-            "file": true
-        },
-        "guile": {
             "command": "guix style --whole-file",
             "file": true
         }
