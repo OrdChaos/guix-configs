@@ -31,5 +31,23 @@
     "workbench.browser.showInTitleBar": false,
     "workbench.layoutControl.enabled": false,
     "workbench.startupEditor": "none",
+    "[scheme]": {
+        "editor.defaultFormatter": "lxl66566.anyformatter-vscode",
+        "editor.formatOnSave": false
+    },
+    "[guile]": {
+        "editor.defaultFormatter": "lxl66566.anyformatter-vscode",
+        "editor.formatOnSave": false
+    },
+    "anyformatter": {
+        "scheme": {
+            "command": "blue format",
+            "file": true
+        },
+        "guile": {
+            "command": "blue format",
+            "file": true
+        }
+    },
     "[scheme]": { "editor.autoIndent": "none" }
 }
