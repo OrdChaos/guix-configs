@@ -1,5 +1,5 @@
 ;;; Flatpak composition 测试（docs/architecture/flatpak.md）：
-;;;   - system profile 含 flatpak executable；
+;;;   - system profile 含 flatpak executable 与共享 %fonts 投影；
 ;;;   - Home 含 XDG_DATA_DIRS exports 贡献（追加不覆盖）与 desktop shadow；
 ;;;     managed overrides 由 system activation 写入 persistent backing；
 ;;;   - %vm-os 的 file-systems 含 installation bind；
@@ -11,6 +11,7 @@
 
 (use-modules (guixcfg hosts vm) ;%vm-os
              (guixcfg users user) ;user-profile-name、%primary-user
+             (guixcfg fonts model) ;%fonts（shared fact）
              (guixcfg storage model) ;persist-mount-point
              (guixcfg system packages) ;%system-packages
              (guixcfg flatpak model)
@@ -33,9 +34,12 @@
 
 (test-begin "flatpak-service")
 
-;; ── system profile：flatpak ─────────────────────────────────
+;; ── system profile：flatpak + %fonts 投影 ──────────────────
 (test-assert "system profile contains flatpak executable"
              (member flatpak %system-packages))
+(test-assert "system profile projects every shared %fonts package"
+             (every (lambda (p)
+                      (member p %system-packages)) %fonts))
 
 ;; ── Home services 结构 ─────────────────────────────────────
 ;; simple-service 返回的是包装 service-type（名字 = simple-service

@@ -28,14 +28,12 @@
 
 (define-module (guixcfg flatpak service)
   #:use-module (gnu home services) ;home-environment-variables-service-type、home-files-service-type
-  #:use-module (gnu packages fontutils) ;fontconfig（工具包，无 share/fonts，跳过）
   #:use-module (gnu services) ;simple-service、activation-service-type
   #:use-module (guix gexp) ;plain-file、mixed-text-file、file-append
   #:use-module (guix modules) ;source-module-closure
   #:use-module (srfi srfi-1) ;filter-map、append-map
   #:use-module (guixcfg flatpak model)
   #:use-module (guixcfg flatpak registry)
-  #:use-module (guixcfg fonts model) ;%fonts（Flatpak 资源闭包绑定）
   #:use-module (guixcfg home appearance) ;%appearance-cursor-theme/size（shared facts）
   #:use-module (guixcfg system application-persistence) ;application-persistence-rule
   #:use-module (guixcfg utils module-closure) ;guixcfg-module-select?
@@ -163,33 +161,35 @@ external app 与未知 target fail closed）。"
                            (flatpak-selected-applications))))
 
 ;;; ── 全局 override（overrides/global）────────────────────────
-;;; 沙箱里的宿主资源（图标/光标/字体）都是指向 /gnu/store 的符号链：
-;;;   - 图标：宿主 ~/.local/share/icons/** 由 Flatpak 原生挂到
-;;;     /run/host/user-share/icons（该路径已在沙箱 XDG_DATA_DIRS）；
-;;;   - 字体：宿主 ~/.local/share/fonts/** 挂到 /run/host/user-fonts；
-;;;   - 光标：无原生通道，且 Flatpak 丢弃 XCURSOR_PATH、libXcursor 也不看
-;;;     XDG_DATA_DIRS。
-;;; 但沙箱没有 /gnu/store，符号链会悬空。于是 overrides/global（作用于
-;;; 全部应用，含 'external）只做两件事：
-;;;   1. [Context] filesystems：把资源【包】的 store 目录只读绑进沙箱，
-;;;      让 /run/host/user-share|user-fonts 里的符号链可解析——最小闭包，
+;;; 两处需要处理：
+;;;   1. 图标：宿主 ~/.local/share/icons/** 由 Flatpak 原生通道挂到
+;;;      /run/host/user-share/icons（该路径已在沙箱 XDG_DATA_DIRS），
+;;;      但其中的符号链指向 /gnu/store，而沙箱没有 /gnu/store；
+;;;   2. 光标：无原生通道，且 Flatpak 丢弃 XCURSOR_PATH、libXcursor
+;;;      也不看 XDG_DATA_DIRS。
+;;; 字体不在这里——由 pinned Guix 的 flatpak-fix-fonts-icons.patch
+;;; 直接把 system profile 的 /run/current-system/profile/share/fonts
+;;; 绑到 /run/host/fonts，并遍历符号链补绑 store 闭包
+;;; （docs/architecture/flatpak.md（fonts））。
+;;; 于是 overrides/global（作用于全部应用，含 'external）只做两件事：
+;;;   1. [Context] filesystems：把图标/光标【包】的 store 目录只读绑进
+;;;      沙箱，让 /run/host/user-share/icons 里的符号链可解析——最小闭包，
 ;;;      绝不绑整个 /gnu/store；
 ;;;   2. [Environment]：固定光标主题/大小，并把 XCURSOR_PATH 指向光标包
 ;;;      的 share/icons（libXcursor 的唯一生效通道）。
-;;; 不写 XDG_DATA_DIRS / FONTCONFIG_FILE：图标/字体走原生 /run/host 通道，
+;;; 不写 XDG_DATA_DIRS / FONTCONFIG_FILE：图标走原生 /run/host 通道，
 ;;; 避免覆盖 Flatpak 默认值（override 的 env 值不做 $VAR 展开）。
 ;;; 资源包 store 路径随 lock 变化，是本文件 derivation 的输入（GC 安全）。
 (define %flatpak-resource-packages
-  ;; fontconfig 是工具包（无 share/fonts，农场结构性跳过），不绑。
-  (append (list fluent-icon-theme fluent-cursor-theme)
-          (delete fontconfig %fonts)))
+  (list fluent-icon-theme fluent-cursor-theme))
 
 (define %flatpak-global-override-file
   (apply mixed-text-file "flatpak-global-override"
          (append
           (list
-           "# (guixcfg flatpak service): bind host resource store dirs so\n"
-           "# in-sandbox symlinks into /gnu/store resolve; pin cursor env.\n"
+           "# (guixcfg flatpak service): bind icon/cursor store dirs so\n"
+           "# in-sandbox symlinks resolve; pin cursor env. Fonts come from\n"
+           "# the system profile via the pinned flatpak-fix-fonts-icons.patch.\n"
            "[Context]\n"
            "filesystems=")
           (append-map (lambda (package) (list package ":ro;"))

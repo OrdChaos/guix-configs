@@ -256,37 +256,42 @@ repo-owned override 是 **read-only declarative state**，不建议直接
 7. reconfigure（repo 重新取得 authority）
 ```
 
-### Global override（overrides/global）：资源闭包绑定
+### Global override（overrides/global）：图标/光标资源闭包
 
 除 per-app 文件外，system activation 还写 Flatpak 的全局 override
 `overrides/global`（作用于**全部**应用，含 `'external`/user-owned——
 后者没有 managed override 文件，故只有 global 能覆盖它们）。它由
 `(guixcfg flatpak service)` 的 `%flatpak-global-override-file` 渲染。
 
-沙箱里的宿主资源（图标/光标/字体）都是指向 `/gnu/store` 的符号链，而
-沙箱没有 `/gnu/store`。发现通道分两类：
+**字体不走这里**：由 **pinned Guix 的 `flatpak-fix-fonts-icons.patch`**
+处理——只要宿主存在 `/run/current-system/profile/share/fonts`（`%fonts`
+在 system profile），Flatpak 启动时就把该目录绑到沙箱 `/run/host/fonts`，
+并遍历其中符号链收集字体包的 `/gnu/store` 闭包一并只读绑定。这是上游
+（NixOS PR #262462 → Guix，commit `9590fa7617c`）与安装器/GDM 的同款
+机制，因此 system profile 保有 `%fonts`（`system/packages.scm`）。
+
+其余两处需要全局 override：
 
 - **图标**：宿主 `~/.local/share/icons/<theme>`（`apps/gtk` 的
   `gtk-icon-theme-xdg-link`，指向 `fluent-icon-theme` **包目录**而非
   profile）经 Flatpak **原生**通道挂到沙箱
-  `/run/host/user-share/icons`（该路径已在 `XDG_DATA_DIRS`）。
-- **字体**：宿主 `~/.local/share/fonts/<pkg>`（`(guixcfg home fonts)`
-  的 XDG 链接农场）经 Flatpak 原生通道挂到 `/run/host/user-fonts`。
+  `/run/host/user-share/icons`（该路径已在 `XDG_DATA_DIRS`），但其中的
+  符号链指向 `/gnu/store`，而沙箱没有。
 - **光标**：无原生通道；Flatpak 丢弃 `XCURSOR_PATH`，libXcursor 也不看
   `XDG_DATA_DIRS`。
 
-因此全局 override 只做两件事：
+于是 override 只做两件事：
 
-1. `[Context] filesystems`：把资源**包**的 store 目录只读绑进沙箱，让上
-   述原生通道里的符号链可解析——**最小闭包**（`fluent-icon-theme`、
-   `fluent-cursor-theme`、`%fonts` 各包），**绝不**绑整个 `/gnu/store`；
+1. `[Context] filesystems`：把图标/光标**包**的 store 目录只读绑进沙箱
+   （`fluent-icon-theme`、`fluent-cursor-theme`），让原生通道里的符号链
+   可解析——**最小闭包**，**绝不**绑整个 `/gnu/store`；
 2. `[Environment]`：固定 `XCURSOR_THEME` / `XCURSOR_SIZE`，并把
    `XCURSOR_PATH` 指向光标包的 `share/icons`（libXcursor 的唯一生效通道）。
 
-不写 `XDG_DATA_DIRS` / `FONTCONFIG_FILE`：图标/字体走原生 `/run/host`
-通道，避免覆盖 Flatpak 默认值（override 的 env 值不做 `$VAR` 展开）。资源
-包的 store 路径是本 override 文件的 derivation input（随 lock / 主题升级
-自动刷新且 GC 安全）。
+不写 `XDG_DATA_DIRS` / `FONTCONFIG_FILE`：图标走原生 `/run/host` 通道、
+字体走补丁，避免覆盖 Flatpak 默认值（override 的 env 值不做 `$VAR`
+展开）。包的 store 路径是本 override 文件的 derivation input（随 lock /
+主题升级自动刷新且 GC 安全）。
 
 > 备选（未采用）：把主题按 Flatpak runtime extension
 > （`org.freedesktop.Platform.Icontheme.*`）装入 installation。因 Guix 的
@@ -392,7 +397,7 @@ import `(guixcfg flatpak reconcile)`、不含 CLI 调用面
 | flatpak executable | Guix System（`system/packages.scm`） | 一切安装走 `--user`；入口经 `flatpak-binary` 显式解析（PATH 优先覆盖，随后回退 `/run/current-system/profile/bin/flatpak` 与 `~/.guix-profile/bin/flatpak`，并把其目录前置进 PATH 供全部子调用）——**不依赖 login shell 的 `/etc/profile`**（ssh 非 login shell 不 source profile）。Flatpak 子系统对所有 host 提供（2026-09：persistence 平台规则提升到 common 层）；`blue flatpak …` 在目标机本地运行、绝不 sudo（本机缺 flatpak 二进制时 fail fast） |
 | XDG_DATA_DIRS | Flatpak 平台 Home service | `$XDG_DATA_DIRS:$HOME/.local/share/flatpak/exports/share`（追加不覆盖；launcher 经此发现 desktop entries） |
 | desktop shadows | selected Flatpak definition → Home files | optional 完整文件投影到 `~/.local/share/applications/<id>.desktop`，经 XDG precedence 覆盖 Flatpak export；只用于已审计为低变更率的 metadata 修正，完整文件 single-owner、不做字段 merge；当前 Steam 基线为 launcher 1.0.0.87，仅把多 main category 收敛为 `Game;` |
-| fonts | `(guixcfg fonts model)` 单一事实源 | `%fonts` 进 Home profile；Flatpak 走宿主 `~/.local/share/fonts`（原生 `/run/host/user-fonts`）+ 全局 override 绑资源包 store |
+| fonts | `(guixcfg fonts model)` 单一事实源 | `%fonts` 进 Home（用户会话）与 System（greeter + Flatpak）profile；Flatpak 由 pinned `flatpak-fix-fonts-icons.patch` 把 system profile 的 `share/fonts` + store 闭包绑到沙箱 `/run/host/fonts` |
 | portal | 现有 niri 栈（零新增） | niri home profile 三件套 + repo-owned `niri-portals.conf`；Flatpak 只是 portal client |
 | Secret Service | 现有 gnome-keyring 栈 | Flatpak 应用默认无 secrets 权限；portal Secret 或 per-app override `session-bus` |
 
