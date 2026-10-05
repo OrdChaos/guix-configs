@@ -35,13 +35,11 @@
   #:use-module (guixcfg apps vscode extensions language-pack-zh-hans)
   #:use-module (guixcfg apps vscode extensions nord-light)
   #:use-module (guixcfg apps vscode extensions rust-analyzer)
-  #:use-module (guixcfg apps vscode extensions scheme-lsp)
   #:export (%vscode-extensions))
 
 (define-public %vscode-extensions
   (list vscode-extension-guile-scheme-enhanced
         vscode-extension-anyformatter
-        vscode-extension-scheme-lsp
         vscode-extension-language-pack-zh-hans
         vscode-extension-nord-light
         vscode-extension-rust-analyzer

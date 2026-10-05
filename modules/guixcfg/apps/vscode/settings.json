@@ -31,15 +31,15 @@
     "workbench.browser.showInTitleBar": false,
     "workbench.layoutControl.enabled": false,
     "workbench.startupEditor": "none",
-    "[scheme]": {
+    "[guile]": {
         "editor.defaultFormatter": "lxl66566.anyformatter-vscode",
         "editor.formatOnSave": false
     },
     "files.associations": {
-        "*.scm": "scheme"
+        "*.scm": "guile"
     },
     "anyformatter": {
-        "scheme": {
+        "guile": {
             "command": "guix style --whole-file",
             "file": true
         }

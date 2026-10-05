@@ -1,24 +1,13 @@
-;;; tsyesika.guile-scheme-enhanced —— Guile/Scheme 语法增强。
+;;; tsyesika.guile-scheme-enhanced —— Guile/Scheme 语法增强
+;;;（.scm 的语法高亮/缩进规则/SRFI 工具；语言 id 为上游原生的
+;;; "guile"，.scm 由它独占认领，无 id 冲突）。
 ;;;
-;;; 两处打包期修补：
-;;;
-;;; 1. 启动写 settings（上游 bug）：activate() 每次启动都无条件执行
-;;;    schemeConfig.update('autoIndent', 'none', ConfigurationTarget.Global)
-;;;    （注释自称 languageId 作用域，实际写全局），对 repo-owned 只读
-;;;    settings.json 反复写入失败。抠掉这行：settings 的权威是本仓库，
-;;;    扩展不得触碰。
-;;;
-;;; 2. language id 统一到 "scheme"：本扩展把 .scm 注册为自家 id
-;;;    "guile"，而 rgherdt.scheme-lsp 注册为 "scheme"——VS Code 对
-;;;    同扩展名的多个注册按"后注册者胜出"（languagesAssociations.ts
-;;;    getAssociationByPath），结果取决于扩展加载顺序，用户不可控。
-;;;    两个扩展能力互补（语法/缩进 vs LSP），统一到 scheme 后由 VS Code
-;;;    的 _mergeLanguage 合并贡献，配合 settings.json 的
-;;;    files.associations 双保险。改动面：package.json 的
-;;;    languages[0].id 与 grammars[0].language；main.js 的三处
-;;;    'guile'（languageId 判断、document selector、已死的
-;;;    getConfiguration 作用域——settings 写入行已被修补 1 删除）。
-;;;    升级本扩展版本时复查本 patch（上游文件结构可能变化）。
+;;; 打包期修补（上游 bug）：activate() 每次启动都无条件执行
+;;;   schemeConfig.update('autoIndent', 'none', ConfigurationTarget.Global)
+;;; （src/main.js——注释自称 languageId 作用域，实际写全局），对
+;;; repo-owned 只读 settings.json 反复写入失败。抠掉这行：settings
+;;; 的权威是本仓库，扩展不得触碰。升级本扩展版本时复查 patch（上游
+;;; 文件结构可能变化）。
 
 (define-module (guixcfg apps vscode extensions guile-scheme-enhanced)
   #:use-module (guix gexp) ;#~ #$
@@ -42,16 +31,9 @@
        (substitute-keyword-arguments (package-arguments base)
          ((#:phases phases)
           #~(modify-phases #$phases
-               (add-after 'unpack 'drop-startup-settings-write
-                 (lambda _
-                   ;; 已在 unpack 阶段 chdir 进 extension/。
-                   (substitute* "src/main.js"
-                     (("^.*schemeConfig\\.update\\('autoIndent'.*$")
-                      ""))))
-               (add-after 'unpack 'unify-language-id
-                 (lambda _
-                   (substitute* "package.json"
-                     (("\"id\": \"guile\"") "\"id\": \"scheme\"")
-                     (("\"language\": \"guile\"") "\"language\": \"scheme\""))
-                   (substitute* "src/main.js"
-                     (("'guile'") "'scheme'")))))))))))
+              (add-after 'unpack 'drop-startup-settings-write
+                (lambda _
+                  ;; 已在 unpack 阶段 chdir 进 extension/。
+                  (substitute* "src/main.js"
+                    (("^.*schemeConfig\\.update\\('autoIndent'.*$")
+                     "")))))))))))

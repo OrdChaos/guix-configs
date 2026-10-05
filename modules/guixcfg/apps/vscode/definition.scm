@@ -126,7 +126,6 @@
 
 (define-module (guixcfg apps vscode definition)
   #:use-module (gnu home services) ;home-files-service-type
-  #:use-module (gnu packages guile-xyz) ;guile-lsp-server
   #:use-module (gnu services) ;simple-service
   #:use-module (guix gexp) ;local-file
   #:use-module (guix records)
@@ -147,10 +146,9 @@
   (application (name 'vscode)
                ;; wrapper 包与裸 vscode 的 bin/code、desktop entry 同名——profile 中
                ;; 两者并存会以 collision 报错，这是有意设计（防止桌面启动绕过
-               ;; --extensions-dir）。guile-lsp-server 为 rgherdt.scheme-lsp 的
-               ;; server：扩展经 hasbin 在 PATH 上查找（见 extensions.scm 头注释）。
+               ;; --extensions-dir）。
                (home-packages (list (vscode-with-extensions vscode
-                                     %vscode-extensions) guile-lsp-server))
+                                     %vscode-extensions)))
                (home-services (list (simple-service 'vscode-user-config
                                                     home-files-service-type
                                                     `((".config/Code/User/settings.json" ,
