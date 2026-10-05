@@ -41,11 +41,11 @@
     },
     "anyformatter": {
         "scheme": {
-            "command": "blue format",
+            "command": "guix style --whole-file",
             "file": true
         },
         "guile": {
-            "command": "blue format",
+            "command": "guix style --whole-file",
             "file": true
         }
     },
