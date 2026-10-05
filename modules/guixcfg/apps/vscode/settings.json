@@ -5,6 +5,9 @@
     "extensions.autoCheckUpdates": false,
     "extensions.verifySignature": false,
     "rust-analyzer.server.path": "rust-analyzer",
+    "clangd.arguments": [
+        "--fallback-style={IndentWidth: 4}"
+    ],
     "terminal.integrated.profiles.linux": {
         "bash": {
             "path": "bash",
