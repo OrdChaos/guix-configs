@@ -6,7 +6,7 @@
 
 (define %flatpak-tuba
   (flatpak-application (name 'tuba)
-                       (id "org.gnome.Tuba")
+                       (id "dev.geopjr.Tuba")
                        (remote 'flathub)
                        (branch "stable")
                        (update-policy 'track-branch)
