@@ -24,6 +24,19 @@
 
 (test-runner-current (test-runner-simple))
 
+(define (read-normalized path)
+  "Read the whole file at PATH, collapsing every whitespace run to a
+single space.  Source-wiring assertions then survive formatting
+reflows (guix style rewrapping a call across lines)."
+  (string-join
+   (delete "" (string-split
+               (string-map (lambda (ch)
+                             (if (char-whitespace? ch) #\space ch))
+                           (call-with-input-file path
+                             (lambda (p) (read-string p))))
+               #\space))
+   " "))
+
 (test-begin "secrets")
 
 ;; 声明结构（sentinel 由 VM 装配点声明，generic 机制不含 inventory）
@@ -166,12 +179,8 @@
  ;; composition 拆分为 host inventory（vm.scm：secret 集合
  ;; 含 applications-secrets）与共享组装算法（common.scm：
  ;; login-critical / ordinary domain 分区）。
- (let ((s (call-with-input-file "modules/guixcfg/hosts/vm.scm"
-            (lambda (p)
-              (read-string p))))
-       (c (call-with-input-file "modules/guixcfg/hosts/common.scm"
-            (lambda (p)
-              (read-string p)))))
+ (let ((s (read-normalized "modules/guixcfg/hosts/vm.scm"))
+       (c (read-normalized "modules/guixcfg/hosts/common.scm")))
    (and (string-contains s "applications-secrets %applications")
         (string-contains c "login-critical-secrets")
         (string-contains c "ordinary-secrets"))))

@@ -47,6 +47,17 @@
   (call-with-input-file path
     get-string-all))
 
+(define (collapse-ws text)
+  "Collapse every whitespace run in TEXT to a single space so source
+wiring assertions survive formatting reflows."
+  (string-join
+   (delete "" (string-split
+               (string-map (lambda (ch)
+                             (if (char-whitespace? ch) #\space ch))
+                           text)
+               #\space))
+   " "))
+
 ;; ── N1：NM dns backend ──────────────────────────────────────
 (define %nm-svc
   (service-by-type-name 'network-manager))
@@ -103,7 +114,7 @@
 (for-each (lambda (host-file)
             (test-assert (string-append "N6: " host-file
                           " wires dns=dnsmasq + nm-dnsmasq conf")
-                         (let ((src (repo-file-text host-file)))
+                         (let ((src (collapse-ws (repo-file-text host-file))))
                            (and (string-contains src "(dns \"dnsmasq\")")
                                 (string-contains src
                                  "(nm-dnsmasq-dnsmasq-configuration-files)")))))
