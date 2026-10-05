@@ -43,6 +43,5 @@
             "command": "guix style --whole-file",
             "file": true
         }
-    },
-    "[scheme]": { "editor.autoIndent": "none" }
+    }
 }

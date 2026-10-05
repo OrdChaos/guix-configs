@@ -190,7 +190,7 @@
 ;; ── VC6：不可变扩展集合（vscode-with-extensions）──────────────
 ;; 架构不变量：home-packages 含且仅含一个 wrapper 包（裸 vscode 与
 ;; wrapper 并存会 bin/desktop 冲突——单 wrapper 是显式约束）；声明
-;; 集合恰为 extensions.scm 的 8 个 id（含 zh-hans 语言包——不可变
+;; 集合恰为 extensions.scm 的 9 个 id（含 zh-hans 语言包——不可变
 ;; 集合下语言包必须声明式提供；含 rust-analyzer——platform-specific
 ;; linux-x64 variant，server 走 PATH；含 clangd——纯 JS 前端，后端
 ;; 走 PATH 的 clang-toolchain）；扩展版本/hash pin 于
@@ -207,14 +207,15 @@
 (test-assert "VC6: exactly one vscode-with-extensions wrapper, no bare vscode"
  (and (package-named "vscode-with-extensions")
       (not (package-named "vscode"))))
-(test-equal "VC6: wrapper declares exactly the eight pinned extension ids"
+(test-equal "VC6: wrapper declares exactly the nine pinned extension ids"
             '("astro-build.astro-vscode" "huytd.nord-light"
               "llvm-vs-code-extensions.vscode-clangd"
               "lxl66566.anyformatter-vscode"
               "MS-CEINTL.vscode-language-pack-zh-hans"
               "rust-lang.rust-analyzer"
               "tamasfe.even-better-toml"
-              "tsyesika.guile-scheme-enhanced")
+              "tsyesika.guile-scheme-enhanced"
+              "yzhang.markdown-all-in-one")
             (assoc-ref (package-properties (package-named
                                             "vscode-with-extensions"))
                        'vscode-extension-ids))

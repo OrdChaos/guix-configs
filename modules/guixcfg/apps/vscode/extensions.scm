@@ -33,6 +33,7 @@
   #:use-module (guixcfg apps vscode extensions even-better-toml)
   #:use-module (guixcfg apps vscode extensions guile-scheme-enhanced)
   #:use-module (guixcfg apps vscode extensions language-pack-zh-hans)
+  #:use-module (guixcfg apps vscode extensions markdown-all-in-one)
   #:use-module (guixcfg apps vscode extensions nord-light)
   #:use-module (guixcfg apps vscode extensions rust-analyzer)
   #:export (%vscode-extensions))
@@ -45,4 +46,5 @@
         vscode-extension-rust-analyzer
         vscode-extension-clangd
         vscode-extension-astro
-        vscode-extension-even-better-toml))
+        vscode-extension-even-better-toml
+        vscode-extension-markdown-all-in-one))

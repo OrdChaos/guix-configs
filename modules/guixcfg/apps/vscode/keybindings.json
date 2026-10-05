@@ -1,7 +1,1 @@
-[
-    {
-        "key": "ctrl+k v",
-        "command": "latex-workshop.view",
-        "when": "editorTextFocus && editorLangId =~ /^latex$|^latex-class$|^latex-package$|^context$|^latex-expl3$|^doctex$|^rsweave$|^jlweave$|^pweave$/"
-    }
-]
+[]
