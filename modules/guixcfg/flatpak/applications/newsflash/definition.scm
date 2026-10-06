@@ -6,7 +6,7 @@
 
 (define %flatpak-newsflash
   (flatpak-application (name 'newsflash)
-                       (id "com.github.rafostar.Clapper.Enhancers")
+                       (id "io.gitlab.news_flash.NewsFlash")
                        (remote 'flathub)
                        (branch "stable")
                        (update-policy 'track-branch)
