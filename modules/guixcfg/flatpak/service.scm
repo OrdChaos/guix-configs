@@ -180,6 +180,29 @@ external app 与未知 target fail closed）。"
 ;;; 不写 XDG_DATA_DIRS / FONTCONFIG_FILE：图标走原生 /run/host 通道，
 ;;; 避免覆盖 Flatpak 默认值（override 的 env 值不做 $VAR 展开）。
 ;;; 资源包 store 路径随 lock 变化，是本文件 derivation 的输入（GC 安全）。
+
+;;; Flatpak 默认把调用者（宿主登录会话）的环境**原样透传**进沙箱（只有
+;;; `flatpak run --clear-env` 才清）。而 Guix 的 profile etc/profile 导出了
+;;; 一批指向 /run/current-system/profile、$HOME/.guix-home、/gnu/store 的
+;;; 变量，沙箱里这些路径不存在。这里 unset 掉标准库会读、且指向宿主
+;;; profile 的那批（CA/GI/git/node/输入法/terminfo/VA-API/VDPAU/GBM 驱动），
+;;; 回落到 runtime 自带默认值。JAVA_HOME 有意保留——需要 JVM 的应用另行
+;;; 透传对应 store（upstream Guix issue #9150；本仓库选择 unset，不绑
+;;; /gnu/store）。
+(define %flatpak-unset-environment
+  '("SSL_CERT_FILE"
+    "SSL_CERT_DIR"
+    "CURL_CA_BUNDLE"
+    "GI_TYPELIB_PATH"
+    "GIT_EXEC_PATH"
+    "NODE_PATH"
+    "FCITX_ADDON_DIRS"
+    "DICPATH"
+    "TERMINFO_DIRS"
+    "LIBVA_DRIVERS_PATH"
+    "VDPAU_DRIVER_PATH"
+    "GBM_BACKENDS_PATH"))
+
 (define %flatpak-resource-packages
   (list fluent-icon-theme fluent-cursor-theme))
 
@@ -188,13 +211,17 @@ external app 与未知 target fail closed）。"
          (append
           (list
            "# (guixcfg flatpak service): bind icon/cursor store dirs so\n"
-           "# in-sandbox symlinks resolve; pin cursor env. Fonts come from\n"
-           "# the system profile via the pinned flatpak-fix-fonts-icons.patch.\n"
+           "# in-sandbox symlinks resolve; pin cursor env; drop host profile\n"
+           "# vars that dangle in the sandbox (Flatpak passes the host env\n"
+           "# through unless --clear-env). Fonts come from the system profile\n"
+           "# via the pinned flatpak-fix-fonts-icons.patch.\n"
            "[Context]\n"
            "filesystems=")
           (append-map (lambda (package) (list package ":ro;"))
                       %flatpak-resource-packages)
-          (list "\n\n[Environment]\n"
+          (list "\nunset-environment="
+                (string-join %flatpak-unset-environment ";")
+                "\n\n[Environment]\n"
                 "XCURSOR_THEME=" %appearance-cursor-theme "\n"
                 "XCURSOR_SIZE=" (number->string %appearance-cursor-size) "\n"
                 "XCURSOR_PATH=" (file-append fluent-cursor-theme "/share/icons")

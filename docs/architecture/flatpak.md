@@ -280,13 +280,22 @@ repo-owned override 是 **read-only declarative state**，不建议直接
 - **光标**：无原生通道；Flatpak 丢弃 `XCURSOR_PATH`，libXcursor 也不看
   `XDG_DATA_DIRS`。
 
-于是 override 只做两件事：
+于是 override 做三件事：
 
 1. `[Context] filesystems`：把图标/光标**包**的 store 目录只读绑进沙箱
    （`fluent-icon-theme`、`fluent-cursor-theme`），让原生通道里的符号链
    可解析——**最小闭包**，**绝不**绑整个 `/gnu/store`；
 2. `[Environment]`：固定 `XCURSOR_THEME` / `XCURSOR_SIZE`，并把
-   `XCURSOR_PATH` 指向光标包的 `share/icons`（libXcursor 的唯一生效通道）。
+   `XCURSOR_PATH` 指向光标包的 `share/icons`（libXcursor 的唯一生效通道）；
+3. `[Context] unset-environment`：宿主登录会话由 profile `etc/profile`
+   导出一批指向 `/run/current-system/profile` 的变量（`SSL_CERT_FILE`、
+   `SSL_CERT_DIR`、`CURL_CA_BUNDLE` 等），而 Flatpak 默认把宿主环境
+   **原样透传**进沙箱（只有 `flatpak run --clear-env` 才清）——沙箱里这些
+   路径不存在，认它们的应用（OpenSSL/curl 等）TLS 失败。这里 unset 掉
+   标准库会读、且指向宿主 profile 的那批（CA、GI、git、node、输入法、
+   terminfo、VA-API/VDPAU/GBM 驱动路径），回落到 runtime 自带默认值。
+   `JAVA_HOME` 有意**不** unset——需要 JVM 的应用另行透传对应 store
+   （upstream Guix issue #9150；本仓库选择 unset，不绑 `/gnu/store`）。
 
 不写 `XDG_DATA_DIRS` / `FONTCONFIG_FILE`：图标走原生 `/run/host` 通道、
 字体走补丁，避免覆盖 Flatpak 默认值（override 的 env 值不做 `$VAR`
