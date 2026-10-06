@@ -27,6 +27,7 @@
   #:use-module (guixcfg flatpak applications telegram definition)
   #:use-module (guixcfg flatpak applications tuba definition)
   #:use-module (guixcfg flatpak applications discord definition)
+  #:use-module (guixcfg flatpak applications newsflash definition)
   #:use-module (guixcfg flatpak applications thunderbird definition)
   #:use-module (guixcfg flatpak extensions gamescope definition)
   #:use-module (guixcfg flatpak extensions proton-ge definition)
@@ -61,6 +62,7 @@
         %flatpak-telegram
         %flatpak-tuba
         %flatpak-discord
+        %flatpak-newsflash
         %flatpak-thunderbird))
 
 ;; 应用 selection 缺省：全局用户软件 policy——每台设备的用户态
@@ -75,6 +77,7 @@
        telegram
        tuba
        discord
+       newsflash
        thunderbird))
 
 ;; Catalog：已知 extension（auxiliary ref；定义在 extensions/ 下）。
