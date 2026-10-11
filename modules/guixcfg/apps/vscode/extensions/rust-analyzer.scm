@@ -3,8 +3,8 @@
 ;;; linux-x64 variant（该扩展无 universal 变体——捆绑
 ;;; server/rust-analyzer FHS ELF 二进制）。无需 native patch：
 ;;; settings.json 的 "rust-analyzer.server.path": "rust-analyzer"
-;;; 让扩展经 PATH 使用环境内的 rust-analyzer（apps/rust 的
-;;; home-packages 提供），捆绑二进制闲置不启动。
+;;; 让扩展经 PATH 使用 apps/rust 提供的 project toolchain proxy，捆绑
+;;; 二进制闲置不启动。
 
 (define-module (guixcfg apps vscode extensions rust-analyzer)
   #:use-module (guix packages) ;base32
