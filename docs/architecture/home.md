@@ -133,11 +133,12 @@ tests/test-user-persistence.scm 回归。
   - machine-state persistence（/etc、/var 等）不带这些 options
     （不是桌面用户 trash domain）。
 
-显式 ephemeral（本轮不持久化）：`~/.cache`、`~/.config`、
-`~/.local`（含 Trash）、`~/.mozilla`、`~/.steam`、整个 HOME。本轮不
-声称完整用户状态持久化。**应用级 mutable state**（如未来 Firefox
-profile）走 `/persist/data-app` bind（application-persistence 规则，
-不整目录持久化；见 persistence.md）。
+显式 ephemeral（除精确声明的 `~/.cache/guix` 与
+`~/.cache/guix-rust-toolchain` 外）：`~/.cache`、`~/.config`、`~/.local`
+（含 Trash）、`~/.mozilla`、`~/.steam`、整个 HOME。本轮不声称完整用户
+状态持久化。**应用级 mutable state**（如未来 Firefox profile）走
+`/persist/data-app` bind（application-persistence 规则，不整目录持久化；
+见 persistence.md）。
 
 ## Guix Home 是 derived state
 

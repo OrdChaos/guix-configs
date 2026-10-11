@@ -68,8 +68,7 @@
                                         "/home/user/Projects/guix-configs")))
                             fss))))
 
-;; ── Guix channel cache 持久化（唯一持久化 cache；精确到
-;;    ~/.cache/guix，绝不持久化整个 ~/.cache）──────────────────
+;; ── Guix cache 持久化（精确到单个目录，绝不持久化整个 ~/.cache）──
 (test-assert "guix channel cache is persisted at ~/.cache/guix"
              (let ((d (find (lambda (d)
                               (string=? ".cache/guix"
@@ -77,6 +76,15 @@
                             %persistent-user-dirs)))
                (and d
                     (string=? "cache-guix"
+                               (persistent-user-dir-backing d)))))
+
+(test-assert "Rust toolchain proxy cache is persisted with its GC roots"
+             (let ((d (find (lambda (d)
+                              (string=? ".cache/guix-rust-toolchain"
+                                        (persistent-user-dir-consumer d)))
+                            %persistent-user-dirs)))
+               (and d
+                    (string=? "cache-guix-rust-toolchain"
                               (persistent-user-dir-backing d)))))
 
 (test-assert "whole ~/.cache is NOT persisted"

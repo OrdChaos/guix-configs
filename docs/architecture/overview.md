@@ -39,7 +39,8 @@ login / session / Guix Home
 - **persistent**：`/persist/*` 内的 canonical backing（系统状态、用户
   数据、credential verifier），跨 generation 保留。
 - **derived**：Guix Home 生成物、UKI/build artifacts、可重建的
-  cache/index。不持久化。
+  cache/index。通常不持久化；Guix channel cache 与 Rust toolchain proxy
+  cache 是消除昂贵重建的显式例外（见 `architecture/persistence.md`）。
 
 不变量：persistent mutable state 只有一个 canonical backing；
 runtime 路径通过 bind/symlink/direct reference 访问它。详见

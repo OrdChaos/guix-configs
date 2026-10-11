@@ -11,10 +11,10 @@
 ;;;
 ;;; 本模块只删 profile generation（即删除 GC root），**不运行 `guix gc`**：
 ;;; 删除 root 本身不释放 store 空间；真正回收 store 需要显式 `guix gc`。
-;;; 有意不自动 `guix gc`——它会连带回收所有失去 root 的 on-demand store
-;;; 内容（例如 guix-rust-toolchain 代理 realize 的 toolchain：其 GC root
-;;; 在 ephemeral 的 ~/.cache/guix-rust-toolchain/roots/，跨 boot 即失效）。
-;;; store 空间由操作者按需显式回收。
+;;; 有意不自动 `guix gc`——它会回收所有失去 root 的 on-demand store
+;;; 内容。guix-rust-toolchain 代理的 toolchain 由持久化的
+;;; ~/.cache/guix-rust-toolchain/roots/ 间接 root 保留；删除该 cache 后，
+;;; 显式 `guix gc` 才可回收对应 toolchain。store 空间由操作者按需管理。
 ;;;
 ;;; 为什么不用 `guix system delete-generations`（决策记录）：pinned Guix
 ;;; 的该命令删完 generation 后调用 reinstall-bootloader，后者经

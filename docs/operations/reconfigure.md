@@ -219,10 +219,10 @@ blue gc HOST --delete LIST      LIST 逗号分隔、支持 3..5 区间
 
 **`blue gc` 不运行 `guix gc`**：删除 generation 只是移除 GC root，
 不释放 store 空间。有意不自动 `guix gc`——它是全 store 级的，会连带
-回收所有失去 root 的 on-demand store 内容（例如 guix-rust-toolchain
-代理 realize 的 toolchain：其 GC root 在 ephemeral 的
-`~/.cache/guix-rust-toolchain/roots/`，跨 boot 即失效）。需要释放空间
-时自行显式运行 `guix gc`。
+回收所有失去 root 的 on-demand store 内容。guix-rust-toolchain 代理
+realize 的 toolchain 由持久化的
+`~/.cache/guix-rust-toolchain/roots/` 间接 root 保留；删除对应 cache
+后，需要释放空间时再自行显式运行 `guix gc`。
 
 Btrfs 轴（`@root-N` 子卷）由系统 activation 的 `ephemeral-root-cleanup`
 按同一 policy 自动清理（见 architecture/storage.md）；两轴共用保留算法
