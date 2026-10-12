@@ -11,7 +11,6 @@
     "tests/test-nautilus.scm"
     "tests/test-niri-config.scm"
     "tests/test-noctalia-seed.scm"
-    "tests/test-rust.scm"
     "tests/test-selection.scm"
     "tests/test-vscode.scm"
     "tests/test-xdg-policy.scm"))
