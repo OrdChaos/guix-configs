@@ -195,6 +195,14 @@ production consumers：
   autosave/recovery；路径经宿主实装实证；包层不生成 store
   symlink，mutable 配置由应用首次运行自建；
   `apps/onlyoffice/definition.scm`）；
+- musescore（`.config/MuseScore` →
+  `/persist/data-app/musescore/config`，MuseScore4.ini 偏好/最近文件/
+  窗口几何；`.local/share/MuseScore` →
+  `/persist/data-app/musescore/share`，extensions/plugins/soundfonts/
+  styles/templates/workspaces/locale/shortcuts/midimappings/
+  musescore.com 凭据等 app-internal 状态；`~/Documents/MuseScore4`
+  的用户乐谱归 XDG user dirs，`~/.cache/MuseScore` 保持 ephemeral；
+  `apps/musescore/definition.scm`）；
 - flatpak（`.local/share/flatpak` →
   `/persist/data-app/flatpak/installation`，user installation 整体
   ——repo/remotes/exports/overrides 内部结构由 Flatpak 自管；
