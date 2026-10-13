@@ -2,7 +2,8 @@
 ;;; mimeapps.list 默认应用表的结构不变量——每个 MIME 恰好一个
 ;;; default（跨组重复 key 会生成语义不确定的 mimeapps.list）、
 ;;; 每个 default 值恰好一个 desktop entry、office 组指向 ONLYOFFICE
-;;; desktop entry、领域排除不变量（文本/电子书类不进 office 默认表）。
+;;; desktop entry、文档域（PDF）指向 Papers desktop entry、领域排除
+;;; 不变量（文本/电子书类不进 office 默认表）。
 ;;;
 ;;; 加应用不要求改本测试：断言只检查策略表的结构与领域边界，不枚举
 ;;; per-app 关联清单（完整清单在 office 组注释里，由上游 desktop
@@ -10,6 +11,7 @@
 
 (use-modules (guixcfg home xdg)
              (guixcfg apps onlyoffice definition) ;%onlyoffice-desktop-entry
+             (guixcfg apps papers definition) ;%papers-desktop-entry
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -42,14 +44,14 @@
 (test-assert "office mime types default to the ONLYOFFICE desktop entry"
              (pair? %office-keys))
 
-(test-assert "core office formats are covered (docx/xlsx/pptx/odt/pdf/csv)"
+(test-assert "core office formats are covered (docx/xlsx/pptx/odt/csv)"
              (every (lambda (m)
                       (member m %office-keys))
                     '("application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                       "application/vnd.openxmlformats-officedocument.presentationml.presentation"
                       "application/vnd.oasis.opendocument.text"
-                      "application/pdf" "text/csv")))
+                      "text/csv")))
 
 ;; ONLYOFFICE 声明集含 WPS 原生格式（wps/et/dps——它声明可打开）。
 (test-assert "wps-native formats are covered (onlyoffice declares them)"
@@ -57,6 +59,17 @@
                       (member m %office-keys))
                     '("application/wps-office.wps" "application/wps-office.et"
                       "application/wps-office.dps")))
+
+;; 文档查看器域：PDF 已从 office 组迁出，默认到专用文档查看器
+;; Papers（架构注释预定的迁移）。key 唯一性已断言，按值反查可靠。
+(define %papers-keys
+  (filter (lambda (k)
+            (equal? (assoc-ref %xdg-default-applications k)
+                    (list %papers-desktop-entry))) %keys))
+
+(test-assert "pdf defaults to the dedicated document viewer (Papers)"
+             (and (member "application/pdf" %papers-keys)
+                  (not (member "application/pdf" %office-keys))))
 
 ;; 领域排除（office 组注释声明的边界）：文本编辑器域与电子书/图像
 ;; 域不得进 office 默认表（text/plain 已由 GNOME Text Editor 默认）。

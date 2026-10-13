@@ -23,6 +23,8 @@
   #:use-module (guixcfg apps gnome-text-editor definition)
   #:use-module (guixcfg apps onlyoffice definition) ;%onlyoffice-desktop-entry
   #:use-module (guixcfg apps nautilus definition) ;%nautilus-desktop-entry
+  #:use-module (guixcfg apps musescore definition) ;%musescore-desktop-entry
+  #:use-module (guixcfg apps papers definition) ;%papers-desktop-entry
   #:export (%xdg-default-applications %xdg-default-apps-service
                                       %xdg-user-dirs-service))
 
@@ -151,13 +153,12 @@
 ;;     GNOME Text Editor 默认，不制造重复 key）
 ;;   - 电子书/图像类（epub、fictionbook、djvu——非 office 文档，
 ;;     留给各自领域应用）
+;;   - application/pdf（已由专用文档查看器 Papers 默认，见下方
+;;     %document-default-mime-types）
 ;;   - x-scheme-handler/oo-office（URL scheme handler，非文件类型）
-;; 注：application/pdf 一并默认到 ONLYOFFICE（当前无独立 PDF
-;; 查看器；引入专用查看器后把该行移出本表即可）。
 (define %office-default-mime-types
   '("application/msword" "application/msword-template"
     "application/oxps"
-    "application/pdf"
     "application/rtf"
     "application/vnd.apple.keynote"
     "application/vnd.apple.numbers"
@@ -210,6 +211,56 @@
     "text/csv"
     "text/tab-separated-values"))
 
+;; 乐谱/记谱/MIDI 文件 → MuseScore Studio（上游 desktop entry 声明的
+;; MimeType 全集——空 MUSE_APP_INSTALL_SUFFIX 实测；唯一乐谱处理器，
+;; 不制造重复 key）。x-scheme-handler/musescore 是 URL scheme handler，
+;; 与既有 http/https、mms/rtsp 策略同构，一并默认到该 entry。
+(define %score-default-mime-types
+  '("application/x-musescore" "application/x-musescore+xml"
+    "application/vnd.recordare.musicxml"
+    "application/vnd.recordare.musicxml+xml"
+    "application/x-mei+xml"
+    "application/x-bww"
+    "application/x-biab"
+    "application/x-capella"
+    "application/x-musedata"
+    "application/x-overture"
+    "application/x-tef"
+    "application/x-sf2"
+    "application/x-sf3"
+    "audio/midi"
+    "audio/x-gtp"
+    "audio/x-ptb"
+    "x-scheme-handler/musescore"))
+
+;; 文档（PDF/DjVu/comic/illustrator）→ Papers（GNOME 专用文档查看器；
+;; 上游 desktop entry 声明的 MimeType 全集——meson.build 的
+;; papers_mime_types 实证）。PDF 家族（application/pdf 及 bz/gz/xz/ext
+;; 别名）从此不再默认到 ONLYOFFICE（office 组已移除该行）。
+;; 排除点：image/tiff 属图片域（Loupe 默认），不在此重复声明——
+;; 跨组重复 key 会生成语义不确定的 mimeapps.list。
+(define %document-default-mime-types
+  '("application/pdf"
+    "application/x-bzpdf"
+    "application/x-ext-pdf"
+    "application/x-gzpdf"
+    "application/x-xzpdf"
+    "application/illustrator"
+    "application/x-ext-djv"
+    "application/x-ext-djvu"
+    "image/vnd.djvu"
+    "image/vnd.djvu+multipage"
+    "application/vnd.comicbook-rar"
+    "application/vnd.comicbook+zip"
+    "application/x-cb7"
+    "application/x-cbr"
+    "application/x-cbt"
+    "application/x-cbz"
+    "application/x-ext-cb7"
+    "application/x-ext-cbr"
+    "application/x-ext-cbt"
+    "application/x-ext-cbz"))
+
 (define (mime-defaults mime-types desktop-entry)
   "MIME-TYPES 全部指向 DESKTOP-ENTRY 的 default association 列表。"
   (map (lambda (mime)
@@ -223,6 +274,8 @@
           (mime-defaults %text-default-mime-types
                          %gnome-text-editor-desktop-entry)
           (mime-defaults %office-default-mime-types %onlyoffice-desktop-entry)
+          (mime-defaults %score-default-mime-types %musescore-desktop-entry)
+          (mime-defaults %document-default-mime-types %papers-desktop-entry)
           ;; 目录 → Nautilus（文件管理器）。必须显式声明：Amberol 的
           ;; desktop entry 也声明了 inode/directory（上游 MimeType
           ;; 异常）；无显式默认时 GIO 会把它解析为默认，"打开文件夹"
