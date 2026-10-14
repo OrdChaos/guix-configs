@@ -52,6 +52,7 @@
   #:use-module (guixcfg apps amberol definition)
   #:use-module (guixcfg apps celluloid definition)
   #:use-module (guixcfg apps loupe definition)
+  #:use-module (guixcfg apps file-roller definition)
   #:use-module (guixcfg apps gnome-text-editor definition)
   #:use-module (guixcfg apps gnome-characters definition)
   #:use-module (guixcfg apps mission-center definition)
@@ -113,6 +114,7 @@
         %amberol
         %celluloid
         %loupe
+        %file-roller
         %gnome-text-editor
         %gnome-characters
         %mission-center

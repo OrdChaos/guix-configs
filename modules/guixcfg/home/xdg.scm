@@ -24,6 +24,7 @@
   #:use-module (guixcfg apps onlyoffice definition) ;%onlyoffice-desktop-entry
   #:use-module (guixcfg apps nautilus definition) ;%nautilus-desktop-entry
   #:use-module (guixcfg apps musescore definition) ;%musescore-desktop-entry
+  #:use-module (guixcfg apps file-roller definition) ;%file-roller-desktop-entry
   #:use-module (guixcfg apps papers definition) ;%papers-desktop-entry
   #:export (%xdg-default-applications %xdg-default-apps-service
                                       %xdg-user-dirs-service))
@@ -233,6 +234,76 @@
     "audio/x-ptb"
     "x-scheme-handler/musescore"))
 
+;; 归档/压缩格式 → File Roller（GNOME Archive Manager）。MIME 清单 =
+;; 上游 file-roller 3.42.0 data/supported-mime-types 全集（set-mime-
+;; type-entry.py 经 meson 填入 desktop entry 的 @MIMETYPES@，pinned
+;; 实测）；唯一归档管理器，不制造重复 key。含 .deb/.rpm/.apk/ISO/
+;; 各类 tarball 压缩变体与 PE（application/x-ms-dos-executable，归档
+;; 管理器以内容视图打开而非尝试执行）。
+(define %archive-default-mime-types
+  '("application/bzip2" "application/gzip"
+    "application/vnd.android.package-archive"
+    "application/vnd.ms-cab-compressed"
+    "application/vnd.debian.binary-package"
+    "application/x-7z-compressed"
+    "application/x-7z-compressed-tar"
+    "application/x-ace"
+    "application/x-alz"
+    "application/x-ar"
+    "application/x-archive"
+    "application/x-arj"
+    "application/x-brotli"
+    "application/x-bzip"
+    "application/x-bzip-brotli-tar"
+    "application/x-bzip-compressed-tar"
+    "application/x-bzip1"
+    "application/x-bzip1-compressed-tar"
+    "application/x-cabinet"
+    "application/x-cd-image"
+    "application/x-chrome-extension"
+    "application/x-compress"
+    "application/x-compressed-tar"
+    "application/x-cpio"
+    "application/x-deb"
+    "application/x-ear"
+    "application/x-gtar"
+    "application/x-gzip"
+    "application/x-gzpostscript"
+    "application/x-java-archive"
+    "application/x-lha"
+    "application/x-lhz"
+    "application/x-lrzip"
+    "application/x-lrzip-compressed-tar"
+    "application/x-lz4"
+    "application/x-lz4-compressed-tar"
+    "application/x-lzip"
+    "application/x-lzip-compressed-tar"
+    "application/x-lzma"
+    "application/x-lzma-compressed-tar"
+    "application/x-lzop"
+    "application/x-ms-dos-executable"
+    "application/x-ms-wim"
+    "application/x-rar"
+    "application/x-rar-compressed"
+    "application/x-rpm"
+    "application/x-rzip"
+    "application/x-rzip-compressed-tar"
+    "application/x-source-rpm"
+    "application/x-stuffit"
+    "application/x-tar"
+    "application/x-tarz"
+    "application/x-tzo"
+    "application/x-war"
+    "application/x-xar"
+    "application/x-xz"
+    "application/x-xz-compressed-tar"
+    "application/x-zip"
+    "application/x-zip-compressed"
+    "application/x-zoo"
+    "application/x-zstd-compressed-tar"
+    "application/zip"
+    "application/zstd"))
+
 ;; 文档（PDF/DjVu/comic/illustrator）→ Papers（GNOME 专用文档查看器；
 ;; 上游 desktop entry 声明的 MimeType 全集——meson.build 的
 ;; papers_mime_types 实证）。PDF 家族（application/pdf 及 bz/gz/xz/ext
@@ -240,8 +311,7 @@
 ;; 排除点：image/tiff 属图片域（Loupe 默认），不在此重复声明——
 ;; 跨组重复 key 会生成语义不确定的 mimeapps.list。
 (define %document-default-mime-types
-  '("application/pdf"
-    "application/x-bzpdf"
+  '("application/pdf" "application/x-bzpdf"
     "application/x-ext-pdf"
     "application/x-gzpdf"
     "application/x-xzpdf"
@@ -275,6 +345,8 @@
                          %gnome-text-editor-desktop-entry)
           (mime-defaults %office-default-mime-types %onlyoffice-desktop-entry)
           (mime-defaults %score-default-mime-types %musescore-desktop-entry)
+          (mime-defaults %archive-default-mime-types
+                         %file-roller-desktop-entry)
           (mime-defaults %document-default-mime-types %papers-desktop-entry)
           ;; 目录 → Nautilus（文件管理器）。必须显式声明：Amberol 的
           ;; desktop entry 也声明了 inode/directory（上游 MimeType
