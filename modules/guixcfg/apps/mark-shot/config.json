@@ -1,0 +1,40 @@
+{
+  "ui": {
+    "language": "system",
+    "theme": "system"
+  },
+  "save": {
+    "pathTemplate": "{pictures}/Screenshots/mark-shot-{datetime}.png"
+  },
+  "capture": {
+    "hideOwnWindows": true
+  },
+  "captureHistory": {
+    "enabled": true
+  },
+  "windowDetection": {
+    "enabled": true,
+    "command": "mark-shot-window-detection-niri",
+    "timeoutMs": 1000
+  },
+  "ocr": {
+    "enabled": true,
+    "backend": "auto",
+    "timeoutMs": 30000
+  },
+  "translation": {
+    "autoAfterOcr": false
+  },
+  "pinnedWindow": {
+    "autoOcr": false,
+    "alwaysOnTop": true
+  },
+  "recording": {
+    "dialog": {
+      "backend": "auto",
+      "container": "mp4",
+      "quality": "balanced",
+      "countdownSeconds": 0
+    }
+  }
+}

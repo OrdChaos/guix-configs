@@ -612,21 +612,23 @@ binds {
 
 
     // ── Screenshots ──────────────────────────────────────────────────────────
+    // 全部交给 mark-shot（apps/mark-shot）：选区 + 标注 + OCR + 录制，
+    // 覆盖层走 LayerShellQt。niri 内置 screenshot action 不在此处使用。
 
     Print {
-        screenshot
+        spawn "mark-shot";
     }
 
     Ctrl+Print {
-        screenshot-screen
+        spawn "mark-shot" "--fullscreen";
     }
 
     Alt+Print {
-        screenshot-window
+        spawn "mark-shot" "--all-outputs";
     }
 
     Mod+Shift+S {
-        screenshot
+        spawn "mark-shot";
     }
 
 
