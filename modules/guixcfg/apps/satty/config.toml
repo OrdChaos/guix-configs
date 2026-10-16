@@ -1,0 +1,7 @@
+[general]
+fullscreen = "current-screen"
+floating-hack = true
+copy-command = "wl-copy"
+output-filename = "~/Pictures/Screenshots/satty-%Y-%m-%d_%H-%M-%S.png"
+actions-on-enter = ["save-to-clipboard", "save-to-file", "exit"]
+actions-on-escape = ["exit"]

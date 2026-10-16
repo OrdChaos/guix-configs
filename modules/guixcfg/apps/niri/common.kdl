@@ -137,8 +137,6 @@ gestures {
     }
 }
 
-screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Animations
 // ─────────────────────────────────────────────────────────────────────────────
@@ -182,10 +180,6 @@ animations {
         spring damping-ratio=0.6 stiffness=500 epsilon=0.01
     }
 
-    screenshot-ui-open {
-        duration-ms 200
-        curve "ease-out-quad"
-    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -612,23 +606,23 @@ binds {
 
 
     // ── Screenshots ──────────────────────────────────────────────────────────
-    // 全部交给 mark-shot（apps/mark-shot）：选区 + 标注 + OCR + 录制，
-    // 覆盖层走 LayerShellQt。niri 内置 screenshot action 不在此处使用。
+    // Satty（apps/satty）接收 Grim 的无压缩 PPM 截图；Slurp 选择区域或
+    // 输出。取消选择时短路，不启动标注窗口。
 
     Print {
-        spawn "mark-shot";
+        spawn-sh "region=\"$(slurp)\" && [ -n \"$region\" ] && grim -g \"$region\" -t ppm - | satty --filename -"
     }
 
     Ctrl+Print {
-        spawn "mark-shot" "--fullscreen";
+        spawn-sh "output=\"$(slurp -o -f '%o')\" && [ -n \"$output\" ] && grim -o \"$output\" -t ppm - | satty --filename -"
     }
 
     Alt+Print {
-        spawn "mark-shot" "--all-outputs";
+        spawn-sh "grim -t ppm - | satty --filename - --fullscreen all"
     }
 
     Mod+Shift+S {
-        spawn "mark-shot";
+        spawn-sh "region=\"$(slurp)\" && [ -n \"$region\" ] && grim -g \"$region\" -t ppm - | satty --filename -"
     }
 
 
