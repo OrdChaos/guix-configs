@@ -1,5 +1,6 @@
 [general]
-fullscreen = "current-screen"
+fullscreen = false
+resize = { mode = "smart" }
 floating-hack = true
 copy-command = "wl-copy"
 output-filename = "~/Pictures/Screenshots/satty-%Y-%m-%d_%H-%M-%S.png"

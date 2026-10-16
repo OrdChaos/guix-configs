@@ -618,7 +618,7 @@ binds {
     }
 
     Alt+Print {
-        spawn-sh "grim -t ppm - | satty --filename - --fullscreen all"
+        spawn-sh "grim -t ppm - | satty --filename -"
     }
 
     Mod+Shift+S {
