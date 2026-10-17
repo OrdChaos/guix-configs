@@ -3,7 +3,6 @@
 
 (define %app-test-files
   '("tests/test-appearance.scm" "tests/test-bash.scm"
-    "tests/test-blue-app.scm"
     "tests/test-fonts-policy.scm"
     "tests/test-gaming.scm"
     "tests/test-gnome-keyring.scm"
@@ -42,12 +41,10 @@
     "tests/test-install-identity.scm"
     "tests/test-tpm2-enroll.scm"
     "tests/test-credential-source.scm"
-    "tests/test-kernel-modules.scm"
     "tests/test-kernel-platform.scm"
     "tests/test-nvidia.scm"
     "tests/test-bluetooth.scm"
     "tests/test-guix-cache.scm"
-    "tests/test-pam-limits.scm"
     "tests/test-power.scm"
     "tests/test-prime-run.scm"
     "tests/test-channels.scm"

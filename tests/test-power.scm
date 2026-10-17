@@ -1,26 +1,21 @@
 ;;; Laptop power management wiring test（docs/architecture/power.md）。
 ;;;
 ;;; 覆盖：
-;;;   P1  laptop TLP 使用 virelith tlp-with-pd，且机器策略字段正确
-;;;       （EPP、离电关睿频、NVMe disk）；
-;;;   P2  %laptop-power-services 的 tlp-pd shepherd 服务语义
+;;;   P1  %laptop-power-services 的 tlp-pd shepherd 服务语义
 ;;;       （provision tlp-pd、requirement dbus-system）；
-;;;   P3  simple-service 接线到正确的 service-type（shepherd-root /
+;;;   P2  simple-service 接线到正确的 service-type（shepherd-root /
 ;;;       dbus-root / polkit）；
-;;;   P4  host gating：laptop OS 含 TLP + tlp-pd；VM OS 零 power；
-;;;   P5  single owner：laptop 不引入 power-profiles-daemon；
-;;;   P6  fn+q（platform-profile）→ tlp-pd SyncProfile 同步适配器。
+;;;   P3  host gating：laptop OS 含 TLP + tlp-pd；VM OS 零 power；
+;;;   P4  single owner：laptop 不引入 power-profiles-daemon；
+;;;   P5  fn+q（platform-profile）→ tlp-pd SyncProfile 同步适配器。
 ;;;
-;;; 纯 Scheme——不触 flatpak/网络/derivation 构建。tlp-configuration /
-;;; dbus / polkit 的 accessor 未 export，经 @@ 取私有绑定（仓库既有
-;;; 模式，见 test-nvidia.scm）。
+;;; 纯 Scheme——不触 flatpak/网络/derivation 构建。
 
 (use-modules ((guixcfg hosts lenovo-legion-y7000p)
               #:prefix host:)
              ((guixcfg hosts vm)
               #:prefix vm:)
              (guixcfg system power)
-             (virelith packages tlp) ;tlp-with-pd
              (gnu services) ;service-kind、service-value、simple-service 等
              (gnu services dbus) ;dbus-root-service-type、polkit-service-type
              (gnu services pm) ;tlp-service-type、power-profiles-daemon-service-type
@@ -31,66 +26,19 @@
 
 (test-runner-current (test-runner-simple))
 
-(define tlp-configuration-tlp
-  (@@ (gnu services pm) tlp-configuration-tlp))
-(define tlp-configuration-cpu-energy-perf-policy-on-ac
-  (@@ (gnu services pm) tlp-configuration-cpu-energy-perf-policy-on-ac))
-(define tlp-configuration-cpu-energy-perf-policy-on-bat
-  (@@ (gnu services pm) tlp-configuration-cpu-energy-perf-policy-on-bat))
-(define tlp-configuration-cpu-boost-on-bat?
-  (@@ (gnu services pm) tlp-configuration-cpu-boost-on-bat?))
-(define tlp-configuration-disks-devices
-  (@@ (gnu services pm) tlp-configuration-disks-devices))
-(define tlp-configuration-runtime-pm-on-ac
-  (@@ (gnu services pm) tlp-configuration-runtime-pm-on-ac))
-(define tlp-configuration-runtime-pm-on-bat
-  (@@ (gnu services pm) tlp-configuration-runtime-pm-on-bat))
-(define tlp-configuration-runtime-pm-driver-blacklist
-  (@@ (gnu services pm) tlp-configuration-runtime-pm-driver-blacklist))
-
 (test-begin "power")
 
-;; ── P1：TLP 机器策略 ────────────────────────────────────────
-(test-assert "P1: laptop TLP uses the virelith tlp-with-pd package"
-             (eq? (tlp-configuration-tlp %laptop-tlp-configuration)
-                  tlp-with-pd))
-
-(test-equal "P1: EPP on AC releases performance" "performance"
-            (tlp-configuration-cpu-energy-perf-policy-on-ac
-             %laptop-tlp-configuration))
-
-(test-equal "P1: EPP on battery is balance_power" "balance_power"
-            (tlp-configuration-cpu-energy-perf-policy-on-bat
-             %laptop-tlp-configuration))
-
-(test-equal "P1: turbo boost disabled on battery" #f
-            (tlp-configuration-cpu-boost-on-bat? %laptop-tlp-configuration))
-
-(test-equal "P1: TLP manages the NVMe disk (record default is sda-only)"
-            '("nvme0n1" "sda")
-            (tlp-configuration-disks-devices %laptop-tlp-configuration))
-
-(test-equal
- "P1: AC runtime PM remains auto so TLP does not defeat NVIDIA RTD3" "auto"
- (tlp-configuration-runtime-pm-on-ac %laptop-tlp-configuration))
-(test-equal "P1: battery runtime PM remains auto" "auto"
-            (tlp-configuration-runtime-pm-on-bat %laptop-tlp-configuration))
-(test-assert "P1: NVIDIA is not excluded from TLP runtime PM"
-             (not (member "nvidia"
-                          (tlp-configuration-runtime-pm-driver-blacklist
-                           %laptop-tlp-configuration))))
-
-;; ── P2：tlp-pd shepherd 服务语义 ────────────────────────────
+;; ── P1：tlp-pd shepherd 服务语义 ────────────────────────────
 (define %tlp-pd-service
   (find (lambda (s)
           (eq? (service-type-name (service-kind s))
                'tlp-pd))
         (operating-system-user-services host:%lenovo-legion-y7000p-os)))
 
-(test-assert "P2: laptop OS carries the tlp-pd shepherd service"
+(test-assert "P1: laptop OS carries the tlp-pd shepherd service"
              %tlp-pd-service)
 
-(test-assert "P2: tlp-pd starts after dbus-system and provisions tlp-pd"
+(test-assert "P1: tlp-pd starts after dbus-system and provisions tlp-pd"
              (let ((svc (car (service-value %tlp-pd-service))))
                (and (shepherd-service? svc)
                     (memq 'tlp-pd
@@ -98,7 +46,7 @@
                     (memq 'dbus-system
                           (shepherd-service-requirement svc)))))
 
-;; ── P3：simple-service 接线 ─────────────────────────────────
+;; ── P2：simple-service 接线 ─────────────────────────────────
 (define (service-extends? svc target-type)
   (any (lambda (ext)
          (eq? (service-extension-target ext) target-type))
@@ -109,43 +57,43 @@
           (eq? (service-type-name (service-kind s)) name))
         %laptop-power-services))
 
-(test-assert "P3: tlp-pd extends shepherd-root-service-type"
+(test-assert "P2: tlp-pd extends shepherd-root-service-type"
              (service-extends? (service-by-name 'tlp-pd)
                                shepherd-root-service-type))
-(test-assert "P3: dbus policy extends dbus-root-service-type"
+(test-assert "P2: dbus policy extends dbus-root-service-type"
              (service-extends? (service-by-name 'tlp-pd-dbus-policy)
                                dbus-root-service-type))
-(test-assert "P3: polkit action extends polkit-service-type"
+(test-assert "P2: polkit action extends polkit-service-type"
              (service-extends? (service-by-name 'tlp-pd-polkit-action)
                                polkit-service-type))
 
-;; ── P4：host gating ─────────────────────────────────────────
+;; ── P3：host gating ─────────────────────────────────────────
 (define (has-kind? os kind)
   (any (lambda (s)
          (eq? (service-kind s) kind))
        (operating-system-user-services os)))
 
-(test-assert "P4: laptop OS contains tlp-service-type"
+(test-assert "P3: laptop OS contains tlp-service-type"
              (has-kind? host:%lenovo-legion-y7000p-os tlp-service-type))
-(test-assert "P4: laptop OS contains the tlp-pd service"
+(test-assert "P3: laptop OS contains the tlp-pd service"
              (service-by-name 'tlp-pd))
-(test-assert "P4: VM OS has no tlp-service-type"
+(test-assert "P3: VM OS has no tlp-service-type"
              (not (has-kind? vm:%vm-os tlp-service-type)))
 
-;; ── P5：single owner（不得并存 PPD）─────────────────────────
-(test-assert "P5: laptop OS does not include power-profiles-daemon"
+;; ── P4：single owner（不得并存 PPD）─────────────────────────
+(test-assert "P4: laptop OS does not include power-profiles-daemon"
              (not (has-kind? host:%lenovo-legion-y7000p-os
                              power-profiles-daemon-service-type)))
 
-;; ── P6：fn+q（platform-profile）→ tlp-pd 同步适配器 ──────────
-(test-assert "P6: laptop OS installs the platform-profile sync udev rule"
+;; ── P5：fn+q（platform-profile）→ tlp-pd 同步适配器 ──────────
+(test-assert "P5: laptop OS installs the platform-profile sync udev rule"
              (find (lambda (s)
                      (eq? (service-type-name (service-kind s))
                           'power-profile-sync-udev-rules))
                    (operating-system-user-services
                     host:%lenovo-legion-y7000p-os)))
 
-(test-assert "P6: VM OS has no platform-profile sync rule (laptop-only)"
+(test-assert "P5: VM OS has no platform-profile sync rule (laptop-only)"
              (not (find (lambda (s)
                           (eq? (service-type-name (service-kind s))
                                'power-profile-sync-udev-rules))

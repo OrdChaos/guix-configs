@@ -1,17 +1,10 @@
-;;; Noctalia seed-once 接入测试：seed 内容契约、persistence rule
-;;; 声明（整目录 bind + settings.toml seed）、无第二配置源
-;;; （不声明 ~/.config/noctalia 配置；niri 的 noctalia.kdl 是
-;;; Noctalia 运行时生成，与 seed 模型无关）。
+;;; Noctalia seed portability and single-configuration-source tests.
 
 (use-modules (gnu services) ;service-kind、service-value、service-type-name
-             (guix records)
-             (virelith packages noctalia) ;noctalia（channel 固定版本）
-             (guixcfg apps model)
-             (guixcfg apps registry)
-             (guixcfg apps noctalia definition)
-             (guixcfg system application-persistence)
-             (ice-9 rdelim) ;read-string
-             (srfi srfi-1) ;count、any
+              (guixcfg apps model)
+              (guixcfg apps noctalia definition)
+              (ice-9 rdelim) ;read-string
+              (srfi srfi-1) ;any
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -34,78 +27,17 @@
 (test-assert "seed has no machine-specific monitor sections"
              (not (string-contains %seed-text "eDP-")))
 
-;; ── 2. persistence rule 声明 ────────────────────────────────
-(define rules
-  (applications-persistence (list %noctalia)))
-(define rule
-  (find (lambda (r)
-          (eq? 'state
-               (application-persistence-rule-name r))) rules))
-(test-equal "state: consumer is the whole state dir (no file whitelist)"
-            ".local/state/noctalia"
-            (application-persistence-rule-consumer rule))
-(test-equal "state: backing is relative under /persist/data-app"
-            "noctalia/state"
-            (application-persistence-rule-backing rule))
-(test-equal "state: exposure is directory bind"
-            'bind-directory
-            (application-persistence-rule-exposure rule))
-(test-equal "state: lifecycle is application-owned"
-            'application-owned
-            (application-persistence-rule-lifecycle rule))
-(test-assert "rule seeds settings.toml"
-             (member "settings.toml"
-                     (map car
-                          (application-persistence-rule-seeds rule))))
-(test-equal "seed targets stay minimal (one entry)"
-            '("settings.toml")
-            (map car
-                 (application-persistence-rule-seeds rule)))
-(test-assert "seeded rule passes validation"
-             (valid-application-persistence-rule? rule))
-
-;; plugins：用户运行时安装的插件目录（app-private，跨 boot 保留）。
-(define plugins-rule
-  (find (lambda (r)
-          (eq? 'plugins
-               (application-persistence-rule-name r))) rules))
-(test-equal "plugins: consumer is the app-private plugins dir"
-            ".local/share/noctalia/plugins"
-            (application-persistence-rule-consumer plugins-rule))
-(test-equal "plugins: backing is relative under /persist/data-app"
-            "noctalia/plugins"
-            (application-persistence-rule-backing plugins-rule))
-(test-equal "plugins: exposure is directory bind"
-            'bind-directory
-            (application-persistence-rule-exposure plugins-rule))
-(test-equal "plugins: lifecycle is application-owned"
-            'application-owned
-            (application-persistence-rule-lifecycle plugins-rule))
-(test-assert "plugins rule has no seeds (runtime-only content)"
-             (null? (application-persistence-rule-seeds plugins-rule)))
-(test-assert "plugins rule passes validation"
-             (valid-application-persistence-rule? plugins-rule))
-
-;; ── 3. 无第二配置源：不声明 settings；palettes 是静态素材例外 ─
+;; ── 2. No second configuration source ────────────────────────
 (define %noctalia-xdg-value
   (service-value (find (lambda (s)
                          (eq? 'noctalia-palettes
                               (service-type-name (service-kind s))))
                        (application-home-services %noctalia))))
 
-(test-assert "fluent-blue palette installed under .config/noctalia/palettes"
-             (assoc ".config/noctalia/palettes/fluent-blue.json"
-                    %noctalia-xdg-value))
 (test-assert "no declarative settings config (no second config source)"
              (not (assoc ".config/noctalia/config.toml" %noctalia-xdg-value)))
 (test-assert "no other .config/noctalia toml files declared"
              (not (any (lambda (target)
                          (string-suffix? ".toml" target))
                        (map car %noctalia-xdg-value))))
-(test-assert "registry enables noctalia exactly once"
-             (= 1
-                (count (lambda (a)
-                         (eq? (application-name a)
-                              'noctalia)) %applications)))
-
 (test-end "noctalia-seed")

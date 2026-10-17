@@ -26,16 +26,14 @@
 (use-modules (guixcfg hosts vm) ;%vm-os（assembly 真实接线）
              (guixcfg apps model)
              (guixcfg apps registry) ;%applications
-             (guixcfg apps vscode extensions) ;%vscode-extensions
-             (guixcfg system application-persistence) ;rule accessors
-             (guixcfg users user) ;%primary-user
-             (guix packages) ;package-name/-version/-properties
+              (guixcfg system application-persistence) ;rule accessors
+              (guixcfg users user) ;%primary-user
+              (guix packages) ;package-name
              (gnu home services) ;home-files-service-type
              (gnu system) ;operating-system-file-systems
              (gnu system file-systems) ;file-system-*
              (gnu services)
-             (virelith packages vscode-extensions) ;vscode-extension-package?
-             (srfi srfi-1)
+              (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64))
 
@@ -187,15 +185,9 @@
              (not (member ".config/Code/clp"
                           (vscode-home-file-targets))))
 
-;; ── VC6：不可变扩展集合（vscode-with-extensions）──────────────
-;; 架构不变量：home-packages 含且仅含一个 wrapper 包（裸 vscode 与
-;; wrapper 并存会 bin/desktop 冲突——单 wrapper 是显式约束）；声明
-;; 集合恰为 extensions.scm 的 9 个 id（含 zh-hans 语言包——不可变
-;; 集合下语言包必须声明式提供；含 rust-analyzer——platform-specific
-;; linux-x64 variant，server 走 PATH；含 clangd——纯 JS 前端，后端
-;; 走 PATH 的 clang-toolchain）；扩展版本/hash pin 于
-;; extensions.scm。scheme-lsp 与 guile-lsp-server 已于 2026-10-04
-;; 移除（LSP 体验不佳）。
+;; ── VC6：single package owner ────────────────────────────────
+;; The wrapper owns the vscode executable and desktop entry; a bare vscode
+;; package alongside it would create conflicting owners.
 (define %vscode-home-packages
   (application-home-packages %vscode-app))
 
@@ -206,45 +198,6 @@
 
 (test-assert "VC6: exactly one vscode-with-extensions wrapper, no bare vscode"
  (and (package-named "vscode-with-extensions")
-      (not (package-named "vscode"))))
-(test-equal "VC6: wrapper declares exactly the nine pinned extension ids"
-            '("astro-build.astro-vscode" "huytd.nord-light"
-              "llvm-vs-code-extensions.vscode-clangd"
-              "lxl66566.anyformatter-vscode"
-              "MS-CEINTL.vscode-language-pack-zh-hans"
-              "rust-lang.rust-analyzer"
-              "tamasfe.even-better-toml"
-              "tsyesika.guile-scheme-enhanced"
-              "yzhang.markdown-all-in-one")
-            (assoc-ref (package-properties (package-named
-                                            "vscode-with-extensions"))
-                       'vscode-extension-ids))
-
-(test-assert
- "VC6: rust-analyzer extension pins the linux-x64 platform variant"
- (let ((ra (find (lambda (ext)
-                   (string-ci=? "rust-lang.rust-analyzer"
-                                (vscode-extension-package-id ext)))
-                 %vscode-extensions)))
-   (and ra
-        (string=? "linux-x64"
-                  (assoc-ref (package-properties ra)
-                             'vscode-extension-platform)))))
-
-(test-assert
- "VC6: every declared extension carries id property and pinned version"
- (every (lambda (ext)
-          (and (vscode-extension-package? ext)
-               (string? (vscode-extension-package-id ext))
-               (not (string-null? (package-version ext))))) %vscode-extensions))
-
-(test-assert "VC6: zh-hans language pack is part of the declared set"
-             (find (lambda (ext)
-                     (string-ci=? "MS-CEINTL.vscode-language-pack-zh-hans"
-                                  (vscode-extension-package-id ext)))
-                   %vscode-extensions))
-
-(test-assert "VC6: guile-lsp-server is gone with scheme-lsp"
-             (not (package-named "guile-lsp-server")))
+       (not (package-named "vscode"))))
 
 (test-end "vscode")

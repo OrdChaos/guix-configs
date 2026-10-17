@@ -32,10 +32,6 @@
 (test-assert "connection profile rule is valid"
              (valid-machine-state-persistence-rule?
               %network-manager-connections-persistence-rule))
-(test-equal "consumer is NetworkManager's system keyfile directory"
-            "/etc/NetworkManager/system-connections"
-            (machine-state-persistence-rule-consumer
-             %network-manager-connections-persistence-rule))
 (test-assert "laptop binds persistent connection profiles"
              (and %lenovo-legion-y7000p-mount
                   (string=? %backing

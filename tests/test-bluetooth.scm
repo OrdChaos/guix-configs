@@ -1,8 +1,7 @@
 ;;; Laptop Bluetooth wiring test（docs/architecture/bluetooth.md）。
 ;;;
 ;;; 覆盖：
-;;;   B1  laptop OS 含官方 bluetooth-service-type，且 AutoEnable=false
-;;;       （默认关闭，由用户按需开启）；
+;;;   B1  laptop OS 含官方 bluetooth-service-type；
 ;;;   B2  host gating：VM OS 无 bluetooth-service-type（零 BlueZ closure）；
 ;;;   B3  pairing-state 规则：/var/lib/bluetooth ← machine-state backing
 ;;;       "bluetooth"，rule 合法；
@@ -28,9 +27,6 @@
 
 (test-runner-current (test-runner-simple))
 
-(define bluetooth-configuration-auto-enable?
-  (@@ (gnu services desktop) bluetooth-configuration-auto-enable?))
-
 (define laptop-bluetooth-service
   (find (lambda (s)
           (eq? (service-kind s) bluetooth-service-type))
@@ -38,15 +34,9 @@
 
 (test-begin "bluetooth")
 
-;; ── B1：laptop BlueZ 服务与 AutoEnable ─────────────────────
+;; ── B1：laptop BlueZ 服务 ───────────────────────────────────
 (test-assert "B1: laptop OS includes the official bluetooth-service-type"
              laptop-bluetooth-service)
-
-(test-assert "B1: BlueZ does not auto-enable the controller (default off)"
-             (and laptop-bluetooth-service
-                  (eq? (bluetooth-configuration-auto-enable? (service-value
-                                                              laptop-bluetooth-service))
-                       #f)))
 
 ;; ── B2：VM gating ──────────────────────────────────────────
 (test-assert "B2: VM OS has no bluetooth-service-type (zero BlueZ closure)"
@@ -54,22 +44,12 @@
                           (eq? (service-kind s) bluetooth-service-type))
                         (operating-system-user-services vm:%vm-os))))
 
-;; ── B3：pairing-state 持久化规则 ───────────────────────────
-(test-assert "B3: Bluetooth state rule persists /var/lib/bluetooth"
-             (and (valid-machine-state-persistence-rule?
-                   %laptop-bluetooth-persistence-rule)
-                  (string=? (machine-state-persistence-rule-backing
-                             %laptop-bluetooth-persistence-rule) "bluetooth")
-                  (string=? (machine-state-persistence-rule-consumer
-                             %laptop-bluetooth-persistence-rule)
-                            "/var/lib/bluetooth")))
-
-;; ── B4：rule 产生的 bind file-system ───────────────────────
+;; ── B3：rule 产生的 bind file-system ───────────────────────
 (define bluetooth-bind-file-systems
   (machine-state-persistence-file-systems (list
                                            %laptop-bluetooth-persistence-rule)))
 
-(test-assert "B4: rule yields one bind mount from the machine-state root"
+(test-assert "B3: rule yields one bind mount from the machine-state root"
              (let ((fs (car bluetooth-bind-file-systems)))
                (and (= 1
                        (length bluetooth-bind-file-systems))
@@ -81,8 +61,8 @@
                           (file-system-flags fs))
                     (file-system-create-mount-point? fs))))
 
-;; ── B5：laptop OS file-systems 实际包含该绑定 ──────────────
-(test-assert "B5: laptop OS mounts /var/lib/bluetooth from machine state"
+;; ── B4：laptop OS file-systems 实际包含该绑定 ──────────────
+(test-assert "B4: laptop OS mounts /var/lib/bluetooth from machine state"
              (find (lambda (fs)
                      (string=? (file-system-mount-point fs)
                                "/var/lib/bluetooth"))

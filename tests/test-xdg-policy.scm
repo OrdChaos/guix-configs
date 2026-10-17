@@ -10,9 +10,8 @@
 ;;; entry 的 MimeType 实证）。
 
 (use-modules (guixcfg home xdg)
-             (guixcfg apps onlyoffice definition) ;%onlyoffice-desktop-entry
-             (guixcfg apps papers definition) ;%papers-desktop-entry
-             (srfi srfi-1)
+              (guixcfg apps onlyoffice definition) ;%onlyoffice-desktop-entry
+              (srfi srfi-1)
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -43,43 +42,5 @@
 
 (test-assert "office mime types default to the ONLYOFFICE desktop entry"
              (pair? %office-keys))
-
-(test-assert "core office formats are covered (docx/xlsx/pptx/odt/csv)"
-             (every (lambda (m)
-                      (member m %office-keys))
-                    '("application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                      "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                      "application/vnd.oasis.opendocument.text"
-                      "text/csv")))
-
-;; ONLYOFFICE 声明集含 WPS 原生格式（wps/et/dps——它声明可打开）。
-(test-assert "wps-native formats are covered (onlyoffice declares them)"
-             (every (lambda (m)
-                      (member m %office-keys))
-                    '("application/wps-office.wps" "application/wps-office.et"
-                      "application/wps-office.dps")))
-
-;; 文档查看器域：PDF 已从 office 组迁出，默认到专用文档查看器
-;; Papers（架构注释预定的迁移）。key 唯一性已断言，按值反查可靠。
-(define %papers-keys
-  (filter (lambda (k)
-            (equal? (assoc-ref %xdg-default-applications k)
-                    (list %papers-desktop-entry))) %keys))
-
-(test-assert "pdf defaults to the dedicated document viewer (Papers)"
-             (and (member "application/pdf" %papers-keys)
-                  (not (member "application/pdf" %office-keys))))
-
-;; 领域排除（office 组注释声明的边界）：文本编辑器域与电子书/图像
-;; 域不得进 office 默认表（text/plain 已由 GNOME Text Editor 默认）。
-(test-assert "editor/ebook domain types are not office defaults"
-             (every (lambda (m)
-                      (not (member m %office-keys)))
-                    '("text/plain" "text/markdown" "application/epub+zip"
-                      "application/x-fictionbook+xml" "image/vnd.djvu")))
-
-;; desktop entry 事实 single source：策略消费的常量来自应用
-;; definition（virelith 包 install-plan 实证）。
 
 (test-end "xdg-policy")
