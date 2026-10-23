@@ -1,5 +1,5 @@
 palette = "fluent-blue"
-format = "$all$custom"
+format = "$all$custom$line_break$character"
 
 [character]
 success_symbol = '[➜](bold green)'
