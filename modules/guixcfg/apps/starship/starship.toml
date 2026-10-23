@@ -10,12 +10,6 @@ disabled = true
 
 [custom.rust_toolchain]
 command = '''
-if version=$(rustc --version 2>/dev/null); then
-    version=${version#rustc }
-    printf 'v%s\n' "${version%% *}"
-    exit 0
-fi
-
 selector=${RUSTUP_TOOLCHAIN-}
 directory=$PWD
 while [ -z "$selector" ]; do
@@ -39,6 +33,12 @@ while [ -z "$selector" ]; do
     [ "$parent" = "$directory" ] && break
     directory=$parent
 done
+
+if version=$(rustc --version 2>/dev/null); then
+    version=${version#rustc }
+    printf '%s (v%s)\n' "${selector:-stable}" "${version%% *}"
+    exit 0
+fi
 
 printf '%s (not installed)\n' "${selector:-stable}"
 '''
