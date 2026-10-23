@@ -9,7 +9,7 @@
 ;; Direct proxy invocations remain reproducible across channel updates.  Project
 ;; rust-toolchain files retain authority for project-specific versions.
 (define %rust-version "1.99.0")
-(define %rust-nightly-version "nightly-2026-10-10")
+(define %rust-nightly-version "nightly-2026-10-18")
 
 (define %rust
   (application (name 'rust)
