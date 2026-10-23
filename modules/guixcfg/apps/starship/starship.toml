@@ -1,8 +1,52 @@
 palette = "fluent-blue"
+format = "$all$custom"
 
 [character]
 success_symbol = '[➜](bold green)'
 error_symbol = '[➜](bold red)'
+
+[rust]
+disabled = true
+
+[custom.rust_toolchain]
+command = '''
+if version=$(rustc --version 2>/dev/null); then
+    version=${version#rustc }
+    printf 'v%s\n' "${version%% *}"
+    exit 0
+fi
+
+selector=${RUSTUP_TOOLCHAIN-}
+directory=$PWD
+while [ -z "$selector" ]; do
+    if [ -f "$directory/rust-toolchain" ]; then
+        selector=$(sed -n '1{s/^[[:space:]]*//;s/[[:space:]]*$//;p;q;}' \
+            "$directory/rust-toolchain")
+        break
+    fi
+    if [ -f "$directory/rust-toolchain.toml" ]; then
+        selector=$(sed -n '
+/^[[:space:]]*\[toolchain\][[:space:]]*$/, /^[[:space:]]*\[/ {
+/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"/ {
+  s/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/
+  p
+  exit
+}
+}' "$directory/rust-toolchain.toml")
+        break
+    fi
+    parent=${directory%/*}
+    [ "$parent" = "$directory" ] && break
+    directory=$parent
+done
+
+printf '%s (not installed)\n' "${selector:-stable}"
+'''
+detect_extensions = ["rs"]
+detect_files = ["Cargo.toml", "rust-toolchain", "rust-toolchain.toml"]
+format = 'via [🦀 $output]($style) '
+shell = ["sh"]
+style = "bold red"
 
 [palettes.fluent-blue]
 # Standard colors
