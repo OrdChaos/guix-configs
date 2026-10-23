@@ -55,10 +55,9 @@
 ;; $XDG_CACHE_HOME/guix；无状态 /home 下每次 reconfigure 都要重新
 ;; clone 全部频道（guix 仓库最大，数分钟）。
 ;;
-;; Rust toolchain proxy cache（backing cache-guix-rust-toolchain → consumer
-;; $HOME/.cache/guix-rust-toolchain）：包含已实现 toolchain 的间接 GC
-;; roots。持久化避免每次 boot 后首次 Rust prompt 同步调用 Guix realize。
-;; 两类 consumer 都精确到单个 cache 目录，绝不持久化整个 ~/.cache
+;; Guix channel cache 是唯一需要持久化的工具 cache。Rust toolchains are
+;; direct references of the Home profile, so they have neither a runtime cache
+;; nor indirect GC roots.  Consumer paths stay precise; never persist ~/.cache
 ;; （AGENT.md §12）。内容均可重建，不构成 canonical mutable state——是
 ;; docs/architecture/persistence.md "Projection exceptions" 第 4 条
 ;; （cache ephemeral）的显式例外。
@@ -90,10 +89,7 @@
                              (consumer "Videos"))
         ;; Guix channel checkout / profile cache（见上）。
         (persistent-user-dir (backing "cache-guix")
-                             (consumer ".cache/guix"))
-        ;; Rust toolchain proxy cache and its indirect GC roots（见上）。
-        (persistent-user-dir (backing "cache-guix-rust-toolchain")
-                             (consumer ".cache/guix-rust-toolchain"))))
+                             (consumer ".cache/guix"))))
 
 (define (user-persistence-file-systems user)
   "持久化用户数据的 bind mount 声明（/persist/data-home/USER/<backing>

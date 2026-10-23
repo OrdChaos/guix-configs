@@ -78,14 +78,11 @@
                     (string=? "cache-guix"
                                (persistent-user-dir-backing d)))))
 
-(test-assert "Rust toolchain proxy cache is persisted with its GC roots"
-             (let ((d (find (lambda (d)
-                              (string=? ".cache/guix-rust-toolchain"
-                                        (persistent-user-dir-consumer d)))
-                            %persistent-user-dirs)))
-               (and d
-                    (string=? "cache-guix-rust-toolchain"
-                              (persistent-user-dir-backing d)))))
+(test-assert "Rust toolchains do not create a persisted runtime cache"
+             (not (any (lambda (d)
+                         (string=? ".cache/guix-rust-toolchain"
+                                   (persistent-user-dir-consumer d)))
+                       %persistent-user-dirs)))
 
 (test-assert "whole ~/.cache is NOT persisted"
              (not (any (lambda (d)

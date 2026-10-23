@@ -7,8 +7,7 @@
 ;;; plan 只读（显示将删除的 generation）；run 执行
 ;;; `guix package -p <system-profile> --delete-generations=...`。
 ;;; **不运行 `guix gc`**：删除 profile generation 只是移除 GC root，
-;;; 不释放 store 空间；自动 `guix gc` 会连带回收 on-demand store 内容
-;;; （如 guix-rust-toolchain 代理 realize 的 toolchain）。store 回收由
+;;; 不释放 store 空间；自动 `guix gc` 是全 store 级操作。store 回收由
 ;;; 操作者显式执行。域逻辑在 (guixcfg system system-generations)；本脚本
 ;;; 只做 argv 解析与子进程执行（blueprint 编译期不导入该模块——gsettings/
 ;;; install/enroll 同款决策）。

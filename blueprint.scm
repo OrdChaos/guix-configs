@@ -569,8 +569,7 @@ overrides it; --delete LIST removes an explicit generation set
 (comma-separated, ranges like 3..5 allowed). current and last-good
 generations are never deleted, and generation 0 is protected by Guix.
 This does NOT run 'guix gc': deleting generations alone reclaims no
-store space (a global guix gc would also collect on-demand store
-content such as rust-toolchain proxies' realized toolchains). Run
+store space. Run
 'guix gc' yourself if you want to reclaim store space. Needs root:
 hands off directly to the pinned privileged gc CLI.
 With blue -n: read-only plan only (existing/current/last-good/

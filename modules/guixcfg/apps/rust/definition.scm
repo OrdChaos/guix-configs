@@ -4,16 +4,27 @@
   #:use-module (guix records)
   #:use-module (guixcfg apps model)
   #:use-module (rust-toolchain proxy)
-  #:export (%rust %rust-version %rust-nightly-version))
+  #:export (%rust %rust-version %rust-nightly-version %rust-toolchains))
 
-;; Direct proxy invocations remain reproducible across channel updates.  Project
-;; rust-toolchain files retain authority for project-specific versions.
-(define %rust-version "1.99.0")
-(define %rust-nightly-version "nightly-2026-10-18")
+;; This is the complete installed set.  Channel manifest updates make new
+;; versions available, but never alter this project-level selection.
+(define %rust-version "1.99.1")
+(define %rust-nightly-version "nightly-2026-10-23")
+
+(define %rust-toolchains
+  (list (rust-toolchain-entry "1.99.0"
+                              #:components '("rust-analyzer-preview" "rust-src"))
+        (rust-toolchain-entry %rust-version
+                              #:components '("rust-analyzer-preview" "rust-src"))
+        (rust-toolchain-entry "nightly-2026-08-01"
+                              #:components '("rust-analyzer-preview" "rust-src"))
+        (rust-toolchain-entry %rust-nightly-version
+                              #:components '("rust-analyzer-preview" "rust-src"))))
 
 (define %rust
   (application (name 'rust)
-               (home-packages
-                (list (rust-toolchain-proxies
-                       #:default-stable %rust-version
-                       #:default-nightly %rust-nightly-version)))))
+                (home-packages
+                 (list (rust-toolchain-proxies
+                        #:toolchains %rust-toolchains
+                        #:default-stable %rust-version
+                        #:default-nightly %rust-nightly-version)))))

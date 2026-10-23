@@ -73,9 +73,8 @@ Guix 轴    /var/guix/profiles/system-N-link（声明式 system generation）
 boot-state/recovery 维护。
 
 Guix 轴只删 generation（移除 GC root），**不运行 `guix gc`**：删除
-generation 不释放 store 空间；有意不自动 `guix gc`（它是全 store 级，
-会连带回收 on-demand store 内容，如 rust-toolchain 代理 realize 的
-toolchain）。store 空间由操作者显式回收。
+generation 不释放 store 空间；有意不自动 `guix gc`，因为它是全 store
+级操作。store 空间由操作者显式回收。
 
 ## 持久子卷
 

@@ -46,7 +46,6 @@ atomic replace（write temp → rename）产生新 inode，破坏 hardlink；
 | user dirs | `/persist/data-home/<user>/<d>` | `/home/<user>/<d>` | directory bind | yes | no |
 | guix-configs | `/persist/data-home/<user>/Projects/guix-configs` | `/home/<user>/Projects/guix-configs` | ordinary child of the `Projects` directory bind（无独立 mount） | yes | no |
 | Guix channel cache | `/persist/data-home/<user>/cache-guix` | `/home/<user>/.cache/guix` | directory bind | yes | no |
-| Rust toolchain proxy cache | `/persist/data-home/<user>/cache-guix-rust-toolchain` | `/home/<user>/.cache/guix-rust-toolchain` | directory bind | yes | no |
 | SSH host keys | `/persist/system/ssh/ssh_host_ed25519_key` | sshd HostKey | direct reference | yes | no |
 | **machine-id** | **`/persist/system/machine-id`** | **`/etc/machine-id`** | **activation projection** | **yes** | **no** |
 | age identity | `/persist/system/keys/age/identity` | secrets 解密 | direct reference | yes | no |
@@ -67,18 +66,12 @@ atomic replace（write temp → rename）产生新 inode，破坏 hardlink；
 - Guix channel cache：`guix time-machine -C channels.lock.scm` 把各频道
   git 仓库抓到 `$XDG_CACHE_HOME/guix`；无状态 `/home` 下每次
   reconfigure 都重新 clone 全部频道（guix 仓库最大）。
-- Rust toolchain proxy cache：`rust-toolchain-proxy` 在
-  `$XDG_CACHE_HOME/guix-rust-toolchain` 保存请求 cache 与 toolchain 的
-  Guix indirect GC roots。无此 cache 时，首次 `rustc`、`cargo` 或
-  Starship Rust prompt 会同步调用 Guix realize toolchain。
-
-两者均经 selected user persistence（`(guixcfg system user-persistence)`
-的 `%persistent-user-dirs`）持久化，分别是 `cache-guix` → `.cache/guix`
-与 `cache-guix-rust-toolchain` → `.cache/guix-rust-toolchain`。consumer
-精确到单个目录，绝不持久化整个 `~/.cache`；cache 内容可重建，不构成
-canonical mutable state。删除 Rust proxy cache 后，下一次使用会重新
-realize；其间接 root 消失后，显式 `guix gc` 可以回收不再被其它 root
-引用的 toolchain。
+Guix channel cache 经 selected user persistence
+（`(guixcfg system user-persistence)` 的 `%persistent-user-dirs`）持久化为
+`cache-guix` → `.cache/guix`。consumer 精确到单个目录，绝不持久化整个
+`~/.cache`；cache 内容可重建，不构成 canonical mutable state。Rust
+toolchains are declared Home-profile references and create no runtime cache or
+indirect GC roots.
 
 ## Application persistence（/persist/data-app）
 
