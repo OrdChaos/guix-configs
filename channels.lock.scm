@@ -32,7 +32,7 @@
        (name 'virelith)
        (url "https://github.com/ordchaos/virelith.git")
        (branch "master")
-       (commit "72d0e0fa2d1fb0464ae4250f7eaeae80724564f3")
+       (commit "ec4f734e56c91b08cce7e53874203a3d5afc5418")
        (introduction
         (make-channel-introduction
          "cae11b77a64f281cc9ab45e20567e59efc37e96b"
@@ -42,7 +42,7 @@
        (name 'guix-rust-toolchain)
        (url "https://github.com/OrdChaos/guix-rust-toolchain.git")
        (branch "master")
-       (commit "88633ee0248972184d1e964389738fe67e5e3d1d")
+       (commit "499c34c31252bbefddbe26e44ae6d47eb7684a5d")
        (introduction
         (make-channel-introduction
          "7eb3c7727b341ac671f1b7a06054a8aacc28cb52"
