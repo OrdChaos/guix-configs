@@ -2,7 +2,7 @@
        (name 'guix)
        (url "https://codeberg.org/guix/guix.git")
        (branch "master")
-       (commit "6ae3f810ac142874fcf7fbf0b3de7b91d5e6cf61")
+       (commit "a639dc9f4767b55d5a9240a76c82957533273657")
        (introduction
         (make-channel-introduction
          "9edb3f66fd807b096b48283debdcddccfea34bad"
@@ -12,7 +12,7 @@
        (name 'nonguix)
        (url "https://gitlab.com/nonguix/nonguix")
        (branch "master")
-       (commit "4b21ba0c885907aff3b1b6c717ac830144d3c575")
+       (commit "47c20df59dd9f27c9154ef20a81d383a19d4ad7f")
        (introduction
         (make-channel-introduction
          "897c1a470da759236cc11798f4e0a5f7d4d59fbc"
@@ -22,7 +22,7 @@
        (name 'rosenthal)
        (url "https://codeberg.org/hako/rosenthal.git")
        (branch "trunk")
-       (commit "fc235e2eb0ece409908df7249e58f13d928da7f6")
+       (commit "c3781eefc8bf06d90b5ee2e98de65d1bd36c777e")
        (introduction
         (make-channel-introduction
          "7677db76330121a901604dfbad19077893865f35"
@@ -42,7 +42,7 @@
        (name 'guix-rust-toolchain)
        (url "https://github.com/OrdChaos/guix-rust-toolchain.git")
        (branch "master")
-       (commit "48f8eae611563a6bf3c440fda139629e9c60332d")
+       (commit "a49a7bc42df42798c0ff0e6bee795fdd3ae4d725")
        (introduction
         (make-channel-introduction
          "7eb3c7727b341ac671f1b7a06054a8aacc28cb52"
