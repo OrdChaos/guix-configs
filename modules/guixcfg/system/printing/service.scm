@@ -8,58 +8,14 @@
   #:use-module (guix gexp)
   #:use-module (guix packages)
   #:use-module (guixcfg system printing model)
-   #:use-module (srfi srfi-1)
-   #:export (printing-services))
+  #:use-module (srfi srfi-1)
+  #:export (printing-services))
 
-(define cups-configuration-policies
-  (@@ (gnu services cups) cups-configuration-policies))
-
-(define policy-configuration-name
-  (@@ (gnu services cups) policy-configuration-name))
-
-(define policy-configuration-access-controls
-  (@@ (gnu services cups) policy-configuration-access-controls))
-
-(define operation-access-control-operations
-  (@@ (gnu services cups) operation-access-control-operations))
-
-(define operation-access-control-access-controls
-  (@@ (gnu services cups) operation-access-control-access-controls))
+(define %cups-local-socket "/var/run/cups/cups.sock")
 
 (define (queue-option-arguments queue)
   (append-map (lambda (option) (list "-o" option))
               (printer-queue-options queue)))
-
-(define (cups-printer-administration? access-control)
-  (memq 'CUPS-Add-Printer
-        (operation-access-control-operations access-control)))
-
-(define %printing-cups-configuration
-  ;; CUPS's default policy requires Basic authentication for lpadmin even on
-  ;; its local Unix socket.  Root intentionally has no password on this
-  ;; system, so allow an already-local connection to administer queues while
-  ;; retaining authentication for any non-local connection.
-  (let ((config (cups-configuration)))
-    (cups-configuration
-     (inherit config)
-     (policies
-      (map (lambda (policy)
-             (if (string=? (policy-configuration-name policy) "default")
-                 (policy-configuration
-                  (inherit policy)
-                  (access-controls
-                   (map (lambda (access-control)
-                          (if (cups-printer-administration? access-control)
-                              (operation-access-control
-                               (inherit access-control)
-                               (access-controls
-                                (append (operation-access-control-access-controls
-                                         access-control)
-                                        '("Satisfy any"))))
-                              access-control))
-                        (policy-configuration-access-controls policy))))
-                 policy))
-           (cups-configuration-policies config))))))
 
 (define (queue-projection-program queues)
   "Return a program that projects QUEUES into the live CUPS daemon.
@@ -71,9 +27,10 @@ the generated printers.conf remains ephemeral machine output."
        #$@(map
            (lambda (queue)
              #~(unless
-                   (zero?
-                    (system* #$(file-append cups "/sbin/lpadmin")
-                             "-p" #$(printer-queue-name queue)
+                    (zero?
+                     (system* #$(file-append cups "/sbin/lpadmin")
+                              "-h" #$%cups-local-socket
+                              "-p" #$(printer-queue-name queue)
                              "-v" #$(printer-queue-device-uri queue)
                              "-P" #$(printer-queue-ppd queue)
                              "-E"
@@ -107,7 +64,7 @@ firmware loaders; CUPS queue state itself stays in this module."
   (let* ((queues (validate-printer-queues queues))
          (drivers (delete-duplicates
                    (append-map printer-queue-driver-packages queues))))
-     (append (list (service cups-service-type %printing-cups-configuration)
+     (append (list (service cups-service-type)
                    (queue-projection-service queues))
              ;; cups-service-type composes individual package extensions, so
              ;; each driver must be its own contribution rather than a list.

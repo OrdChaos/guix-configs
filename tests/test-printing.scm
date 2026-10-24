@@ -11,14 +11,17 @@
              (guixcfg system printing laptop)
              (guixcfg system printing model)
              (gnu packages cups)
-             (gnu services)
-             (gnu services cups)
-             (gnu system)
+              (gnu services)
+              (gnu services cups)
+              (gnu system)
              (guix gexp)
              (srfi srfi-1)
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
+
+(define cups-local-socket
+  (@@ (guixcfg system printing service) %cups-local-socket))
 
 (define (service-by-kind-name os name)
   (find (lambda (service)
@@ -64,6 +67,10 @@
 (test-assert "P3: Laptop OS projects declarative printer queues"
   (service-by-kind-name host:%lenovo-legion-y7000p-os
                         'printing-queue-projection))
+
+(test-equal "P3: queue projection uses the local CUPS socket"
+  "/var/run/cups/cups.sock"
+  cups-local-socket)
 
 (test-assert "P3: Laptop OS installs the HP firmware udev rule"
   (service-by-kind-name host:%lenovo-legion-y7000p-os
