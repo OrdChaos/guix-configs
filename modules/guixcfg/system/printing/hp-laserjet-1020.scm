@@ -3,6 +3,7 @@
 (define-module (guixcfg system printing hp-laserjet-1020)
   #:use-module (gnu packages base)
   #:use-module (gnu packages cups)
+  #:use-module (gnu packages pdf)
   #:use-module (gnu services base)
   #:use-module (guix gexp)
   #:use-module (guixcfg system printing model)
@@ -18,6 +19,8 @@
    (device-uri %hp-laserjet-1020-device-uri)
    (ppd (file-append foo2zjs "/share/cups/model/HP-LaserJet_1020.ppd.gz"))
    (driver-packages (list foo2zjs))
+   ;; foomatic-rip invokes Poppler's pdftops CLI for this legacy PPD.
+   (filter-packages (list poppler))
    ;; lpadmin's -o NAME-default=VALUE makes the server-side queue default
    ;; explicit rather than inheriting the PPD's US Letter default.
    (options '("media-default=A4"))))

@@ -13,6 +13,17 @@
 
 (define %cups-local-socket "/var/run/cups/cups.sock")
 
+(define %cups-filter-path "/run/current-system/profile/bin")
+
+(define %printing-cups-configuration
+  ;; Guix's cups-filters wrapper preserves the daemon's PATH.  Legacy Foomatic
+  ;; PPDs invoke helpers such as Poppler's pdftops by name, so expose the
+  ;; profile containing declared filter packages to CUPS child processes.
+  (cups-configuration
+   (files-configuration
+    (files-configuration
+     (set-env (string-append "PATH " %cups-filter-path))))))
+
 (define (queue-option-arguments queue)
   (append-map (lambda (option) (list "-o" option))
               (printer-queue-options queue)))
@@ -63,8 +74,10 @@ DEVICE-SERVICES contain model-specific hardware integration such as udev
 firmware loaders; CUPS queue state itself stays in this module."
   (let* ((queues (validate-printer-queues queues))
          (drivers (delete-duplicates
-                   (append-map printer-queue-driver-packages queues))))
-     (append (list (service cups-service-type)
+                   (append-map printer-queue-driver-packages queues)))
+         (filter-packages (delete-duplicates
+                           (append-map printer-queue-filter-packages queues))))
+    (append (list (service cups-service-type %printing-cups-configuration)
                    (queue-projection-service queues))
              ;; cups-service-type composes individual package extensions, so
              ;; each driver must be its own contribution rather than a list.
@@ -74,4 +87,10 @@ firmware loaders; CUPS queue state itself stays in this module."
                       (string-append "printing-driver-" (package-name driver)))
                      cups-service-type driver))
                   drivers)
+             (if (null? filter-packages)
+                 '()
+                 (list
+                  (simple-service 'printing-filter-tools
+                                  profile-service-type
+                                  filter-packages)))
              device-services)))

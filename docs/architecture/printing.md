@@ -55,6 +55,14 @@ Keep Guix's default CUPS policy.  In particular, do not use `Satisfy any` to
 work around authentication and do not add a network `Listen` directive unless
 remote printing is an explicit, separately reviewed requirement.
 
+## Filter Helpers
+
+Some legacy PPDs invoke command-line helpers by name.  A queue declares such
+helpers as `filter-packages`; `printing-services` places them in the system
+profile and gives CUPS child filters `/run/current-system/profile/bin` through
+`SetEnv PATH`.  This is distinct from `driver-packages`, which contribute
+PPDs, CUPS filters, or backends under CUPS's server tree.
+
 ## Adding A Model
 
 新增型号时，在 `modules/guixcfg/system/printing/<vendor>-<model>.scm` 导出：
