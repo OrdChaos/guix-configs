@@ -57,12 +57,14 @@ remote printing is an explicit, separately reviewed requirement.
 
 ## Filter Helpers
 
-The HP PPD's legacy `foomatic-rip` filter invokes Poppler's `pdftops` CLI by
-name.  The pinned Guix `cups-filters` package already has Poppler as an input,
-but its wrapper omits Poppler's `bin` directory.  The printing service replaces
-that package with a narrowly derived variant which prepends Poppler only to
-`foomatic-rip`'s PATH.  It does not set CUPS's `PATH`, so the daemon retains
-its ServerBin filter and backend lookup paths.
+The HP PPD's legacy `foomatic-rip` filter invokes CUPS's six-argument
+`pdftops` ABI filter and the `foo2zjs-wrapper` by name.  The pinned Guix
+`cups-filters` package hard-codes `/usr/bin/pdftops` inside that ABI filter,
+which does not exist on Guix.  The printing service replaces the package with
+a narrow variant that uses Poppler's immutable store path and gives
+`foomatic-rip` CUPS's filter union through `CUPS_SERVERBIN`.  It does not set
+the daemon-wide `PATH`, preserving CUPS's ServerBin filter and backend lookup
+paths.
 
 ## Adding A Model
 

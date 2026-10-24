@@ -18,22 +18,27 @@
   (@@ (gnu services cups) cups-configuration-extensions))
 
 (define %cups-filters-for-foomatic-pdftops
-  ;; Guix's cups-filters package already has Poppler as an input, but its
-  ;; foomatic-rip wrapper omits Poppler's CLI directory.  Keep the fix on the
-  ;; filter that needs it instead of replacing CUPS's ServerBin PATH.
+  ;; The legacy PPD invokes CUPS's pdftops ABI filter, whose pinned Guix build
+  ;; still executes /usr/bin/pdftops.  It also expects CUPS's filter union to
+  ;; resolve both pdftops and foo2zjs-wrapper by name.
   (package/inherit cups-filters
     (name "cups-filters-foomatic-pdftops")
     (arguments
      (substitute-keyword-arguments (package-arguments cups-filters)
        ((#:phases phases)
         #~(modify-phases #$phases
-            (add-after 'wrap-filters 'add-poppler-pdftops
+            (add-after 'unpack 'patch-pdftops-path
               (lambda _
-                (wrap-program
+                (substitute* "filter/pdftops.c"
+                  (("/usr/bin/pdftops")
+                   (string-append #$(this-package-input "poppler")
+                                  "/bin/pdftops"))))
+            (add-after 'wrap-filters 'add-foomatic-filter-path
+              (lambda _
+                (substitute*
                  (string-append #$output "/lib/cups/filter/foomatic-rip")
-                 `("PATH" ":" prefix
-                   (,(string-append #$(this-package-input "poppler")
-                                    "/bin"))))))))))))
+                 (("export PATH=\"")
+                  "export PATH=\"${CUPS_SERVERBIN:+$CUPS_SERVERBIN/filter:}")))))))))))
 
 (define %printing-cups-extensions
   (cons %cups-filters-for-foomatic-pdftops
