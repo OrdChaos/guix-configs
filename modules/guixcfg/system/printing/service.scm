@@ -25,14 +25,13 @@
     (name "cups-filters-foomatic-pdftops")
     (arguments
      (substitute-keyword-arguments (package-arguments cups-filters)
-       ((#:phases phases)
-        #~(modify-phases #$phases
-            (add-after 'unpack 'patch-pdftops-path
-              (lambda _
-                (substitute* "filter/pdftops.c"
-                  (("/usr/bin/pdftops")
-                   (string-append #$(this-package-input "poppler")
-                                  "/bin/pdftops")))))
+        ((#:configure-flags flags)
+         #~(cons (string-append "--with-pdftops-path="
+                                #$(this-package-input "poppler")
+                                "/bin/pdftops")
+                  #$flags))
+        ((#:phases phases)
+         #~(modify-phases #$phases
             (add-after 'wrap-filters 'add-foomatic-filter-path
               (lambda _
                 (substitute*
