@@ -4,10 +4,9 @@
   #:use-module (guix records)
   #:use-module (srfi srfi-1)
   #:export (<printer-queue> printer-queue make-printer-queue printer-queue?
-             printer-queue-name printer-queue-device-uri printer-queue-ppd
-             printer-queue-driver-packages printer-queue-filter-packages
-             printer-queue-options
-             validate-printer-queues))
+              printer-queue-name printer-queue-device-uri printer-queue-ppd
+              printer-queue-driver-packages printer-queue-options
+              validate-printer-queues))
 
 ;; A queue describes only CUPS-facing state.  USB matching and firmware
 ;; lifecycle are device-specific concerns owned by the corresponding model
@@ -17,12 +16,10 @@
                      make-printer-queue
   printer-queue?
   (name printer-queue-name) ;string: CUPS queue name
-  (device-uri printer-queue-device-uri) ;string: CUPS backend URI
-  (ppd printer-queue-ppd) ;file-like: PPD supplied to lpadmin -P
-  (driver-packages printer-queue-driver-packages) ;list of package
-  ;; Packages whose command-line helpers are called by the PPD filter chain.
-  (filter-packages printer-queue-filter-packages (default '()))
-  (options printer-queue-options (default '()))) ;list of lpadmin -o values
+   (device-uri printer-queue-device-uri) ;string: CUPS backend URI
+   (ppd printer-queue-ppd) ;file-like: PPD supplied to lpadmin -P
+   (driver-packages printer-queue-driver-packages) ;list of package
+   (options printer-queue-options (default '()))) ;list of lpadmin -o values
 
 (define (valid-nonempty-string? value)
   (and (string? value) (not (string-null? value))))
@@ -35,8 +32,6 @@
   (unless (and (list? (printer-queue-driver-packages queue))
                (pair? (printer-queue-driver-packages queue)))
     (error "printer queue must declare at least one driver package" queue))
-  (unless (list? (printer-queue-filter-packages queue))
-    (error "printer queue filter packages must be a list" queue))
   (unless (and (list? (printer-queue-options queue))
                (every valid-nonempty-string? (printer-queue-options queue)))
     (error "printer queue options must be non-empty strings" queue)))

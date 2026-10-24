@@ -9,11 +9,10 @@
               #:prefix vm:)
               (guixcfg system printing hp-laserjet-1020)
               (guixcfg system printing laptop)
-             (guixcfg system printing model)
-             (gnu packages cups)
-             (gnu packages pdf)
-              (gnu services)
-              (gnu services cups)
+              (guixcfg system printing model)
+              (gnu packages cups)
+               (gnu services)
+               (gnu services cups)
               (gnu system)
              (guix gexp)
              (srfi srfi-1)
@@ -24,24 +23,16 @@
 (define cups-local-socket
   (@@ (guixcfg system printing service) %cups-local-socket))
 
-(define cups-filter-path
-  (@@ (guixcfg system printing service) %cups-filter-path))
+(define cups-configuration-extensions
+  (@@ (gnu services cups) cups-configuration-extensions))
 
-(define files-configuration-set-env
-  (@@ (gnu services cups) files-configuration-set-env))
-
-(define cups-configuration-files-configuration
-  (@@ (gnu services cups) cups-configuration-files-configuration))
+(define cups-filters-for-foomatic-pdftops
+  (@@ (guixcfg system printing service) %cups-filters-for-foomatic-pdftops))
 
 (define (service-by-kind-name os name)
   (find (lambda (service)
           (eq? (service-type-name (service-kind service)) name))
         (operating-system-user-services os)))
-
-(define (service-extends? service target-type)
-  (any (lambda (extension)
-         (eq? (service-extension-target extension) target-type))
-       (service-type-extensions (service-kind service))))
 
 (test-begin "printing")
 
@@ -58,10 +49,6 @@
             foo2zjs)
        (equal? (file-append-suffix (printer-queue-ppd hp-laserjet-1020-queue))
                '("/share/cups/model/HP-LaserJet_1020.ppd.gz"))))
-
-(test-equal "P1: HP queue provides Poppler for its Foomatic PDF filter"
-  (list poppler)
-  (printer-queue-filter-packages hp-laserjet-1020-queue))
 
 (test-equal "P1: HP queue defaults to A4"
   '("media-default=A4")
@@ -91,27 +78,16 @@
   "/var/run/cups/cups.sock"
   cups-local-socket)
 
-(test-equal "P3: CUPS filters use the system profile helper path"
-  "/run/current-system/profile/bin"
-  cups-filter-path)
-
-(test-equal "P3: CUPS passes the helper path to child filters"
-  "PATH /run/current-system/profile/bin"
-  (files-configuration-set-env
-   (cups-configuration-files-configuration
-    (service-value
-     (find (lambda (service)
-             (eq? (service-kind service) cups-service-type))
-           (operating-system-user-services host:%lenovo-legion-y7000p-os))))))
-
-(let ((filter-tools
-       (service-by-kind-name host:%lenovo-legion-y7000p-os
-                             'printing-filter-tools)))
-  (test-assert "P3: Laptop projects filter helpers into the system profile"
-    (service-extends? filter-tools profile-service-type))
-  (test-equal "P3: Laptop CUPS filter helper is Poppler"
-    (list poppler)
-    (service-value filter-tools)))
+(let ((config
+       (service-value
+        (find (lambda (service)
+                (eq? (service-kind service) cups-service-type))
+              (operating-system-user-services host:%lenovo-legion-y7000p-os)))))
+  (test-assert "P3: CUPS uses the Poppler-enabled Foomatic filter"
+    (memq cups-filters-for-foomatic-pdftops
+          (cups-configuration-extensions config)))
+  (test-assert "P3: CUPS omits the unwrapped Foomatic filter"
+    (not (memq cups-filters (cups-configuration-extensions config)))))
 
 (test-assert "P3: Laptop OS installs the HP firmware udev rule"
   (service-by-kind-name host:%lenovo-legion-y7000p-os
@@ -128,8 +104,5 @@
 (test-assert "P4: VM OS has no HP firmware udev rule"
   (not (service-by-kind-name vm:%vm-os
                              'hp-laserjet-1020-firmware-udev-rules)))
-
-(test-assert "P4: VM system profile has no Poppler printing helper"
-  (not (service-by-kind-name vm:%vm-os 'printing-filter-tools)))
 
 (test-end "printing")

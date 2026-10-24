@@ -57,11 +57,12 @@ remote printing is an explicit, separately reviewed requirement.
 
 ## Filter Helpers
 
-Some legacy PPDs invoke command-line helpers by name.  A queue declares such
-helpers as `filter-packages`; `printing-services` places them in the system
-profile and gives CUPS child filters `/run/current-system/profile/bin` through
-`SetEnv PATH`.  This is distinct from `driver-packages`, which contribute
-PPDs, CUPS filters, or backends under CUPS's server tree.
+The HP PPD's legacy `foomatic-rip` filter invokes Poppler's `pdftops` CLI by
+name.  The pinned Guix `cups-filters` package already has Poppler as an input,
+but its wrapper omits Poppler's `bin` directory.  The printing service replaces
+that package with a narrowly derived variant which prepends Poppler only to
+`foomatic-rip`'s PATH.  It does not set CUPS's `PATH`, so the daemon retains
+its ServerBin filter and backend lookup paths.
 
 ## Adding A Model
 

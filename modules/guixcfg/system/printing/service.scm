@@ -7,22 +7,42 @@
   #:use-module (gnu services shepherd)
   #:use-module (guix gexp)
   #:use-module (guix packages)
+  #:use-module (guix utils)
   #:use-module (guixcfg system printing model)
   #:use-module (srfi srfi-1)
   #:export (printing-services))
 
 (define %cups-local-socket "/var/run/cups/cups.sock")
 
-(define %cups-filter-path "/run/current-system/profile/bin")
+(define cups-configuration-extensions
+  (@@ (gnu services cups) cups-configuration-extensions))
+
+(define %cups-filters-for-foomatic-pdftops
+  ;; Guix's cups-filters package already has Poppler as an input, but its
+  ;; foomatic-rip wrapper omits Poppler's CLI directory.  Keep the fix on the
+  ;; filter that needs it instead of replacing CUPS's ServerBin PATH.
+  (package/inherit cups-filters
+    (name "cups-filters-foomatic-pdftops")
+    (arguments
+     (substitute-keyword-arguments (package-arguments cups-filters)
+       ((#:phases phases)
+        #~(modify-phases #$phases
+            (add-after 'wrap-filters 'add-poppler-pdftops
+              (lambda _
+                (wrap-program
+                 (string-append #$output "/lib/cups/filter/foomatic-rip")
+                 `("PATH" ":" prefix
+                   (,(string-append #$(this-package-input "poppler")
+                                    "/bin"))))))))))))
+
+(define %printing-cups-extensions
+  (cons %cups-filters-for-foomatic-pdftops
+        (delq cups-filters
+              (cups-configuration-extensions (cups-configuration)))))
 
 (define %printing-cups-configuration
-  ;; Guix's cups-filters wrapper preserves the daemon's PATH.  Legacy Foomatic
-  ;; PPDs invoke helpers such as Poppler's pdftops by name, so expose the
-  ;; profile containing declared filter packages to CUPS child processes.
   (cups-configuration
-   (files-configuration
-    (files-configuration
-     (set-env (string-append "PATH " %cups-filter-path))))))
+   (extensions %printing-cups-extensions)))
 
 (define (queue-option-arguments queue)
   (append-map (lambda (option) (list "-o" option))
@@ -72,25 +92,17 @@ the generated printers.conf remains ephemeral machine output."
   "Return CUPS, driver, queue-projection and DEVICE-SERVICES for QUEUES.
 DEVICE-SERVICES contain model-specific hardware integration such as udev
 firmware loaders; CUPS queue state itself stays in this module."
-  (let* ((queues (validate-printer-queues queues))
-         (drivers (delete-duplicates
-                   (append-map printer-queue-driver-packages queues)))
-         (filter-packages (delete-duplicates
-                           (append-map printer-queue-filter-packages queues))))
-    (append (list (service cups-service-type %printing-cups-configuration)
-                   (queue-projection-service queues))
+   (let* ((queues (validate-printer-queues queues))
+          (drivers (delete-duplicates
+                    (append-map printer-queue-driver-packages queues))))
+     (append (list (service cups-service-type %printing-cups-configuration)
+                    (queue-projection-service queues))
              ;; cups-service-type composes individual package extensions, so
              ;; each driver must be its own contribution rather than a list.
              (map (lambda (driver)
                     (simple-service
                      (string->symbol
                       (string-append "printing-driver-" (package-name driver)))
-                     cups-service-type driver))
-                  drivers)
-             (if (null? filter-packages)
-                 '()
-                 (list
-                  (simple-service 'printing-filter-tools
-                                  profile-service-type
-                                  filter-packages)))
-             device-services)))
+                      cups-service-type driver))
+                   drivers)
+              device-services)))
