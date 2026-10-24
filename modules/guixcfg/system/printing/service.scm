@@ -32,13 +32,13 @@
                 (substitute* "filter/pdftops.c"
                   (("/usr/bin/pdftops")
                    (string-append #$(this-package-input "poppler")
-                                  "/bin/pdftops"))))
+                                  "/bin/pdftops")))))
             (add-after 'wrap-filters 'add-foomatic-filter-path
               (lambda _
                 (substitute*
                  (string-append #$output "/lib/cups/filter/foomatic-rip")
                  (("export PATH=\"")
-                  "export PATH=\"${CUPS_SERVERBIN:+$CUPS_SERVERBIN/filter:}")))))))))))
+                  "export PATH=\"${CUPS_SERVERBIN:+$CUPS_SERVERBIN/filter:}"))))))))))
 
 (define %printing-cups-extensions
   (cons %cups-filters-for-foomatic-pdftops
