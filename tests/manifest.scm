@@ -46,6 +46,7 @@
     "tests/test-bluetooth.scm"
     "tests/test-guix-cache.scm"
     "tests/test-power.scm"
+    "tests/test-printing.scm"
     "tests/test-prime-run.scm"
     "tests/test-channels.scm"
     "tests/test-certificates.scm"

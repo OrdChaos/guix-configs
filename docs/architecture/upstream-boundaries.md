@@ -32,6 +32,7 @@ OFFICIAL；项目 invariant 需要 → THIN ADAPTER / KEEP（custom）。
 | Graphical session services（polkit-gnome/fcitx5 等） | niri config spawn | — | `modules/guixcfg/apps/niri/config.kdl` | graphical-only lifecycle（polkit agent libexec 不在 PATH：apps/polkit-gnome 经 ~/.local/bin wrapper 暴露后恢复使用）；notification daemon 由 Noctalia 持有（mako 已移除） |
 | Laptop power management | guixcfg adapter | Guix official `tlp-service-type`；TLP 1.9 `tlp-pd`（virelith `tlp-with-pd`） | `modules/guixcfg/system/power.scm`（TLP machine policy + tlp-pd shepherd + dbus/polkit 接线） | 官方 `tlp` 包不安装 `tlp-pd`；PPD 兼容接口需自行接线，TLP 作唯一后端（禁止并存 PPD） |
 | Laptop Bluetooth | guixcfg system service | Guix official `bluetooth-service-type`（BlueZ） | `modules/guixcfg/system/bluetooth.scm`（BlueZ + pairing-state persistence） | kernel driver/firmware 由内核平台层提供；本模块只做 userspace + `/var/lib/bluetooth` 机器状态持久化 |
+| HP LaserJet 1020 printing | Guix official + guixcfg adapter | Guix `cups-service-type` + `foo2zjs` | `modules/guixcfg/system/printing/service.scm`（declarative queue → `lpadmin` one-shot projection）、`laptop.scm`（single CUPS composition）与 `hp-laserjet-1020.scm`（USB firmware udev lifecycle） | cupsd/driver union 使用官方机制；型号 URI/PPD/firmware 是 project machine policy，queue state 保持 ephemeral |
 
 ## HOME/PATH/D-Bus 语义（§7 根除 HOME=/var/empty）
 

@@ -46,6 +46,7 @@
   #:use-module (guixcfg system graphics nvidia) ;nvidia-system-transformation（laptop 专属）
   #:use-module (guixcfg system power) ;TLP + tlp-pd（laptop 专属）
   #:use-module (guixcfg system bluetooth) ;BlueZ userspace + pairing state（laptop 专属）
+  #:use-module (guixcfg system printing laptop) ;CUPS + physical-printer inventory（laptop 专属）
   #:use-module (guixcfg users user) ;%primary-user（结构事实权威源）
   #:use-module (guixcfg home user) ;guix-home（挂入 system）
   #:use-module (guixcfg security secrets) ;secrets 部署机制
@@ -157,7 +158,9 @@
                                                      ;; TLP + tlp-pd（离电功耗控制 + PPD 兼容 D-Bus 接口）。
                                                      %laptop-power-services
                                                      ;; BlueZ userspace（bluetoothd + org.bluez + udev）。
-                                                     %laptop-bluetooth-services))
+                                                     %laptop-bluetooth-services
+                                                     ;; CUPS queue + HP LaserJet 1020 USB firmware loader.
+                                                     %laptop-printing-services))
               ;; Activation precedes Shepherd's mounts and NetworkManager startup.
               (list (network-manager-connections-persistence-service)))
     (guix-service-type config =>
