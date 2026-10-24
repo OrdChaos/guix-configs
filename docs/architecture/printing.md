@@ -43,6 +43,20 @@ backend 上传 `sihp1020.dl`。这是设备 lifecycle，不是 CUPS queue state�
 因此 `/etc/cups/printers.conf` 和 CUPS 复制的 PPD 是 ephemeral root 上的
 derived state，绝不加入 persistent storage，也不存在第二个 queue writer。
 
+## Local Administration Policy
+
+The pinned CUPS default policy requires Basic authentication for `lpadmin`,
+including requests over its local Unix socket.  This system deliberately has
+no root password, so the root-owned `printing-queues` one-shot could not
+authenticate to create a queue.
+
+`printing-services` derives the official default policy and adds `Satisfy any`
+only to its printer-administration operation group.  CUPS already limits this
+system to `localhost:631` and `/var/run/cups/cups.sock`; therefore local
+connections can project the declared queues without a root password, while a
+non-local connection must still satisfy Basic authentication.  Do not add a
+network `Listen` directive without revisiting this policy.
+
 ## Adding A Model
 
 新增型号时，在 `modules/guixcfg/system/printing/<vendor>-<model>.scm` 导出：
