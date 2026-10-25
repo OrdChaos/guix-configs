@@ -77,6 +77,7 @@
 (define %common-services
   (list (service guix-service-type
                  (guix-configuration (tmpdir "/var/tmp")
+                                     (generate-substitute-key? #f)
                                      (substitute-urls '("https://mirror.sjtu.edu.cn/guix"
                                                         "https://cache-cdn.guix.moe"
                                                         "https://ci.guix.gnu.org"
