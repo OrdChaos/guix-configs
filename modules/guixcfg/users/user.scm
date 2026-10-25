@@ -45,7 +45,12 @@ docs/architecture/secrets.md 与 tests/test-users.scm）。"
       (name (user-profile-name u))
       (uid (user-profile-uid u))
       (group (user-profile-group u))
-      (supplementary-groups (user-profile-supplementary-groups u))
+       ;; DupriMan's dedicated bridge group grants this user access only to
+       ;; their CUPS prompt requests; the group itself is declared by the
+       ;; globally enabled application contribution.
+       (supplementary-groups
+        (append (user-profile-supplementary-groups u)
+                (list (string-append "dupriman-" (user-profile-name u)))))
       (comment (user-profile-comment u))
       (home-directory (user-profile-home-directory u))
       ;; shell 的 file-like 值权威在本模块（facts 无法 import bash——

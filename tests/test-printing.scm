@@ -8,11 +8,13 @@
              ((guixcfg hosts vm)
               #:prefix vm:)
               (guixcfg system printing hp-laserjet-1020)
+              (guixcfg system printing dupriman)
               (guixcfg system printing laptop)
               (guixcfg system printing model)
+              (guixcfg users user)
               (gnu packages cups)
-               (gnu services)
-               (gnu services cups)
+              (gnu services)
+              (gnu services cups)
               (gnu system)
              (guix gexp)
              (srfi srfi-1)
@@ -25,6 +27,12 @@
 
 (define cups-configuration-extensions
   (@@ (gnu services cups) cups-configuration-extensions))
+
+(define cups-configuration-files-configuration
+  (@@ (gnu services cups) cups-configuration-files-configuration))
+
+(define cups-files-configuration-group
+  (@@ (gnu services cups) files-configuration-group))
 
 (define cups-filters-for-foomatic-pdftops
   (@@ (guixcfg system printing service) %cups-filters-for-foomatic-pdftops))
@@ -53,6 +61,18 @@
 (test-equal "P1: HP queue defaults to A4"
   '("media-default=A4")
   (printer-queue-options hp-laserjet-1020-queue))
+
+(test-equal "P1: DupriMan queue has the expected CUPS name"
+  "dupriman-duplex"
+  (printer-queue-name dupriman-queue))
+
+(test-equal "P1: DupriMan queue uses its CUPS backend URI"
+  "dupriman://duplex"
+  (printer-queue-device-uri dupriman-queue))
+
+(test-equal "P1: DupriMan bridge group is private to the primary user"
+  (string-append "dupriman-" (user-profile-name %primary-user))
+  dupriman-bridge-group-name)
 
 (test-assert "P2: firmware loader is a generated program"
   (and (program-file? hp-laserjet-1020-firmware-loader)
@@ -87,7 +107,11 @@
     (memq cups-filters-for-foomatic-pdftops
           (cups-configuration-extensions config)))
   (test-assert "P3: CUPS omits the unwrapped Foomatic filter"
-    (not (memq cups-filters (cups-configuration-extensions config)))))
+    (not (memq cups-filters (cups-configuration-extensions config))))
+  (test-equal "P3: CUPS external programs use the DupriMan bridge group"
+    dupriman-bridge-group-name
+    (cups-files-configuration-group
+     (cups-configuration-files-configuration config))))
 
 (test-assert "P3: Laptop OS installs the HP firmware udev rule"
   (service-by-kind-name host:%lenovo-legion-y7000p-os
@@ -103,6 +127,10 @@
 
 (test-assert "P4: VM OS has no HP firmware udev rule"
   (not (service-by-kind-name vm:%vm-os
-                             'hp-laserjet-1020-firmware-udev-rules)))
+                              'hp-laserjet-1020-firmware-udev-rules)))
+
+(test-assert "P3: Laptop OS projects DupriMan runtime directories"
+  (service-by-kind-name host:%lenovo-legion-y7000p-os
+                        'dupriman-runtime-directories))
 
 (test-end "printing")

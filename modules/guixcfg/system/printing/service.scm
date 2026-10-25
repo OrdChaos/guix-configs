@@ -44,10 +44,6 @@
         (delq cups-filters
               (cups-configuration-extensions (cups-configuration)))))
 
-(define %printing-cups-configuration
-  (cups-configuration
-   (extensions %printing-cups-extensions)))
-
 (define (queue-option-arguments queue)
   (append-map (lambda (option) (list "-o" option))
               (printer-queue-options queue)))
@@ -92,14 +88,18 @@ the generated printers.conf remains ephemeral machine output."
                   (zero? (system* #$program))))
        (stop #~(const #f)))))))
 
-(define* (printing-services queues #:key (device-services '()))
+(define* (printing-services queues #:key (device-services '())
+                           (cups-files-config (files-configuration)))
   "Return CUPS, driver, queue-projection and DEVICE-SERVICES for QUEUES.
 DEVICE-SERVICES contain model-specific hardware integration such as udev
 firmware loaders; CUPS queue state itself stays in this module."
    (let* ((queues (validate-printer-queues queues))
           (drivers (delete-duplicates
                     (append-map printer-queue-driver-packages queues))))
-     (append (list (service cups-service-type %printing-cups-configuration)
+      (append (list (service cups-service-type
+                             (cups-configuration
+                              (extensions %printing-cups-extensions)
+                              (files-configuration cups-files-config)))
                     (queue-projection-service queues))
              ;; cups-service-type composes individual package extensions, so
              ;; each driver must be its own contribution rather than a list.

@@ -67,6 +67,7 @@
   #:use-module (guixcfg apps prismlauncher definition)
   #:use-module (guixcfg apps musescore definition)
   #:use-module (guixcfg apps satty definition)
+  #:use-module (guixcfg apps dupriman definition)
   #:use-module (guixcfg apps papers definition)
   #:export (%applications))
 
@@ -128,9 +129,10 @@
         %blue
         %xdg-utils
         %prismlauncher
-        %musescore
-        %papers
-        %satty))
+         %musescore
+         %papers
+         %satty
+         %dupriman))
 
 ;; 完整性检查：启用集合的名字必须唯一（fail fast，加载即报错）。
 (define %application-names
