@@ -26,20 +26,25 @@
 ;; can upload it directly without requiring cupsd to be running yet.
 (define hp-laserjet-1020-firmware-loader
   (program-file
-   "hp-laserjet-1020-firmware-loader"
-   #~(begin
-       (unless (zero? (system* #$(file-append coreutils "/bin/sleep") "3"))
-         (error "HP LaserJet 1020: USB settle delay failed"))
-       (setenv "DEVICE_URI" #$%hp-laserjet-1020-device-uri)
-       (unless
-           (zero?
-            (system* #$(file-append cups "/lib/cups/backend/usb")
-                     "1" "1" "1" "1" ""
-                     #$(file-append hp-laserjet-1020-firmware
-                                    "/share/hp-laserjet-1020/firmware/"
-                                    "sihp1020.dl")))
-         (error "HP LaserJet 1020: firmware upload failed"))
-       #t)))
+    "hp-laserjet-1020-firmware-loader"
+    #~(begin
+        (unless (zero? (system* #$(file-append coreutils "/bin/sleep") "3"))
+          (error "HP LaserJet 1020: USB settle delay failed"))
+        ;; udev waits for the rule's direct child.  Keep the firmware upload
+        ;; out of that worker, as foo2zjs's upstream hotplug helper does.
+        (if (zero? (primitive-fork))
+            (begin
+              (setenv "DEVICE_URI" #$%hp-laserjet-1020-device-uri)
+              (primitive-exit
+               (if (zero?
+                    (system* #$(file-append cups "/lib/cups/backend/usb")
+                             "1" "1" "1" "1" ""
+                             #$(file-append hp-laserjet-1020-firmware
+                                            "/share/hp-laserjet-1020/firmware/"
+                                            "sihp1020.dl")))
+                   0
+                   1)))
+            #t))))
 
 (define %hp-laserjet-1020-firmware-udev-rule
   (file->udev-rule
