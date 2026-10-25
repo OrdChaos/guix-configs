@@ -31,9 +31,12 @@
         (unless (zero? (system* #$(file-append coreutils "/bin/sleep") "3"))
           (error "HP LaserJet 1020: USB settle delay failed"))
         ;; udev waits for the rule's direct child.  Keep the firmware upload
-        ;; out of that worker, as foo2zjs's upstream hotplug helper does.
+        ;; and its captured output pipes out of that worker.
         (if (zero? (primitive-fork))
             (begin
+              (close-fdes 0)
+              (close-fdes 1)
+              (close-fdes 2)
               (setenv "DEVICE_URI" #$%hp-laserjet-1020-device-uri)
               (primitive-exit
                (if (zero?
