@@ -6,13 +6,13 @@
     "tests/test-fonts-policy.scm"
     "tests/test-gaming.scm"
     "tests/test-gnome-keyring.scm"
-     "tests/test-gnupg.scm"
-     "tests/test-dupriman.scm"
-     "tests/test-nautilus.scm"
+    "tests/test-gnupg.scm"
+    "tests/test-dupriman.scm"
+    "tests/test-nautilus.scm"
     "tests/test-niri-config.scm"
-     "tests/test-noctalia-seed.scm"
-     "tests/test-selection.scm"
-     "tests/test-vscode.scm"
+    "tests/test-noctalia-seed.scm"
+    "tests/test-selection.scm"
+    "tests/test-vscode.scm"
     "tests/test-xdg-policy.scm"))
 
 (define %core-test-files

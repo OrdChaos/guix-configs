@@ -1,10 +1,10 @@
 ;;; Noctalia seed portability and single-configuration-source tests.
 
 (use-modules (gnu services) ;service-kind、service-value、service-type-name
-              (guixcfg apps model)
-              (guixcfg apps noctalia definition)
-              (ice-9 rdelim) ;read-string
-              (srfi srfi-1) ;any
+             (guixcfg apps model)
+             (guixcfg apps noctalia definition)
+             (ice-9 rdelim) ;read-string
+             (srfi srfi-1) ;any
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))

@@ -190,8 +190,7 @@ external app 与未知 target fail closed）。"
 ;;; 透传对应 store（upstream Guix issue #9150；本仓库选择 unset，不绑
 ;;; /gnu/store）。
 (define %flatpak-unset-environment
-  '("SSL_CERT_FILE"
-    "SSL_CERT_DIR"
+  '("SSL_CERT_FILE" "SSL_CERT_DIR"
     "CURL_CA_BUNDLE"
     "GI_TYPELIB_PATH"
     "GIT_EXEC_PATH"
@@ -208,24 +207,35 @@ external app 与未知 target fail closed）。"
 
 (define %flatpak-global-override-file
   (apply mixed-text-file "flatpak-global-override"
-         (append
-          (list
-           "# (guixcfg flatpak service): bind icon/cursor store dirs so\n"
-           "# in-sandbox symlinks resolve; pin cursor env; drop host profile\n"
-           "# vars that dangle in the sandbox (Flatpak passes the host env\n"
-           "# through unless --clear-env). Fonts come from the system profile\n"
-           "# via the pinned flatpak-fix-fonts-icons.patch.\n"
-           "[Context]\n"
-           "filesystems=")
-          (append-map (lambda (package) (list package ":ro;"))
-                      %flatpak-resource-packages)
-          (list "\nunset-environment="
-                (string-join %flatpak-unset-environment ";")
-                "\n\n[Environment]\n"
-                "XCURSOR_THEME=" %appearance-cursor-theme "\n"
-                "XCURSOR_SIZE=" (number->string %appearance-cursor-size) "\n"
-                "XCURSOR_PATH=" (file-append fluent-cursor-theme "/share/icons")
-                "\n"))))
+         (append (list
+                  "# (guixcfg flatpak service): bind icon/cursor store dirs so
+"
+                  "# in-sandbox symlinks resolve; pin cursor env; drop host profile
+"
+                  "# vars that dangle in the sandbox (Flatpak passes the host env
+"
+                  "# through unless --clear-env). Fonts come from the system profile
+"
+                  "# via the pinned flatpak-fix-fonts-icons.patch.
+"
+                  "[Context]\n"
+                  "filesystems=")
+                 (append-map (lambda (package
+                                       )
+                               (list package ":ro;"))
+                             %flatpak-resource-packages)
+                 (list "\nunset-environment="
+                       (string-join %flatpak-unset-environment ";")
+                       "\n\n[Environment]\n"
+                       "XCURSOR_THEME="
+                       %appearance-cursor-theme
+                       "\n"
+                       "XCURSOR_SIZE="
+                       (number->string %appearance-cursor-size)
+                       "\n"
+                       "XCURSOR_PATH="
+                       (file-append fluent-cursor-theme "/share/icons")
+                       "\n"))))
 
 (define* (flatpak-overrides-activation environment-overrides
                                        #:key (global-override

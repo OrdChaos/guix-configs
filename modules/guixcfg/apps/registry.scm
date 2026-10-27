@@ -129,10 +129,10 @@
         %blue
         %xdg-utils
         %prismlauncher
-         %musescore
-         %papers
-         %satty
-         %dupriman))
+        %musescore
+        %papers
+        %satty
+        %dupriman))
 
 ;; 完整性检查：启用集合的名字必须唯一（fail fast，加载即报错）。
 (define %application-names

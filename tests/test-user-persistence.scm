@@ -76,7 +76,7 @@
                             %persistent-user-dirs)))
                (and d
                     (string=? "cache-guix"
-                               (persistent-user-dir-backing d)))))
+                              (persistent-user-dir-backing d)))))
 
 (test-assert "Rust toolchains do not create a persisted runtime cache"
              (not (any (lambda (d)

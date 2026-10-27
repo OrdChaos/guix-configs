@@ -9,45 +9,57 @@
   #:use-module (guixcfg users user)
   #:use-module (virelith packages dupriman)
   #:export (dupriman-bridge-group-name dupriman-queue
-            %dupriman-printing-services))
+                                       %dupriman-printing-services))
 
 (define dupriman-bridge-group-name
-  (string-append "dupriman-" (user-profile-name %primary-user)))
+  (string-append "dupriman-"
+                 (user-profile-name %primary-user)))
 
 (define %dupriman-config
-  (mixed-text-file
-   "dupriman-config.toml"
-   "[printer]\n"
-   "real = \"hp-laserjet-1020\"\n"
-   "\n[paths]\n"
-   "state_dir = \"/run/dupriman\"\n"
-   "spool_dir = \"/var/tmp/dupriman\"\n"
-   "\n[prompt]\n"
-   "allowed_users = [\"" (user-profile-name %primary-user) "\"]\n"))
+  (mixed-text-file "dupriman-config.toml"
+                   "[printer]\n"
+                   "real = \"hp-laserjet-1020\"\n"
+                   "\n[paths]\n"
+                   "state_dir = \"/run/dupriman\"\n"
+                   "spool_dir = \"/var/tmp/dupriman\"\n"
+                   "\n[prompt]\n"
+                   "allowed_users = [\""
+                   (user-profile-name %primary-user)
+                   "\"]\n"))
 
 (define dupriman-queue
-  (printer-queue
-   (name "dupriman-duplex")
-   (device-uri "dupriman://duplex")
-   (ppd (file-append dupriman "/share/cups/model/dupriman.ppd"))
-   (driver-packages (list dupriman))
-   (options '("media-default=A4"))))
+  (printer-queue (name "dupriman-duplex")
+                 (device-uri "dupriman://duplex")
+                 (ppd (file-append dupriman "/share/cups/model/dupriman.ppd"))
+                 (driver-packages (list dupriman))
+                 (options '("media-default=A4"))))
 
 (define (dupriman-runtime-activation)
   #~(begin
       (use-modules (guix build utils))
-      (define install #$(file-append coreutils "/bin/install"))
+      (define install
+        #$(file-append coreutils "/bin/install"))
       (define (directory mode owner group path)
-        (invoke install "-d" "-m" mode "-o" owner "-g" group path))
+        (invoke install
+                "-d"
+                "-m"
+                mode
+                "-o"
+                owner
+                "-g"
+                group
+                path))
       (directory "0711" "root" "root" "/run/dupriman")
       (directory "0711" "root" "root"
                  #$(string-append "/run/dupriman/"
                                   (user-profile-name %primary-user)))
-      (directory "2750" "lp" #$dupriman-bridge-group-name
+      (directory "2750" "lp"
+                 #$dupriman-bridge-group-name
                  #$(string-append "/run/dupriman/"
                                   (user-profile-name %primary-user)
                                   "/requests"))
-      (directory "2770" #$(user-profile-name %primary-user)
+      (directory "2770"
+                 #$(user-profile-name %primary-user)
                  #$dupriman-bridge-group-name
                  #$(string-append "/run/dupriman/"
                                   (user-profile-name %primary-user)

@@ -26,7 +26,8 @@
   #:use-module (guixcfg system application-persistence)
   #:export (%mpv %mpv-desktop-entry))
 
-(define %mpv-desktop-entry "mpv.desktop")
+(define %mpv-desktop-entry
+  "mpv.desktop")
 
 (define %mpv
   (application (name 'mpv)

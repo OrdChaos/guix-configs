@@ -27,7 +27,8 @@
   #:export (%flatpak-telegram %telegram-desktop-entry))
 
 ;; Flatpak export 实证；默认协议选择由 (guixcfg home xdg) 拥有。
-(define %telegram-desktop-entry "org.telegram.desktop.desktop")
+(define %telegram-desktop-entry
+  "org.telegram.desktop.desktop")
 
 (define %flatpak-telegram
   (flatpak-application (name 'telegram)

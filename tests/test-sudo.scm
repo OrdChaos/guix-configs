@@ -9,7 +9,7 @@
              (guix gexp) ;lower-object
              (guix monads)
              (guix store)
-              (ice-9 textual-ports) ;get-string-all
+             (ice-9 textual-ports) ;get-string-all
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
@@ -27,9 +27,9 @@
 
 ;; ── Shared host projection ──────────────────────────────────
 (test-assert "both hosts lower the same sudoers policy"
-              (let ((vm-s (lower-text (operating-system-sudoers-file %vm-os)))
-                    (lp-s (lower-text (operating-system-sudoers-file
-                                       %lenovo-legion-y7000p-os))))
-                (string=? vm-s lp-s)))
+             (let ((vm-s (lower-text (operating-system-sudoers-file %vm-os)))
+                   (lp-s (lower-text (operating-system-sudoers-file
+                                      %lenovo-legion-y7000p-os))))
+               (string=? vm-s lp-s)))
 
 (test-end "sudo")

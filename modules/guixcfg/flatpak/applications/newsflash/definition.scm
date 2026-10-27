@@ -4,7 +4,8 @@
   #:use-module (guixcfg flatpak model)
   #:export (%flatpak-newsflash %newsflash-desktop-entry))
 
-(define %newsflash-desktop-entry "io.gitlab.news_flash.NewsFlash.desktop")
+(define %newsflash-desktop-entry
+  "io.gitlab.news_flash.NewsFlash.desktop")
 
 (define %flatpak-newsflash
   (flatpak-application (name 'newsflash)

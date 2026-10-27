@@ -74,8 +74,8 @@
 ;; docs/architecture/flatpak.md（driver overlays）。
 (define %flatpak-selection
   '(qq wechat
-        an-anime-game-launcher
-        sleepy-launcher
+       an-anime-game-launcher
+       sleepy-launcher
        steam
        telegram
        tuba

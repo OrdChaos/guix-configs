@@ -83,12 +83,12 @@
                                                         "https://ci.guix.gnu.org"
                                                         "https://bordeaux.guix.gnu.org"
                                                         "https://substitutes.nonguix.org"))
-                                      ;; Keep Guix's official signing keys; this field
-                                      ;; replaces its default rather than extending it.
-                                      (authorized-keys
-                                       (append %default-authorized-guix-keys
-                                               (list (local-file
-                                                      "nonguix-key.pub"))))))
+                                     ;; Keep Guix's official signing keys; this field
+                                     ;; replaces its default rather than extending it.
+                                     (authorized-keys (append
+                                                       %default-authorized-guix-keys
+                                                       (list (local-file
+                                                              "nonguix-key.pub"))))))
         (service elogind-service-type
                  (elogind-configuration (elogind elogind-compat)))
         (service polkit-service-type) polkit-wheel-service))

@@ -20,5 +20,6 @@
                (home-services (list (simple-service 'satty-config
                                                     home-files-service-type
                                                     `((".config/satty/config.toml" ,
-                                                       (local-file "config.toml"
+                                                       (local-file
+                                                        "config.toml"
                                                         "satty-config.toml"))))))))

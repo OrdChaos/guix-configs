@@ -43,7 +43,8 @@
   #:use-module (guixcfg system gaming) ;%steam-games-library-path
   #:export (%flatpak-steam %steam-desktop-entry))
 
-(define %steam-desktop-entry "com.valvesoftware.Steam.desktop")
+(define %steam-desktop-entry
+  "com.valvesoftware.Steam.desktop")
 
 (define %flatpak-steam
   (flatpak-application (name 'steam)
@@ -51,11 +52,10 @@
                        (remote 'flathub)
                        (branch "stable")
                        (update-policy 'track-branch)
-                       (desktop-files (list (list
-                                             %steam-desktop-entry
-                                             (local-file
-                                              "com.valvesoftware.Steam.desktop"
-                                              "steam-flatpak-desktop-shadow.desktop"))))
+                       (desktop-files (list (list %steam-desktop-entry
+                                                  (local-file
+                                                   "com.valvesoftware.Steam.desktop"
+                                                   "steam-flatpak-desktop-shadow.desktop"))))
                        (override-policy (list 'managed-overrides
                                               (flatpak-override (filesystems (list
                                                                               %steam-games-library-path)))))))

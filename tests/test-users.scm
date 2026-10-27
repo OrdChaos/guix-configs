@@ -19,9 +19,9 @@
              (and (string? (user-profile-name %primary-user))
                   (not (string-null? (user-profile-name %primary-user)))))
 (test-assert "primary user home derives from the user name"
-              (string=? (string-append "/home/"
-                                       (user-profile-name %primary-user))
-                        (user-profile-home-directory %primary-user)))
+             (string=? (string-append "/home/"
+                                      (user-profile-name %primary-user))
+                       (user-profile-home-directory %primary-user)))
 
 ;; 生成的 user-account：password 恒为 #f（hash 不进 evaluator/store）
 (define acct

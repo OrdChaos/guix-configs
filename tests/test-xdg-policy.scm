@@ -62,67 +62,83 @@
 
 ;; Exercise the official serializer and GIO, without depending on installed
 ;; user applications, desktop caches, a graphical session or the network.
-(define %store (open-connection))
+(define %store
+  (open-connection))
 
-(define* (materialize object #:optional (output "out"))
-  (let ((drv (run-with-store %store (lower-object object))))
-    (if (string? drv)
-        drv
+(define* (materialize object
+                      #:optional (output "out"))
+  (let ((drv (run-with-store %store
+                             (lower-object object))))
+    (if (string? drv) drv
         (begin
-          (build-derivations %store (list drv))
+          (build-derivations %store
+                             (list drv))
           (derivation->output-path drv output)))))
 
 (define (extension-value type value target)
-  ((service-extension-compute
-    (find (lambda (extension)
-            (eq? target (service-extension-target extension)))
-          (service-type-extensions type)))
+  ((service-extension-compute (find (lambda (extension)
+                                      (eq? target
+                                           (service-extension-target extension)))
+                                    (service-type-extensions type)))
    value))
 
 (define %mimeapps-file
-  (materialize
-   (cadr (assoc "mimeapps.list"
-                (extension-value home-xdg-mime-applications-service-type
-                                 (service-value %xdg-default-apps-service)
-                                 home-xdg-configuration-files-service-type)))))
+  (materialize (cadr (assoc "mimeapps.list"
+                            (extension-value
+                             home-xdg-mime-applications-service-type
+                             (service-value %xdg-default-apps-service)
+                             home-xdg-configuration-files-service-type)))))
 
 (define %url-service
   (find (lambda (service)
-          (eq? 'vscode-url-handler (service-type-name (service-kind service))))
+          (eq? 'vscode-url-handler
+               (service-type-name (service-kind service))))
         (application-home-services %vscode)))
 
 (define %url-file
-  (materialize
-   (cadr (assoc (string-append "applications/" %vscode-url-desktop-entry)
-                (extension-value (service-kind %url-service)
-                                 (service-value %url-service)
-                                 home-xdg-data-files-service-type)))))
+  (materialize (cadr (assoc (string-append "applications/"
+                                           %vscode-url-desktop-entry)
+                            (extension-value (service-kind %url-service)
+                                             (service-value %url-service)
+                                             home-xdg-data-files-service-type)))))
 
-(define %url-content (call-with-input-file %url-file get-string-all))
-(define %vscode-output (materialize (car (application-home-packages %vscode))))
+(define %url-content
+  (call-with-input-file %url-file
+    get-string-all))
+(define %vscode-output
+  (materialize (car (application-home-packages %vscode))))
 
 (test-assert "URL entry forwards URLs to the installed extension wrapper"
-  (and (string-contains %url-content
-                        (string-append "Exec=" %vscode-output
-                                       "/bin/code --ozone-platform-hint=auto --open-url %U\n"))
-       (string-contains %url-content "NoDisplay=true\n")
-       (string-contains %url-content "MimeType=x-scheme-handler/vscode;\n")))
+             (and (string-contains %url-content
+                                   (string-append "Exec=" %vscode-output
+                                    "/bin/code --ozone-platform-hint=auto --open-url %U
+"))
+                  (string-contains %url-content "NoDisplay=true\n")
+                  (string-contains %url-content
+                                   "MimeType=x-scheme-handler/vscode;\n")))
 
-(define %gio (string-append (materialize glib "bin") "/bin/gio"))
+(define %gio
+  (string-append (materialize glib "bin") "/bin/gio"))
 
 ;; A raw-key uniqueness check is insufficient: aliases such as audio/wav
 ;; and audio/vnd.wave must not select different players after GIO unaliases.
 (test-assert "MIME aliases and canonical names have the same default"
-  (call-with-input-file
-      (string-append (materialize shared-mime-info) "/share/mime/aliases")
-    (lambda (port)
-      (let loop ((line (read-line port)))
-        (or (eof-object? line)
-            (let* ((names (string-split line #\space))
-                   (alias (assoc-ref %xdg-default-applications (car names)))
-                   (canonical (assoc-ref %xdg-default-applications (cadr names))))
-              (and (or (not alias) (not canonical) (equal? alias canonical))
-                   (loop (read-line port)))))))))
+             (call-with-input-file (string-append (materialize
+                                                   shared-mime-info)
+                                                  "/share/mime/aliases")
+               (lambda (port)
+                 (let loop
+                   ((line (read-line port)))
+                   (or (eof-object? line)
+                       (let* ((names (string-split line #\space))
+                              (alias (assoc-ref %xdg-default-applications
+                                                (car names)))
+                              (canonical (assoc-ref %xdg-default-applications
+                                                    (cadr names))))
+                         (and (or (not alias)
+                                  (not canonical)
+                                  (equal? alias canonical))
+                              (loop (read-line port)))))))))
 
 (let* ((root (mkdtemp "/tmp/guixcfg-xdg-policy-XXXXXX"))
        (config (string-append root "/config"))
@@ -131,46 +147,88 @@
        (applications (string-append exports "/applications"))
        (mime "x-scheme-handler/tg")
        (desktop (cadr (assoc mime %xdg-default-applications))))
-  (dynamic-wind
-    (lambda ()
-      (for-each mkdir-p (list config data applications))
-      (copy-file %mimeapps-file (string-append config "/mimeapps.list"))
-      ;; The application is discoverable via XDG_DATA_DIRS, like a Flatpak
-      ;; export, but no update-desktop-database or application is executed.
-      (call-with-output-file (string-append applications "/" desktop)
-        (lambda (port)
-          (format port
-                  "[Desktop Entry]\nName=Fixture\nType=Application\nExec=true %U\nMimeType=~a;\n"
-                  mime)))
-      (copy-file %url-file
-                 (string-append applications "/" %vscode-url-desktop-entry)))
-    (lambda ()
-      (with-environment-variables
-          `(("HOME" ,root)
-            ("XDG_CONFIG_HOME" ,config)
-            ("XDG_CONFIG_DIRS" ,config)
-            ("XDG_DATA_HOME" ,data)
-            ("XDG_DATA_DIRS" ,exports)
-            ("XDG_CURRENT_DESKTOP" "")
-            ("LC_ALL" "C")
-            ("LANGUAGE" "C"))
-        (for-each
-         (lambda (entry)
-           (let* ((pipe (open-pipe* OPEN_READ %gio "mime" (car entry)))
-                  (text (get-string-all pipe))
-                  (status (close-pipe pipe)))
-             (test-assert (string-append "GIO resolves without a MIME cache: "
-                                         (car entry))
-               (and (zero? status)
-                    (string-prefix? "Default application for " text)
-                    (string-contains text
-                                     (string-append ": " (cdr entry) "\n"))
-                    (string-contains
-                     text (string-append "Registered applications:\n\t"
-                                         (cdr entry)))))))
-         (list (cons mime desktop)
-               (cons "x-scheme-handler/vscode" %vscode-url-desktop-entry)))))
-    (lambda () (delete-file-recursively root))))
+  (dynamic-wind (lambda ()
+                  (for-each mkdir-p
+                            (list config data applications))
+                  (copy-file %mimeapps-file
+                             (string-append config "/mimeapps.list"))
+                  ;; The application is discoverable via XDG_DATA_DIRS, like a Flatpak
+                  ;; export, but no update-desktop-database or application is executed.
+                  (call-with-output-file (string-append applications "/"
+                                                        desktop)
+                    (lambda (port)
+                      (format port "[Desktop Entry]
+Name=Fixture
+Type=Application
+Exec=true %U
+MimeType=~a;
+" mime)))
+                  (copy-file %url-file
+                             (string-append applications "/"
+                                            %vscode-url-desktop-entry)))
+                (lambda ()
+                  (with-environment-variables `(("HOME" ,root)
+                                                ("XDG_CONFIG_HOME" ,config)
+                                                ("XDG_CONFIG_DIRS" ,config)
+                                                ("XDG_DATA_HOME" ,data)
+                                                ("XDG_DATA_DIRS" ,exports)
+                                                ("XDG_CURRENT_DESKTOP" "")
+                                                ("LC_ALL" "C")
+                                                ("LANGUAGE" "C"))
+                                              (for-each (lambda (entry)
+                                                          (let* ((pipe (open-pipe*
+                                                                        OPEN_READ
+                                                                        %gio
+                                                                        "mime"
+                                                                        (car
+                                                                         entry)))
+                                                                 (text (get-string-all
+                                                                        pipe))
+                                                                 (status (close-pipe
+                                                                          pipe)))
+                                                            (test-assert (string-append
+                                                                          "GIO resolves without a MIME cache: "
+                                                                          (car
+                                                                           entry))
+                                                                         (and (zero?
+                                                                               status)
+
+                                                                              
+                                                                              (string-prefix?
+                                                                               "Default application for "
+                                                                               text)
+
+                                                                              
+                                                                              (string-contains
+                                                                               text
+
+                                                                               
+                                                                               (string-append
+                                                                                ": "
+
+                                                                                
+                                                                                (cdr
+                                                                                 entry)
+                                                                                "\n"))
+
+                                                                              
+                                                                              (string-contains
+                                                                               text
+
+                                                                               
+                                                                               (string-append
+                                                                                "Registered applications:\n\t"
+
+                                                                                
+                                                                                (cdr
+                                                                                 entry)))))))
+                                                        (list (cons mime
+                                                                    desktop)
+                                                              (cons
+                                                               "x-scheme-handler/vscode"
+                                                               %vscode-url-desktop-entry)))))
+                (lambda ()
+                  (delete-file-recursively root))))
 
 (close-connection %store)
 

@@ -22,7 +22,8 @@
   #:use-module (guixcfg apps model)
   #:export (%seahorse %seahorse-desktop-entry))
 
-(define %seahorse-desktop-entry "org.gnome.seahorse.Application.desktop")
+(define %seahorse-desktop-entry
+  "org.gnome.seahorse.Application.desktop")
 
 (define %seahorse
   (application (name 'seahorse)

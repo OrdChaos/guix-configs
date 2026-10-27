@@ -26,14 +26,14 @@
 (use-modules (guixcfg hosts vm) ;%vm-os（assembly 真实接线）
              (guixcfg apps model)
              (guixcfg apps registry) ;%applications
-              (guixcfg system application-persistence) ;rule accessors
-              (guixcfg users user) ;%primary-user
-              (guix packages) ;package-name
+             (guixcfg system application-persistence) ;rule accessors
+             (guixcfg users user) ;%primary-user
+             (guix packages) ;package-name
              (gnu home services) ;home-files-service-type
              (gnu system) ;operating-system-file-systems
              (gnu system file-systems) ;file-system-*
              (gnu services)
-              (srfi srfi-1)
+             (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64))
 
@@ -198,6 +198,6 @@
 
 (test-assert "VC6: exactly one vscode-with-extensions wrapper, no bare vscode"
  (and (package-named "vscode-with-extensions")
-       (not (package-named "vscode"))))
+      (not (package-named "vscode"))))
 
 (test-end "vscode")

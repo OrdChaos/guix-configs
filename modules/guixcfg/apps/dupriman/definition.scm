@@ -12,29 +12,31 @@
   #:export (%dupriman))
 
 (define %dupriman
-  (application
-   (name 'dupriman)
-   (home-packages (list dupriman))
-   (system-services
-    (list (simple-service 'dupriman-bridge-group account-service-type
-                          (list (user-group
-                                 (name dupriman-bridge-group-name)
-                                 (system? #t))))))
-   (home-services
-    (list (simple-service
-           'dupriman-prompt
-           home-shepherd-service-type
-           (list (shepherd-service
-                  (documentation
-                   "Run the DupriMan manual-duplex confirmation prompt in the graphical session.")
-                  (provision '(dupriman-prompt))
-                  (requirement '(niri))
-                  (respawn? #f)
-                  (modules '((shepherd support)))
-                  (start #~(make-forkexec-constructor
-                             (list #$(file-append dupriman "/bin/dupriman")
-                                   "prompt")
-                             #:log-file
-                             (string-append %user-log-dir
-                                            "/dupriman-prompt.log")))
-                  (stop #~(make-kill-destructor)))))))))
+  (application (name 'dupriman)
+               (home-packages (list dupriman))
+               (system-services (list (simple-service 'dupriman-bridge-group
+                                                      account-service-type
+                                                      (list (user-group
+                                                              (name
+                                                               dupriman-bridge-group-name)
+                                                              (system? #t))))))
+               (home-services (list (simple-service 'dupriman-prompt
+                                     home-shepherd-service-type
+                                     (list (shepherd-service (documentation
+                                                              "Run the DupriMan manual-duplex confirmation prompt in the graphical session.")
+                                                             (provision '(dupriman-prompt))
+                                                             (requirement '(niri))
+                                                             (respawn? #f)
+                                                             (modules '((shepherd
+                                                                         support)))
+                                                             (start #~(make-forkexec-constructor
+                                                                       (list #$
+                                                                        (file-append
+                                                                         dupriman
+                                                                         "/bin/dupriman")
+                                                                        "prompt")
+                                                                       #:log-file
+                                                                       (string-append
+                                                                        %user-log-dir
+                                                                        "/dupriman-prompt.log")))
+                                                             (stop #~(make-kill-destructor)))))))))

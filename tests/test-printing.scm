@@ -7,15 +7,15 @@
               #:prefix host:)
              ((guixcfg hosts vm)
               #:prefix vm:)
-              (guixcfg system printing hp-laserjet-1020)
-              (guixcfg system printing dupriman)
-              (guixcfg system printing laptop)
-              (guixcfg system printing model)
-              (guixcfg users user)
-              (gnu packages cups)
-              (gnu services)
-              (gnu services cups)
-              (gnu system)
+             (guixcfg system printing hp-laserjet-1020)
+             (guixcfg system printing dupriman)
+             (guixcfg system printing laptop)
+             (guixcfg system printing model)
+             (guixcfg users user)
+             (gnu packages cups)
+             (gnu services)
+             (gnu services cups)
+             (gnu system)
              (guix gexp)
              (srfi srfi-1)
              (srfi srfi-64))
@@ -44,93 +44,94 @@
 
 (test-begin "printing")
 
-(test-equal "P1: HP queue has the expected CUPS name"
-  "hp-laserjet-1020"
-  (printer-queue-name hp-laserjet-1020-queue))
+(test-equal "P1: HP queue has the expected CUPS name" "hp-laserjet-1020"
+            (printer-queue-name hp-laserjet-1020-queue))
 
 (test-equal "P1: HP queue uses the expected USB URI"
-  "usb://HP/LaserJet%201020"
-  (printer-queue-device-uri hp-laserjet-1020-queue))
+            "usb://HP/LaserJet%201020"
+            (printer-queue-device-uri hp-laserjet-1020-queue))
 
 (test-assert "P1: HP queue installs the foo2zjs PPD"
-  (and (eq? (file-append-base (printer-queue-ppd hp-laserjet-1020-queue))
-            foo2zjs)
-       (equal? (file-append-suffix (printer-queue-ppd hp-laserjet-1020-queue))
-               '("/share/cups/model/HP-LaserJet_1020.ppd.gz"))))
+             (and (eq? (file-append-base (printer-queue-ppd
+                                          hp-laserjet-1020-queue)) foo2zjs)
+                  (equal? (file-append-suffix (printer-queue-ppd
+                                               hp-laserjet-1020-queue))
+                          '("/share/cups/model/HP-LaserJet_1020.ppd.gz"))))
 
 (test-equal "P1: HP queue defaults to A4"
-  '("media-default=A4")
-  (printer-queue-options hp-laserjet-1020-queue))
+            '("media-default=A4")
+            (printer-queue-options hp-laserjet-1020-queue))
 
-(test-equal "P1: DupriMan queue has the expected CUPS name"
-  "dupriman-duplex"
-  (printer-queue-name dupriman-queue))
+(test-equal "P1: DupriMan queue has the expected CUPS name" "dupriman-duplex"
+            (printer-queue-name dupriman-queue))
 
-(test-equal "P1: DupriMan queue uses its CUPS backend URI"
-  "dupriman://duplex"
-  (printer-queue-device-uri dupriman-queue))
+(test-equal "P1: DupriMan queue uses its CUPS backend URI" "dupriman://duplex"
+            (printer-queue-device-uri dupriman-queue))
 
 (test-equal "P1: DupriMan bridge group is private to the primary user"
-  (string-append "dupriman-" (user-profile-name %primary-user))
-  dupriman-bridge-group-name)
+            (string-append "dupriman-"
+                           (user-profile-name %primary-user))
+            dupriman-bridge-group-name)
 
 (test-assert "P2: firmware loader is a generated program"
-  (and (program-file? hp-laserjet-1020-firmware-loader)
-       (string=? (program-file-name hp-laserjet-1020-firmware-loader)
-                 "hp-laserjet-1020-firmware-loader")))
+             (and (program-file? hp-laserjet-1020-firmware-loader)
+                  (string=? (program-file-name
+                             hp-laserjet-1020-firmware-loader)
+                            "hp-laserjet-1020-firmware-loader")))
 
 (test-assert "P3: Laptop OS includes CUPS"
-  (find (lambda (service)
-          (eq? (service-kind service) cups-service-type))
-        (operating-system-user-services host:%lenovo-legion-y7000p-os)))
+             (find (lambda (service)
+                     (eq? (service-kind service) cups-service-type))
+                   (operating-system-user-services
+                    host:%lenovo-legion-y7000p-os)))
 
-(test-equal "P3: Laptop inventory creates exactly one CUPS service"
-  1
-  (length (filter (lambda (service)
-                    (eq? (service-kind service) cups-service-type))
-                  %laptop-printing-services)))
+(test-equal "P3: Laptop inventory creates exactly one CUPS service" 1
+            (length (filter (lambda (service)
+                              (eq? (service-kind service) cups-service-type))
+                            %laptop-printing-services)))
 
 (test-assert "P3: Laptop OS projects declarative printer queues"
-  (service-by-kind-name host:%lenovo-legion-y7000p-os
-                        'printing-queue-projection))
+             (service-by-kind-name host:%lenovo-legion-y7000p-os
+                                   'printing-queue-projection))
 
 (test-equal "P3: queue projection uses the local CUPS socket"
-  "/var/run/cups/cups.sock"
-  cups-local-socket)
+            "/var/run/cups/cups.sock" cups-local-socket)
 
-(let ((config
-       (service-value
-        (find (lambda (service)
-                (eq? (service-kind service) cups-service-type))
-              (operating-system-user-services host:%lenovo-legion-y7000p-os)))))
+(let ((config (service-value (find (lambda (service)
+                                     (eq? (service-kind service)
+                                          cups-service-type))
+                                   (operating-system-user-services
+                                    host:%lenovo-legion-y7000p-os)))))
   (test-assert "P3: CUPS uses the Poppler-enabled Foomatic filter"
-    (memq cups-filters-for-foomatic-pdftops
-          (cups-configuration-extensions config)))
+               (memq cups-filters-for-foomatic-pdftops
+                     (cups-configuration-extensions config)))
   (test-assert "P3: CUPS omits the unwrapped Foomatic filter"
-    (not (memq cups-filters (cups-configuration-extensions config))))
+               (not (memq cups-filters
+                          (cups-configuration-extensions config))))
   (test-equal "P3: CUPS external programs use the DupriMan bridge group"
-    dupriman-bridge-group-name
-    (cups-files-configuration-group
-     (cups-configuration-files-configuration config))))
+              dupriman-bridge-group-name
+              (cups-files-configuration-group (cups-configuration-files-configuration
+                                               config))))
 
 (test-assert "P3: Laptop OS installs the HP firmware udev rule"
-  (service-by-kind-name host:%lenovo-legion-y7000p-os
-                        'hp-laserjet-1020-firmware-udev-rules))
+             (service-by-kind-name host:%lenovo-legion-y7000p-os
+                                   'hp-laserjet-1020-firmware-udev-rules))
 
 (test-assert "P4: VM OS has no CUPS service"
-  (not (find (lambda (service)
-               (eq? (service-kind service) cups-service-type))
-             (operating-system-user-services vm:%vm-os))))
+             (not (find (lambda (service)
+                          (eq? (service-kind service) cups-service-type))
+                        (operating-system-user-services vm:%vm-os))))
 
 (test-assert "P4: VM OS has no printer queue projection"
-  (not (service-by-kind-name vm:%vm-os 'printing-queue-projection)))
+             (not (service-by-kind-name vm:%vm-os
+                                        'printing-queue-projection)))
 
 (test-assert "P4: VM OS has no HP firmware udev rule"
-  (not (service-by-kind-name vm:%vm-os
-                              'hp-laserjet-1020-firmware-udev-rules)))
+             (not (service-by-kind-name vm:%vm-os
+                                        'hp-laserjet-1020-firmware-udev-rules)))
 
 (test-assert "P3: Laptop OS projects DupriMan runtime directories"
-  (service-by-kind-name host:%lenovo-legion-y7000p-os
-                        'dupriman-runtime-directories))
+             (service-by-kind-name host:%lenovo-legion-y7000p-os
+                                   'dupriman-runtime-directories))
 
 (test-end "printing")

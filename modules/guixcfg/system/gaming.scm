@@ -39,9 +39,8 @@
   #:use-module (guixcfg users user) ;%primary-user（owner 推导）
   #:export (%steam-games-library-path
             %an-anime-game-launcher-games-library-path
-            %sleepy-launcher-games-library-path
-            %prismlauncher-instances-path
-                                       %gaming-system-services))
+            %sleepy-launcher-games-library-path %prismlauncher-instances-path
+            %gaming-system-services))
 
 ;; 游戏库 canonical 位置：/persist/data-nobackup/steam（persist-
 ;; mount-point 是 /persist/* 语义路径唯一 authority——AGENT.md §13）。
@@ -100,10 +99,10 @@
                                                   (password-entry-gid user))
                                            ;; 游戏库仅 primary user 可遍历。
                                            (chmod dir #o700))
-                                          (list #$%steam-games-library-path
-                                                #$%an-anime-game-launcher-games-library-path
-                                                #$%sleepy-launcher-games-library-path
-                                                #$%prismlauncher-instances-path))
+                                         (list #$%steam-games-library-path
+                                               #$%an-anime-game-launcher-games-library-path
+                                               #$%sleepy-launcher-games-library-path
+                                               #$%prismlauncher-instances-path))
                                #t))))
 
 ;; gaming system services：controller udev rules + 游戏库目录

@@ -4,7 +4,8 @@
   #:use-module (guixcfg flatpak model)
   #:export (%flatpak-tuba %tuba-desktop-entry))
 
-(define %tuba-desktop-entry "dev.geopjr.Tuba.desktop")
+(define %tuba-desktop-entry
+  "dev.geopjr.Tuba.desktop")
 
 (define %flatpak-tuba
   (flatpak-application (name 'tuba)

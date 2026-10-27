@@ -131,38 +131,40 @@
                              (priority 100)))
 
 (define %lenovo-legion-y7000p-services
-  (modify-services
-      (append (make-host-services
-               ;; 实机网络：NetworkManager（dnsmasq backend）+ 显式 wpa-supplicant。
-               ;; DNS 语义同 VM（docs/architecture/dns.md）：dnsmasq 127.0.0.1:53 →
-               ;; DHCP DNS，以专用稳定 UID 运行（mihomo TUN exclude-uid 引用）。
-               #:network-services (list (service network-manager-service-type
-                                                  (network-manager-configuration (dns
-                                                                                  "dnsmasq")
-                                                                                 (dnsmasq-configuration-files
-                                                                                  (nm-dnsmasq-dnsmasq-configuration-files))))
-                                         (service wpa-supplicant-service-type))
-               #:keep-root-generations (host-storage-policy-keep-root-generations
-                                        %lenovo-legion-y7000p-storage-policy)
-               #:persistent-mount-file-systems %persistent-mount-file-systems
-               ;; UPower publishes battery and charging state on the system bus for
-               ;; Noctalia.  It is a physical-laptop capability, not a VM service.
-               #:additional-system-services (append (list (service
-                                                            upower-service-type)
-                                                           (service
-                                                            pam-limits-service-type
-                                                            %primary-user-pam-limits)
-                                                           (service
-                                                            zram-device-service-type
-                                                            %laptop-zram-configuration))
-                                                     ;; TLP + tlp-pd（离电功耗控制 + PPD 兼容 D-Bus 接口）。
-                                                     %laptop-power-services
-                                                     ;; BlueZ userspace（bluetoothd + org.bluez + udev）。
-                                                     %laptop-bluetooth-services
-                                                     ;; CUPS queue + HP LaserJet 1020 USB firmware loader.
-                                                     %laptop-printing-services))
-              ;; Activation precedes Shepherd's mounts and NetworkManager startup.
-              (list (network-manager-connections-persistence-service)))
+  (modify-services (append (make-host-services
+                            ;; 实机网络：NetworkManager（dnsmasq backend）+ 显式 wpa-supplicant。
+                            ;; DNS 语义同 VM（docs/architecture/dns.md）：dnsmasq 127.0.0.1:53 →
+                            ;; DHCP DNS，以专用稳定 UID 运行（mihomo TUN exclude-uid 引用）。
+                            #:network-services (list (service
+                                                      network-manager-service-type
+                                                      (network-manager-configuration
+                                                       (dns "dnsmasq")
+                                                       (dnsmasq-configuration-files
+                                                        (nm-dnsmasq-dnsmasq-configuration-files))))
+                                                     (service
+                                                      wpa-supplicant-service-type))
+                            #:keep-root-generations (host-storage-policy-keep-root-generations
+                                                     %lenovo-legion-y7000p-storage-policy)
+                            #:persistent-mount-file-systems
+                            %persistent-mount-file-systems
+                            ;; UPower publishes battery and charging state on the system bus for
+                            ;; Noctalia.  It is a physical-laptop capability, not a VM service.
+                            #:additional-system-services (append (list (service
+                                                                        upower-service-type)
+                                                                       (service
+                                                                        pam-limits-service-type
+                                                                        %primary-user-pam-limits)
+                                                                       (service
+                                                                        zram-device-service-type
+                                                                        %laptop-zram-configuration))
+                                                          ;; TLP + tlp-pd（离电功耗控制 + PPD 兼容 D-Bus 接口）。
+                                                          %laptop-power-services
+                                                          ;; BlueZ userspace（bluetoothd + org.bluez + udev）。
+                                                          %laptop-bluetooth-services
+                                                          ;; CUPS queue + HP LaserJet 1020 USB firmware loader.
+                                                          %laptop-printing-services))
+                           ;; Activation precedes Shepherd's mounts and NetworkManager startup.
+                           (list (network-manager-connections-persistence-service)))
     (guix-service-type config =>
                        (guix-configuration (inherit config)
                                            (extra-options %local-build-options)))))

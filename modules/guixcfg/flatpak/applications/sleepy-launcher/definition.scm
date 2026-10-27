@@ -10,16 +10,15 @@
   #:export (%flatpak-sleepy-launcher))
 
 (define %flatpak-sleepy-launcher
-  (flatpak-application
-   (name 'sleepy-launcher)
-   (id "moe.launcher.sleepy-launcher")
-   (remote 'flathub)
-   (branch "stable")
-   (update-policy 'track-branch)
-   (override-policy
-    (list 'managed-overrides
-          (flatpak-override
-           (sockets (list "wayland"))
-           (filesystems (list %sleepy-launcher-games-library-path))
-           (environment
-            '("GIT_EXEC_PATH=/app/libexec/git-core")))))))
+  (flatpak-application (name 'sleepy-launcher)
+                       (id "moe.launcher.sleepy-launcher")
+                       (remote 'flathub)
+                       (branch "stable")
+                       (update-policy 'track-branch)
+                       (override-policy (list 'managed-overrides
+                                              (flatpak-override (sockets (list
+                                                                          "wayland"))
+                                                                (filesystems (list
+                                                                              %sleepy-launcher-games-library-path))
+                                                                (environment '
+                                                                             ("GIT_EXEC_PATH=/app/libexec/git-core")))))))

@@ -432,7 +432,8 @@
 ;; shared-mime-info 中已有归属的同义类型必须留在同一组，不能仅按
 ;; MIME 字符串作差集（例如 audio/vnd.wave 与 audio/x-wav 等价）。
 (define %mpv-default-mime-types
-  '("application/smil" "application/x-smil" "application/x-cue"
+  '("application/smil" "application/x-smil"
+    "application/x-cue"
     "application/x-mpegurl"
     "application/x-ogm"
     "application/x-ogm-audio"
@@ -478,7 +479,9 @@
 ;; 当前 Flatpak export desktop entry 的 MimeType 全集。文件类型与
 ;; 登录/订阅回调协议均交给同一个 Thunderbird ESR 入口。
 (define %mail-default-mime-types
-  '("message/rfc822" "text/calendar" "text/vcard" "text/x-vcard"
+  '("message/rfc822" "text/calendar"
+    "text/vcard"
+    "text/x-vcard"
     "x-scheme-handler/mailto"
     "x-scheme-handler/net.thunderbird"
     "x-scheme-handler/webcal"
@@ -508,21 +511,22 @@
           (mime-defaults %key-default-mime-types %seahorse-desktop-entry)
           (mime-defaults %mail-default-mime-types %thunderbird-desktop-entry)
           (mime-defaults '("x-scheme-handler/tg" "x-scheme-handler/tonsite"
-                           "x-scheme-handler/ton")
-                         %telegram-desktop-entry)
+                           "x-scheme-handler/ton") %telegram-desktop-entry)
           (mime-defaults '("x-scheme-handler/discord") %discord-desktop-entry)
-          (mime-defaults '("x-scheme-handler/steam" "x-scheme-handler/steamlink")
-                         %steam-desktop-entry)
+          (mime-defaults '("x-scheme-handler/steam"
+                           "x-scheme-handler/steamlink") %steam-desktop-entry)
           (mime-defaults '("x-scheme-handler/tuba" "x-scheme-handler/web+ap")
                          %tuba-desktop-entry)
-          (mime-defaults '("x-scheme-handler/newsflash" "x-scheme-handler/feed")
-                         %newsflash-desktop-entry)
+          (mime-defaults '("x-scheme-handler/newsflash"
+                           "x-scheme-handler/feed") %newsflash-desktop-entry)
           (mime-defaults '("x-scheme-handler/curseforge"
                            "x-scheme-handler/prismlauncher"
                            "application/x-modrinth-modpack+zip")
                          %prismlauncher-desktop-entry)
-          (mime-defaults '("x-scheme-handler/vscode") %vscode-url-desktop-entry)
-          (mime-defaults '("x-scheme-handler/oo-office") %onlyoffice-desktop-entry)
+          (mime-defaults '("x-scheme-handler/vscode")
+                         %vscode-url-desktop-entry)
+          (mime-defaults '("x-scheme-handler/oo-office")
+                         %onlyoffice-desktop-entry)
           ;; 目录 → Nautilus（文件管理器）。必须显式声明：Amberol 的
           ;; desktop entry 也声明了 inode/directory（上游 MimeType
           ;; 异常）；无显式默认时 GIO 会把它解析为默认，"打开文件夹"
@@ -532,19 +536,26 @@
           (map (lambda (mime)
                  (cons mime
                        (list %chrome-desktop-entry)))
-               '("text/html" "application/xhtml+xml" "application/xhtml_xml"
-                 "application/xml" "text/xml" "application/rdf+xml"
-                 "application/rss+xml" "x-scheme-handler/http"
-                 "x-scheme-handler/https" "x-scheme-handler/google-chrome"))))
+               '("text/html" "application/xhtml+xml"
+                 "application/xhtml_xml"
+                 "application/xml"
+                 "text/xml"
+                 "application/rdf+xml"
+                 "application/rss+xml"
+                 "x-scheme-handler/http"
+                 "x-scheme-handler/https"
+                 "x-scheme-handler/google-chrome"))))
 
 (define %xdg-default-apps-service
-  (simple-service 'xdg-default-apps home-xdg-mime-applications-service-type
+  (simple-service 'xdg-default-apps
+                  home-xdg-mime-applications-service-type
                   ;; XDG MIME Applications spec: a default must also be
                   ;; associated. Explicit Added Associations lets GIO discover
                   ;; Flatpak handlers even without exports/mimeinfo.cache.
-                  (home-xdg-mime-applications-configuration
-                   (default %xdg-default-applications)
-                   (added %xdg-default-applications))))
+                  (home-xdg-mime-applications-configuration (default
+                                                             %xdg-default-applications)
+                                                            (added
+                                                             %xdg-default-applications))))
 
 ;; ── XDG user directories ──────────────────────────────────────
 ;; 官方 home-xdg-user-directories-service-type（pinned

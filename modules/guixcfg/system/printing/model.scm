@@ -3,26 +3,32 @@
 (define-module (guixcfg system printing model)
   #:use-module (guix records)
   #:use-module (srfi srfi-1)
-  #:export (<printer-queue> printer-queue make-printer-queue printer-queue?
-              printer-queue-name printer-queue-device-uri printer-queue-ppd
-              printer-queue-driver-packages printer-queue-options
-              validate-printer-queues))
+  #:export (<printer-queue> printer-queue
+                            make-printer-queue
+                            printer-queue?
+                            printer-queue-name
+                            printer-queue-device-uri
+                            printer-queue-ppd
+                            printer-queue-driver-packages
+                            printer-queue-options
+                            validate-printer-queues))
 
 ;; A queue describes only CUPS-facing state.  USB matching and firmware
 ;; lifecycle are device-specific concerns owned by the corresponding model
 ;; module, not by this inventory.
-(define-record-type* <printer-queue>
-                     printer-queue
-                     make-printer-queue
+(define-record-type* <printer-queue> printer-queue make-printer-queue
   printer-queue?
   (name printer-queue-name) ;string: CUPS queue name
-   (device-uri printer-queue-device-uri) ;string: CUPS backend URI
-   (ppd printer-queue-ppd) ;file-like: PPD supplied to lpadmin -P
-   (driver-packages printer-queue-driver-packages) ;list of package
-   (options printer-queue-options (default '()))) ;list of lpadmin -o values
+  (device-uri printer-queue-device-uri) ;string: CUPS backend URI
+  (ppd printer-queue-ppd) ;file-like: PPD supplied to lpadmin -P
+  (driver-packages printer-queue-driver-packages) ;list of package
+  (options printer-queue-options
+           (default '())))
+;list of lpadmin -o values
 
 (define (valid-nonempty-string? value)
-  (and (string? value) (not (string-null? value))))
+  (and (string? value)
+       (not (string-null? value))))
 
 (define (validate-printer-queue queue)
   (unless (valid-nonempty-string? (printer-queue-name queue))
@@ -33,16 +39,20 @@
                (pair? (printer-queue-driver-packages queue)))
     (error "printer queue must declare at least one driver package" queue))
   (unless (and (list? (printer-queue-options queue))
-               (every valid-nonempty-string? (printer-queue-options queue)))
+               (every valid-nonempty-string?
+                      (printer-queue-options queue)))
     (error "printer queue options must be non-empty strings" queue)))
 
 (define (validate-printer-queues queues)
   "Validate QUEUES and reject duplicate CUPS queue names."
-  (unless (and (list? queues) (pair? queues) (every printer-queue? queues))
-    (error "printing configuration requires a non-empty list of printer queues"
-           queues))
+  (unless (and (list? queues)
+               (pair? queues)
+               (every printer-queue? queues))
+    (error
+     "printing configuration requires a non-empty list of printer queues"
+     queues))
   (for-each validate-printer-queue queues)
   (let ((names (map printer-queue-name queues)))
-    (unless (= (length names) (length (delete-duplicates names)))
-      (error "printer queue names must be unique" names)))
-  queues)
+    (unless (= (length names)
+               (length (delete-duplicates names)))
+      (error "printer queue names must be unique" names))) queues)

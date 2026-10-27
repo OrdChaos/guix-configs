@@ -50,13 +50,11 @@
 (define (collapse-ws text)
   "Collapse every whitespace run in TEXT to a single space so source
 wiring assertions survive formatting reflows."
-  (string-join
-   (delete "" (string-split
-               (string-map (lambda (ch)
-                             (if (char-whitespace? ch) #\space ch))
-                           text)
-               #\space))
-   " "))
+  (string-join (delete ""
+                       (string-split (string-map (lambda (ch)
+                                                   (if (char-whitespace? ch)
+                                                       #\space ch)) text)
+                                     #\space)) " "))
 
 ;; ── N1：NM dns backend ──────────────────────────────────────
 (define %nm-svc

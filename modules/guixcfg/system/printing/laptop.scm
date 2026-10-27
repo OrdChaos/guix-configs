@@ -13,7 +13,6 @@
   (append (printing-services (list hp-laserjet-1020-queue dupriman-queue)
                              #:device-services
                              %hp-laserjet-1020-device-services
-                             #:cups-files-config
-                             (files-configuration
-                              (group dupriman-bridge-group-name)))
+                             #:cups-files-config (files-configuration (group
+                                                                       dupriman-bridge-group-name)))
           %dupriman-printing-services))

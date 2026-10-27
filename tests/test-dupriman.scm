@@ -18,26 +18,30 @@
 (test-begin "dupriman")
 
 (define (app-by-name name)
-  (find (lambda (app) (eq? name (application-name app))) %applications))
+  (find (lambda (app)
+          (eq? name
+               (application-name app))) %applications))
 
 (define (app-contributions app target-type)
   (append-map service-value
               (filter (lambda (service)
                         (any (lambda (extension)
                                (eq? target-type
-                                    (service-extension-target
-                                     extension)))
+                                    (service-extension-target extension)))
                              (service-type-extensions (service-kind service))))
                       (application-home-services app))))
 
-(define %dupriman-app (app-by-name 'dupriman))
+(define %dupriman-app
+  (app-by-name 'dupriman))
 
-(test-assert "D1: DupriMan is explicitly enabled"
-  %dupriman-app)
+(test-assert "D1: DupriMan is explicitly enabled" %dupriman-app)
 
 (test-assert "D2: Home profile includes the prompt binary"
-  (any (lambda (package) (string=? "dupriman" (package-name package)))
-       (application-home-packages %dupriman-app)))
+             (any (lambda (package
+                            )
+                    (string=? "dupriman"
+                              (package-name package)))
+                  (application-home-packages %dupriman-app)))
 
 (define %dupriman-prompt-service
   (find (lambda (service)
@@ -46,23 +50,23 @@
         (app-contributions %dupriman-app home-shepherd-service-type)))
 
 (test-assert "D3: prompt is supervised after the graphical session starts"
-  (let ((service %dupriman-prompt-service))
-    (and service
-         (member 'niri (shepherd-service-requirement service))
-         (not (shepherd-service-respawn? service)))))
+             (let ((service %dupriman-prompt-service))
+               (and service
+                    (member 'niri
+                            (shepherd-service-requirement service))
+                    (not (shepherd-service-respawn? service)))))
 
 (test-assert "D4: bridge group is a system account contribution"
-  (let ((groups
-         (append-map service-value
-                     (application-system-services %dupriman-app))))
-    (any (lambda (group)
-           (and (user-group? group)
-                (string=? dupriman-bridge-group-name
-                          (user-group-name group))))
-         groups)))
+             (let ((groups (append-map service-value
+                                       (application-system-services
+                                        %dupriman-app))))
+               (any (lambda (group)
+                      (and (user-group? group)
+                           (string=? dupriman-bridge-group-name
+                                     (user-group-name group)))) groups)))
 
 (test-assert "D5: primary user belongs to the private bridge group"
-  (member dupriman-bridge-group-name
-          (user-account-supplementary-groups (primary-user-account))))
+             (member dupriman-bridge-group-name
+                     (user-account-supplementary-groups (primary-user-account))))
 
 (test-end "dupriman")

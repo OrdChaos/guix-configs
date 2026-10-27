@@ -156,16 +156,24 @@
 ;; 把 MimeType/NoDisplay 变成无效的 Mimetype/Nodisplay。
 (define %vscode-url-desktop-file
   (mixed-text-file %vscode-url-desktop-entry
-                  "[Desktop Entry]\n"
-                  "Name=Visual Studio Code - URL Handler\n"
-                  "Comment=Code Editing. Redefined.\n"
-                  "GenericName=Text Editor\n"
-                  "Exec=" (file-append %vscode-package "/bin/code")
-                  " --ozone-platform-hint=auto --open-url %U\n"
-                  "Icon=code\nType=Application\nNoDisplay=true\n"
-                  "StartupNotify=true\n"
-                  "Categories=Utility;TextEditor;Development;IDE;\n"
-                  "MimeType=x-scheme-handler/vscode;\nKeywords=vscode;\n"))
+                   "[Desktop Entry]\n"
+                   "Name=Visual Studio Code - URL Handler\n"
+                   "Comment=Code Editing. Redefined.\n"
+                   "GenericName=Text Editor\n"
+                   "Exec="
+                   (file-append %vscode-package "/bin/code")
+                   " --ozone-platform-hint=auto --open-url %U
+"
+                   "Icon=code
+Type=Application
+NoDisplay=true
+"
+                   "StartupNotify=true\n"
+                   "Categories=Utility;TextEditor;Development;IDE;
+"
+                   "MimeType=x-scheme-handler/vscode;
+Keywords=vscode;
+"))
 
 (define %vscode
   (application (name 'vscode)
@@ -189,14 +197,13 @@
                                                     home-files-service-type
                                                     `((".vscode/argv.json" ,(local-file
                                                                              "argv.json"
-                                                                              "vscode-argv.json"))))
+                                                                             "vscode-argv.json"))))
                                     (simple-service 'vscode-url-handler
-                                                    home-xdg-data-files-service-type
-                                                    (list (list
-                                                           (string-append
-                                                            "applications/"
-                                                            %vscode-url-desktop-entry)
-                                                           %vscode-url-desktop-file)))))
+                                     home-xdg-data-files-service-type
+                                     (list (list (string-append
+                                                  "applications/"
+                                                  %vscode-url-desktop-entry)
+                                                 %vscode-url-desktop-file)))))
                (persistence (list (application-persistence-rule (name 'global-storage)
                                                                 (backing
                                                                  "vscode/global-storage")

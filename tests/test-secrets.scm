@@ -28,14 +28,14 @@
   "Read the whole file at PATH, collapsing every whitespace run to a
 single space.  Source-wiring assertions then survive formatting
 reflows (guix style rewrapping a call across lines)."
-  (string-join
-   (delete "" (string-split
-               (string-map (lambda (ch)
-                             (if (char-whitespace? ch) #\space ch))
-                           (call-with-input-file path
-                             (lambda (p) (read-string p))))
-               #\space))
-   " "))
+  (string-join (delete ""
+                       (string-split (string-map (lambda (ch)
+                                                   (if (char-whitespace? ch)
+                                                       #\space ch))
+                                                 (call-with-input-file path
+                                                   (lambda (p)
+                                                     (read-string p))))
+                                     #\space)) " "))
 
 (test-begin "secrets")
 

@@ -32,7 +32,8 @@
   #:use-module (guixcfg flatpak model)
   #:export (%flatpak-thunderbird %thunderbird-desktop-entry))
 
-(define %thunderbird-desktop-entry "org.mozilla.thunderbird_esr.desktop")
+(define %thunderbird-desktop-entry
+  "org.mozilla.thunderbird_esr.desktop")
 
 (define %flatpak-thunderbird
   (flatpak-application (name 'thunderbird)
