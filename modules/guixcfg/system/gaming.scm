@@ -9,7 +9,8 @@
 ;;;     容器时代它随 steam app 走；Flatpak Steam 的 controller
 ;;;     支持同样依赖宿主 udev rules（flathub steam wiki）——它是
 ;;;     机器能力（有没有手柄），不是某个 launcher 的属性；
-;;;   - 游戏库目录 /persist/data-nobackup/{steam,aagl}：direct-access
+;;;   - 游戏库目录 /persist/data-nobackup/{steam,an-anime-game-launcher,
+;;;     sleepy-launcher}：direct-access
 ;;;     bulk storage（docs/architecture/persistence.md（
 ;;;     data-nobackup）），经各自 Flatpak 的 managed override
 ;;;     （filesystem）暴露进 sandbox（路径 authority 在本模块，
@@ -36,17 +37,24 @@
   #:use-module (guix modules) ;source-module-closure
   #:use-module (guixcfg storage model) ;persist-mount-point
   #:use-module (guixcfg users user) ;%primary-user（owner 推导）
-  #:export (%steam-games-library-path %aagl-games-library-path
-                                      %prismlauncher-instances-path
-                                      %gaming-system-services))
+  #:export (%steam-games-library-path
+            %an-anime-game-launcher-games-library-path
+            %sleepy-launcher-games-library-path
+            %prismlauncher-instances-path
+                                       %gaming-system-services))
 
 ;; 游戏库 canonical 位置：/persist/data-nobackup/steam（persist-
 ;; mount-point 是 /persist/* 语义路径唯一 authority——AGENT.md §13）。
 (define %steam-games-library-path
   (string-append (persist-mount-point "@persist-data-nobackup") "/steam"))
 
-(define %aagl-games-library-path
-  (string-append (persist-mount-point "@persist-data-nobackup") "/aagl"))
+(define %an-anime-game-launcher-games-library-path
+  (string-append (persist-mount-point "@persist-data-nobackup")
+                 "/an-anime-game-launcher"))
+
+(define %sleepy-launcher-games-library-path
+  (string-append (persist-mount-point "@persist-data-nobackup")
+                 "/sleepy-launcher"))
 
 ;; Prism Launcher 的实例（游戏内容）目录；InstanceDir 由用户在 GUI
 ;; 手动指向此处（应用自有 cfg，仓库不 seed）。
@@ -92,9 +100,10 @@
                                                   (password-entry-gid user))
                                            ;; 游戏库仅 primary user 可遍历。
                                            (chmod dir #o700))
-                                         (list #$%steam-games-library-path
-                                               #$%aagl-games-library-path
-                                               #$%prismlauncher-instances-path))
+                                          (list #$%steam-games-library-path
+                                                #$%an-anime-game-launcher-games-library-path
+                                                #$%sleepy-launcher-games-library-path
+                                                #$%prismlauncher-instances-path))
                                #t))))
 
 ;; gaming system services：controller udev rules + 游戏库目录

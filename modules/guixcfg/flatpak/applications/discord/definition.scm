@@ -28,7 +28,9 @@
 
 (define-module (guixcfg flatpak applications discord definition)
   #:use-module (guixcfg flatpak model)
-  #:export (%flatpak-discord))
+  #:export (%flatpak-discord %discord-desktop-entry))
+
+(define %discord-desktop-entry "com.discordapp.Discord.desktop")
 
 (define %flatpak-discord
   (flatpak-application (name 'discord)

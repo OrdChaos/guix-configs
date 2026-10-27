@@ -24,7 +24,9 @@
   #:use-module (guix records)
   #:use-module (guixcfg apps model)
   #:use-module (guixcfg system application-persistence)
-  #:export (%mpv))
+  #:export (%mpv %mpv-desktop-entry))
+
+(define %mpv-desktop-entry "mpv.desktop")
 
 (define %mpv
   (application (name 'mpv)

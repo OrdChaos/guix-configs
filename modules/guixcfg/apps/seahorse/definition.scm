@@ -20,7 +20,9 @@
   #:use-module (gnu packages gnome) ;seahorse
   #:use-module (guix records)
   #:use-module (guixcfg apps model)
-  #:export (%seahorse))
+  #:export (%seahorse %seahorse-desktop-entry))
+
+(define %seahorse-desktop-entry "org.gnome.seahorse.Application.desktop")
 
 (define %seahorse
   (application (name 'seahorse)

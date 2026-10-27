@@ -4,7 +4,7 @@
 ;;; org.freedesktop.Platform.VulkanLayer.gamescope：runtime
 ;;; extension，挂载于 /usr/lib/extensions/vulkan/gamescope
 ;;; （executable 在 .../bin）。消费方（flathub steam 的
-;;; steam_wrapper、AAGL 的 wrapper）各自把该 bin 目录加入
+;;; steam_wrapper、两个 anime launcher 的 wrapper）各自把该 bin 目录加入
 ;;; PATH——用户侧无需手动 PATH（上游 README 明确不建议
 ;;; --env=PATH 覆盖）。
 ;;;

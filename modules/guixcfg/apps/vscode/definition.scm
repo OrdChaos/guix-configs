@@ -125,16 +125,16 @@
 ;;; Exec 参数提供；portal 由 niri 会话提供。
 
 (define-module (guixcfg apps vscode definition)
-  #:use-module (gnu home services) ;home-files-service-type
+  #:use-module (gnu home services) ;home-files / home-xdg-data-files
   #:use-module (gnu services) ;simple-service
-  #:use-module (guix gexp) ;local-file
+  #:use-module (guix gexp) ;local-file、mixed-text-file、file-append
   #:use-module (guix records)
   #:use-module (virelith packages vscode) ;vscode（自建 channel）
   #:use-module (virelith packages vscode-extensions)
   #:use-module (guixcfg apps vscode extensions)
   #:use-module (guixcfg apps model)
   #:use-module (guixcfg system application-persistence) ;rule
-  #:export (%vscode %vscode-desktop-entry))
+  #:export (%vscode %vscode-desktop-entry %vscode-url-desktop-entry))
 
 ;; VS Code 的 XDG desktop entry（store 内实际构建产物
 ;; share/applications/ 核实）。纯数据常量：供统一 XDG 策略模块
@@ -142,13 +142,37 @@
 (define %vscode-desktop-entry
   "vscode.desktop")
 
+(define %vscode-url-desktop-entry
+  "vscode-url-handler.desktop")
+
+(define %vscode-package
+  (vscode-with-extensions vscode %vscode-extensions))
+
+;; Upstream resources/linux/code-url-handler.desktop: --open-url %U.
+;; Virelith 3a5d2b5 明确把 MIME integration 留给配置层，只提供普通
+;; launcher。URL 入口必须调用同一个 immutable-extension package。
+;; 使用官方 Home data-files 投影完整 desktop 文本：pinned Guix 的
+;; xdg-desktop-entry serializer 会 string-capitalize config keys，
+;; 把 MimeType/NoDisplay 变成无效的 Mimetype/Nodisplay。
+(define %vscode-url-desktop-file
+  (mixed-text-file %vscode-url-desktop-entry
+                  "[Desktop Entry]\n"
+                  "Name=Visual Studio Code - URL Handler\n"
+                  "Comment=Code Editing. Redefined.\n"
+                  "GenericName=Text Editor\n"
+                  "Exec=" (file-append %vscode-package "/bin/code")
+                  " --ozone-platform-hint=auto --open-url %U\n"
+                  "Icon=code\nType=Application\nNoDisplay=true\n"
+                  "StartupNotify=true\n"
+                  "Categories=Utility;TextEditor;Development;IDE;\n"
+                  "MimeType=x-scheme-handler/vscode;\nKeywords=vscode;\n"))
+
 (define %vscode
   (application (name 'vscode)
                ;; wrapper 包与裸 vscode 的 bin/code、desktop entry 同名——profile 中
                ;; 两者并存会以 collision 报错，这是有意设计（防止桌面启动绕过
                ;; --extensions-dir）。
-               (home-packages (list (vscode-with-extensions vscode
-                                     %vscode-extensions)))
+               (home-packages (list %vscode-package))
                (home-services (list (simple-service 'vscode-user-config
                                                     home-files-service-type
                                                     `((".config/Code/User/settings.json" ,
@@ -165,7 +189,14 @@
                                                     home-files-service-type
                                                     `((".vscode/argv.json" ,(local-file
                                                                              "argv.json"
-                                                                             "vscode-argv.json"))))))
+                                                                              "vscode-argv.json"))))
+                                    (simple-service 'vscode-url-handler
+                                                    home-xdg-data-files-service-type
+                                                    (list (list
+                                                           (string-append
+                                                            "applications/"
+                                                            %vscode-url-desktop-entry)
+                                                           %vscode-url-desktop-file)))))
                (persistence (list (application-persistence-rule (name 'global-storage)
                                                                 (backing
                                                                  "vscode/global-storage")

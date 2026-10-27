@@ -4,7 +4,8 @@
 ;;; 选型（2026-09 调研结论）：Guix/Nonguix 均无 gamescope；公开
 ;;; Guix 配置无一使用 Flatpak Steam，但 Flatpak 路线的
 ;;; gamescope 是上游官方支持路径（steam wrapper 自动把
-;;; VulkanLayer extension bin 加入 PATH），且与 AAGL 共用同一
+;;; VulkanLayer extension bin 加入 PATH），且与 An Anime Game Launcher、
+;;; Sleepy Launcher 共用同一
 ;;; gamescope extension。NVIDIA GL/GL32 extension 按内核模块
 ;;; 版本自动匹配（flatpak --gl-drivers），驱动升级仪式见
 ;;; flatpak.md（GL driver 一致性）。
@@ -40,7 +41,9 @@
   #:use-module (guix gexp) ;local-file
   #:use-module (guixcfg flatpak model)
   #:use-module (guixcfg system gaming) ;%steam-games-library-path
-  #:export (%flatpak-steam))
+  #:export (%flatpak-steam %steam-desktop-entry))
+
+(define %steam-desktop-entry "com.valvesoftware.Steam.desktop")
 
 (define %flatpak-steam
   (flatpak-application (name 'steam)
@@ -49,7 +52,7 @@
                        (branch "stable")
                        (update-policy 'track-branch)
                        (desktop-files (list (list
-                                             "com.valvesoftware.Steam.desktop"
+                                             %steam-desktop-entry
                                              (local-file
                                               "com.valvesoftware.Steam.desktop"
                                               "steam-flatpak-desktop-shadow.desktop"))))

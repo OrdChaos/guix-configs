@@ -22,7 +22,8 @@
   #:use-module (guixcfg flatpak model)
   #:use-module (guixcfg flatpak applications qq definition)
   #:use-module (guixcfg flatpak applications wechat definition)
-  #:use-module (guixcfg flatpak applications aagl definition)
+  #:use-module (guixcfg flatpak applications an-anime-game-launcher definition)
+  #:use-module (guixcfg flatpak applications sleepy-launcher definition)
   #:use-module (guixcfg flatpak applications steam definition)
   #:use-module (guixcfg flatpak applications telegram definition)
   #:use-module (guixcfg flatpak applications tuba definition)
@@ -57,7 +58,8 @@
 (define %flatpak-applications
   (list %flatpak-qq
         %flatpak-wechat
-        %flatpak-aagl
+        %flatpak-an-anime-game-launcher
+        %flatpak-sleepy-launcher
         %flatpak-steam
         %flatpak-telegram
         %flatpak-tuba
@@ -72,7 +74,8 @@
 ;; docs/architecture/flatpak.md（driver overlays）。
 (define %flatpak-selection
   '(qq wechat
-       aagl
+        an-anime-game-launcher
+        sleepy-launcher
        steam
        telegram
        tuba

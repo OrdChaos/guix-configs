@@ -2,8 +2,8 @@
 ;;; Flatpak selection 2026-09 全局化——硬件差异只经 environment
 ;;; adapter 表达）：
 ;;;   - (guixcfg system gaming)：游戏库路径 authority
-;;;     （persist-mount-point 派生 /persist/data-nobackup/{steam,aagl,
-;;;     prismlauncher}）、system services（steam-devices udev rules +
+;;;     （persist-mount-point 派生 /persist/data-nobackup/{steam,
+;;;     an-anime-game-launcher,sleepy-launcher,prismlauncher}）、system services（steam-devices udev rules +
 ;;;     目录 activation）——所有 host 共享；
 ;;;   - Prism Launcher 是原生应用，其游戏实例目录
 ;;;     %prismlauncher-instances-path 由同一 activation 建好并归还
@@ -13,9 +13,8 @@
 ;;;   - NVIDIA PRIME：单一 authority（%prime-offload-environment-strings
 ;;;     与 %flatpak-prime-environment-overrides）——application
 ;;;     definition 不直接引用 NVIDIA 模块；
-;;;   - AAGL 已从 Flatpak 迁出，作为原生 virelith 应用进入
-;;;     (guixcfg apps anime-game-launcher)（persistence 由
-;;;     application 层声明）；
+;;;   - An Anime Game Launcher 与 Sleepy Launcher 均为 Flatpak 应用；
+;;;     游戏内容目录由同一 activation 建好并经 managed override 暴露。
 ;;;   - host 差异：Lenovo Guix Home 传 PRIME environment adapter，
 ;;;     VM 传空 adapter。
 ;;;

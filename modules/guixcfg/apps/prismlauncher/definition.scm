@@ -19,7 +19,7 @@
 ;;;     launcher 启动/退出时整文件重写）、accounts.json、
 ;;;     metacache/、icons/、themes/、translations/、logs/ 等。cfg 由
 ;;;     Prism 自己初始化与重写，故不作为 Home file 或 seed 从仓库
-;;;     派生（应用自有状态，与 AAGL/VS Code 同类结论）。
+;;;     派生（应用自有状态，与 An Anime Game Launcher/VS Code 同类结论）。
 ;;;   ~/.config/PrismLauncher      不存在：Prism 的 XDG 路径全部落在
 ;;;     data dir（QStandardPaths::AppDataLocation 的父目录）。
 ;;;   ~/.cache/…                   不涉及。
@@ -41,7 +41,7 @@
 
 ;; Prism 的 XDG desktop entry 名（virelith 包 share/applications/ 实际
 ;; 构建产物核实）。纯数据常量：供统一 XDG 策略模块引用，本模块不决定
-;; 默认应用（Prism 不是任何 MIME 的默认处理器）。
+;; 默认应用（专属协议和 modpack 的选择由 XDG policy 拥有）。
 (define %prismlauncher-desktop-entry
   "org.prismlauncher.PrismLauncher.desktop")
 

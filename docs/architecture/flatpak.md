@@ -73,8 +73,9 @@ reconcile projection（mutable）  selected definitions + extensions → install
 
 ### Global selection 与 host driver adapter
 
-用户态 Flatpak 集合跨设备一致：应用 selection 含 `qq wechat aagl
-steam`，extension selection 含 `gamescope proton-ge`。两个消费方：
+用户态 Flatpak 集合跨设备一致：应用 selection 含 `qq wechat
+an-anime-game-launcher sleepy-launcher steam`，extension selection 含
+`gamescope proton-ge`。两个消费方：
 
 - **Home/System 投影**（offline）：`guix-home` 与
   `host-persistent-mount-file-systems` 直接使用 registry 的全局
@@ -92,7 +93,8 @@ driver adapter（如 NVIDIA PRIME environment overlay）：
   `#:flatpak-environment-overrides`，经
   `(flatpak-applications-with-environments)` 对 **managed-overrides**
   app 追加环境并生成单一完整 override 文件（complete-file single
-  owner 不变）；VM 传空 overlay，AAGL/Steam override 不含 `__NV_*`；
+  owner 不变）；VM 传空 overlay，An Anime Game Launcher、Sleepy Launcher、
+  Steam override 不含 `__NV_*`；
 - external app（user/Flatseal owns）拒绝环境 overlay（fail
   fast）；未知 app、重复变量、非法条目同样 fail closed。
 - **extension selection 与硬件驱动**：gamescope / proton-ge 是
@@ -113,8 +115,12 @@ driver adapter（如 NVIDIA PRIME environment overlay）：
   声明（依赖方向 policy → app metadata，definition 不反向依赖 xdg）。
   需要文件关联的应用在 definition 导出 desktop-entry 纯数据
   常量——Flatpak exports 固定命名 `<app-id>.desktop`——策略模块消费它
-  生成 mimeapps.list 的 [Default Applications]。QQ/WeChat 类无文件
-  关联的应用不涉及。
+  生成 mimeapps.list 的 [Default Applications] 与 [Added Associations]。
+  每个默认项同时显式关联，符合 XDG MIME Applications 规范，且 GIO 不再
+  依赖 Flatpak exports 的 `mimeinfo.cache` 才能发现 handler。当前覆盖
+  Telegram、Discord、Steam、Tuba、NewsFlash 的专属协议，以及
+  Thunderbird ESR 的邮件/日历/联系人与协议。QQ/WeChat 当前导出的
+  desktop entry 不声明 MIME/protocol handler，不凭协议名称猜测支持。
 
 ### 生命周期（Case A–D）
 
@@ -348,39 +354,44 @@ flatpak status` 对比 active GL driver 与已装 nvidia extension，
 发散症状：stale extension 不被挂载（`enable-if`），GL/Vulkan
 初始化失败。
 
-### Gaming（steam / aagl）
+### Gaming（steam / an-anime-game-launcher / sleepy-launcher）
 
-Steam 与 AAGL 是全局用户软件（所有设备 selection 一致）；其
+Steam、An Anime Game Launcher 与 Sleepy Launcher 是全局用户软件（所有
+设备 selection 一致）；其
 host-level system 集成（controller udev rules + 游戏库目录
 activation，`(guixcfg system gaming)`）也在 `(guixcfg hosts
 common)` 共享组装。Steam 全线 Flatpak 化（2026-09 调研结论：
 Guix/Nonguix 均无 gamescope，Flatpak gamescope 是上游官方支持
-路径，且与 AAGL 共用同一 extension）：
+路径，且与两个 anime launcher 共用同一 extension）：
 
-- **NVIDIA PRIME（唯一 host driver adapter）**：steam/aagl 的
+- **NVIDIA PRIME（唯一 host driver adapter）**：steam、
+  an-anime-game-launcher、sleepy-launcher 的
   definition 保持 hardware-neutral；NVIDIA host 的 Guix Home 把
   `%flatpak-prime-environment-overrides` 传给
   `(flatpak-applications-with-environments)`，对 managed override
   追加 `%prime-offload-environment-strings`（变量语义归
   `(guixcfg system graphics nvidia)`）。游戏库
-  `/persist/data-nobackup/{steam,aagl}`（路径 authority 在
+  `/persist/data-nobackup/{steam,an-anime-game-launcher,sleepy-launcher}`
+  （路径 authority 在
   `(guixcfg system gaming)`，目录由其 activation 创建）与手柄
   udev rules 是全局共享的 gaming host infrastructure。
-- **AAGL config 不从仓库派生**：Flatpak 内 `$XDG_DATA_HOME` 对应宿主
-  `~/.var/app/moe.launcher.an-anime-game-launcher/data`，AAGL 的完整配置
-  因而位于其下的 `anime-game-launcher/config.json`。上游 schema 把
+- **An Anime Game Launcher config 不从仓库派生**：Flatpak 内
+  `$XDG_DATA_HOME` 对应宿主 `~/.var/app/moe.launcher.an-anime-game-launcher/data`，
+  完整配置因而位于其下的 `anime-game-launcher/config.json`。上游 schema 把
   launcher 偏好与游戏路径、Wine prefix/build、DXVK/component 下载
   状态放在同一 JSON，并在 preferences/main window 关闭及组件变化时
   整文件重写。Home store symlink 会与应用形成双 owner；seed-once 又会
   提前创建配置并改变 first-run 初始化。因此该文件继续作为整个
   `~/.var/app/<id>` persistence unit 内的 app-owned mutable state。
-  此结论核对过 AAGL 3.19.8 / anime-launcher-sdk 1.36.11；本仓库跟踪
+  此结论核对过 An Anime Game Launcher 3.19.8 / anime-launcher-sdk 1.36.11；本仓库跟踪
   stable branch，未来若上游拆出只读 policy/schema，需重新审计后再接入。
-- **AAGL 使用包内 Git helpers**：Guix 会话会导出宿主 profile 的
-  `GIT_EXEC_PATH`，而 Flatpak sandbox 不可访问该路径。AAGL 的组件索引
+- **An Anime Game Launcher 使用包内 Git helpers**：Guix 会话会导出宿主
+  profile 的 `GIT_EXEC_PATH`，而 Flatpak sandbox 不可访问该路径。组件索引
   同步调用 Flathub 包内 `/app/bin/git`，因此 managed override 将
   `GIT_EXEC_PATH` 固定为 `/app/libexec/git-core`；否则 `git clone` 失败，
-  上游 3.19.8 又会把该退出状态掩盖成组件目录 `ENOENT`。
+  上游 3.19.8 又会把该退出状态掩盖成组件目录 `ENOENT`。Sleepy Launcher
+  使用相同的 Git helper 与游戏库 override policy，其 app-private state 由
+  `moe.launcher.sleepy-launcher` 自动投影。
 - **Gamescope 逐游戏**（如 niri 兼容性差的游戏）：游戏属性
   Launch Options 写 `gamescope -f -- %command%`（多显示器指针
   逃逸时用 `gamescope --backend sdl -f -- %command%`）；**不要**
