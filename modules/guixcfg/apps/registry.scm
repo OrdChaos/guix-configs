@@ -37,6 +37,7 @@
   #:use-module (guixcfg apps cmake definition)
   #:use-module (guixcfg apps ninja definition)
   #:use-module (guixcfg apps gdb definition)
+  #:use-module (guixcfg apps godot definition)
   #:use-module (guixcfg apps strace definition)
   #:use-module (guixcfg apps nodejs definition)
   #:use-module (guixcfg apps java definition)
@@ -100,6 +101,7 @@
         %cmake
         %ninja
         %gdb
+        %godot
         %strace
         %nodejs
         %java
