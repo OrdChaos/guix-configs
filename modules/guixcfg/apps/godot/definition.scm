@@ -14,19 +14,19 @@
   #:export (%godot))
 
 (define %godot
-  (application
-   (name 'godot)
-   (home-packages (list godot))
-   (persistence
-    (list (application-persistence-rule
-           (name 'config)
-           (backing "godot/config")
-           (consumer ".config/godot")
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))
-          (application-persistence-rule
-           (name 'data)
-           (backing "godot/data")
-           (consumer ".local/share/godot")
-           (exposure 'bind-directory)
-           (lifecycle 'application-owned))))))
+  (application (name 'godot)
+               (home-packages (list godot))
+               (persistence (list (application-persistence-rule (name 'config)
+                                                                (backing
+                                                                 "godot/config")
+                                                                (consumer
+                                                                 ".config/godot")
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))
+                                  (application-persistence-rule (name 'data)
+                                                                (backing
+                                                                 "godot/data")
+                                                                (consumer
+                                                                 ".local/share/godot")
+                                                                (exposure 'bind-directory)
+                                                                (lifecycle 'application-owned))))))
