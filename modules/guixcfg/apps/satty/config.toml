@@ -2,6 +2,7 @@
 fullscreen = false
 resize = { mode = "smart" }
 floating-hack = true
+app-id = "org.satty.satty"
 copy-command = "wl-copy"
 output-filename = "~/Pictures/Screenshots/satty-%Y-%m-%d_%H-%M-%S.png"
 actions-on-enter = ["save-to-clipboard", "save-to-file", "exit"]

@@ -110,6 +110,15 @@ window-rule {
     open-focused false
 }
 
+// Satty is a transient screenshot editor.  With no explicit floating position,
+// Niri places each new window at the center of the current working area.
+window-rule {
+    match app-id=r#"^org\.satty\.satty$"#
+    open-floating true
+    default-column-width { fixed 1400; }
+    default-window-height { fixed 900; }
+}
+
 prefer-no-csd
 
 // ─────────────────────────────────────────────────────────────────────────────
