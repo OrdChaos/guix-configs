@@ -19,6 +19,10 @@
 (define %store
   (open-connection))
 
+;; This test only compares declarative policy text; disable grafting so
+;; derivation lowering cannot build a missing package output.
+(run-with-store %store (set-grafting #f))
+
 (define (lower-text file-like)
   "lower FILE-LIKE 并读 store 内容（test-mihomo 同款模式）。"
   (call-with-input-file (run-with-store %store

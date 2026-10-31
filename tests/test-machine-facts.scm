@@ -196,6 +196,11 @@ GUIX_CONFIG_FACTS。"
 "
          p)
         (display "(define store (open-connection))\n" p)
+        ;; Derivation path equality is independent of grafts.  Leaving
+        ;; grafting enabled makes graft reference discovery build any missing
+        ;; output (guix/grafts.scm non-self-references -> build-derivations),
+        ;; which would turn this test into an unexpected package build.
+        (display "(run-with-store store (set-grafting #f))\n" p)
         (display
          "(display (derivation-file-name (run-with-store store (lower-object (operating-system-initrd-file %lenovo-legion-y7000p-os))))) (newline)
 "

@@ -6,6 +6,7 @@
 (use-modules (srfi srfi-1)
              (srfi srfi-64)
              (guix derivations) ;derivation?
+             (guix gexp) ;lower-object
              (guix monads) ;mlet、run-with-store、mapm
              (guix store) ;open-connection
              (guixcfg security certificates))
@@ -14,10 +15,19 @@
 
 (test-begin "vendor-certificates")
 
+(define %store
+  (open-connection))
+
+;; Derivation identity is independent of grafts.  With grafting enabled,
+;; graft reference discovery builds missing outputs (guix/grafts.scm
+;; non-self-references -> build-derivations), contradicting this test's
+;; no-build contract.
+(run-with-store %store (set-grafting #f))
+
 (test-group "lowering"
             (test-assert
              "all sources lower to one certificate package derivation (no build, no network)"
-             (run-with-store (open-connection)
+             (run-with-store %store
                              (mlet %store-monad
                                    ((drvs (mapm %store-monad
                                                 (lambda (cert)
