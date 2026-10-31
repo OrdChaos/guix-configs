@@ -205,34 +205,35 @@ resume 生效 → 未持久化的普通 HOME 临时文件 reboot 后消失。
 
 需要 `#:use-module (guixcfg system application-persistence)`。
 
-## E5b. 可写 mixed-authority 容器（managed-files）
+## E5b. mixed-authority 容器（home-files + app-owned runtime）
 
 应用需要 repo 声明一部分文件，但同一目录还必须由应用自己写入运行时
-文件时（例如 DSH profile 根），使用 `(guixcfg home managed-files)`：
+文件时（例如 DSH profile 根），继续使用 Guix Home 的 `home-files`
+symlink：
 
 ```scheme
-#:use-module (guixcfg home managed-files)
+#:use-module (gnu home services) ;home-files-service-type
 
 (home-services
  (list (simple-service 'foo-profile
-                       managed-files-service-type
-                       (list (managed-file
-                              (name 'package)
-                              (target ".local/share/foo/profiles/web/package.json")
-                              (source (local-file "profiles/web/package.json")))))))
+                       home-files-service-type
+                       `((".local/share/foo/profiles/web/package.json"
+                          ,(local-file "profiles/web/package.json"))))))
 ```
 
-语义（`(guixcfg utils managed-file)`）：
+边界：
 
-- Home activation 把 store source 原子复制到 target；内容相同则 no-op；
-- 只替换声明的 target，**不删除**未声明文件；
-- target 类型冲突（目录/普通文件/symlink 不符）fail closed；
-- 不使用 `home-files` symlink，因为应用需要写同一目录（symlink 目标
-  不可写）；也不把整个 `.config`/`.local/share` 交给规则。
+- repo-owned 文件是 store symlink，只读；应用读取它们，但不要写；
+- 同目录的应用自有文件（如 DSH 的 `cordis.yml`、sessions）保持可写；
+- 应用若尝试改写 repo-owned symlink（例如 DSH Settings 写 profile
+  `cordis.patch.yml`），会 fail closed；这是有意的单 authority；
+- 不把整个 `.config`/`.local/share` 交给 symlink；只精确声明文件；
+- 外部插件 `node_modules` 同样是 store symlink，不复制插件闭包。
 
 首个 consumer：`apps/dsh`（profile 的 package.json、
 pnpm-workspace.yaml、cordis.patch.yml）。首次部署先 reconfigure system
-（建立 persistence bind），再 reconfigure Home。
+（建立 persistence bind），再 reconfigure Home。外部插件见
+`docs/development/dsh-plugins.md`。
 
 ## E6. App-private secret
 

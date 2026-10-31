@@ -219,11 +219,12 @@ production consumers：
 - dsh（`.local/share/dsh` → `/persist/data-app/dsh/data`）：
   DSH_HOME 单一根；`DSH_AGENTS_HOME` 嵌在 `$DSH_HOME/agents`，不使用
   上游共享的 `~/.agents`。profile 的 `package.json`/
-  `pnpm-workspace.yaml`/`cordis.patch.yml` 是 repo-owned，由
-  `(guixcfg home managed-files)` 在 Home activation 原子复制；同目录
-  的 `cordis.yml`、sessions、storages、credentials、logs、cache 是
-  DSH-owned，managed-files 不删除未声明文件。`apps/dsh` 头注释是
-  所有权边界 authority。
+  `pnpm-workspace.yaml`/`cordis.patch.yml` 是 repo-owned，经
+  `home-files-service-type` 投影为 store symlink；同目录的
+  `cordis.yml`、sessions、storages、credentials、logs、cache 是
+  DSH-owned，写入保持可写。repo-owned symlink 只读，DSH Settings
+  改写 profile patch 会 fail closed。`apps/dsh` 头注释是所有权边界
+  authority。
 
 后续应用按同一契约显式 adopt。
 
