@@ -269,6 +269,7 @@ tests 的 `add-to-load-path` 本来就拼绝对路径）。
 |---|---|
 | 可由 repo 确定性重建？ | → Guix Home / System（derived state） |
 | 编辑器/工具扩展（VS Code extension 等）？ | → pinned VSIX 的 fixed-output origin → extension package → 不可变集合目录 → wrapper 以官方接口（`--extensions-dir`）注入；集合结构性等于 generation 声明（先例：apps/vscode——`extensions.scm` 是唯一数据入口，virelith `(virelith packages vscode-extensions)` 提供机制；不经 activation、不写 mutable 默认扩展目录） |
+| 应用需要可写 profile/配置根，同时由 repo 声明 composition？ | → `(guixcfg home managed-files)`：Home activation 原子复制 store 文件；只替换声明的 target、不删除未声明文件；应用自有运行时文件保持可写（先例：apps/dsh——DSH profile 的 `package.json`/`pnpm-workspace.yaml`/`cordis.patch.yml`，同目录的 `cordis.yml`/sessions 由应用拥有） |
 | 上游只提供滚动 URL、无固定版本地址的应用数据资源？ | → 上游/自建 channel 以版本化 snapshot release pin（先例：rime-data-wanxiang——tag = 快照时间戳，asset 按 tag immutable，fixed-output sha256 稳定；version 与 tag 同步升级） |
 | 应用产生、需保留、要求标准 HOME/XDG/FHS 路径？ | → `/persist/data-app` + bind projection |
 | 用户自己创建/拥有的数据？ | → `/persist/data-home` |

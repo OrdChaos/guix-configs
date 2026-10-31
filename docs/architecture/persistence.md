@@ -215,7 +215,15 @@ production consumers：
   直写同一路径（非 temp+rename），因此单文件 bind 合适；
   `clp/` 是 derived cache（hash+locale+commit 版本隔离、
   corrupted.info 自愈重建），持久化只为消除 cold-start
-  regeneration）。
+  regeneration）；
+- dsh（`.local/share/dsh` → `/persist/data-app/dsh/data`）：
+  DSH_HOME 单一根；`DSH_AGENTS_HOME` 嵌在 `$DSH_HOME/agents`，不使用
+  上游共享的 `~/.agents`。profile 的 `package.json`/
+  `pnpm-workspace.yaml`/`cordis.patch.yml` 是 repo-owned，由
+  `(guixcfg home managed-files)` 在 Home activation 原子复制；同目录
+  的 `cordis.yml`、sessions、storages、credentials、logs、cache 是
+  DSH-owned，managed-files 不删除未声明文件。`apps/dsh` 头注释是
+  所有权边界 authority。
 
 后续应用按同一契约显式 adopt。
 

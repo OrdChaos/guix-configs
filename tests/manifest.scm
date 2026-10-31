@@ -18,6 +18,7 @@
 (define %core-test-files
   '("tests/test-atomic-file.scm" "tests/test-modules-load.scm"
     "tests/test-home-path.scm"
+    "tests/test-managed-files.scm"
     "tests/test-sudo.scm"
     "tests/test-profile.scm"
     "tests/test-boot-state.scm"

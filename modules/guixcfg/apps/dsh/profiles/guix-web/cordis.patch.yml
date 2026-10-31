@@ -1,0 +1,3 @@
+# Repository-owned DSH profile patch layer.
+# Bundle layers are applied first; this list overrides them.
+[]

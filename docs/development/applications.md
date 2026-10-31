@@ -205,6 +205,35 @@ resume 生效 → 未持久化的普通 HOME 临时文件 reboot 后消失。
 
 需要 `#:use-module (guixcfg system application-persistence)`。
 
+## E5b. 可写 mixed-authority 容器（managed-files）
+
+应用需要 repo 声明一部分文件，但同一目录还必须由应用自己写入运行时
+文件时（例如 DSH profile 根），使用 `(guixcfg home managed-files)`：
+
+```scheme
+#:use-module (guixcfg home managed-files)
+
+(home-services
+ (list (simple-service 'foo-profile
+                       managed-files-service-type
+                       (list (managed-file
+                              (name 'package)
+                              (target ".local/share/foo/profiles/web/package.json")
+                              (source (local-file "profiles/web/package.json")))))))
+```
+
+语义（`(guixcfg utils managed-file)`）：
+
+- Home activation 把 store source 原子复制到 target；内容相同则 no-op；
+- 只替换声明的 target，**不删除**未声明文件；
+- target 类型冲突（目录/普通文件/symlink 不符）fail closed；
+- 不使用 `home-files` symlink，因为应用需要写同一目录（symlink 目标
+  不可写）；也不把整个 `.config`/`.local/share` 交给规则。
+
+首个 consumer：`apps/dsh`（profile 的 package.json、
+pnpm-workspace.yaml、cordis.patch.yml）。首次部署先 reconfigure system
+（建立 persistence bind），再 reconfigure Home。
+
 ## E6. App-private secret
 
 ```text

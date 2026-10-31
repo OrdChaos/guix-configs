@@ -62,6 +62,7 @@
   #:use-module (guixcfg apps nushell definition)
   #:use-module (guixcfg apps carapace definition)
   #:use-module (guixcfg apps opencode definition)
+  #:use-module (guixcfg apps dsh definition)
   #:use-module (guixcfg apps starship definition)
   #:use-module (guixcfg apps blue definition)
   #:use-module (guixcfg apps xdg-utils definition)
@@ -127,6 +128,7 @@
         %nushell
         %carapace
         %opencode
+        %dsh
         %starship
         %blue
         %xdg-utils
