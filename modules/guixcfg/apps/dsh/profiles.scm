@@ -2,27 +2,32 @@
 ;;;
 ;;; The profile is one dependency-resolution boundary.  In-box bundles are
 ;;; named directly; external bundles are dsh-npm-bundle descriptors added to
-;;; this list.  dsh-profile generates the manifest, uses the committed pnpm
-;;; lockfile, and emits an immutable artifact.
-;;;
-;;; Bump NODE-MODULES-HASH together with any bundle list or lockfile change.
+;;; this list.  dsh-profile generates the manifest and, when external bundles
+;;; are present, resolves their closure into an immutable artifact pinned by
+;;; SPECS-HASH.  No pnpm lockfile is committed.
 
 (define-module (guixcfg apps dsh profiles)
   #:use-module (guix gexp) ;local-file
-  #:use-module (guix packages) ;base32
+  #:use-module (srfi srfi-1) ;any
   #:use-module (virelith packages dsh-profiles)
   #:export (%dsh-guix-web-bundles
+            %dsh-guix-web-external?
             %dsh-guix-web-profile))
 
 (define %dsh-guix-web-bundles
   (list "@deepseek-ai/dsh-base"
         "@deepseek-ai/dsh-web-app"))
 
+(define %dsh-guix-web-external?
+  (any (lambda (entry) (not (string? entry)))
+       %dsh-guix-web-bundles))
+
+;; Set to the recursive sha256 of the external closure when the bundle list
+;; contains a dsh-npm-bundle descriptor.  Ignored for in-box-only profiles.
+(define %dsh-guix-web-specs-hash #f)
+
 (define %dsh-guix-web-profile
   (dsh-profile "guix-web"
                #:bundles %dsh-guix-web-bundles
-               #:lockfile (local-file "profiles/guix-web/pnpm-lock.yaml")
                #:patch (local-file "profiles/guix-web/cordis.patch.yml")
-               ;; Replace after the first build reports the actual hash.
-               #:node-modules-hash
-               (base32 "0vghhmdmh5pcpgsghfka5vmqml7ra6kmzcyccky9zc85di2ksrs3")))
+               #:specs-hash %dsh-guix-web-specs-hash))

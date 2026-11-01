@@ -8,7 +8,7 @@ DSH profile 是插件组合的边界。仓库管理插件集合、版本和配�
 | 类型 | 来源 | 启用方式 |
 |---|---|---|
 | in-box bundle | DSH 包自身（`@deepseek-ai/dsh-base`、`dsh-web-app` 等） | 直接写进 profile 的 `dsh.profile.bundles` |
-| 外部 npm bundle | 独立 npm 包，固定 tarball 和版本 | Virelith 描述包 + profile lockfile + `dsh-profile` artifact |
+| 外部 npm bundle | 独立 npm 包，固定 tarball 和版本 | Virelith 描述包 + profile `specs-hash` + `dsh-profile` artifact |
 
 官方可选插件如果随 DSH 安装分发（例如
 `@deepseek-ai/dsh-experimental-auto-review`），也可以直接加入 bundle
@@ -56,9 +56,8 @@ guix hash /tmp/plugin.tgz
                #:bundles (list "@deepseek-ai/dsh-base"
                                "@deepseek-ai/dsh-web-app"
                                %my-plugin)
-               #:lockfile (local-file "profiles/guix-web/pnpm-lock.yaml")
                #:patch (local-file "profiles/guix-web/cordis.patch.yml")
-               #:node-modules-hash (base32 "...")))
+               #:specs-hash (base32 "...")))
 ```
 
 `dsh-profile` 会：
@@ -66,7 +65,7 @@ guix hash /tmp/plugin.tgz
 - 按声明顺序生成 profile `package.json` 的 `dsh.profile.bundles`；
 - 把外部描述包写成精确 `dependencies`；
 - 生成 `pnpm-workspace.yaml`；
-- 用固定 profile lockfile 在 profile 专属 root 安装一次；
+- 有外部 bundle 时，在 profile 专属 root 用 pnpm 解析一次闭包；
 - 校验每个外部 bundle 已安装且 manifest 仍声明 `dsh.bundle.patch`；
 - 输出不可变 artifact：
 
@@ -75,18 +74,27 @@ share/dsh/profiles/<name>/
   package.json
   pnpm-workspace.yaml
   cordis.patch.yml
-  node_modules/
+  node_modules/          # 仅当存在外部 bundle
 ```
 
-## Lockfile 与 hash
+只有 in-box bundle 时，`node_modules` 整段不存在，pnpm 完全不会被调用。
+`#:specs-hash` 也只在存在外部 bundle 时必填；缺失会 fail closed。
 
-profile lockfile 是构建输入，必须提交到仓库。更新插件时：
+## specs-hash 与升级
 
-1. 在临时目录生成与 `dsh-profile` 相同的 profile manifest；
-2. 运行 `pnpm install --lockfile-only`；
-3. 把 `pnpm-lock.yaml` 放回 `profiles/<name>/`；
-4. 构建 profile artifact。首次使用临时 hash，Guix 会报告实际
-   `node-modules-hash`，再回填并重建。
+仓库**不提交 pnpm lockfile**。外部依赖闭包由 `pnpm-closure` 在构建期
+解析成 fixed-output；`#:specs-hash` 是这个闭包的递归 sha256，因而同时
+固定了顶层版本和所有 transitive dependencies。
+
+首次启用或升级插件时：
+
+1. 改描述包版本和 npm tarball hash；
+2. 先填一个临时 `#:specs-hash` 并构建 profile；
+3. Guix 会报告实际 hash；把它回填到 `#:specs-hash`；
+4. 重新构建 profile artifact，再 reconfigure。
+
+`pnpm-closure` 会把本次解析生成的 `pnpm-lock.yaml` 留在 store artifact
+内供检查，但它不是配置仓库输入；依赖闭包只由 `specs-hash` 固定。
 
 profile root 由 `dsh-profile-default-root` 生成，必须保持稳定；pnpm shim
 会嵌入该路径，artifact 构建时再改写到最终 store 路径。
@@ -109,17 +117,17 @@ Home generation 切换时 symlink-manager 负责把链接更新到新的 artifac
 
 当前 `apps/dsh` 已按此接线：`apps/dsh/profiles.scm` 定义
 `%dsh-guix-web-profile`，definition 把 artifact 的 package.json、
-pnpm-workspace.yaml、cordis.patch.yml 和 node_modules 全部经
-home-files 投影。只有 in-box bundle 时 node_modules 为空；加入外部
-描述包后重生成 lockfile 和 hash 即可。
+pnpm-workspace.yaml、cordis.patch.yml 经 home-files 投影。当前只有
+in-box bundle，因此没有 node_modules；`%dsh-guix-web-external?` 为真时
+definition 才会额外投影 node_modules。加入外部描述包后，把重算得到的
+hash 填进 `%dsh-guix-web-specs-hash` 即可。
 
 ## 边界
 
 - 不执行 npm install script；带 native 构建的插件需要单独 package 和
   Guix-native 修补，不能走通用 tarball 工厂。
 - 不使用 `latest`、不运行时查询 registry。
-- 插件升级 = 改描述包版本/hash + 重新生成 lockfile + 更新
-  `node-modules-hash` + reconfigure。
+- 插件升级 = 改描述包版本/hash + 重算 `specs-hash` + reconfigure。
 - Web Settings 写入 profile `cordis.patch.yml`，而仓库将其投影为只读
   store symlink；写入会 fail closed。需要长期保留的配置应写进仓库
   profile patch，然后 reconfigure。
