@@ -230,10 +230,11 @@ symlink：
 - 不把整个 `.config`/`.local/share` 交给 symlink；只精确声明文件；
 - 外部插件 `node_modules` 同样是 store symlink，不复制插件闭包。
 
-首个 consumer：`apps/dsh`（profile 的 package.json、
-pnpm-workspace.yaml、cordis.patch.yml）。首次部署先 reconfigure system
-（建立 persistence bind），再 reconfigure Home。外部插件见
-`docs/development/dsh-plugins.md`。
+首个 consumer：`apps/dsh`；profile 的 package.json、pnpm-workspace.yaml、
+cordis.patch.yml 和 node_modules 由 `apps/dsh/profiles.scm` 的
+`dsh-profile` artifact 生成，再经 home-files 投影。首次部署先
+reconfigure system（建立 persistence bind），再 reconfigure Home。外部
+插件见 `docs/development/dsh-plugins.md`。
 
 ## E6. App-private secret
 

@@ -219,7 +219,8 @@ production consumers：
 - dsh（`.local/share/dsh` → `/persist/data-app/dsh/data`）：
   DSH_HOME 单一根；`DSH_AGENTS_HOME` 嵌在 `$DSH_HOME/agents`，不使用
   上游共享的 `~/.agents`。profile 的 `package.json`/
-  `pnpm-workspace.yaml`/`cordis.patch.yml` 是 repo-owned，经
+  `pnpm-workspace.yaml`/`cordis.patch.yml`/`node_modules` 由
+  `apps/dsh/profiles.scm` 的 `dsh-profile` artifact 生成，经
   `home-files-service-type` 投影为 store symlink；同目录的
   `cordis.yml`、sessions、storages、credentials、logs、cache 是
   DSH-owned，写入保持可写。repo-owned symlink 只读，DSH Settings

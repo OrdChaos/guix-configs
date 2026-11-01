@@ -107,8 +107,11 @@ profile root 由 `dsh-profile-default-root` 生成，必须保持稳定；pnpm s
 Home generation 切换时 symlink-manager 负责把链接更新到新的 artifact；
 不需要 activation 时复制目录或维护自定义 symlink kind。
 
-如果没有外部插件，继续使用当前静态 in-box profile 即可，不需要
-`node_modules`。
+当前 `apps/dsh` 已按此接线：`apps/dsh/profiles.scm` 定义
+`%dsh-guix-web-profile`，definition 把 artifact 的 package.json、
+pnpm-workspace.yaml、cordis.patch.yml 和 node_modules 全部经
+home-files 投影。只有 in-box bundle 时 node_modules 为空；加入外部
+描述包后重生成 lockfile 和 hash 即可。
 
 ## 边界
 
