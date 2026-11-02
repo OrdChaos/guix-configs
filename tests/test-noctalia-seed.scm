@@ -45,15 +45,16 @@
                          (string-suffix? ".toml" target))
                        (map car %noctalia-xdg-value))))
 ;; ── 3. host seed variants（host 只做 logical selection）─────
-(define %laptop-seed-text
-  (read-file "modules/guixcfg/apps/noctalia/variants/laptop-settings.toml"))
+(define %lenovo-seed-text
+  (read-file
+   "modules/guixcfg/apps/noctalia/variants/lenovo-legion-y7000p-settings.toml"))
 (define %vm-seed-text
   (read-file "modules/guixcfg/apps/noctalia/variants/vm-settings.toml"))
 
-(test-assert "laptop seed carries the internal panel layout"
-             (string-contains %laptop-seed-text "eDP-1"))
-(test-assert "laptop seed stays free of user absolute paths"
-             (not (string-contains %laptop-seed-text "/home/")))
+(test-assert "lenovo seed carries the internal panel layout"
+             (string-contains %lenovo-seed-text "eDP-1"))
+(test-assert "lenovo seed stays free of user absolute paths"
+             (not (string-contains %lenovo-seed-text "/home/")))
 (test-assert "vm seed carries the Virtual-1 layout"
              (string-contains %vm-seed-text "Virtual-1"))
 (test-assert "vm seed stays free of user absolute paths"
@@ -64,16 +65,16 @@
           (eq? 'state (application-persistence-rule-name rule)))
         (application-persistence %noctalia)))
 
-(test-assert "noctalia declares the laptop seed variant"
-             (assq 'laptop
+(test-assert "noctalia declares the lenovo-legion-y7000p seed variant"
+             (assq 'lenovo-legion-y7000p
                    (application-persistence-rule-seed-variants %state-rule)))
 (test-assert "noctalia declares the vm seed variant"
              (assq 'vm
                    (application-persistence-rule-seed-variants %state-rule)))
-(test-assert "selecting the laptop variant swaps the seed source"
+(test-assert "selecting the lenovo-legion-y7000p variant swaps the seed source"
              (not (equal? (application-persistence-rule-seeds
                            (application-persistence-rule-for-variant
-                            %state-rule 'laptop))
+                            %state-rule 'lenovo-legion-y7000p))
                           (application-persistence-rule-seeds %state-rule))))
 (test-assert "selecting the vm variant swaps the seed source"
              (not (equal? (application-persistence-rule-seeds

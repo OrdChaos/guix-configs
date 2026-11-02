@@ -63,7 +63,7 @@
   #:use-module (guixcfg system application-persistence) ;application-persistence-rule
   #:export (%noctalia))
 
-;; 锁屏 widget 布局绑定具体 connector（laptop 内屏 eDP-1 / VM 的
+;; 锁屏 widget 布局绑定具体 connector（本机内屏 eDP-1 / VM 的
 ;; Virtual-1）与面板尺寸，不能进可移植 base seed。内容归 application；
 ;; host 只做 logical variant selection（(guixcfg apps model) seed 变体）。
 (define (noctalia-settings-seed source)
@@ -72,9 +72,9 @@
 (define %noctalia-base-settings-seed
   (local-file "base-settings.toml" "noctalia-base-settings.toml"))
 
-(define %noctalia-laptop-settings-seed
-  (local-file "variants/laptop-settings.toml"
-              "noctalia-laptop-settings.toml"))
+(define %noctalia-lenovo-legion-y7000p-settings-seed
+  (local-file "variants/lenovo-legion-y7000p-settings.toml"
+              "noctalia-lenovo-legion-y7000p-settings.toml"))
 
 (define %noctalia-vm-settings-seed
   (local-file "variants/vm-settings.toml"
@@ -113,9 +113,9 @@
                                                                  (noctalia-settings-seed
                                                                   %noctalia-base-settings-seed))
                                                                 (seed-variants
-                                                                 (list (cons 'laptop
+                                                                 (list (cons 'lenovo-legion-y7000p
                                                                              (noctalia-settings-seed
-                                                                              %noctalia-laptop-settings-seed))
+                                                                              %noctalia-lenovo-legion-y7000p-settings-seed))
                                                                        (cons 'vm
                                                                              (noctalia-settings-seed
                                                                               %noctalia-vm-settings-seed)))))

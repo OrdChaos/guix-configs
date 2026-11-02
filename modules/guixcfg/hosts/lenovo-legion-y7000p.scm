@@ -76,10 +76,10 @@
 
 ;; seed 的 logical selection（同一 host-agnostic boundary）：Noctalia
 ;; 的锁屏 widget 布局绑定内屏 connector（eDP-1）与这块面板的尺寸，
-;; 因此只在本机选 'laptop 变体；未选中的 host（VM）用 app 声明的
-;; 可移植 base seed。
+;; 因此只在本机选 lenovo-legion-y7000p 变体（与 reconfigure 的 host
+;; 标识一致）；未选中的 host（VM）用 app 声明的可移植 base seed。
 (define %lenovo-legion-y7000p-seed-selections
-  '((noctalia . laptop)))
+  '((noctalia . lenovo-legion-y7000p)))
 
 ;; laptop 的 Guix Home 组合：默认 home + logical selections（由
 ;; generic resolver 解析为配置文件贡献）+ laptop-only host
