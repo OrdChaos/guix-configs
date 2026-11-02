@@ -82,9 +82,8 @@ modules/guixcfg/      全部配置模块（guile/repl 用绝对 -L；guix system
   fonts/               共享字体事实（single source；中立域，system
                        层不 import home 层）：model.scm（%fonts 包
                        集合）+ fontconfig-policy.scm（generic-family/
-                       fallback 策略 SXML 数据）——Home profile、
-                       System profile 的 Flatpak sandbox 字体投影、
-                       ONLYOFFICE 兼容层（apps/onlyoffice）共同消费
+                       fallback 策略 SXML 数据）——Home profile 与
+                       System profile 的 Flatpak sandbox 字体投影共同消费
 tools/                 独立领域 CLI（刻意留在 Blue 之外：disk-install、
                        secrets、secure-boot、tpm2-enroll，以及仍被集成测试
                        使用的 E2E driver；reconfigure 事务与 Flatpak 已迁入

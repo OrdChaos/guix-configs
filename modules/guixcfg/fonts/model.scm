@@ -3,8 +3,7 @@
 ;;; %fonts：profile 安装哪些字体（"有哪些字体"）——中立事实，由
 ;;; Home profile（(guixcfg home fonts) 消费）与 System profile
 ;;; （(guixcfg system packages)：greeter 经 XDG_DATA_DIRS、Flatpak 经
-;;; pinned flatpak-fix-fonts-icons.patch）、apps 层 adapter（onlyoffice
-;;; 的 bwrap 字体投影）共同消费。
+;;; pinned flatpak-fix-fonts-icons.patch）共同消费。
 ;;; system 层不允许 import home 层（layering inversion），因此事实
 ;;; 放在这个中立域模块。
 ;;;
@@ -26,7 +25,7 @@
 ;; （DengXian/FangSong/KaiTi/SimHei，Microsoft payload）；
 ;; Windows Office 兼容字体（Arial/Calibri/Cambria/Courier New/
 ;; Times New Roman/Symbol/Wingdings/YaHei/SimSun，Microsoft ESD
-;; payload——ONLYOFFICE 官方检测字体族齐全）。
+;; payload——Office 文档的字体替换需要这些族齐全）。
 (define %fonts
   (list mi-sans-global
         maple-mono-default-nf-cn

@@ -186,13 +186,6 @@ production consumers：
   雾凇主翻译器唯一可写 leveldb；`*.custom.yaml` 为 declarative
   repo-owned，`build/`/`user.yaml`/`installation.yaml` 保持
   ephemeral；`apps/fcitx5/definition.scm`）；
-- onlyoffice（`.config/onlyoffice` →
-  `/persist/data-app/onlyoffice/config`，偏好
-  DesktopEditors.conf 等；`.local/share/onlyoffice` →
-  `/persist/data-app/onlyoffice/share`，自定义词典/插件/
-  autosave/recovery；路径经宿主实装实证；包层不生成 store
-  symlink，mutable 配置由应用首次运行自建；
-  `apps/onlyoffice/definition.scm`）；
 - musescore（`.config/MuseScore` →
   `/persist/data-app/musescore/config`，MuseScore4.ini 偏好/最近文件/
   窗口几何；`.local/share/MuseScore` →

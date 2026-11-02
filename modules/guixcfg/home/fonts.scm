@@ -4,8 +4,8 @@
 ;;; 职责划分：
 ;;;   - %fonts 与 fontconfig 策略（SXML 数据）：中立事实层
 ;;;     (guixcfg fonts model) / (guixcfg fonts fontconfig-policy) 拥有
-;;;     （System profile 的 greeter/Flatpak 字体与
-;;;     ONLYOFFICE 兼容层等消费同一份；本模块不再持有定义）；
+;;;     （System profile 的 greeter/Flatpak 字体消费同一份；本模块
+;;;     不再持有定义）；
 ;;;   - 本模块只剩 Home 机制：home-fontconfig-service-type 服务包装
 ;;;     （snippet → $XDG_CONFIG_HOME/fontconfig/fonts.conf）与 XDG
 ;;;     字体链接农场。
@@ -25,8 +25,10 @@
 ;;; 出现重复条目）。目录 snippet 由 essential 默认值提供。
 ;;;
 ;;; XDG 字体链接农场（~/.local/share/fonts/<pkg> → store
-;;; share/fonts）：为环境被 CEF 白名单式清洗的渲染进程提供字体
-;;; 目录。诊断链（2026-08 onlyoffice 字体缺失，全部实测）：
+;;; share/fonts）：为直接扫描 XDG 字体目录、且环境被清洗的渲染进程
+;;; 提供字体（Flatpak 经 /run/host/user-fonts 也能看到）。诊断链
+;;; （2026-08 历史上由 ONLYOFFICE 适配层触发，该应用已移除，但
+;;; symlink 农场对同类扫描器仍然成立；全部实测）：
 ;;;   1. ONLYOFFICE 自身的 fontconfig 初始化会整目录加载所加载
 ;;;      fontconfig 包的 share/fontconfig/conf.avail；其中的
 ;;;      05-reset-dirs-sample.conf 含 <reset-dirs/>，把此前配置链
@@ -53,7 +55,7 @@
 ;;;
 ;;; 已知权衡：同一字体文件经两条路径可见（profile share 经
 ;;; XDG_DATA_DIRS + 本农场），fc-list 文件级列表出现双份条目；
-;;; 按 family 聚合的选择器（GTK/Chromium/ONLYOFFICE）天然去重，
+;;; 按 family 聚合的选择器（GTK/Chromium）天然去重，
 ;;; 匹配语义不受影响。removal condition：上游不再整目录加载
 ;;; conf.avail / 停止 reset-dirs / CEF 停止清洗渲染进程环境。
 

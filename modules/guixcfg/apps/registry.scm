@@ -58,7 +58,6 @@
   #:use-module (guixcfg apps gnome-characters definition)
   #:use-module (guixcfg apps mission-center definition)
   #:use-module (guixcfg apps vscode definition)
-  #:use-module (guixcfg apps onlyoffice definition)
   #:use-module (guixcfg apps nushell definition)
   #:use-module (guixcfg apps carapace definition)
   #:use-module (guixcfg apps dsh definition)
@@ -123,7 +122,6 @@
         %gnome-characters
         %mission-center
         %vscode
-        %onlyoffice
         %nushell
         %carapace
         %dsh

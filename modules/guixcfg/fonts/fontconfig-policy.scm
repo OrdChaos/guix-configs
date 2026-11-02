@@ -1,11 +1,9 @@
 ;;; Fontconfig generic-family/fallback 策略（纯 SXML 数据，唯一事实源）。
 ;;;
-;;; 两个渲染器消费同一份策略：
-;;;   - (guixcfg home fonts) 的 home-fontconfig 服务 → 用户
-;;;     $XDG_CONFIG_HOME/fontconfig/fonts.conf；
-;;;   - ONLYOFFICE 兼容层（apps/onlyoffice/definition.scm）的进程内嵌
-;;;     fontconfig 文件——ONLYOFFICE 不应用 conf.d/用户配置的
-;;;     include，策略必须内联。
+;;; 消费方：(guixcfg home fonts) 的 home-fontconfig 服务 → 用户
+;;; $XDG_CONFIG_HOME/fontconfig/fonts.conf。Flatpak 沙箱的字体经
+;;; pinned flatpak-fix-fonts-icons.patch 绑定 system profile，不消费
+;;; 本策略。
 ;;;
 ;;; 本模块只含数据与 SXML 构造器（无服务、无机制）；字体包集合在
 ;;; 同域的 (guixcfg fonts model)。
@@ -246,9 +244,8 @@ CHAIN 替换为 VARIANT 置首的版本（mode=assign_replace——实测
                         (family "emoji")
                         (prefer (family "Noto Color Emoji"))))))
 
-;; 完整 snippet 集合（不含目录——目录由各渲染方自备：home-fontconfig
-;; 的目录来自 essential 默认值 "~/.guix-home/profile/share/fonts"，
-;; ONLYOFFICE 兼容层自备其 dir 列表）。
+;; 完整 snippet 集合（不含目录——目录由 home-fontconfig 的 essential
+;; 默认值提供："~/.guix-home/profile/share/fonts"）。
 (define %fontconfig-snippets
   (append %generic-alias-snippets
           (list %mi-sans-l3-lang-edit) %cjk-lang-edits %script-lang-edits))
