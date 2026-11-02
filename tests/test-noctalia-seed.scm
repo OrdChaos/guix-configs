@@ -1,8 +1,11 @@
 ;;; Noctalia seed portability and single-configuration-source tests.
+;;; base seed 必须可移植（无 /home、无显示器 connector）；仅 laptop
+;;; 变体可以带内屏布局，host 经 logical seed selection 选用。
 
 (use-modules (gnu services) ;service-kind、service-value、service-type-name
              (guixcfg apps model)
              (guixcfg apps noctalia definition)
+             (guixcfg system application-persistence) ;rule accessors
              (ice-9 rdelim) ;read-string
              (srfi srfi-1) ;any
              (srfi srfi-64))
@@ -40,4 +43,27 @@
              (not (any (lambda (target)
                          (string-suffix? ".toml" target))
                        (map car %noctalia-xdg-value))))
+;; ── 3. laptop seed variant（host 只做 logical selection）────
+(define %laptop-seed-text
+  (read-file "modules/guixcfg/apps/noctalia/variants/laptop-settings.toml"))
+
+(test-assert "laptop seed carries the internal panel layout"
+             (string-contains %laptop-seed-text "eDP-1"))
+(test-assert "laptop seed stays free of user absolute paths"
+             (not (string-contains %laptop-seed-text "/home/")))
+
+(define %state-rule
+  (find (lambda (rule)
+          (eq? 'state (application-persistence-rule-name rule)))
+        (application-persistence %noctalia)))
+
+(test-assert "noctalia declares the laptop seed variant"
+             (assq 'laptop
+                   (application-persistence-rule-seed-variants %state-rule)))
+(test-assert "selecting the laptop variant swaps the seed source"
+             (not (equal? (application-persistence-rule-seeds
+                           (application-persistence-rule-for-variant
+                            %state-rule 'laptop))
+                          (application-persistence-rule-seeds %state-rule))))
+
 (test-end "noctalia-seed")

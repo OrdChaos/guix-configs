@@ -63,6 +63,13 @@
   #:use-module (guixcfg system application-persistence) ;application-persistence-rule
   #:export (%noctalia))
 
+;; 锁屏 widget 的 laptop 变体：布局绑定内屏 connector（eDP-1）与这块
+;; 面板的尺寸，不能进可移植 base seed。内容归 application；host 只做
+;; logical variant selection（(guixcfg apps model) 的 seed 变体）。
+(define %noctalia-laptop-settings-seed
+  (local-file "variants/laptop-settings.toml"
+              "noctalia-laptop-settings.toml"))
+
 (define %noctalia
   (application (name 'noctalia)
                (home-packages (list noctalia)) ;用户 profile 包（service 自动贡献的不要重复）
@@ -95,7 +102,8 @@
                                                                 (seeds `(("settings.toml" ,
                                                                           (local-file
                                                                            "base-settings.toml"
-                                                                           "noctalia-base-settings.toml")))))
+                                                                           "noctalia-base-settings.toml"))))
+                                                                 (seed-variants `((laptop ("settings.toml" ,%noctalia-laptop-settings-seed)))))
                                   ;; 用户运行时安装的插件（app-private，跨 boot 保留）。
                                   (application-persistence-rule (name 'plugins)
                                                                 (backing
