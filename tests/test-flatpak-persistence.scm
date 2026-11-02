@@ -8,7 +8,8 @@
 ;;;
 ;;; 纯数据——不触 flatpak CLI、不触网络。
 
-(use-modules (guixcfg flatpak model)
+(use-modules (guix gexp) ;plain-file
+             (guixcfg flatpak model)
              (guixcfg flatpak service)
              (guixcfg flatpak registry) ;%flatpak-applications、%flatpak-selection（生产 catalog 回归）
              (guixcfg system application-persistence) ;valid-application-persistence-rule?
@@ -71,6 +72,25 @@
             (application-persistence-rule-backing (cadr %extra-rules)))
 (test-assert "extra rules valid per generic engine"
              (every valid-application-persistence-rule? %extra-rules))
+
+;; ── seeds：definition 的首次初始化投影到默认 rule ──────────
+(define %seeded-app
+  (flatpak-application (name 'seeded-app)
+                       (id "org.example.Seeded")
+                       (remote 'flathub)
+                       (branch "stable")
+                       (seeds (list (list "data/ElyOffice/settings.json"
+                                          (plain-file "settings.json"
+                                                      "{}"))))))
+
+(define %seeded-rule
+  (car (flatpak-application-persistence-rules %seeded-app)))
+
+(test-equal "default rule carries declared seed targets"
+            '("data/ElyOffice/settings.json")
+            (map car (application-persistence-rule-seeds %seeded-rule)))
+(test-assert "seeded default rule valid per generic engine"
+             (valid-application-persistence-rule? %seeded-rule))
 
 ;; ── 命名空间分离（regression：parent/child 嵌套禁止）───────
 (define (path-prefix? a b)

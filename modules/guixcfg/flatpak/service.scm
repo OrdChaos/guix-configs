@@ -78,7 +78,8 @@
   "默认 persistence intent：~/.var/app/<id>（含 sandbox 内
 config/data/cache——不做目录白名单，reliability 优先），从
 application ID 推导——app 自己拥有这条事实（definition 只需声明
-ID，投影在此显式可见）。"
+ID，投影在此显式可见）。definition 的 seeds 一并投影：target 相对
+该 backing，由 generic engine 以 seed-once 写入首次初始状态。"
   (application-persistence-rule (name (string->symbol (string-append
                                                        "flatpak-app-"
                                                        (flatpak-application-id
@@ -90,7 +91,8 @@ ID，投影在此显式可见）。"
                                                          (flatpak-application-id
                                                           app)))
                                 (exposure 'bind-directory)
-                                (lifecycle 'application-owned)))
+                                (lifecycle 'application-owned)
+                                (seeds (flatpak-application-seeds app))))
 
 (define (flatpak-extra-persistence-rules app)
   "definition 的 extra-persistence（(consumer backing) 两元素

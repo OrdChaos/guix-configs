@@ -158,11 +158,16 @@ source)` 两元素列表；source 为 file-like），语义是"只负责创建�
   - 均缺失 → 原子写入（`.new` → fsync → rename → fsync 父目录，
     `(guixcfg utils atomic-file)`），再写 marker——中途崩溃不会留
     下可被误判为已初始化的半成品；
+- target 可以位于 backing 内**尚不存在的子目录**：activation 先
+  `mkdir-p` 目标父层级，并把新建的每一层 chown 回目标 USER（否则
+  应用以后无法在自己的设置目录里写入）；已存在的父目录保持不动；
 - **seed-once != declarative management**：seed 之后 repository 对
   该文件零写入，后续 reconfigure/seed 更新都不影响已初始化目标；
 - 实现：`(guixcfg utils seed-once)`（状态机）+ application
   persistence activation 接线；生产 consumer：noctalia
-  （`.local/state/noctalia/settings.toml` 初始配置）。
+  （`.local/state/noctalia/settings.toml` 初始配置）与 Ely Office
+  Flatpak 应用（各沙箱 `data/ElyOffice/settings.json` 的首次
+  界面默认值，见 `flatpak.md`）。
 
 production consumers：
 - mpv（`.local/state/mpv` → `/persist/data-app/mpv/state`，

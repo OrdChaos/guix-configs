@@ -42,7 +42,9 @@ applications/<name>/definition.scm
     ├── ref metadata            remote、branch
     ├── update policy           'track-branch | (flatpak-commit-pin "<hex>")
     ├── override policy         'external | (managed-overrides <flatpak-override>)
-    └── persistence intent      默认 ~/.var/app/<id>（ID 推导）+ extra-persistence 例外
+    ├── persistence intent      默认 ~/.var/app/<id>（ID 推导）+ extra-persistence 例外
+    └── seeds                   默认 backing 内的首次初始化文件（(target source)，
+                                seed-once；见 persistence.md）
 extensions/<name>/definition.scm auxiliary ref（非 application）：Vulkan layer
                                  （org.freedesktop.Platform.VulkanLayer.*）、
                                  compatibility tool
@@ -168,6 +170,12 @@ declaration removal 不是"永久销毁用户数据"的充分授权
 - `flatpak/installation` 与 `flatpak/apps/<id>` 是**平级** backing，
   禁止 parent/child mount 嵌套（`tests/test-flatpak-persistence.scm`
   回归固定）。
+- **seeds 是首次初始状态，不是持续同步**：definition 可声明
+  `(target source)`（target 相对该 app 的默认 backing，如
+  `data/ElyOffice/settings.json`），由 generic engine 在 activation
+  以 seed-once 写入并写 `.seed-provided` marker。目标已存在（用户
+  自己改过、备份恢复）时完全保留；seed 之后仓库对该文件零写入——
+  应用设置仍由应用拥有，仓库只提供一次初始默认值。
 
 ## Remotes 与 trust（identity / bootstrap authority / transport）
 

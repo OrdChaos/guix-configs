@@ -43,7 +43,10 @@
 ;;; persistence intent：
 ;;;   默认 ~/.var/app/<id> 由 application ID 推导（service 投影）；
 ;;;   extra-persistence 只声明默认之外的例外（(consumer backing)
-;;;   两元素列表，backing 相对 flatpak/apps/ 命名空间）。
+;;;   两元素列表，backing 相对 flatpak/apps/ 命名空间）；
+;;;   seeds 声明默认 backing 内的首次初始化文件（(target source)，
+;;;   target 相对 flatpak/apps/<id>；seed-once 语义，写完即永久
+;;;   放弃 ownership，不是持续同步——见 (guixcfg utils seed-once)）。
 ;;;
 ;;; desktop-files：
 ;;;   optional list of (basename source-file-like)。仅用于上游 desktop
@@ -76,6 +79,7 @@
                              flatpak-application-update-policy
                              flatpak-application-override-policy
                              flatpak-application-extra-persistence
+                             flatpak-application-seeds
                              flatpak-application-desktop-files
                              <flatpak-extension>
                              flatpak-extension
@@ -104,6 +108,7 @@
                              valid-flatpak-commit?
                              valid-flatpak-update-policy?
                              valid-flatpak-override-policy?
+                             valid-flatpak-seeds?
                              valid-flatpak-application?
                              valid-flatpak-extension?
                              validate-flatpak-catalog!
@@ -146,6 +151,8 @@
                    (default 'external))
   (extra-persistence flatpak-application-extra-persistence ;list of (consumer . backing)
                      (default '()))
+  (seeds flatpak-application-seeds ;list of (target source)；target 相对默认 backing
+         (default '()))
   (desktop-files flatpak-application-desktop-files ;list of (basename source-file-like)
                  (default '())))
 
@@ -364,6 +371,22 @@ valid-relative-path? 契约）。默认 persistence（~/.var/app/<id>）
                      (valid-relative-path? (car entry))
                      (valid-relative-path? (cadr entry)))) extras)))
 
+(define (valid-flatpak-seeds? seeds)
+  "SEEDS 是 (target source) 两元素列表的集合：target 是默认
+persistence backing（flatpak/apps/<id>）内的相对路径，source 是
+file-like（store 化）。语义归 (guixcfg utils seed-once)：只在目标
+从未存在时写入一次，之后仓库永久放弃 ownership——应用自己的
+mutable state 可以声明初始默认值，而不形成双 owner。marker 后缀
+冲突由 generic engine 在组装 activation 时 fail closed。"
+  (and (list? seeds)
+       (every (lambda (entry)
+                (and (list? entry)
+                     (= 2
+                        (length entry))
+                     (string? (car entry))
+                     (valid-relative-path? (car entry))
+                     (file-like? (cadr entry)))) seeds)))
+
 (define (valid-flatpak-desktop-files? files)
   "FILES 是 (basename source-file-like) 两元素列表；basename 必须是
 不含路径分隔符的 .desktop 文件名。"
@@ -392,6 +415,7 @@ valid-relative-path? 契约）。默认 persistence（~/.var/app/<id>）
                                         app))
        (valid-flatpak-extra-persistence? (flatpak-application-extra-persistence
                                           app))
+       (valid-flatpak-seeds? (flatpak-application-seeds app))
        (valid-flatpak-desktop-files? (flatpak-application-desktop-files app))))
 
 (define (valid-flatpak-extension? ext remote-names)

@@ -242,6 +242,15 @@ test-runtime-exec.scm AP1）。只补缺失目录/文件、不重建已有数据
                             (marker (string-append src "/"
                                                    (car entry)
                                                    #$%seed-marker-suffix)))
+                        ;; seed 目标可落在 backing 内尚不存在的子目录
+                        ;; （如 flatpak app 的 data/ElyOffice/）：mkdir
+                        ;; 以 root 建层级，必须逐层归还 USER，否则应用
+                        ;; 以后无法在自己的设置目录里写入/重命名。
+                        (mkdir-p (dirname dest))
+                        (let loop ((dir (dirname dest)))
+                          (unless (string=? dir src)
+                            (chown dir uid gid)
+                            (loop (dirname dir))))
                         (case (seed-once-file! dest
                                                (cadr entry) marker)
                           ((seeded)

@@ -150,6 +150,31 @@
                                                                                  (sockets '
                                                                                   ("wayland")))))))))
 
+;; ── application seeds（默认 backing 内的首次初始化）────────
+(define %fp-seed-source (plain-file "settings.json" "{}"))
+
+(test-assert "valid seeds: (target source)"
+             (valid-flatpak-seeds?
+              (list (list "data/ElyOffice/settings.json" %fp-seed-source))))
+(test-assert "invalid seeds: absolute target"
+             (not (valid-flatpak-seeds?
+                   (list (list "/data/settings.json" %fp-seed-source)))))
+(test-assert "invalid seeds: target escapes the backing"
+             (not (valid-flatpak-seeds?
+                   (list (list "../settings.json" %fp-seed-source)))))
+(test-assert "invalid seeds: source is not file-like"
+             (not (valid-flatpak-seeds? (list (list "data/settings.json"
+                                                    "settings.json")))))
+(test-assert "application with seeds is valid"
+             (valid-flatpak-application?
+              (flatpak-application (name 'seeded)
+                                   (id "com.example.Seeded")
+                                   (remote 'flathub)
+                                   (branch "stable")
+                                   (seeds (list (list "data/settings.json"
+                                                      %fp-seed-source))))
+              (map flatpak-remote-name %fp-remotes)))
+
 ;; ── override 校验（record 内部字段）────────────────────────
 (test-assert "valid bus policy"
              (valid-flatpak-application? (flatpak-application (name 'a)
