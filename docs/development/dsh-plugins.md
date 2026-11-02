@@ -77,16 +77,19 @@ profile 是 pnpm 依赖解析边界，外部 bundle 使用 `specs-hash` 固定�
 (dsh-profile "tui"
              #:bundles (dsh-extensions-for-profile '(tui))
              #:patch (plain-file "dsh-tui-cordis.patch.yml" "[]\n")
-             ;; dsh-TUI resolves DSH peers from a sibling @deepseek-ai/dsh.
-             #:auto-install-peers? #t
-             #:extra-dependencies
-             '(("@deepseek-ai/dsh" . "0.2.1-rc.5"))
+             ;; Share the launching DSH runtime's module identity.
+             #:runtime-scope
+             (file-append deepseek-harness
+                          "/libexec/deepseek-harness/node_modules/.pnpm/node_modules/@deepseek-ai")
              #:bundle-sources (dsh-extension-sources '(tui))
              #:specs-hash (base32 "..."))
 ```
 
 `dsh-profile` 会生成 `dsh.profile.bundles`、依赖、`pnpm-workspace.yaml`，
 有外部 bundle 时调用 pnpm 解析闭包，并校验每个外部 bundle 的 manifest。
+`#:runtime-scope` 把 profile 中缺失的 `node_modules/@deepseek-ai` 链接到
+启动它的 Guix DSH 运行时。不要另外安装 npm `@deepseek-ai/dsh`：两个
+`config-editor`/`app-boot` 实例会破坏 root Include 的生命周期。
 外部插件可以在 `extensions/<name>.scm` 中继承 `dsh-npm-bundle`，用 Guix
 package phases 直接 patch 安装后的插件内容（与 VS Code 扩展的 patch 形式
 相同）。profile 通过 `#:bundle-sources` 消费这个已 patch 的 package，而不是
@@ -150,8 +153,11 @@ VS Code 集成扩展 `baobaolaodie.dsh-tui-vscode` 同步 patch 到同一路径�
 ```
 
 Home generation 切换时 symlink-manager 更新链接；repo-owned 文件是只读
-store symlink，DSH Settings 写 profile patch 会 fail closed。配置变更应写
-进仓库 profile，再 reconfigure。
+store symlink，不能直接编辑。Guix 的 DSH 包把 Config Editor 的写入目标改为
+`$DSH_HOME/cordis.patch.yml`（home patch）：仓库 profile patch 是只读基线，
+Config Editor 只写 home patch，command-line overlay 仍优先。API key/OAuth
+token 由 DSH 自己的凭据存储管理；不要把 OAuth token 写进仓库。修改仓库
+profile 基线仍走 commit + reconfigure。
 
 ## 边界
 

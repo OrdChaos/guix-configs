@@ -32,7 +32,7 @@
        (name 'virelith)
        (url "https://github.com/ordchaos/virelith.git")
        (branch "master")
-       (commit "866aa68908efa10595f3e81e6ccdba1b05450777")
+       (commit "ff3d04f3c4761fc60241422125f5e6367323a8ae")
        (introduction
         (make-channel-introduction
          "cae11b77a64f281cc9ab45e20567e59efc37e96b"
