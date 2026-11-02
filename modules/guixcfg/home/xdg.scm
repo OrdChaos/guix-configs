@@ -22,7 +22,9 @@
   #:use-module (guixcfg apps celluloid definition)
   #:use-module (guixcfg apps loupe definition)
   #:use-module (guixcfg apps gnome-text-editor definition)
-  #:use-module (guixcfg apps onlyoffice definition) ;%onlyoffice-desktop-entry
+  #:use-module (guixcfg flatpak applications ely-doc definition) ;%ely-doc-desktop-entry
+  #:use-module (guixcfg flatpak applications ely-table definition) ;%ely-table-desktop-entry
+  #:use-module (guixcfg flatpak applications ely-show definition) ;%ely-show-desktop-entry
   #:use-module (guixcfg apps nautilus definition) ;%nautilus-desktop-entry
   #:use-module (guixcfg apps musescore definition) ;%musescore-desktop-entry
   #:use-module (guixcfg apps file-roller definition) ;%file-roller-desktop-entry
@@ -171,82 +173,39 @@
     "audio/vorbis"))
 
 ;; 文本 → GNOME Text Editor（包声明的 text/plain + 空文件类型 +
-;; Markdown——.md 用文本编辑器打开，而非 ONLYOFFICE）。
+;; Markdown——.md 用文本编辑器打开，而非办公套件）。
 (define %text-default-mime-types
   '("text/plain" "application/x-zerosize" "text/markdown"))
 
-;; 办公文档 → ONLYOFFICE Desktop Editors（原生 virelith 包 + bwrap
-;; adapter；desktop entry 名来自其 definition 的
-;; %onlyoffice-desktop-entry——policy 不复制应用专属字符串）。
-;; MIME 清单 = 上游 desktop entry 声明的 MimeType 全集（virelith
-;; 包安装的 share/applications/onlyoffice-desktopeditors.desktop
-;; 实证），排除：
-;;   - text/plain、text/markdown（文本编辑器领域；均有
-;;     GNOME Text Editor 默认，不制造重复 key）
-;;   - 电子书/图像类（epub、fictionbook、djvu——非 office 文档，
-;;     在下方独立 ebook 组选择 ONLYOFFICE；DjVu 由 Papers 处理）
-;;   - application/pdf（已由专用文档查看器 Papers 默认，见下方
-;;     %document-default-mime-types）
-;;   - x-scheme-handler/oo-office（下方单独声明 URL handler）
-(define %office-default-mime-types
-  '("application/msword" "application/msword-template"
-    "application/oxps"
+;; 办公文档 → Ely Office 套件（Flatpak；desktop entry 名来自各
+;; definition 的纯数据常量——policy 不复制应用专属字符串）。
+;; 关联范围 = 原先 ONLYOFFICE office 组 ∩ Ely 各应用 desktop entry
+;; 实际声明的 MimeType——不把应用不支持的类型硬指过去：
+;;   - 文字：DOCX/DOC/ODT/RTF     → %ely-doc-desktop-entry
+;;   - 表格：XLSX/XLS/ODS/CSV/TSV → %ely-table-desktop-entry
+;;   - 演示：PPTX/PPT/ODP         → %ely-show-desktop-entry
+;; ONLYOFFICE 原有的其余类型（XPS/OXPS、Visio、WPS、HWP、Apple
+;; iWork、ODF 模板/flat-xml、宏启用变体、Sun XML）、EPUB/FB2 与
+;; x-scheme-handler/oo-office 没有对应 Ely 应用声明支持，因此不再
+;; 设默认（交给 GIO 的候选与用户选择）；application/pdf 仍归 Papers
+;; （%document-default-mime-types）。
+(define %doc-default-mime-types
+  '("application/msword"
     "application/rtf"
-    "application/vnd.apple.keynote"
-    "application/vnd.apple.numbers"
-    "application/vnd.apple.pages"
-    "application/vnd.ms-excel"
-    "application/vnd.ms-excel.sheet.binary.macroEnabled.12"
-    "application/vnd.ms-excel.sheet.macroEnabled.12"
-    "application/vnd.ms-excel.template.macroEnabled.12"
-    "application/vnd.ms-powerpoint"
-    "application/vnd.ms-powerpoint.presentation.macroEnabled.12"
-    "application/vnd.ms-powerpoint.slideshow.macroEnabled.12"
-    "application/vnd.ms-powerpoint.template.macroEnabled.12"
-    "application/vnd.ms-visio.drawing.macroEnabled.main+xml"
-    "application/vnd.ms-visio.drawing.main+xml"
-    "application/vnd.ms-visio.stencil.macroEnabled.main+xml"
-    "application/vnd.ms-visio.stencil.main+xml"
-    "application/vnd.ms-visio.template.macroEnabled.main+xml"
-    "application/vnd.ms-visio.template.main+xml"
-    "application/vnd.ms-word.document.macroEnabled.12"
-    "application/vnd.ms-word.template.macroEnabled.12"
-    "application/vnd.ms-xpsdocument"
-    "application/vnd.oasis.opendocument.graphics"
-    "application/vnd.oasis.opendocument.presentation"
-    "application/vnd.oasis.opendocument.presentation-flat-xml"
-    "application/vnd.oasis.opendocument.presentation-template"
-    "application/vnd.oasis.opendocument.spreadsheet"
-    "application/vnd.oasis.opendocument.spreadsheet-flat-xml"
-    "application/vnd.oasis.opendocument.spreadsheet-template"
     "application/vnd.oasis.opendocument.text"
-    "application/vnd.oasis.opendocument.text-flat-xml"
-    "application/vnd.oasis.opendocument.text-template"
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-    "application/vnd.openxmlformats-officedocument.presentationml.slideshow"
-    "application/vnd.openxmlformats-officedocument.presentationml.template"
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+
+(define %spreadsheet-default-mime-types
+  '("application/vnd.ms-excel"
+    "application/vnd.oasis.opendocument.spreadsheet"
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.template"
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.template"
-    "application/vnd.sun.xml.calc"
-    "application/vnd.sun.xml.impress"
-    "application/vnd.sun.xml.writer"
-    "application/vnd.sun.xml.writer.template"
-    "application/wps-office.dps"
-    "application/wps-office.dpt"
-    "application/wps-office.et"
-    "application/wps-office.ett"
-    "application/wps-office.wps"
-    "application/wps-office.wpt"
-    "application/x-hwp"
     "text/csv"
     "text/tab-separated-values"))
 
-;; ONLYOFFICE 9.4 desktop entry 声明 + 官方 SupportedFormats 文档确认
-;; EPUB/FB2 可打开（导入时转换到 OOXML）；当前没有专用电子书应用。
-(define %ebook-default-mime-types
-  '("application/epub+zip" "application/x-fictionbook+xml"))
+(define %presentation-default-mime-types
+  '("application/vnd.ms-powerpoint"
+    "application/vnd.oasis.opendocument.presentation"
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation"))
 
 ;; 乐谱/记谱/MIDI 文件 → MuseScore Studio（上游 desktop entry 声明的
 ;; MimeType 全集——空 MUSE_APP_INSTALL_SUFFIX 实测；唯一乐谱处理器，
@@ -346,7 +305,7 @@
 ;; 文档（PDF/DjVu/comic/illustrator）→ Papers（GNOME 专用文档查看器；
 ;; 上游 desktop entry 声明的 MimeType 全集——meson.build 的
 ;; papers_mime_types 实证）。PDF 家族（application/pdf 及 bz/gz/xz/ext
-;; 别名）从此不再默认到 ONLYOFFICE（office 组已移除该行）。
+;; 别名）独立默认到 Papers（原 ONLYOFFICE office 组本就不含 PDF）。
 ;; 排除点：image/tiff 属图片域（Loupe 默认），不在此重复声明——
 ;; 跨组重复 key 会生成语义不确定的 mimeapps.list。
 (define %document-default-mime-types
@@ -500,12 +459,15 @@
           (mime-defaults %audio-default-mime-types %amberol-desktop-entry)
           (mime-defaults %text-default-mime-types
                          %gnome-text-editor-desktop-entry)
-          (mime-defaults %office-default-mime-types %onlyoffice-desktop-entry)
+          (mime-defaults %doc-default-mime-types %ely-doc-desktop-entry)
+          (mime-defaults %spreadsheet-default-mime-types
+                         %ely-table-desktop-entry)
+          (mime-defaults %presentation-default-mime-types
+                         %ely-show-desktop-entry)
           (mime-defaults %score-default-mime-types %musescore-desktop-entry)
           (mime-defaults %archive-default-mime-types
                          %file-roller-desktop-entry)
           (mime-defaults %document-default-mime-types %papers-desktop-entry)
-          (mime-defaults %ebook-default-mime-types %onlyoffice-desktop-entry)
           (mime-defaults %media-default-mime-types %celluloid-desktop-entry)
           (mime-defaults %mpv-default-mime-types %mpv-desktop-entry)
           (mime-defaults %key-default-mime-types %seahorse-desktop-entry)
@@ -525,8 +487,6 @@
                          %prismlauncher-desktop-entry)
           (mime-defaults '("x-scheme-handler/vscode")
                          %vscode-url-desktop-entry)
-          (mime-defaults '("x-scheme-handler/oo-office")
-                         %onlyoffice-desktop-entry)
           ;; 目录 → Nautilus（文件管理器）。必须显式声明：Amberol 的
           ;; desktop entry 也声明了 inode/directory（上游 MimeType
           ;; 异常）；无显式默认时 GIO 会把它解析为默认，"打开文件夹"

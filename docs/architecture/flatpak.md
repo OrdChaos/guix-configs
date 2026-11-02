@@ -120,8 +120,9 @@ driver adapter（如 NVIDIA PRIME environment overlay）：
   生成 mimeapps.list 的 [Default Applications] 与 [Added Associations]。
   每个默认项同时显式关联，符合 XDG MIME Applications 规范，且 GIO 不再
   依赖 Flatpak exports 的 `mimeinfo.cache` 才能发现 handler。当前覆盖
-  Telegram、Discord、Steam、Tuba、NewsFlash 的专属协议，以及
-  Thunderbird ESR 的邮件/日历/联系人与协议。QQ/WeChat 当前导出的
+  Telegram、Discord、Steam、Tuba、NewsFlash 的专属协议，Thunderbird ESR
+  的邮件/日历/联系人与协议，以及 Ely Office 的文字/表格/演示文档类型
+  （ElyDoc/ElyTable/ElyShow 各自只声明自己支持的 MIME）。QQ/WeChat 当前导出的
   desktop entry 不声明 MIME/protocol handler，不凭协议名称猜测支持。
 
 ### 生命周期（Case A–D）

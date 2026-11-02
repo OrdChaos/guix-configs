@@ -1,16 +1,19 @@
 ;;; 统一 XDG/default-apps 策略测试（(guixcfg home xdg)）：
 ;;; mimeapps.list 默认应用表的结构不变量——每个 MIME 恰好一个
 ;;; default（跨组重复 key 会生成语义不确定的 mimeapps.list）、
-;;; 每个 default 值恰好一个 desktop entry、office 组指向 ONLYOFFICE
-;;; desktop entry；实际序列化的关联在无 mimeinfo.cache 时能被 GIO
-;;; 发现，URL handler 保留参数与 immutable-extension executable。
+;;; 每个 default 值恰好一个 desktop entry、办公文档按文字/表格/
+;;; 演示分别指向 ElyDoc/ElyTable/ElyShow；实际序列化的关联在无
+;;; mimeinfo.cache 时能被 GIO 发现，URL handler 保留参数与
+;;; immutable-extension executable。
 ;;;
 ;;; 加应用不要求改本测试：断言只检查策略表的结构与领域边界，不枚举
-;;; per-app 关联清单（完整清单在 office 组注释里，由上游 desktop
+;;; per-app 关联清单（完整清单在 office 组注释里，由应用 desktop
 ;;; entry 的 MimeType 实证）。
 
 (use-modules (guixcfg home xdg)
-             (guixcfg apps onlyoffice definition) ;%onlyoffice-desktop-entry
+             (guixcfg flatpak applications ely-doc definition)
+             (guixcfg flatpak applications ely-table definition)
+             (guixcfg flatpak applications ely-show definition)
              (guixcfg apps vscode definition)
              (guixcfg apps model)
              (gnu home services)
@@ -50,15 +53,18 @@
                            (string? (cadr entry))
                            (null? (cddr entry)))) %xdg-default-applications))
 
-;; office 组 = 默认值恰为 ONLYOFFICE desktop entry 的 MIME 集合
-;; （key 唯一性已断言，按值反查可靠）。
-(define %office-keys
+;; 办公组按套件分工（key 唯一性已断言，按值反查可靠）。
+(define (keys-for entry)
   (filter (lambda (k)
             (equal? (assoc-ref %xdg-default-applications k)
-                    (list %onlyoffice-desktop-entry))) %keys))
+                    (list entry))) %keys))
 
-(test-assert "office mime types default to the ONLYOFFICE desktop entry"
-             (pair? %office-keys))
+(test-assert "word documents default to ElyDoc"
+             (pair? (keys-for %ely-doc-desktop-entry)))
+(test-assert "spreadsheets default to ElyTable"
+             (pair? (keys-for %ely-table-desktop-entry)))
+(test-assert "presentations default to ElyShow"
+             (pair? (keys-for %ely-show-desktop-entry)))
 
 ;; Exercise the official serializer and GIO, without depending on installed
 ;; user applications, desktop caches, a graphical session or the network.

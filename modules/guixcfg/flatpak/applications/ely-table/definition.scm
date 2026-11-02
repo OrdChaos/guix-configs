@@ -4,7 +4,11 @@
 (define-module (guixcfg flatpak applications ely-table definition)
   #:use-module (guix gexp) ;local-file
   #:use-module (guixcfg flatpak model)
-  #:export (%flatpak-ely-table))
+  #:export (%flatpak-ely-table %ely-table-desktop-entry))
+
+;; Flatpak exports 固定命名 <app-id>.desktop；XDG 默认关联策略消费。
+(define %ely-table-desktop-entry
+  "ely.zacharyzhang.office.table.desktop")
 
 (define %flatpak-ely-table
   (flatpak-application (name 'ely-table)
