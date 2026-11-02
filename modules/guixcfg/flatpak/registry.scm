@@ -30,6 +30,12 @@
   #:use-module (guixcfg flatpak applications discord definition)
   #:use-module (guixcfg flatpak applications newsflash definition)
   #:use-module (guixcfg flatpak applications thunderbird definition)
+  #:use-module (guixcfg flatpak applications ely-doc definition)
+  #:use-module (guixcfg flatpak applications ely-table definition)
+  #:use-module (guixcfg flatpak applications ely-show definition)
+  #:use-module (guixcfg flatpak applications ely-pdf definition)
+  #:use-module (guixcfg flatpak applications ely-mark definition)
+  #:use-module (guixcfg flatpak applications ely-tree definition)
   #:use-module (guixcfg flatpak extensions gamescope definition)
   #:use-module (guixcfg flatpak extensions proton-ge definition)
   #:export (%flatpak-remotes %flatpak-applications %flatpak-selection
@@ -52,7 +58,12 @@
                         (descriptor-url
                          "https://dl.flathub.org/repo/flathub.flatpakrepo")
                         (repository-url "https://mirror.sjtu.edu.cn/flathub")
-                        (comment "Flathub via SJTU mirror"))))
+                        (comment "Flathub via SJTU mirror"))
+        (flatpak-remote (name 'flatpark)
+                        (descriptor-url
+                         "https://dl.flatpark.org/flatpark.flatpakrepo")
+                        (repository-url "https://dl.flatpark.org/")
+                        (comment "Flatpark official mirror"))))
 
 ;; Catalog：已知 Flatpak 应用（纯聚合——定义在 applications/ 下）。
 (define %flatpak-applications
@@ -65,7 +76,13 @@
         %flatpak-tuba
         %flatpak-discord
         %flatpak-newsflash
-        %flatpak-thunderbird))
+        %flatpak-thunderbird
+        %flatpak-ely-doc
+        %flatpak-ely-table
+        %flatpak-ely-show
+        %flatpak-ely-pdf
+        %flatpak-ely-mark
+        %flatpak-ely-tree))
 
 ;; 应用 selection 缺省：全局用户软件 policy——每台设备的用户态
 ;; Flatpak 集合完全一致；硬件差异不通过 selection 表达，只经
@@ -81,7 +98,13 @@
        tuba
        discord
        newsflash
-       thunderbird))
+       thunderbird
+       ely-doc
+       ely-table
+       ely-show
+       ely-pdf
+       ely-mark
+       ely-tree))
 
 ;; Catalog：已知 extension（auxiliary ref；定义在 extensions/ 下）。
 (define %flatpak-extensions

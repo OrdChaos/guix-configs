@@ -338,10 +338,12 @@
 ;; no-op 报告、零 mutation 命令、返回空安装列表（收敛的 sync 必须
 ;; 有输出、绝不触发任何 install/remote-add/remote-modify）。
 (fp-write-file %fp-remotes-out
-               (string-append "flathub\t"
-                              (flatpak-remote-repository-url (car
-                                                              %flatpak-remotes))
-                              "\n"))
+               (string-concatenate
+                (map (lambda (remote)
+                       (string-append
+                        (symbol->string (flatpak-remote-name remote)) "\t"
+                        (flatpak-remote-repository-url remote) "\n"))
+                     %flatpak-remotes)))
 ;; 全局 extension selection 的 refs 也计入"已装"集合：converged
 ;; 判定覆盖 apps + extensions（零 mutation 契约适用于全部 selection）。
 (fp-write-file %fp-list-app-out
