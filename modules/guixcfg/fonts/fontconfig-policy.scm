@@ -227,7 +227,7 @@ CHAIN 替换为 VARIANT 置首的版本（mode=assign_replace——实测
   (append (list (alias-sxml "sans-serif" %sans-serif-families)
                 (alias-sxml "serif" %serif-families)
                 (alias-sxml "monospace" %monospace-families))
-          ;; Chromium's OpenCode Web UI requests these CSS UI generic stacks.
+          ;; Chromium-based web UIs request these CSS UI generic stacks.
           ;; Replace rather than alias/prefer: upstream has already expanded
           ;; them into concrete fonts by the time this user config is read.
           (map (lambda (family)
