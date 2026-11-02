@@ -22,7 +22,8 @@
 ;; graft reference discovery builds missing outputs (guix/grafts.scm
 ;; non-self-references -> build-derivations), contradicting this test's
 ;; no-build contract.
-(run-with-store %store (set-grafting #f))
+(run-with-store %store
+                (set-grafting #f))
 
 (test-group "lowering"
             (test-assert

@@ -106,6 +106,30 @@ package phases 直接 patch 安装后的插件内容（与 VS Code 扩展的 pat
 profile root 由 `dsh-profile-default-root` 生成，必须稳定；pnpm shim 会
 嵌入该路径，artifact 构建时再改写。
 
+## Skill 库
+
+仓库管理的 flat skill 放在：
+
+```text
+modules/guixcfg/apps/dsh/skills/<name>.md
+```
+
+`apps/dsh/skills.scm` 维护显式注册表，经 `home-files-service-type` 投影为：
+
+```text
+$DSH_HOME/skills/<name>.md
+```
+
+这些目标是指向 Home generation 的只读 store 链接；DSH 的
+`skill-filesystem` 会在 `$DSH_HOME/skills` 发现它们。新增 skill 必须同时：
+
+1. 添加 `<name>.md`，frontmatter 含 kebab-case `name` 和 `description`；
+2. 在 `apps/dsh/skills.scm` 的 `%dsh-skill-files` 登记目标和源文件。
+
+用户自建的 skill 仍可放在同一目录，但不要使用仓库占用的文件名；仓库
+链接在 reconfigure 时由 symlink-manager 重建，不进入持久化层。需要
+资源目录的 skill 目前不自动递归投影，应先扩展注册表/文件投影方式。
+
 ## DSH TUI
 
 `tui` 使用 dsh-TUI 作为声明式 profile 的前端，不安装独立桌面 runtime。

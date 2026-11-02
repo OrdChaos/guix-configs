@@ -8,18 +8,15 @@
   #:use-module (srfi srfi-9) ;define-record-type
   #:use-module (guixcfg apps dsh profiles web)
   #:use-module (guixcfg apps dsh profiles tui)
-  #:export (<dsh-profile-entry>
-            dsh-profile-entry?
-            dsh-profile-entry-key
-            dsh-profile-entry-package
-            dsh-profile-entry-external?
-            %dsh-profiles))
+  #:export (<dsh-profile-entry> dsh-profile-entry? dsh-profile-entry-key
+                                dsh-profile-entry-package
+                                dsh-profile-entry-external? %dsh-profiles))
 
 (define-record-type <dsh-profile-entry>
-  (make-dsh-profile-entry key package external?)
-  dsh-profile-entry?
+  (make-dsh-profile-entry key package external?) dsh-profile-entry?
   (key dsh-profile-entry-key)
-  (package dsh-profile-entry-package)
+  (package
+    dsh-profile-entry-package)
   (external? dsh-profile-entry-external?))
 
 (define %dsh-profiles

@@ -321,7 +321,8 @@ k1='x'
 
 ;; Derivation identity does not involve grafts.  Disable grafting so that
 ;; reference discovery cannot build a missing package output.
-(run-with-store %store (set-grafting #f))
+(run-with-store %store
+                (set-grafting #f))
 
 (define (wrapper-file-name desired)
   (let ((drv (run-with-store %store

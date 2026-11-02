@@ -16,13 +16,11 @@
                ;; second npm @deepseek-ai/dsh copy makes config-editor and
                ;; app-boot separate instances, so profile reload cannot find
                ;; the root Include mounted by the CLI.
-               #:runtime-scope
-               (file-append deepseek-harness
-                            "/libexec/deepseek-harness/node_modules/.pnpm/node_modules/@deepseek-ai")
+               #:runtime-scope (file-append deepseek-harness
+                                "/libexec/deepseek-harness/node_modules/.pnpm/node_modules/@deepseek-ai")
                ;; The extension package is already patched at build time;
                ;; profile consumes that artifact instead of the registry copy.
                #:bundle-sources (dsh-extension-sources '(tui))
                ;; Replaced with the hash reported by the first build.
-               #:specs-hash
-               (base32
-                "1whpfjz35db688d0ybfk981rr62xbhc08w8gjcrrrvnmn892s0zw")))
+               #:specs-hash (base32
+                             "1whpfjz35db688d0ybfk981rr62xbhc08w8gjcrrrvnmn892s0zw")))

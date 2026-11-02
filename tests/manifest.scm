@@ -2,7 +2,8 @@
 ;;; application does not expand the mandatory repository test contract.
 
 (define %app-test-files
-  '("tests/test-appearance.scm" "tests/test-dsh.scm" "tests/test-bash.scm"
+  '("tests/test-appearance.scm" "tests/test-dsh.scm"
+    "tests/test-bash.scm"
     "tests/test-fonts-policy.scm"
     "tests/test-gaming.scm"
     "tests/test-gnome-keyring.scm"

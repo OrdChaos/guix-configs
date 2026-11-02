@@ -12,8 +12,7 @@
   #:export (dsh-extension-tui))
 
 (define-public dsh-extension-tui
-  (let ((base (dsh-npm-bundle "@deepseek-harness-tui/dsh-tui"
-                              "0.18.0"
+  (let ((base (dsh-npm-bundle "@deepseek-harness-tui/dsh-tui" "0.18.0"
                               (base32
                                "1ksy7q8j2pwv81rlxx75pwhwr8h88i8q7wjynbw4747mbz6qmf4k"))))
     (package
@@ -24,19 +23,16 @@
           #~(modify-phases #$phases
               (add-after 'validate-bundle 'patch-data-dir
                 (lambda* (#:key outputs #:allow-other-keys)
-                  (let ((root
-                         (string-append
-                          (assoc-ref outputs "out")
-                          "/share/dsh/bundles/@deepseek-harness-tui/dsh-tui")))
-                    (substitute*
-                        (string-append root "/lib/types/utils/paths.js")
+                  (let ((root (string-append (assoc-ref outputs "out")
+                               "/share/dsh/bundles/@deepseek-harness-tui/dsh-tui")))
+                    (substitute* (string-append root
+                                                "/lib/types/utils/paths.js")
                       (("export const DATA_DIR = join\\(homeDir\\(\\), '\\.dsh-tui'\\);")
                        (string-append
                         "const dataHome = process.env.XDG_DATA_HOME ?? "
                         "join(homeDir(), '.local/share');\n"
                         "export const DATA_DIR = process.env.DSH_TUI_DATA_DIR ?? "
                         "join(dataHome, 'dsh-tui');")))
-                    (substitute*
-                        (string-append root "/bin/dsh-tui.js")
+                    (substitute* (string-append root "/bin/dsh-tui.js")
                       (("\\.dsh-tui")
                        ".local/share/dsh-tui"))))))))))))
