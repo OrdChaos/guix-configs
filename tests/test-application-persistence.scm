@@ -8,9 +8,11 @@
 ;;; bind-file 语义（create-mount-point? #f、backing/consumer
 ;;; regular-file 激活、与 bind-directory 共存、seeds 组合拒绝）、
 ;;; activation/ownership 可生成、seed-once seeds 字段/校验/接线、
+;;; seed 变体（host logical selection）选择与校验、
 ;;; 无 data-nobackup mapping、无 copy/sync 实现。
 
 (use-modules (guixcfg system application-persistence)
+             (guixcfg apps model) ;application（seed selection 聚合）
              (gnu services)
              (gnu system file-systems)
              (guix gexp)
@@ -238,6 +240,91 @@
 ;; seed 目标必须落在 backing 内（backing/consumer 校验已保证），
 ;; 且不引入独立白名单：seed 只针对首次初始化，目录持久化仍是
 ;; 整个 consumer（bind directory）。
+
+;; ── seed 变体（host 的 logical selection）───────────────────
+(define %seed-base (plain-file "base.toml" "base"))
+(define %seed-laptop (plain-file "laptop.toml" "laptop"))
+
+(define (variant-seeds source)
+  `(("settings.toml" ,source)))
+
+(define variant-rule
+  (application-persistence-rule
+   (name 'variant-test)
+   (backing "variant-test/state")
+   (consumer ".local/state/variant-test")
+   (seeds (variant-seeds %seed-base))
+   (seed-variants (list (cons 'laptop (variant-seeds %seed-laptop))))))
+
+(test-assert "rule with seed variants passes validation"
+             (valid-application-persistence-rule? variant-rule))
+(test-assert "variant selection replaces the seed source"
+             (let ((selected (application-persistence-rule-for-variant
+                              variant-rule 'laptop)))
+               (and (equal? (application-persistence-rule-seeds selected)
+                            (variant-seeds %seed-laptop))
+                    (equal? (application-persistence-rule-backing selected)
+                            (application-persistence-rule-backing
+                             variant-rule)))))
+(test-assert "unknown variant keeps the base seed"
+             (equal? (application-persistence-rule-seeds
+                      (application-persistence-rule-for-variant
+                       variant-rule 'vm))
+                     (application-persistence-rule-seeds variant-rule)))
+(test-assert "no variant keeps the base seed"
+             (equal? (application-persistence-rule-seeds
+                      (application-persistence-rule-for-variant
+                       variant-rule #f))
+                     (application-persistence-rule-seeds variant-rule)))
+(test-assert "applications-persistence applies the seed selection"
+             (let* ((app (application (name 'variant-test-app)
+                                      (persistence (list variant-rule))))
+                    (selected (car (applications-persistence
+                                    (list app)
+                                    #:seed-selections
+                                    '((variant-test-app . laptop))))))
+               (equal? (application-persistence-rule-seeds selected)
+                       (variant-seeds %seed-laptop))))
+(test-assert "reject duplicate seed variant"
+             (not (valid-application-persistence-rule?
+                   (application-persistence-rule
+                    (name 'bad)
+                    (backing "x")
+                    (consumer ".config/x")
+                    (seed-variants (list (cons 'laptop
+                                               (variant-seeds %seed-base))
+                                         (cons 'laptop
+                                               (variant-seeds
+                                                %seed-laptop))))))))
+(test-assert "reject non-symbol seed variant key"
+             (not (valid-application-persistence-rule?
+                   (application-persistence-rule
+                    (name 'bad)
+                    (backing "x")
+                    (consumer ".config/x")
+                    (seed-variants (list (cons "laptop"
+                                               (variant-seeds
+                                                %seed-base))))))))
+(test-assert "reject bad target inside a seed variant"
+             (not (valid-application-persistence-rule?
+                   (application-persistence-rule
+                    (name 'bad)
+                    (backing "x")
+                    (consumer ".config/x")
+                    (seed-variants
+                     (list (cons 'laptop
+                                 (list (list "../escape" %seed-base)))))))))
+(test-assert "bind-file rule must not declare seed variants"
+             (not (valid-application-persistence-rule?
+                   (application-persistence-rule
+                    (name 'bad)
+                    (backing "x")
+                    (consumer ".config/x")
+                    (exposure 'bind-file)
+                    (seed-variants
+                     (list (cons 'laptop
+                                 (variant-seeds %seed-base))))))))
+
 ;; ── bind file-system 生成 ───────────────────────────────────
 (define mounts
   (application-persistence-file-systems (list rule) "alice"))

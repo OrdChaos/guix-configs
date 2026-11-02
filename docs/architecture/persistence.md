@@ -161,6 +161,14 @@ source)` 两元素列表；source 为 file-like），语义是"只负责创建�
 - target 可以位于 backing 内**尚不存在的子目录**：activation 先
   `mkdir-p` 目标父层级，并把新建的每一层 chown 回目标 USER（否则
   应用以后无法在自己的设置目录里写入）；已存在的父目录保持不动；
+- **seed 变体（host 差异）**：rule 可用 `seed-variants` 声明
+  `(variant . seeds)` 的 alist；每个变体是一份**完整**的 seeds 列表
+  （整份替换 base，不做 merge）。host 只做 logical selection
+  （`(application-name . variant)` alist，经
+  `host-application-persistence-rules #:seed-selections` 传入），
+  不接触文件或路径；未选中的 host 使用 base seeds。base 必须保持
+  可移植（无 `/home`、无显示器 connector/面板尺寸），机器专属内容
+  只放在变体里。
 - **seed-once != declarative management**：seed 之后 repository 对
   该文件零写入，后续 reconfigure/seed 更新都不影响已初始化目标；
 - 实现：`(guixcfg utils seed-once)`（状态机）+ application

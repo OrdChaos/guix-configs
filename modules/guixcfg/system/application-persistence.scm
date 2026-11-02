@@ -65,6 +65,8 @@
             application-persistence-rule-exposure
             application-persistence-rule-lifecycle
             application-persistence-rule-seeds
+            application-persistence-rule-seed-variants
+            application-persistence-rule-for-variant
             %application-persistence-root
             valid-application-persistence-rule?
             application-persistence-file-systems
@@ -98,7 +100,9 @@
   (lifecycle application-persistence-rule-lifecycle ;symbol：仅 'application-owned
              (default 'application-owned))
   (seeds application-persistence-rule-seeds ;list of (target source)
-         (default '())))
+         (default '()))
+  (seed-variants application-persistence-rule-seed-variants ;alist variant -> seeds
+                 (default '())))
 
 (define (validate-seed-spec spec)
   "SEED-SPEC 是 (target source) 两元素列表（与 configuration
@@ -122,6 +126,31 @@ input——AGENT.md §12）。非法抛错（fail closed）。"
   (unless (file-like? (cadr spec))
     (error "application persistence seed source must be a file-like"
            (cadr spec))))
+
+(define (validate-seed-variants variants)
+  "SEED-VARIANTS 是 (variant . seeds) 的 alist：variant 是逻辑变体名
+（如 'laptop），seeds 是该变体的**完整** (target source) 列表——
+替换 base seeds，不做增量 merge（seed-once 只写一次，部分覆盖会留下
+混合状态）。host 只做 variant selection，不接触文件或路径
+（docs/architecture/applications.md（Host-agnostic boundary））。"
+  (unless (list? variants)
+    (error "application persistence seed-variants must be an alist"
+           variants))
+  (let loop ((rest variants) (seen '()))
+    (unless (null? rest)
+      (let ((entry (car rest)))
+        (unless (and (pair? entry)
+                     (symbol? (car entry)))
+          (error "application persistence seed-variant key must be a symbol"
+                 entry))
+        (when (memq (car entry) seen)
+          (error "duplicate application persistence seed-variant"
+                 (car entry)))
+        (unless (list? (cdr entry))
+          (error "application persistence seed-variant seeds must be a list"
+                 entry))
+        (for-each validate-seed-spec (cdr entry))
+        (loop (cdr rest) (cons (car entry) seen))))))
 
 (define (forbidden-consumer? consumer)
   "CONSUMER 是否是禁止整体持久化的全局目录（精确匹配——任务契约
@@ -155,14 +184,20 @@ docs/architecture/persistence.md 与 secrets.md 的 flatpak 例子）。"
              (application-persistence-rule-name rule) lifecycle))
     ;; seeds 语义是"backing 目录内相对 target 的首次初始化"——只对
     ;; bind-directory 成立（bind-file 的 backing 本身就是单文件，
-    ;; seed target 无从相对）。fail closed 拒绝该组合。
+    ;; seed target 无从相对）。fail closed 拒绝该组合；带变体的 seed
+    ;; 同样是 backing-relative，一并拒绝。
     (when (and (eq? exposure
                     'bind-file)
-               (pair? (application-persistence-rule-seeds rule)))
-      (error "application persistence bind-file rule must not declare seeds"
-             (application-persistence-rule-name rule)))
+               (or (pair? (application-persistence-rule-seeds rule))
+                   (pair? (application-persistence-rule-seed-variants
+                           rule))))
+      (error
+       "application persistence bind-file rule must not declare seeds or seed-variants"
+       (application-persistence-rule-name rule)))
     (for-each validate-seed-spec
               (application-persistence-rule-seeds rule))
+    (validate-seed-variants
+     (application-persistence-rule-seed-variants rule))
     #t))
 
 (define (valid-application-persistence-rule? rule)
@@ -172,6 +207,19 @@ docs/architecture/persistence.md 与 secrets.md 的 flatpak 例子）。"
            (validate-application-persistence-rule rule) #t)
          (lambda (k . a)
            #f)))
+
+(define (application-persistence-rule-for-variant rule variant)
+  "按逻辑 VARIANT 选择 seed 变体：rule 的 seed-variants 声明了该变体
+时，用其完整 seeds 列表替换 base seeds；VARIANT 为 #f 或未声明该
+变体时原样返回 rule（base seed 继续作为可移植缺省）。其余字段
+（name/backing/consumer/exposure/lifecycle）一律不变。"
+  (let ((chosen (and variant
+                     (assq-ref (application-persistence-rule-seed-variants
+                                rule)
+                               variant))))
+    (if chosen
+        (application-persistence-rule (inherit rule) (seeds chosen))
+        rule)))
 
 (define (application-persistence-file-systems rules user)
   "RULES 的 bind mount 声明（/persist/data-app/<backing> →

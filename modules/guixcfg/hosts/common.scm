@@ -80,20 +80,25 @@
 ;;; append：application rules + Flatpak 平台规则 + HOME persistence
 ;;; bind 列表在 common 单一构造，host 只消费）。
 
-(define (host-application-persistence-rules)
+(define* (host-application-persistence-rules #:key (seed-selections '()))
   "application persistence 规则：applications（全部 registry app）+
 Flatpak 平台（installation + 全局 selected app；Flatpak selection 是
-跨设备一致的用户软件 policy，不再由 host 传参）。"
-  (append (applications-persistence %applications)
+跨设备一致的用户软件 policy，不再由 host 传参）。SEED-SELECTIONS 是
+host 的 logical seed selection（(application-name . variant) alist），
+只决定 app 声明的 seed 变体，不接触文件/路径。"
+  (append (applications-persistence %applications
+                                    #:seed-selections seed-selections)
           (flatpak-persistence-rules)))
 
-(define (host-persistent-mount-file-systems)
+(define* (host-persistent-mount-file-systems #:key (seed-selections '()))
   "HOME persistence bind 列表（user data + app state，含 Flatpak）。
-gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
+gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。
+SEED-SELECTIONS 透传给 application rules（决定 seed 变体）。"
   (append (user-persistence-file-systems (user-profile-name %primary-user))
-          (application-persistence-file-systems (host-application-persistence-rules)
-                                                (user-profile-name
-                                                 %primary-user))))
+          (application-persistence-file-systems
+           (host-application-persistence-rules
+            #:seed-selections seed-selections)
+           (user-profile-name %primary-user))))
 
 ;; Mihomo and Noctalia are common system services, so their machine-owned
 ;; state binds belong to the shared base OS rather than each host assembly.
@@ -175,7 +180,10 @@ gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。"
           desktop-services))
 
 (define* (make-host-user-services #:key system-services
-                                  (application-persistence-rules (host-application-persistence-rules))
+                                  (seed-selections '())
+                                  (application-persistence-rules
+                                   (host-application-persistence-rules
+                                    #:seed-selections seed-selections))
                                   (flatpak-environment-overrides '())
                                   (additional-machine-state-persistence-rules '())
                                   secrets

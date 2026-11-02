@@ -7,10 +7,10 @@
 
 ```text
 application
-    │ 拥有配置资源 + 声明 logical configuration variants
+    │ 拥有配置资源 + 声明 logical configuration/seed variants
     ▼
 generic application composition
-    │ 解析 selection → 校验 → 安装声明文件
+    │ 解析 selection → 校验 → 安装声明文件 / 选择 seed 变体
     ▲
 host/profile
     │ 只做 logical variant selection（application 名 + variant 名）

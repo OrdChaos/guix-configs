@@ -21,6 +21,7 @@
 (define-module (guixcfg apps model)
   #:use-module (guix records)
   #:use-module (gnu services) ;service-kind、service-value
+  #:use-module (guixcfg system application-persistence) ;rule-for-variant
   #:use-module (srfi srfi-1) ;append-map
   #:export (<application> application
                           make-application
@@ -100,9 +101,19 @@ extension 贡献，canonical target 由 instantiate-missing-services
   "聚合 APPS 的全部 system services。"
   (append-map application-system-services apps))
 
-(define (applications-persistence apps)
-  "聚合 APPS 的全部 application persistence rules。"
-  (append-map application-persistence apps))
+(define* (applications-persistence apps #:key (seed-selections '()))
+  "聚合 APPS 的全部 application persistence rules。SEED-SELECTIONS
+是 (application-name . variant) alist（host 的 logical selection）：
+命中的应用把 rule 的 base seeds 换成该变体的完整 seeds；未命中或
+变体未声明时保持 base。"
+  (append-map (lambda (app)
+                (let ((variant (assq-ref seed-selections
+                                         (application-name app))))
+                  (map (lambda (rule)
+                         (application-persistence-rule-for-variant rule
+                                                                  variant))
+                       (application-persistence app))))
+              apps))
 
 (define (applications-secrets apps)
   "聚合 APPS 的全部 secret declarations（ciphertext source 已由
