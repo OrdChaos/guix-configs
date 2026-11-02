@@ -63,12 +63,22 @@
   #:use-module (guixcfg system application-persistence) ;application-persistence-rule
   #:export (%noctalia))
 
-;; 锁屏 widget 的 laptop 变体：布局绑定内屏 connector（eDP-1）与这块
-;; 面板的尺寸，不能进可移植 base seed。内容归 application；host 只做
-;; logical variant selection（(guixcfg apps model) 的 seed 变体）。
+;; 锁屏 widget 布局绑定具体 connector（laptop 内屏 eDP-1 / VM 的
+;; Virtual-1）与面板尺寸，不能进可移植 base seed。内容归 application；
+;; host 只做 logical variant selection（(guixcfg apps model) seed 变体）。
+(define (noctalia-settings-seed source)
+  `(("settings.toml" ,source)))
+
+(define %noctalia-base-settings-seed
+  (local-file "base-settings.toml" "noctalia-base-settings.toml"))
+
 (define %noctalia-laptop-settings-seed
   (local-file "variants/laptop-settings.toml"
               "noctalia-laptop-settings.toml"))
+
+(define %noctalia-vm-settings-seed
+  (local-file "variants/vm-settings.toml"
+              "noctalia-vm-settings.toml"))
 
 (define %noctalia
   (application (name 'noctalia)
@@ -99,11 +109,16 @@
                                                                 (exposure 'bind-directory)
                                                                 (lifecycle 'application-owned)
                                                                 ;; seed-once：首次初始化 settings.toml；此后 repo 永不触碰。
-                                                                (seeds `(("settings.toml" ,
-                                                                          (local-file
-                                                                           "base-settings.toml"
-                                                                           "noctalia-base-settings.toml"))))
-                                                                 (seed-variants `((laptop ("settings.toml" ,%noctalia-laptop-settings-seed)))))
+                                                                (seeds
+                                                                 (noctalia-settings-seed
+                                                                  %noctalia-base-settings-seed))
+                                                                (seed-variants
+                                                                 (list (cons 'laptop
+                                                                             (noctalia-settings-seed
+                                                                              %noctalia-laptop-settings-seed))
+                                                                       (cons 'vm
+                                                                             (noctalia-settings-seed
+                                                                              %noctalia-vm-settings-seed)))))
                                   ;; 用户运行时安装的插件（app-private，跨 boot 保留）。
                                   (application-persistence-rule (name 'plugins)
                                                                 (backing

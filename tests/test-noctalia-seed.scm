@@ -28,7 +28,8 @@
 (test-assert "seed is portable (no absolute /home paths)"
              (not (string-contains %seed-text "/home/")))
 (test-assert "seed has no machine-specific monitor sections"
-             (not (string-contains %seed-text "eDP-")))
+             (and (not (string-contains %seed-text "eDP-"))
+                  (not (string-contains %seed-text "Virtual-"))))
 
 ;; ── 2. No second configuration source ────────────────────────
 (define %noctalia-xdg-value
@@ -43,14 +44,20 @@
              (not (any (lambda (target)
                          (string-suffix? ".toml" target))
                        (map car %noctalia-xdg-value))))
-;; ── 3. laptop seed variant（host 只做 logical selection）────
+;; ── 3. host seed variants（host 只做 logical selection）─────
 (define %laptop-seed-text
   (read-file "modules/guixcfg/apps/noctalia/variants/laptop-settings.toml"))
+(define %vm-seed-text
+  (read-file "modules/guixcfg/apps/noctalia/variants/vm-settings.toml"))
 
 (test-assert "laptop seed carries the internal panel layout"
              (string-contains %laptop-seed-text "eDP-1"))
 (test-assert "laptop seed stays free of user absolute paths"
              (not (string-contains %laptop-seed-text "/home/")))
+(test-assert "vm seed carries the Virtual-1 layout"
+             (string-contains %vm-seed-text "Virtual-1"))
+(test-assert "vm seed stays free of user absolute paths"
+             (not (string-contains %vm-seed-text "/home/")))
 
 (define %state-rule
   (find (lambda (rule)
@@ -60,10 +67,18 @@
 (test-assert "noctalia declares the laptop seed variant"
              (assq 'laptop
                    (application-persistence-rule-seed-variants %state-rule)))
+(test-assert "noctalia declares the vm seed variant"
+             (assq 'vm
+                   (application-persistence-rule-seed-variants %state-rule)))
 (test-assert "selecting the laptop variant swaps the seed source"
              (not (equal? (application-persistence-rule-seeds
                            (application-persistence-rule-for-variant
                             %state-rule 'laptop))
+                          (application-persistence-rule-seeds %state-rule))))
+(test-assert "selecting the vm variant swaps the seed source"
+             (not (equal? (application-persistence-rule-seeds
+                           (application-persistence-rule-for-variant
+                            %state-rule 'vm))
                           (application-persistence-rule-seeds %state-rule))))
 
 (test-end "noctalia-seed")

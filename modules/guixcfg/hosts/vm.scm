@@ -60,11 +60,17 @@
                      (owner-user (user-profile-name %primary-user))
                      (mode 384))))
 
+;; seed 的 logical selection：VM 的锁屏 widget 绑定 Virtual-1 输出，
+;; 因此选 Noctalia 的 'vm 变体；base seed 保持无 connector 字样。
+(define %vm-seed-selections
+  '((noctalia . vm)))
+
 ;; HOME persistence bind mounts（user data + app state；单一定义，
 ;; %vm-services 的 gvfs-mount-metadata 服务与 file-systems 字段共用）。
 ;; Flatpak 部分使用 common 的共享事实（全局 selection 投影）。
 (define %persistent-mount-file-systems
-  (host-persistent-mount-file-systems))
+  (host-persistent-mount-file-systems
+   #:seed-selections %vm-seed-selections))
 
 (define %vm-services
   (make-host-services
@@ -84,7 +90,9 @@
 ;; 完整 user services（不含 account-databases 投影本身）。
 (define %vm-user-services
   (make-host-user-services #:system-services %vm-services
-                           #:application-persistence-rules (host-application-persistence-rules)
+                           #:application-persistence-rules
+                           (host-application-persistence-rules
+                            #:seed-selections %vm-seed-selections)
                            #:secrets (append %vm-test-secrets %mihomo-secrets
                                              (applications-secrets
                                               %applications))

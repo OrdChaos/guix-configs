@@ -44,39 +44,11 @@ enabled = true
 [lockscreen_widgets]
 enabled = false
 schema_version = 2
-widget_order = [ "lockscreen-login-box@Virtual-1" ]
 
     [lockscreen_widgets.grid]
     cell_size = 16
     major_interval = 4
     visible = true
-
-    [lockscreen_widgets.widget."lockscreen-login-box@Virtual-1"]
-    box_height = 196.0
-    box_width = 810.0
-    cx = 907.00006103515625
-    cy = 871.0
-    output = "Virtual-1"
-    placement_height = 1053.0
-    placement_width = 1813.0
-    rotation = 0.0
-    type = "login_box"
-
-        [lockscreen_widgets.widget."lockscreen-login-box@Virtual-1".settings]
-        background_color = "surface_variant"
-        background_opacity = 0.88
-        background_radius = 12.0
-        center_password_text = false
-        input_opacity = 1.0
-        input_radius = 6.0
-        layout = "regular"
-        show_caps_lock = true
-        show_keyboard_layout = true
-        show_login_button = true
-        show_media = true
-        show_session_buttons = true
-        show_unlock_hint = true
-        show_weather = true
 
 [notification]
 enable_daemon = true
@@ -160,9 +132,6 @@ fill_mode = "crop"
     path = "~/.local/share/backgrounds/wallpaper.jpg"
 
     [wallpaper.last]
-    path = "~/.local/share/backgrounds/wallpaper.jpg"
-
-    [wallpaper.monitors.Virtual-1]
     path = "~/.local/share/backgrounds/wallpaper.jpg"
 
 [widget.battery]
