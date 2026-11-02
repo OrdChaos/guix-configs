@@ -2,8 +2,9 @@
 ;;; 警告都会在测试阶段暴露，不用等到 VM 里跑 apply 才发现。
 ;;;
 ;;; 注意：primitive-load / resolve-module 走的是快速求值路径，不产生
-;;; 未绑定变量警告；compile-file 做完整分析，必须用它。由于显式编译，
-;;; 本测试也不受 auto-compile 的 .go 缓存影响。
+;;; 未绑定变量警告；compile-file 做完整分析，必须用它。编译输出显式
+;;; 写到 /tmp（见 %module-compile-output），不会在 ccache 里留下损坏
+;;; 的 .go；因此也不受 auto-compile 缓存影响。
 ;;; 由 tests/run-tests.scm 加载运行（从仓库根目录）；单独运行也要
 ;;; 可用，这里自备 load path（模块顶层求值依赖 %load-path，如
 ;;; repository-source 的 search-path 定位）。
@@ -197,24 +198,47 @@
                     (filter core-source-file?
                             (scheme-files-under "modules/guixcfg"))))
 
+;; compile-file 总会把结果写进 output-file，默认值是 ccache 里的
+;; <source>.go；#:to 'value 写进去的是 #<unspecified>，下次 load 就
+;; 报 "object file too small" 并污染用户 ccache。这里显式输出到本轮
+;; 进程独占的 /tmp 文件，结束后删除。必须保留 #:to 'value：它执行
+;; 模块文件（本测试“compile and load”语义），后续 tools 编译依赖
+;; 这些模块已真正加载；改成 'bytecode 只编译不加载，会让未初始化的
+;; 模块残留在 module 树里。
+(define %module-compile-output
+  (string-append "/tmp/guixcfg-modules-compile-check-"
+                 (number->string (getpid))
+                 ".go"))
+
 (test-assert "all modules compile and load without unbound-variable warnings"
-             (let ((warnings (open-output-string)))
-               (let ((ok (every (lambda (name)
-                                  (catch #t
-                                         (lambda ()
-                                           (parameterize ((current-warning-port
-                                                           warnings))
-                                             (compile-file (module-file name)
-                                                           #:to 'value)) #t)
-                                         (lambda (key . args)
-                                           (format (current-error-port)
-                                            "module compile failed: ~a (~a ~a)~%"
-                                            name key args) #f))) %all-modules)))
-                 (let ((text (get-output-string warnings)))
-                   (when (string-contains text "unbound")
-                     (format (current-error-port) "~a" text))
-                   (and ok
-                        (not (string-contains text "unbound")))))))
+             (dynamic-wind
+               (lambda () #t)
+               (lambda ()
+                 (let ((warnings (open-output-string)))
+                   (let ((ok (every (lambda (name)
+                                      (catch #t
+                                             (lambda ()
+                                               (parameterize ((current-warning-port
+                                                               warnings))
+                                                 (compile-file
+                                                  (module-file name)
+                                                  #:to 'value
+                                                  #:output-file
+                                                  %module-compile-output))
+                                               #t)
+                                             (lambda (key . args)
+                                               (format (current-error-port)
+                                                "module compile failed: ~a (~a ~a)~%"
+                                                name key args) #f)))
+                                    %all-modules)))
+                     (let ((text (get-output-string warnings)))
+                       (when (string-contains text "unbound")
+                         (format (current-error-port) "~a" text))
+                       (and ok
+                            (not (string-contains text "unbound")))))))
+               (lambda ()
+                 (false-if-exception
+                  (delete-file %module-compile-output)))))
 
 ;; tools/*.scm 是 CLI 脚本（无 define-module）：脚本里的未绑定变量只有
 ;; 运行到对应分支才炸（实测教训：(unresolved) 曾在 disk-install 的
