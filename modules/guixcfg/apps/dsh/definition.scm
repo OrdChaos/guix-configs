@@ -18,6 +18,7 @@
 
 (define-module (guixcfg apps dsh definition)
   #:use-module (gnu home services) ;home-environment-variables-service-type
+  #:use-module (gnu packages virtualization) ;bubblewrap（file policy 沙箱后端）
   #:use-module (gnu services) ;simple-service
   #:use-module (guix gexp) ;file-append
   #:use-module (guixcfg apps dsh profiles)
@@ -54,7 +55,13 @@
 
 (define %dsh
   (application (name 'dsh)
-               (home-packages (list deepseek-harness))
+               ;; bwrap is the backend of DSH's file policy
+               ;; (workspace-write): the runtime probes PATH for it and
+               ;; falls back to Landlock-only mode otherwise.  The Home
+               ;; profile is the launch PATH of the installed frontend, so
+               ;; the sandbox backend is a dependency of this application,
+               ;; not of the system profile.
+               (home-packages (list deepseek-harness bubblewrap))
                (home-services (list (simple-service 'dsh-environment
                                      home-environment-variables-service-type
                                      '(("DSH_HOME" . "$HOME/.local/share/dsh")
