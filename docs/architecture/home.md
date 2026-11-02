@@ -171,6 +171,73 @@ state**，由仓库 + 当前 system generation 重新生成——不持久化：
 
 没有独立的 Home generation 轴。Home 绑定随 system generation 切换。
 
+## 为什么不做独立 Home generation（决策记录）
+
+结论：Home 部署保持绑定 system generation；**不引入独立的 Home
+generation 轴**，也不把 `guix-home-service-type` 换成用户侧
+`guix home reconfigure` 的持久部署。
+
+理由（按不变量优先级）：
+
+1. `/home/<user>` 是 ephemeral。独立 Home generation 的
+   `~/.guix-home` 在重启后不存在；要跨 boot 保留，只能把 Home
+   generation（或其 symlink）放进 persistence，并另加 boot 激活
+   服务。这会把 derived state 变成第二套 mutable authority，违反
+   persistent/derived 边界。
+2. `home-ready` 是 `interactive-session-ready` 的 prerequisite，
+   直接控制 login gate。独立部署时 gate 只能二选一：不等 Home
+   （登录到半成品 HOME），或等待一个不由 system generation 固定
+   的 mutable 状态（race，无法 fail-closed 验证）。
+3. rollback / Last Good / Recovery 是单轴：system generation 回滚
+   必须带回匹配的 Home。独立轴需要额外的配对与兼容矩阵，且
+   Recovery 可能 boot 出 old system + new Home。
+4. Home 服务与 system 侧事实耦合：accounts、PAM/elogind、runtime
+   secrets（如 gnome-keyring master）、persistence mount topology、
+   desktop wrapper。两套 generation 会形成版本 skew；secrets 的
+   ordinary/login-critical 分区也失去“同代发布”的保证。
+5. `guix-home-service-type` 是 pinned Guix 的官方机制，语义正好是
+   “system + home 一致地一次部署”；自定义第二轴只在语义确实不同
+   时才允许（AGENT.md §7）。
+
+### 允许的瞬态快测（不是持久部署）
+
+上游支持用 `guix home reconfigure` 操作嵌入的 Home，但效果
+**不超过下一次 system activation**（pinned `guix.texi`
+“guix-home-service-type”）。本仓库只在开发/验证时使用：
+
+```sh
+env GUILE_LOAD_PATH="$PWD/modules" \
+    GUILE_LOAD_COMPILED_PATH="$PWD/modules" \
+  guix time-machine -C channels.lock.scm -- \
+  home reconfigure --dry-run modules/guixcfg/hosts/<host>.scm
+```
+
+- 先跑 `--dry-run`；确认后去掉它。
+- 必须用 host 入口（如 `hosts/lenovo-legion-y7000p.scm`）：
+  `home/user.scm` 的 `%guix-home` 不含 host 的 application
+  selection / NVIDIA / Flatpak overrides。
+- 它会切换当前 `~/.guix-home`，可能重启 Home Shepherd 服务；
+  不经过 login gate，也不提供 readiness 验证。
+- 下一次 `blue reconfigure` 或 reboot 由 system generation 覆盖
+  回权威 Home；**禁止**把它当作持久变更路径。
+
+### 可选的绑定内优化
+
+Home-only 改动不改变 kernel/initrd/cmdline/os-release，UKI 内容
+相同；当前 `boot/uki.scm` 仍在每次 reconfigure 重建非活动槽。
+若部署 churn 成为问题，可在绑定内比较内容并跳过未变化的槽重写，
+而不是拆 generation 轴。
+
+### 重新评估的条件
+
+- `/home` 变为持久（不再 ephemeral）；
+- 多用户需要各自独立的 Home 部署/回滚；
+- home-only 变更频率/耗时成为主要瓶颈，且瞬态路径不够；
+- 需要独立 Home rollback 轴。
+
+届时使用上游 Home generation，并显式设计 system/home 配对与
+兼容检查；不要 ad hoc 移除 `guix-home-service-type`。
+
 ## Live reconfigure vs cold boot
 
 - cold boot：`guix-home-user` one-shot 重建链接；

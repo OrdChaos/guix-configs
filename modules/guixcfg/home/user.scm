@@ -16,12 +16,19 @@
 ;;;   home-environment（%guix-home）
 ;;;
 ;;; System+Home generation 绑定不变：%guix-home 经 guix-home-service-
-;;; type 嵌入 system generation（hosts/vm.scm），boot 时官方 Home
-;;; activation 重建 ephemeral HOME——runtime 不依赖配置 repository。
+;;; type 嵌入 system generation（hosts/<host>.scm），由 blue
+;;; reconfigure 持久部署；boot 时官方 Home activation 重建 ephemeral
+;;; HOME——runtime 不依赖配置 repository。决策理由见
+;;; docs/architecture/home.md“为什么不做独立 Home generation”。
 ;;;
-;;; 用法（普通用户，不需要 sudo）：
-;;;   guix time-machine -C channels.lock.scm -- \
-;;;     home reconfigure -L modules modules/guixcfg/home/user.scm
+;;; standalone 入口只用于瞬态快测（普通用户，不需要 sudo；下一次
+;;; system activation/reboot 会回退，禁止作为持久部署）：
+;;;   env GUILE_LOAD_PATH="$PWD/modules" \
+;;;       GUILE_LOAD_COMPILED_PATH="$PWD/modules" \
+;;;     guix time-machine -C channels.lock.scm -- \
+;;;     home reconfigure --dry-run modules/guixcfg/hosts/<host>.scm
+;;; 用 host 文件而非本文件：%guix-home 不含 host 的 application
+;;; selection / NVIDIA / Flatpak overrides。
 
 (define-module (guixcfg home user)
   #:use-module (gnu home) ;home-environment
