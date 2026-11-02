@@ -2,7 +2,7 @@
        (name 'guix)
        (url "https://codeberg.org/guix/guix.git")
        (branch "master")
-       (commit "b7c99ce1297f19da01ba26828464b5e6d9d74572")
+       (commit "0186e6cafa5edb0803d919b8902d8ee8f49f7894")
        (introduction
         (make-channel-introduction
          "9edb3f66fd807b096b48283debdcddccfea34bad"
@@ -42,7 +42,7 @@
        (name 'guix-rust-toolchain)
        (url "https://github.com/OrdChaos/guix-rust-toolchain.git")
        (branch "master")
-       (commit "388af5d8663765b55b6297cda184c7d90394c6c2")
+       (commit "d1dab0a828b763698ba3b3a21abc9e3523ab5c0a")
        (introduction
         (make-channel-introduction
          "7eb3c7727b341ac671f1b7a06054a8aacc28cb52"
