@@ -43,5 +43,8 @@
             "command": "guix style --whole-file",
             "file": true
         }
-    }
+    },
+    "dsh-tui-vscode.command": "/home/ordchaos/.guix-home/profile/bin/dsh",
+    "dsh-tui-vscode.extraArgs": ["--profile", "tui"],
+    "dsh-tui-vscode.dshHome": "/home/ordchaos/.local/share/dsh"
 }

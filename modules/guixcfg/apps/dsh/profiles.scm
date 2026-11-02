@@ -1,33 +1,27 @@
-;;; DSH profile composition for the guix configuration repository.
+;;; DSH profile registry: one module per profile under profiles/.
 ;;;
-;;; The profile is one dependency-resolution boundary.  In-box bundles are
-;;; named directly; external bundles are dsh-npm-bundle descriptors added to
-;;; this list.  dsh-profile generates the manifest and, when external bundles
-;;; are present, resolves their closure into an immutable artifact pinned by
-;;; SPECS-HASH.  No pnpm lockfile is committed.
+;;; The registry is explicit, like the extension registry: adding a profile
+;;; means adding profiles/<name>.scm and registering it here.  The definition
+;;; consumes this list to project every profile into Home.
 
 (define-module (guixcfg apps dsh profiles)
-  #:use-module (guix gexp) ;local-file
-  #:use-module (srfi srfi-1) ;any
-  #:use-module (virelith packages dsh-profiles)
-  #:export (%dsh-guix-web-bundles
-            %dsh-guix-web-external?
-            %dsh-guix-web-profile))
+  #:use-module (srfi srfi-9) ;define-record-type
+  #:use-module (guixcfg apps dsh profiles web)
+  #:use-module (guixcfg apps dsh profiles tui)
+  #:export (<dsh-profile-entry>
+            dsh-profile-entry?
+            dsh-profile-entry-key
+            dsh-profile-entry-package
+            dsh-profile-entry-external?
+            %dsh-profiles))
 
-(define %dsh-guix-web-bundles
-  (list "@deepseek-ai/dsh-base"
-        "@deepseek-ai/dsh-web-app"))
+(define-record-type <dsh-profile-entry>
+  (make-dsh-profile-entry key package external?)
+  dsh-profile-entry?
+  (key dsh-profile-entry-key)
+  (package dsh-profile-entry-package)
+  (external? dsh-profile-entry-external?))
 
-(define %dsh-guix-web-external?
-  (any (lambda (entry) (not (string? entry)))
-       %dsh-guix-web-bundles))
-
-;; Set to the recursive sha256 of the external closure when the bundle list
-;; contains a dsh-npm-bundle descriptor.  Ignored for in-box-only profiles.
-(define %dsh-guix-web-specs-hash #f)
-
-(define %dsh-guix-web-profile
-  (dsh-profile "guix-web"
-               #:bundles %dsh-guix-web-bundles
-               #:patch (local-file "profiles/guix-web/cordis.patch.yml")
-               #:specs-hash %dsh-guix-web-specs-hash))
+(define %dsh-profiles
+  (list (make-dsh-profile-entry 'web dsh-profile-web #f)
+        (make-dsh-profile-entry 'tui dsh-profile-tui #t)))

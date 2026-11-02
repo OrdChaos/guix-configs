@@ -220,12 +220,17 @@ production consumers：
   DSH_HOME 单一根；`DSH_AGENTS_HOME` 嵌在 `$DSH_HOME/agents`，不使用
   上游共享的 `~/.agents`。profile 的 `package.json`/
   `pnpm-workspace.yaml`/`cordis.patch.yml`/`node_modules` 由
-  `apps/dsh/profiles.scm` 的 `dsh-profile` artifact 生成，经
+  `apps/dsh/profiles.scm` 的 profile artifact 生成，经
   `home-files-service-type` 投影为 store symlink；同目录的
   `cordis.yml`、sessions、storages、credentials、logs、cache 是
   DSH-owned，写入保持可写。repo-owned symlink 只读，DSH Settings
   改写 profile patch 会 fail closed。`apps/dsh` 头注释是所有权边界
-  authority。
+  authority。当前 profile 为 `web`（`dsh web`）与 `tui`
+  （`dsh --profile tui`），共享同一 DSH_HOME。
+- dsh-tui（`.local/share/dsh-tui` → `/persist/data-app/dsh-tui/data`）：
+  dsh-TUI 自己的偏好/历史/日志/插件授权；源码 patch 把上游固定的
+  `~/.dsh-tui` 改为 `DSH_TUI_DATA_DIR`，默认
+  `$XDG_DATA_HOME/dsh-tui`。VS Code 集成扩展同步使用同一路径。
 
 后续应用按同一契约显式 adopt。
 
