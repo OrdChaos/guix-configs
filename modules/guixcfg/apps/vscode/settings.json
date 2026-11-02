@@ -46,5 +46,6 @@
     },
     "dsh-tui-vscode.command": "/home/ordchaos/.guix-home/profile/bin/dsh",
     "dsh-tui-vscode.extraArgs": ["--profile", "tui"],
-    "dsh-tui-vscode.dshHome": "/home/ordchaos/.local/share/dsh"
+    "dsh-tui-vscode.dshHome": "/home/ordchaos/.local/share/dsh",
+    "terminal.integrated.enableImages": true
 }
