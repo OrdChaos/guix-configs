@@ -41,10 +41,12 @@ dns:
   # DIRECT / local 流量解析直接问 NM dnsmasq（当前 DHCP DNS）。
   direct-nameserver:
     - 127.0.0.1:15353
-  # 固定上游：阿里云 AliDNS（223.5.5.5 / 223.6.6.6，UDP）。
+  # 固定上游：阿里云 AliDNS 的 IP DoH 端点（TLS 证书含 IP）。
+  # 不用 UDP 53：TUN 的 dns-hijack 会把 mihomo 自己的 UDP/TCP 53
+  # 查询重新劫回 mihomo，形成递归。
   nameserver:
-    - 223.5.5.5
-    - 223.6.6.6
+    - https://223.5.5.5/dns-query
+    - https://223.6.6.6/dns-query
   # 固定上游失败/无解析时的兜底：NM dnsmasq 的 DHCP DNS。
   fallback:
     - 127.0.0.1:15353

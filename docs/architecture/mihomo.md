@@ -19,7 +19,7 @@ Guix / Shepherd
 
 系统 DNS（docs/architecture/dns.md）
   └── /etc/resolv.conf（NM 经 openresolv 写 127.0.0.1:53）→ mihomo DNS
-      固定 AliDNS（223.5.5.5 / 223.6.6.6，UDP）优先，失败/NXDOMAIN 回退 dnsmasq:15353 → DHCP DNS
+      固定 AliDNS IP DoH（223.5.5.5 / 223.6.6.6）优先，失败/NXDOMAIN 回退 dnsmasq:15353 → DHCP DNS
 
 Noctalia Mihomo Control
   └── 仅经 Clash REST API 控制运行中的 Mihomo
@@ -129,7 +129,8 @@ controller 可读取配置的安全路径。
 
 - **mihomo 是应用 DNS 的唯一入口**：`dns.enable`，监听
   `127.0.0.1:53`；`enhanced-mode: redir-host`（不用 fake-ip）。
-  固定上游是阿里云 AliDNS 的 `223.5.5.5` / `223.6.6.6`（UDP）；主上游
+  固定上游是阿里云 AliDNS 的 IP DoH 端点
+  （`https://223.5.5.5/dns-query` / `https://223.6.6.6/dns-query`）；主上游
   失败、NXDOMAIN 或返回 LAN IP 时，`fallback` 查
   `127.0.0.1:15353`（NetworkManager dnsmasq → 当前 DHCP DNS）。
   两边都失败则由 DNS 协议正常返回失败；
@@ -149,9 +150,9 @@ controller 可读取配置的安全路径。
   关闭后系统 v6 走原生路径绕过 Mihomo（v4-only 机场的取舍）；
 - 不做 Mihomo self-update（binary 归 Guix）；
 - 不引入 geosite/geoip 规则系统（规则集为最小基础集 + sniffer）；
-- **已知取舍**：所有 DNS 先走 AliDNS UDP，内网名字会先得到 NXDOMAIN
-  再回退 DHCP；这换来零域名列表和跨 Wi-Fi/有线一致性。UDP 查询不加密、
-  不走代理，仍可能被本地网络劫持。
+- **已知取舍**：所有 DNS 先走 AliDNS IP DoH，内网名字会先得到
+  NXDOMAIN 再回退 DHCP；这换来零域名列表和跨 Wi-Fi/有线一致性。
+  DoH 直连、不经代理，固定 IP 端点避免域名 bootstrap。
 
 ## 配置模板契约
 
@@ -162,7 +163,8 @@ controller 可读取配置的安全路径。
   `(guixcfg system dns nm-dnsmasq)` 的 `%nm-dnsmasq-uid` 经
   `modules/guixcfg/system/mihomo/config.scm` 注入；
 - `dns`：`listen: 127.0.0.1:53`、`redir-host`、固定 AliDNS
-  `nameserver`（223.5.5.5 / 223.6.6.6）、`fallback` / `direct-nameserver` =
+  `nameserver`（`https://223.5.5.5/dns-query` /
+  `https://223.6.6.6/dns-query`）、`fallback` / `direct-nameserver` =
   `127.0.0.1:15353`、`fallback-lazy-query: true`、
   `fallback-filter.geoip-code: LAN`、IP `default-nameserver`；
 - `tun`：mixed stack、auto-route/auto-redirect/auto-detect-interface、

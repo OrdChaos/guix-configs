@@ -13,7 +13,7 @@ Applications
 /etc/resolv.conf（NetworkManager 经 openresolv 写入 nameserver 127.0.0.1）
     ↓
 mihomo DNS（127.0.0.1:53）
-    ├─ 固定 AliDNS（223.5.5.5 / 223.6.6.6，UDP）
+    ├─ 固定 AliDNS IP DoH（223.5.5.5 / 223.6.6.6）
     ├─ 连接失败 / NXDOMAIN / 空答案 / 私网 IP
     │      ↓
     │  127.0.0.1:15353（NetworkManager dnsmasq → 当前 DHCP DNS）
@@ -21,8 +21,10 @@ mihomo DNS（127.0.0.1:53）
 ```
 
 - TUN on/off 都走这条链；TUN 只决定业务流量是否进入 mihomo。
-- 固定上游是**阿里云 AliDNS 的 IP 服务器**（223.5.5.5、223.6.6.6，
-  UDP 53），不走代理；不是 DoH/DoT。DNS 查询本身在本地直接发出。
+- 固定上游是**阿里云 AliDNS 的 IP DoH 端点**
+  （`https://223.5.5.5/dns-query`、`https://223.6.6.6/dns-query`），
+  直接 HTTPS 443；不使用 UDP/TCP 53（TUN 的 `dns-hijack` 会把 mihomo
+  自己的 53 查询劫回自身），也不经代理。
 - 不使用 fake-ip：`redir-host` 才能让“无解析”产生 fallback 信号；
   fake-ip 会在本地直接生成假 IP，绕过上游失败判断。
 - 不维护域名列表：LAN 判断是 `fallback-filter.geoip-code: LAN`
@@ -77,9 +79,10 @@ mihomo DNS，形成递归。
 
 - **SmartDNS 保持退役**：不引入额外 resolver 层；mihomo 的
   `fallback` 已经覆盖“固定 AliDNS 优先、DHCP 兜底”，且不需要域名列表。
-- **固定 AliDNS 作为唯一系统上游**：`223.5.5.5` / `223.6.6.6`
-  以 UDP 直接查询；不使用 DoH/DoT，也不经代理。校园域 / captive
-  portal 由 fallback 的 DHCP DNS 兜底。
+- **固定 AliDNS IP DoH 作为唯一系统上游**：`223.5.5.5` /
+  `223.6.6.6` 的 DoH 端点（TLS 证书含 IP）直接查询；不使用 DoH
+  域名，也不需要额外 bootstrap。校园域 / captive portal 由 fallback
+  的 DHCP DNS 兜底。
 - **不用 fake-ip**：`redir-host` 保留真实 IP，TUN off 也能直连；
   fallback 的触发条件是“无 IP/失败”，fake-ip 会绕过它。
 - **UID 必须显式固定**：ephemeral root 每 boot 重建 `/etc/passwd`，
@@ -96,9 +99,9 @@ mihomo DNS，形成递归。
 - **内部域名会先被发往公共 AliDNS**：LAN 名字通常得到 NXDOMAIN，再
   fallback 到 DHCP；存在首查延迟和内部名字泄漏。要避免只能维护域名
   列表或本地域名规则（本设计明确不做）。
-- **UDP DNS 不加密、不走代理**：AliDNS 的 UDP 53 查询仍可能被本地
-  网络/ISP 劫持；这是换取简单、低延迟固定上游的代价。需要抗污染时
-  应改回 DoH/DoT（会引入域名/代理依赖）。
+- **AliDNS IP DoH 直连**：DoH 查询走 HTTPS 443，不经过代理；固定 IP
+  避免域名 bootstrap 依赖。TLS 证书校验由 mihomo 负责（AliDNS 的
+  证书包含 223.5.5.5/223.6.6.6）。
 - **所有 DNS 都依赖 mihomo 进程**：mihomo 停止时 53 无人监听，DNS
   直接失败；这符合“两边都失败则正常失败”的语义。
 - **没有 fake-ip 的远端解析**：代理拿到的是真实 IP，不是域名；

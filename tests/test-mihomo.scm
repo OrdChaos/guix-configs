@@ -168,11 +168,11 @@
              (let ((text (template-text)))
                (and (string-contains text "enhanced-mode: redir-host")
                     (not (string-contains text "enhanced-mode: fake-ip")))))
-(test-assert "M7: fixed upstream is AliDNS 223.5.5.5/223.6.6.6"
+(test-assert "M7: fixed upstream is AliDNS IP DoH"
              (let ((text (template-text)))
-               (and (string-contains text "nameserver:\n    - 223.5.5.5\n    - 223.6.6.6")
-                    (not (string-contains text
-                                          "nameserver:\n    - https://dns.alidns.com"))
+               (and (string-contains text
+                                     "nameserver:\n    - https://223.5.5.5/dns-query\n    - https://223.6.6.6/dns-query")
+                    (not (string-contains text "- 223.5.5.5\n    - 223.6.6.6"))
                     (not (string-contains text "1.1.1.1/dns-query"))
                     (not (string-contains text "8.8.8.8/dns-query")))))
 (test-assert "M7: DHCP fallback and direct DNS use NM dnsmasq :15353"

@@ -2,7 +2,7 @@
 ;;;
 ;;; 迁移后 DNS 所有权（docs/architecture/dns.md）：
 ;;;   应用 → /etc/resolv.conf 127.0.0.1:53（mihomo DNS）。
-;;;   mihomo 先查固定 AliDNS（223.5.5.5 / 223.6.6.6，UDP）；失败/NXDOMAIN/空答案回退到
+;;;   mihomo 先查固定 AliDNS IP DoH（223.5.5.5 / 223.6.6.6）；失败/NXDOMAIN/空答案回退到
 ;;;   NetworkManager dnsmasq（127.0.0.1:15353）→ DHCP DNS。
 ;;;   dnsmasq 以专用稳定 UID 运行并被 `tun.exclude-uid` 排除（切断递归）。
 ;;;
@@ -14,7 +14,7 @@
 ;;;   N5 无 standalone dnsmasq 服务（单一 resolver owner）
 ;;;   N6 host 装配引用 nm-dnsmasq 配置
 ;;;   N7 mihomo 组合配置：exclude-uid 注入同一 UID + :53 监听 +
-;;;      redir-host + AliDNS UDP + fallback/direct :15353 + LAN 过滤
+;;;      redir-host + AliDNS IP DoH + fallback/direct :15353 + LAN 过滤
 ;;;
 ;;; 不依赖公网、不构建 package（纯 record/gexp/字符串断言）。
 
@@ -143,9 +143,9 @@ wiring assertions survive formatting reflows."
                   (string-contains %composed "enhanced-mode: redir-host")
                   (string-contains %composed "- any:53")
                   (string-contains %composed "tcp://any:53")))
-(test-assert "N7: fixed AliDNS UDP is lazy with LAN fallback filter"
+(test-assert "N7: fixed AliDNS IP DoH is lazy with LAN fallback filter"
              (and (string-contains %composed
-                                   "nameserver:\n    - 223.5.5.5\n    - 223.6.6.6")
+                                   "nameserver:\n    - https://223.5.5.5/dns-query\n    - https://223.6.6.6/dns-query")
                   (string-contains %composed "fallback-lazy-query: true")
                   (string-contains %composed "geoip-code: LAN")))
 (test-assert "N7: no unresolved placeholders remain"
