@@ -210,6 +210,28 @@
 (test-assert "M9: provider refresh dials DIRECT"
              (string-contains (template-text) "proxy: DIRECT"))
 
+;; ── M15：国内直连 / 国外代理规则 ────────────────────────────
+(test-assert "M15: Loyalsoldier CN-direct and proxy rule providers"
+             (let ((text (template-text)))
+               (and (string-contains text "rule-providers:")
+                    (string-contains text
+                                     "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt")
+                    (string-contains text
+                                     "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/proxy.txt")
+                    (string-contains text "format: yaml")
+                    (string-contains text "interval: 86400"))))
+(test-assert "M15: proxy rules precede direct rules, then MATCH PROXY"
+             (let ((text (template-text)))
+               (and (string-contains text
+                                     "RULE-SET,loyalsoldier-proxy,PROXY")
+                    (string-contains text
+                                     "RULE-SET,loyalsoldier-direct,DIRECT")
+                    (< (string-contains text
+                                        "RULE-SET,loyalsoldier-proxy,PROXY")
+                       (string-contains text
+                                        "RULE-SET,loyalsoldier-direct,DIRECT"))
+                    (string-contains text "MATCH,PROXY"))))
+
 ;; ── M10：TUN 契约 ───────────────────────────────────────────
 
 ;; ── M11：service graph ──────────────────────────────────────

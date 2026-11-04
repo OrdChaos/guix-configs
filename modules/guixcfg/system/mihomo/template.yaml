@@ -100,6 +100,24 @@ proxy-providers:
       interval: 600
       lazy: true
       url: https://www.gstatic.com/generate_204
+# 国内直连 / 国外代理。Loyalsoldier/clash-rules 的 release 分支每天由
+# CI 重新生成（当前约 29k stars）；payload 是 Clash domain 规则。
+# 文件放在 -d 根目录，避免额外创建 rules/ 子目录。
+rule-providers:
+  loyalsoldier-proxy:
+    type: http
+    behavior: domain
+    format: yaml
+    url: https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/proxy.txt
+    path: ./loyalsoldier-proxy.yaml
+    interval: 86400
+  loyalsoldier-direct:
+    type: http
+    behavior: domain
+    format: yaml
+    url: https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt
+    path: ./loyalsoldier-direct.yaml
+    interval: 86400
 proxy-groups:
   - name: PROXY
     type: select
@@ -114,4 +132,7 @@ rules:
   - IP-CIDR6,fc00::/7,DIRECT,no-resolve
   - IP-CIDR6,fe80::/10,DIRECT,no-resolve
   - IP-CIDR6,::1/128,DIRECT,no-resolve
+  # proxy 在 direct 之前：两表重叠时优先走代理。
+  - RULE-SET,loyalsoldier-proxy,PROXY
+  - RULE-SET,loyalsoldier-direct,DIRECT
   - MATCH,PROXY

@@ -174,7 +174,9 @@ controller 可读取配置的安全路径。
   节点可用性；节点域名经 `proxy-server-nameserver` 解析 +
   宿主直连出站可信，2026-08-28 实测直连拉取成功）、
   `interval: 3600`（秒；省略则无周期刷新）、health-check lazy；
-- 规则：loopback/private/local → DIRECT；其余 → PROXY；
+- 规则：私网/loopback/ULA → DIRECT；Loyalsoldier `proxy` 规则集
+  → PROXY；Loyalsoldier `direct` 规则集 → DIRECT；其余 → PROXY。
+  rule-providers 每天更新（86400s），缓存放在 `-d` 根目录；
 - secret 的 target-name 契约：`mihomo-subscription.url`（与
   `(guixcfg system mihomo config)` 的 `%mihomo-secret-path` 派生
   一致；decl 由 `(guixcfg system mihomo service)` 的
