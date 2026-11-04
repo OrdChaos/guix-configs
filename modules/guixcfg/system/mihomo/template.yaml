@@ -56,8 +56,8 @@ dns:
     geoip-code: LAN
   # 代理节点域名的 bootstrap DNS（拨号节点前解析节点域名）。
   proxy-server-nameserver:
-    - https://doh.pub/dns-query
     - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
 sniffer:
   enable: true
   sniff:
