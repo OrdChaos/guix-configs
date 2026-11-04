@@ -127,7 +127,9 @@ wiring assertions survive formatting reflows."
 (define %composed
   (compose-mihomo-config (repo-file-text (local-file-absolute-file-name
                                           %mihomo-template-file))
-                         "https://subscription.invalid/path\n" %nm-dnsmasq-uid))
+                         '(("airport" "http"
+                            "https://subscription.invalid/path"))
+                         %nm-dnsmasq-uid))
 
 (test-assert "N7: mihomo exclude-uid injects the nm-dnsmasq UID"
              (string-contains %composed

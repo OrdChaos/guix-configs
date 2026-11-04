@@ -89,7 +89,7 @@ path DSL。
 | authority | **repository** | **machine** |
 | 来源 | declarative ciphertext → system generation → runtime plaintext | 本机运行期产生的 mutable state |
 | 生命周期 | 随 repository 声明 | 独立于 repository 持久 |
-| 例子 | mihomo 订阅 URL（system/mihomo/secrets/） | GUI 连接 Wi-Fi 后 NM 自己保存的 profile/password |
+| 例子 | mihomo 每源订阅密文（system/mihomo/secrets/） | GUI 连接 Wi-Fi 后 NM 自己保存的 profile/password |
 
 **declarative Wi-Fi credential 不应成为"记住用户在 GUI 中连接过
 哪些 Wi-Fi"的常规机制**——日常 GUI-generated Wi-Fi configuration

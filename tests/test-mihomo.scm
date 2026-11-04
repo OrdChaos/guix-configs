@@ -1,8 +1,8 @@
-;;; Mihomo system service 单元测试（M1-M16）。
+;;; Mihomo system service 单元测试（M1-M17）。
 ;;;
 ;;; 覆盖：
-;;;   M1-M6, M14, M16  config composition 纯逻辑（manifest 解析、多源/
-;;;          文件源、占位符、CR/LF/NUL fail closed、YAML 转义）
+;;;   M1-M6, M14, M16  config composition 纯逻辑（多源/文件源、占位符、
+;;;          CR/LF/NUL fail closed、YAML 转义）
 ;;;   M7-M10 公开模板静态契约（占位符唯一、Phase 1 边界、controller
 ;;;          loopback、无 secret 泄漏面）
 ;;;   M11-M12 service graph（shepherd requirement/provision、
@@ -22,6 +22,7 @@
              (gnu system shadow) ;user-group?
              (guixcfg system mihomo service)
              (guixcfg system mihomo config)
+             (guixcfg system mihomo sources)
              (guixcfg system machine-state-persistence) ;rule 校验
              (guixcfg security secrets) ;secret-decl-name（M13）
              (guixcfg hosts vm) ;%vm-os
@@ -64,18 +65,23 @@ proxy-groups:
 
 (test-begin "mihomo")
 
-;; ── M1：尾换行剥离与旧单 URL 兼容 ───────────────────────────
+;; ── M1：单源与尾换行 ────────────────────────────────────────
 (test-assert "M1: trailing LF stripped"
-             (string-contains (compose-mihomo-config %mini-template
-                                                     "https://a.invalid/x\n")
+             (string-contains (compose-mihomo-config
+                               %mini-template
+                               '(("airport" "http"
+                                  "https://a.invalid/x\n")))
                               "url: \"https://a.invalid/x\""))
 (test-assert "M1: trailing CRLF stripped"
-             (string-contains (compose-mihomo-config %mini-template
-                                                     "https://a.invalid/x\r\n")
+             (string-contains (compose-mihomo-config
+                               %mini-template
+                               '(("airport" "http"
+                                  "https://a.invalid/x\r\n")))
                               "url: \"https://a.invalid/x\""))
-(test-assert "M1: legacy single URL becomes airport source"
-             (let ((text (compose-mihomo-config %mini-template
-                                                "https://a.invalid/x\n")))
+(test-assert "M1: single source becomes airport provider/group"
+             (let ((text (compose-mihomo-config
+                          %mini-template
+                          '(("airport" "http" "https://a.invalid/x")))))
                (and (string-contains text "  airport:\n    type: http")
                     (string-contains text "- name: SRC-airport")
                     (string-contains text "use: [airport]"))))
@@ -83,44 +89,51 @@ proxy-groups:
 ;; ── M2：control chars → fail closed ─────────────────────────
 (test-assert "M2: embedded CR fails closed"
              (caught-error (lambda ()
-                             (compose-mihomo-config %mini-template
-                                                    "https://a.invalid\rb"))))
+                             (compose-mihomo-config
+                              %mini-template
+                              '(("airport" "http" "https://a.invalid\rb"))))))
 (test-assert "M2: NUL fails closed"
              (caught-error (lambda ()
-                             (compose-mihomo-config %mini-template
-                                                    (string-append
-                                                     "https://a.invalid"
-                                                     (string #\nul) "b\n")))))
-(test-assert "M2: blank lines are ignored"
-             (compose-mihomo-config %mini-template
-                                    "airport=https://a.invalid/x\n\n"))
+                             (compose-mihomo-config
+                              %mini-template
+                              (list (list "airport" "http"
+                                          (string-append
+                                           "https://a.invalid"
+                                           (string #\nul) "b")))))))
+(test-assert "M2: empty source list fails closed"
+             (caught-error (lambda ()
+                             (compose-mihomo-config %mini-template '()))))
 
 ;; ── M3：占位符恰好一次 ──────────────────────────────────────
 (test-assert "M3: missing placeholders fail closed"
              (caught-error (lambda ()
-                             (compose-mihomo-config "no placeholder here\n"
-                                                    "https://a.invalid\n"))))
+                             (compose-mihomo-config
+                              "no placeholder here\n"
+                              '(("airport" "http" "https://a.invalid"))))))
 (test-assert "M3: duplicated providers placeholder fails closed"
              (caught-error (lambda ()
                              (compose-mihomo-config
                               (string-append %mini-template
                                              "@@MIHOMO_PROXY_PROVIDERS@@\n")
-                              "https://a.invalid\n"))))
+                              '(("airport" "http" "https://a.invalid"))))))
 (test-assert "M3: exact placeholders succeed"
-             (string-contains (compose-mihomo-config %mini-template
-                                                     "https://a.invalid\n")
+             (string-contains (compose-mihomo-config
+                               %mini-template
+                               '(("airport" "http" "https://a.invalid")))
                               "https://a.invalid"))
 
 ;; ── M4：YAML 双引号转义 ─────────────────────────────────────
 (test-assert "M4: double quote escaped"
              (string-contains (compose-mihomo-config
                                %mini-template
-                               "airport=https://a.invalid/?q=\"x\"\n")
+                               '(("airport" "http"
+                                  "https://a.invalid/?q=\"x\"")))
                               "q=\\\"x\\\""))
 (test-assert "M4: backslash escaped"
              (string-contains (compose-mihomo-config
                                %mini-template
-                               "airport=https://a.invalid/a\\b\n")
+                               '(("airport" "http"
+                                  "https://a.invalid/a\\b")))
                               "a\\\\b"))
 
 ;; ── M5：count-substring ─────────────────────────────────────
@@ -131,39 +144,41 @@ proxy-groups:
 
 ;; ── M6：compose 不打印 secret ───────────────────────────────
 (test-assert "M6: no secret in composition error messages"
-             (not (string-contains (or (caught-error (lambda ()
-                                                       (compose-mihomo-config
-                                                        "x\n" "SECRET_URL\n")))
-                                       "") "SECRET_URL")))
+             (not (string-contains
+                   (or (caught-error (lambda ()
+                                       (compose-mihomo-config
+                                        "x\n"
+                                        '(("airport" "http" "SECRET_URL")))))
+                       "") "SECRET_URL")))
 
 ;; ── M14：nm-dnsmasq UID 占位符替换（可选参数）───────────────
 (test-assert "M14: uid placeholder substituted when uid is given"
-             (string-contains (compose-mihomo-config (string-append
-                                                      %mini-template
-                                                      "tun:\n  exclude-uid:\n"
-                                                      "    - @@MIHOMO_NM_DNSMASQ_UID@@\n")
-                                                     "https://a.invalid/x\n"
-                                                     985) "- 985"))
+             (string-contains (compose-mihomo-config
+                               (string-append
+                                %mini-template
+                                "tun:\n  exclude-uid:\n"
+                                "    - @@MIHOMO_NM_DNSMASQ_UID@@\n")
+                               '(("airport" "http" "https://a.invalid/x"))
+                               985) "- 985"))
 (test-assert "M14: missing uid placeholder fails closed when uid is given"
              (caught-error (lambda ()
-                             (compose-mihomo-config %mini-template
-                                                    "https://a.invalid/x\n"
-                                                    985))))
+                             (compose-mihomo-config
+                              %mini-template
+                              '(("airport" "http" "https://a.invalid/x"))
+                              985))))
 (test-assert "M14: uid not required when omitted"
-             (string-contains (compose-mihomo-config %mini-template
-                                                     "https://a.invalid/x\n")
+             (string-contains (compose-mihomo-config
+                               %mini-template
+                               '(("airport" "http" "https://a.invalid/x")))
                               "https://a.invalid/x"))
 
-;; ── M16：多源与文件源 manifest ──────────────────────────────
-(define %multi-source-secret
-  (string-append
-   "# remote + local file\n"
-   "airport=https://a.invalid/x\n"
-   "home=/var/lib/clash/subscriptions/home.yaml\n"))
+;; ── M16：多源与文件源 ───────────────────────────────────────
+(define %multi-sources
+  '(("airport" "http" "https://a.invalid/x")
+    ("home" "file" "/var/lib/clash/subscriptions/home.yaml")))
 
 (test-assert "M16: remote and file providers generated"
-             (let ((text (compose-mihomo-config %mini-template
-                                                %multi-source-secret)))
+             (let ((text (compose-mihomo-config %mini-template %multi-sources)))
                (and (string-contains text "  airport:\n    type: http")
                     (string-contains text
                                      "url: \"https://a.invalid/x\"")
@@ -171,15 +186,13 @@ proxy-groups:
                     (string-contains text
                                      "path: \"/var/lib/clash/subscriptions/home.yaml\""))))
 (test-assert "M16: every source gets a SRC-* group"
-             (let ((text (compose-mihomo-config %mini-template
-                                                %multi-source-secret)))
+             (let ((text (compose-mihomo-config %mini-template %multi-sources)))
                (and (string-contains text "- name: SRC-airport")
                     (string-contains text "use: [airport]")
                     (string-contains text "- name: SRC-home")
                     (string-contains text "use: [home]"))))
 (test-assert "M16: top PROXY group selects all sources"
-             (let ((text (compose-mihomo-config %mini-template
-                                                %multi-source-secret)))
+             (let ((text (compose-mihomo-config %mini-template %multi-sources)))
                (and (string-contains text "- name: PROXY")
                     (string-contains text
                                      "proxies: [SRC-airport, SRC-home, DIRECT]"))))
@@ -187,27 +200,38 @@ proxy-groups:
              (caught-error (lambda ()
                              (compose-mihomo-config
                               %mini-template
-                              "a=https://a.invalid/x\na=https://b.invalid/y\n"))))
+                              '(("a" "http" "https://a.invalid/x")
+                                ("a" "http" "https://b.invalid/y"))))))
 (test-assert "M16: invalid source name fails closed"
              (caught-error (lambda ()
                              (compose-mihomo-config
                               %mini-template
-                              "bad name=https://a.invalid/x\n"))))
-(test-assert "M16: bare URL in multi-line manifest fails closed"
+                              '(("bad name" "http" "https://a.invalid/x"))))))
+(test-assert "M16: invalid source kind fails closed"
              (caught-error (lambda ()
                              (compose-mihomo-config
                               %mini-template
-                              "airport=https://a.invalid/x\nhttps://b.invalid/y\n"))))
+                              '(("home" "inline" "oops"))))))
+(test-assert "M16: HTTP source must be a URL"
+             (caught-error (lambda ()
+                             (compose-mihomo-config
+                              %mini-template
+                              '(("home" "http" "relative.example"))))))
 (test-assert "M16: file source requires absolute path"
              (caught-error (lambda ()
                              (compose-mihomo-config
                               %mini-template
-                              "home=relative.yaml\n"))))
+                              '(("home" "file" "relative.yaml"))))))
 (test-assert "M16: file source must live under the mihomo -d directory"
              (caught-error (lambda ()
                              (compose-mihomo-config
                               %mini-template
-                              "home=/tmp/outside.yaml\n"))))
+                              '(("home" "file" "/tmp/outside.yaml"))))))
+(test-assert "M16: URL whitespace fails closed"
+             (caught-error (lambda ()
+                             (compose-mihomo-config
+                              %mini-template
+                              '(("airport" "http" "https://a.invalid/a b"))))))
 
 ;; ── M7：模板静态契约 ────────────────────────────────────────
 (test-assert "M7: provider/group/UID placeholders appear exactly once"
@@ -274,8 +298,9 @@ proxy-groups:
 ;; 照常；直连可行性：节点域名经 mihomo `proxy-server-nameserver`
 ;; 解析 + 宿主直连出站可信，2026-08-28 VM 实测直连拉取成功）。
 (test-assert "M9: composed remote provider refresh dials DIRECT"
-             (string-contains (compose-mihomo-config %mini-template
-                                                     "https://a.invalid/x\n")
+             (string-contains (compose-mihomo-config
+                               %mini-template
+                               '(("airport" "http" "https://a.invalid/x")))
                               "proxy: DIRECT"))
 
 ;; ── M15：国内直连 / 国外代理规则 ────────────────────────────
@@ -377,10 +402,10 @@ proxy-groups:
    (and (string-contains source "machine-state-persistence-rule-backing")
         (not (string-contains source "\"/mihomo/providers\"")))))
 
-;; ── M13：subscription secret 归 mihomo 模块（无 host 层）─────
-(test-assert "M13: subscription secret declared by the mihomo module"
+;; ── M13：每源一个 age secret，归 mihomo 模块（无 host 层）────
+(test-assert "M13: airport source secret declared by the mihomo module"
              (let ((d (car %mihomo-secrets)))
-               (and (eq? 'mihomo-subscription
+               (and (eq? 'mihomo-source-airport
                          (secret-decl-name d))
                     (eq? 'system
                          (secret-decl-scope d))
@@ -392,9 +417,27 @@ proxy-groups:
                                                                      d))
                                      "/mihomo/secrets/"))))
 (test-assert "M13: runtime secret path matches the publisher's derivation"
-             ;; %mihomo-secret-path is a literal in the closure-minimal config
-             ;; module; guard it against drift from runtime-secret-target.
-             (string=? %mihomo-secret-path
+             (string=? "/run/guixcfg-secrets-ordinary/system/mihomo-subscription.url"
                        (runtime-secret-target (car %mihomo-secrets) #f)))
+
+;; ── M17：SCM source declarations ───────────────────────────
+(test-assert "M17: %mihomo-sources is non-empty and airport is HTTP"
+             (and (pair? %mihomo-sources)
+                  (string=? (mihomo-source-name (car %mihomo-sources))
+                            "airport")
+                  (eq? (mihomo-source-kind (car %mihomo-sources))
+                       'http)
+                  (string=? (mihomo-source-target-name
+                             (car %mihomo-sources))
+                            "mihomo-subscription.url")))
+(test-assert "M17: exactly one age secret declaration per source"
+             (= (length %mihomo-secrets)
+                (length %mihomo-sources)))
+(test-assert "M17: file source default target uses .file"
+             (let ((s (mihomo-source "home" 'file
+                                     (local-file "secrets/home.file.age"
+                                                 "home.file.age"))))
+               (string=? (mihomo-source-target-name s)
+                         "mihomo-source-home.file")))
 
 (test-end "mihomo")

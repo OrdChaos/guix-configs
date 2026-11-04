@@ -21,16 +21,16 @@
 ;;; 路径契约（与 (guixcfg system mihomo config) 共享常量）：
 ;;;   immutable:  /gnu/store/...-mihomo-template.yaml（公开模板）
 ;;;   runtime:    /run/mihomo/config.yaml（materializer 合成，0600 root）
-;;;   secret:     /run/guixcfg-secrets-ordinary/system/mihomo-subscription.url
+;;;   secret:     /run/guixcfg-secrets-ordinary/system/<per-source target>
 ;;;   persistent: /var/lib/clash（整个 -d：providers cache + cache.db，
 ;;;               machine-state bind，0700）
 ;;;   log:        /var/log/mihomo.log（ephemeral，root 0640）
 ;;; config.yaml 不在 -d 下（-f 指定）。
 ;;;
 ;;; secret 边界（诚实声明，见 docs/architecture/mihomo.md）：
-;;;   - ciphertext colocate 本模块（secrets/mihomo-subscription.url.age，
-;;;     单份密文、stable recipient 加密，所有设备共用——无 host 层）；
-;;;   - plaintext subscription manifest 不进 Git、不进 /gnu/store；
+;;;   - 每个源一个 ciphertext，colocate (guixcfg system mihomo sources)
+;;;     声明的 secrets/*.age；stable recipient、所有设备共用——无 host 层；
+;;;   - 每份 plaintext（单 URL 或单文件路径）不进 Git、不进 /gnu/store；
 ;;;   - runtime config 在 /run（0600 root）；
 ;;;   - Mihomo provider fetch 失败时，上游实现会把完整 URL（含 query
 ;;;     token）写入 error log（VM 实测 "[Provider] airport pull
@@ -47,8 +47,9 @@
   #:use-module (rosenthal packages networking) ;mihomo
   #:use-module (guixcfg utils module-closure) ;guixcfg-module-select?
   #:use-module (guixcfg system mihomo config)
+  #:use-module (guixcfg system mihomo sources)
   #:use-module (guixcfg system dns nm-dnsmasq) ;%nm-dnsmasq-uid（exclude-uid）
-  #:use-module (guixcfg security secrets) ;secret-decl（subscription secret colocate）
+  #:use-module (guixcfg security secrets) ;secret-decl（per-source secrets）
   #:use-module (guixcfg system machine-state-persistence) ;%machine-state-root
   #:export (%mihomo-data-directory %mihomo-log-file
                                    %mihomo-template-file
@@ -71,20 +72,36 @@
 (define %mihomo-template-file
   (local-file "template.yaml" "mihomo-template.yaml"))
 
-;; subscription manifest 的 secret-decl（单一 owner = 本模块；所有设备
-;; 共用同一密文，target-name 契约见 (guixcfg system mihomo config) 的
-;; %mihomo-secret-path）。target-name 沿用历史名；仓库中的 age 密文现在
-;; 是 manifest（单行旧 URL，或多行 name=url-or-file-path）；plaintext
-;; 只在运行期由 stable identity 解密，不进入 store。
+;; 每个 <mihomo-source> 的 age 密文单独声明；target-name 由
+;; (guixcfg system mihomo sources) 声明/派生。明文只能是单 URL 或单份
+;; provider YAML；plaintext 只在运行期由 stable identity 解密，不进入 store。
+(define (mihomo-source-secret-name source)
+  (string->symbol (string-append "mihomo-source-"
+                                 (mihomo-source-name source))))
+
+(define (mihomo-source-secret-decl src)
+  (secret-decl (name (mihomo-source-secret-name src))
+               (scope 'system)
+               (domain 'ordinary)
+               (source (mihomo-source-secret-file src))
+               (target-name (mihomo-source-target-name src))
+               (owner-user "root")
+               (mode 256)))
+
+(define %mihomo-source-secret-decls
+  (map mihomo-source-secret-decl %mihomo-sources))
+
 (define %mihomo-secrets
-  (list (secret-decl (name 'mihomo-subscription)
-                     (scope 'system)
-                     (domain 'ordinary)
-                     (source (local-file "secrets/mihomo-subscription.url.age"
-                              "mihomo-subscription.url.age"))
-                     (target-name "mihomo-subscription.url")
-                     (owner-user "root")
-                     (mode 256))))
+  %mihomo-source-secret-decls)
+
+;; materializer 需要 (name kind runtime-secret-path)；路径由已声明的
+;; secret-decl 的 target-name 派生，和 publisher 保持同一契约。
+(define %mihomo-source-runtime-specs
+  (map (lambda (source)
+         (list (mihomo-source-name source)
+               (symbol->string (mihomo-source-kind source))
+               (runtime-secret-target (mihomo-source-secret-decl source) #f)))
+       %mihomo-sources))
 
 ;; mihomo 数据目录的 machine-state 持久化（整个 -d，不拆分）：
 ;; /persist/system/state/mihomo/clash → bind → /var/lib/clash。
@@ -104,11 +121,11 @@
 ;; ────────────────────────────────────────────────────────────
 
 (define (mihomo-config-program)
-  "生成 mihomo-config 程序：读公开模板（store）与已解密的
-subscription manifest（/run，root 0400），按 (guixcfg system
-mihomo-config) 的 fail-closed 契约生成多 provider/group 配置，原子
+  "生成 mihomo-config 程序：读公开模板（store）与 %mihomo-sources
+声明的各源 age 明文（/run，root 0400），按 (guixcfg system
+mihomo config) 的 fail-closed 契约生成多 provider/group 配置，原子
 写入 /run/mihomo/config.yaml（0700 目录 / 0600 文件）。不联网、不用
-shell；manifest 绝不进 argv/environment/日志（成功日志只报路径）。"
+shell；源明文绝不进 argv/environment/日志（成功日志只报路径）。"
   (program-file "mihomo-config"
                 (with-imported-modules (source-module-closure '((guixcfg
                                                                  system mihomo
@@ -143,19 +160,56 @@ shell；manifest 绝不进 argv/environment/日志（成功日志只报路径）
                                                                      (fail! (string-append
                                                                              "cannot read template "
                                                                              #$%mihomo-template-file)))))
-                                                  (secret (catch 'system-error
-                                                                 (lambda ()
-                                                                   (call-with-input-file %mihomo-secret-path
-                                                                     get-string-all))
-                                                                 (lambda args
-                                                                   (fail! (string-append
-                                                                           "cannot read secret file "
-                                                                           %mihomo-secret-path))))))
+                                                  (source-specs '#$%mihomo-source-runtime-specs)
+                                                  (sources
+                                                   (map (lambda (spec)
+                                                          (match spec
+                                                            ((name kind path)
+                                                             (let ((content
+                                                                    (catch 'system-error
+                                                                      (lambda ()
+                                                                        (call-with-input-file path
+                                                                          get-string-all))
+                                                                      (lambda args
+                                                                        (fail! (string-append
+                                                                                "cannot read source secret "
+                                                                                path))))))
+                                                               (if (string=? kind "file")
+                                                                   (let ((target
+                                                                          (string-append
+                                                                           %mihomo-file-subscriptions-dir
+                                                                           "/" name ".yaml")))
+                                                                     (when (string-null? content)
+                                                                       (fail! (string-append
+                                                                               "empty file source "
+                                                                               name)))
+                                                                     (when (string-contains
+                                                                            content
+                                                                            (string #\nul))
+                                                                       (fail! (string-append
+                                                                               "file source contains NUL: "
+                                                                               name)))
+                                                                     (unless (file-exists?
+                                                                              %mihomo-file-subscriptions-dir)
+                                                                       (mkdir
+                                                                        %mihomo-file-subscriptions-dir)
+                                                                       (chmod
+                                                                        %mihomo-file-subscriptions-dir
+                                                                        #o700))
+                                                                     (atomic-write-file!
+                                                                      target
+                                                                      (lambda (port)
+                                                                        (display content
+                                                                                 port)))
+                                                                     (chmod target #o600)
+                                                                     (list name kind target))
+                                                                   (list name kind content))))))
+                                                        source-specs)))
                                              (catch 'mihomo-config-error
                                                     (lambda ()
                                                       (let ((config (compose-mihomo-config
                                                                      template
-                                                                     secret
+                                                                     sources
                                                                      #$%nm-dnsmasq-uid)))
                                                         (unless (file-exists?
                                                                  %mihomo-runtime-dir)
@@ -194,7 +248,7 @@ mihomo-config-ready——mihomo daemon 显式依赖它（声明式 ordering，
                           (one-shot? #t)
                           (respawn? #f)
                           (documentation
-                           "Compose the runtime Mihomo configuration from the public template and the decrypted subscription manifest into /run/mihomo/config.yaml (root 0600).")
+                           "Compose the runtime Mihomo configuration from the public template and the decrypted per-source secrets into /run/mihomo/config.yaml (root 0600).")
                           (start #~(lambda ()
                                      (zero? (system* #$(mihomo-config-program)))))
                           (stop #~(const #f)))))
@@ -230,7 +284,7 @@ mihomo-config-ready——mihomo daemon 显式依赖它（声明式 ordering，
 相对 %machine-state-root、consumer 绝对），避免与规则漂移。generic
 machine-state activation 只 mkdir 0755；本 activation 无论先后都最终
 强制 0700——Mihomo 以 0644 写 provider/rule cache 文件，隔离靠不可
-遍历的 0700 parent。subscriptions/ 供 manifest 中的文件订阅源使用。"
+遍历的 0700 parent。subscriptions/ 供 %mihomo-sources 中的文件订阅源使用。"
   (with-imported-modules (source-module-closure '((guix build utils)))
                          #~(begin
                              (use-modules (guix build utils))
@@ -272,7 +326,7 @@ machine-state activation 只 mkdir 0755；本 activation 无论先后都最终
                 (default-value #t)
                 (description
                  "Run Mihomo as the system transparent proxy with a runtime-composed
-configuration (subscription manifest never in the store).")))
+configuration (per-source subscription secrets never in the store).")))
 
 (define (mihomo-service)
   "Mihomo system service 实例（Phase 1 固定契约，无可配置字段）。"

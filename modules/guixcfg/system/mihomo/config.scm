@@ -1,5 +1,5 @@
 ;;; Mihomo runtime config composition（纯逻辑，无 gnu/guix imports）：
-;;; 公开模板 + subscription manifest 原文 → 完整 runtime config 文本。
+;;; 公开模板 + 已解密的源值列表 → 完整 runtime config 文本。
 ;;;
 ;;; 与 (guixcfg system mihomo service) 分离的原因：materializer program-file
 ;;; 经 source-module-closure 导入本模块（#:select?
@@ -7,21 +7,19 @@
 ;;; 避免把 gnu/services 依赖拖进 generated runtime（AGENT.md §3
 ;;; 符号审计面）。
 ;;;
-;;; secret manifest 契约（docs/architecture/mihomo.md）：
-;;;   - 单行 URL（旧格式）：自动成为 airport 源；
-;;;   - 多行 name=value：value 为 http(s) URL 或绝对文件路径；
-;;;   - 空行与 # 注释忽略；name 只允许字母/数字/下划线/连字符；
-;;;   - 每个源生成一个 proxy-provider 和一个 SRC-<name> select 组；
-;;;   - 顶层 PROXY select 组包含所有 SRC-<name> 与 DIRECT；
-;;;   - 文件源使用 mihomo proxy-provider `type: file`；
-;;;   - 远端源缓存到 ./providers/<name>.yaml，interval 3600s。
+;;; 输入 sources：((name kind value) ...)，kind 为 "http" 或 "file"，
+;;; value 是 service materializer 从该源 age 文件读出的明文：
+;;;   - http → 一个 http(s) URL；
+;;;   - file → materializer 从 age 内容生成的 /var/lib/clash 路径
+;;;     （compose 本身不解析 provider YAML）。
+;;; 每个源生成一个 proxy-provider + 一个 SRC-<name> select 组；顶层
+;;; PROXY select 组包含所有 SRC-* 与 DIRECT。
 ;;;
-;;; 运行时路径契约（single-owner constants）：secret 路径必须与
-;;; (guixcfg security secrets) 的 runtime-secret-target 派生一致——
-;;; ordinary domain + scope system + target-name
-;;; "mihomo-subscription.url"（decl 由
-;;; (guixcfg system mihomo service) 的 %mihomo-secrets 声明）。target-name
-;;; 是历史兼容名；文件内容现在是 manifest。
+;;; 运行时路径契约（single-owner constants）：
+;;;   - secret 路径/target 名由 (guixcfg system mihomo sources) 声明，
+;;;     service 侧用 runtime-secret-target 派生后传给 materializer；
+;;;   - 文件源路径必须在 -d（/var/lib/clash）下，否则 mihomo 的
+;;;     SAFE_PATHS 检查会拒绝。
 
 (define-module (guixcfg system mihomo config)
   #:use-module (srfi srfi-13) ;string-*、string-join
@@ -30,9 +28,9 @@
   #:export (%mihomo-proxy-providers-placeholder
             %mihomo-proxy-groups-placeholder
             %mihomo-nm-dnsmasq-uid-placeholder
-            %mihomo-secret-path
             %mihomo-runtime-dir
             %mihomo-runtime-config-path
+            %mihomo-data-directory
             %mihomo-file-subscriptions-dir
             compose-mihomo-config
             count-substring))
@@ -47,9 +45,6 @@
 (define %mihomo-nm-dnsmasq-uid-placeholder
   "@@MIHOMO_NM_DNSMASQ_UID@@")
 
-(define %mihomo-secret-path
-  "/run/guixcfg-secrets-ordinary/system/mihomo-subscription.url")
-
 (define %mihomo-runtime-dir
   "/run/mihomo")
 
@@ -61,7 +56,7 @@
 (define %mihomo-data-directory
   "/var/lib/clash")
 
-;; 文件订阅源的推荐目录；manifest 里也可以写该目录下的其他路径。
+;; 文件源 materializer 写出的 provider 目录；路径必须在 -d 下。
 (define %mihomo-file-subscriptions-dir
   "/var/lib/clash/subscriptions")
 
@@ -120,89 +115,54 @@ string-count——它只数字符不数子串）。"
               (not (member name
                            '("DIRECT" "REJECT" "PROXY" "GLOBAL")))))))
 
-(define (source-line-error line-no msg)
-  (config-error (string-append "subscription manifest line "
-                               (number->string line-no)
-                               ": "
-                               msg)))
+(define (validate-source-value name kind raw)
+  (let ((value (strip-one-trailing-newline raw)))
+    (when (string-contains value (string #\nul))
+      (config-error (string-append "source " name " value contains NUL")))
+    (when (or (string-contains value "\r")
+              (string-contains value "\n"))
+      (config-error (string-append "source " name
+                                   " value contains CR/LF")))
+    (cond
+      ((string=? kind "http")
+       (unless (or (string-prefix? "http://" value)
+                   (string-prefix? "https://" value))
+         (config-error (string-append "source " name
+                                      " is not an http(s) URL")))
+       (when (string-any char-whitespace? value)
+         (config-error (string-append "source " name
+                                      " URL contains whitespace")))
+       value)
+      ((string=? kind "file")
+       (unless (string-prefix? (string-append %mihomo-data-directory "/")
+                               value)
+         (config-error (string-append "source " name
+                                      " file path must be under /var/lib/clash")))
+       value)
+      (else
+       (config-error (string-append "source " name
+                                    " has invalid kind: " kind))))))
 
-(define (collect-source-lines raw)
-  "返回 ((line-number . trimmed-line) ...)，忽略空行和 # 注释。"
-  (let loop
-    ((lines (string-split raw #\newline))
-     (n 1)
-     (out '()))
-    (if (null? lines)
-        (reverse out)
-        (let ((line (string-trim-both (car lines))))
-          (cond
-            ((or (string-null? line)
-                 (string-prefix? "#" line))
-             (loop (cdr lines) (+ n 1) out))
-            ((string-contains line "\r")
-             (source-line-error n "embedded carriage return"))
-            (else
-             (loop (cdr lines) (+ n 1)
-                   (cons (cons n line) out))))))))
-
-(define (parse-source-entry line-no line)
-  (let ((eq (string-index line #\=)))
-    (unless eq
-      (source-line-error line-no "expected name=value"))
-    (let ((name (string-trim-both (substring line 0 eq)))
-          (value (string-trim-both (substring line (+ eq 1)))))
-      (unless (valid-source-name? name)
-        (source-line-error line-no "invalid source name"))
-      (cond
-        ((or (string-prefix? "http://" value)
-             (string-prefix? "https://" value))
-         (when (string-any char-whitespace? value)
-           (source-line-error line-no "URL contains whitespace"))
-         (list name 'http value))
-        ((string-prefix? "/" value)
-         (when (string-null? value)
-           (source-line-error line-no "empty file path"))
-         (unless (string-prefix? (string-append %mihomo-data-directory "/")
-                                 value)
-           (source-line-error line-no
-                              "file path must be under /var/lib/clash"))
-         (list name 'file value))
-        (else
-         (source-line-error line-no
-                            "value must be http(s) URL or absolute file path"))))))
-
-(define (ensure-unique-sources sources)
+(define (normalize-sources sources)
+  (when (null? sources)
+    (config-error "at least one subscription source is required"))
   (let loop
     ((rest sources)
-     (seen '()))
-    (unless (null? rest)
-      (let ((name (caar rest)))
-        (when (member name seen)
-          (config-error (string-append "duplicate source name: " name)))
-        (loop (cdr rest) (cons name seen))))))
-
-(define (parse-subscription-manifest raw)
-  (when (string-contains raw (string #\nul))
-    (config-error "subscription manifest contains NUL"))
-  (let* ((clean (strip-one-trailing-newline raw))
-         (entries (collect-source-lines clean)))
-    (when (null? entries)
-      (config-error "subscription manifest contains no sources"))
-    (let ((sources
-           (if (and (= (length entries) 1)
-                    (let ((line (cdar entries)))
-                      (or (string-prefix? "http://" line)
-                          (string-prefix? "https://" line))))
-               (let ((line (cdar entries)))
-                 (when (string-any char-whitespace? line)
-                   (source-line-error (caar entries)
-                                      "URL contains whitespace"))
-                 (list (list "airport" 'http line)))
-               (map (lambda (entry)
-                      (parse-source-entry (car entry) (cdr entry)))
-                    entries))))
-      (ensure-unique-sources sources)
-      sources)))
+     (names '())
+     (out '()))
+    (if (null? rest)
+        (reverse out)
+        (match (car rest)
+          ((name kind raw)
+           (unless (valid-source-name? name)
+             (config-error "invalid subscription source name"))
+           (when (member name names)
+             (config-error (string-append "duplicate source name: " name)))
+           (let ((value (validate-source-value name kind raw)))
+             (loop (cdr rest)
+                   (cons name names)
+                   (cons (list name kind value) out))))
+          (_ (config-error "malformed subscription source record"))))))
 
 (define (http-provider-block name url)
   (string-append
@@ -228,8 +188,8 @@ string-count——它只数字符不数子串）。"
   (apply string-append
          (map (lambda (source)
                 (match source
-                  ((name 'http url) (http-provider-block name url))
-                  ((name 'file path) (file-provider-block name path))))
+                  ((name "http" url) (http-provider-block name url))
+                  ((name "file" path) (file-provider-block name path))))
               sources)))
 
 (define (source-group-block name)
@@ -252,13 +212,13 @@ string-count——它只数字符不数子串）。"
                ", DIRECT]\n")))
     (apply string-append (append source-groups (list top)))))
 
-(define* (compose-mihomo-config template secret-raw
+(define* (compose-mihomo-config template sources
                                 #:optional (nm-dnsmasq-uid #f))
   "TEMPLATE（公开模板，含恰好一次 providers/groups 占位符）+
-SECRET-RAW（subscription manifest）→ 完整 runtime config 文本。
-可选 NM-DNSMASQ-UID（整数）启用 `tun.exclude-uid` 占位符替换。
-违反契约时 (throw 'mihomo-config-error MESSAGE) fail closed；不打印、
-不返回值之外地暴露 secret。"
+SOURCES（((name kind value) ...)，kind 为 \"http\"/\"file\"）→ 完整
+runtime config 文本。可选 NM-DNSMASQ-UID（整数）启用 `tun.exclude-uid`
+占位符替换。违反契约时 (throw 'mihomo-config-error MESSAGE) fail closed；
+不打印、不返回值之外地暴露源值。"
   (let* ((template* (if nm-dnsmasq-uid
                         (begin
                           (unless (= (count-substring template
@@ -268,7 +228,7 @@ SECRET-RAW（subscription manifest）→ 完整 runtime config 文本。
                           (string-replace-substring template
                            %mihomo-nm-dnsmasq-uid-placeholder
                            (number->string nm-dnsmasq-uid))) template))
-         (sources (parse-subscription-manifest secret-raw)))
+         (sources* (normalize-sources sources)))
     (unless (= (count-substring template* %mihomo-proxy-providers-placeholder) 1)
       (config-error "proxy-providers placeholder must appear exactly once"))
     (unless (= (count-substring template* %mihomo-proxy-groups-placeholder) 1)
@@ -276,9 +236,9 @@ SECRET-RAW（subscription manifest）→ 完整 runtime config 文本。
     (let* ((with-providers
             (string-replace-substring template*
              %mihomo-proxy-providers-placeholder
-             (provider-block sources)))
+             (provider-block sources*)))
            (with-groups
             (string-replace-substring with-providers
              %mihomo-proxy-groups-placeholder
-             (group-block sources))))
+             (group-block sources*))))
       with-groups)))

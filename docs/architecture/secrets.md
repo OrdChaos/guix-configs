@@ -51,8 +51,9 @@ target 是 user 就放进 `secrets/user/`。
 app 密文             → apps/<app>/secrets/*.age（该 app 的
                        definition.scm 声明；source-relative local-file）
 系统组件密文         → modules/guixcfg/<域>/<组件>/secrets/*.age
-                       （如 mihomo：system/mihomo/secrets/
-                       mihomo-subscription.url.age，decl 由
+                       （如 mihomo：system/mihomo/secrets/*.age，
+                       每源一份；decl 由
+                       (guixcfg system mihomo sources) 声明、
                        (guixcfg system mihomo service) 导出；
                        单份密文、所有设备共用——无 host 层）
 机制自身密钥         → modules/guixcfg/security/secrets/age/

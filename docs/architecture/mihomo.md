@@ -72,11 +72,11 @@ boot 时序：activation（数据目录/backing 0700）→ file-systems
 |---|---|---|
 | `/gnu/store/...-mihomo-template.yaml` | immutable | 公开模板（三个占位符各恰好一次，无 secret） |
 | `/gnu/store/...-mihomo-1.19.33` | immutable | binary（Guix 唯一 owner；无 self-update） |
-| `/run/guixcfg-secrets-ordinary/system/mihomo-subscription.url` | runtime secret | age 解密产物（manifest），root 0400 |
+| `/run/guixcfg-secrets-ordinary/system/mihomo-source-*` | runtime secret | 每个源一份 age 明文（`.url` 或 `.file`），root 0400；airport 保留旧 target `mihomo-subscription.url` |
 | `/run/mihomo/` | runtime | root 0700（materializer 创建） |
-| `/run/mihomo/config.yaml` | runtime | 模板 + manifest 生成的 providers/groups，root 0600，原子写 |
+| `/run/mihomo/config.yaml` | runtime | 模板 + 各源生成的 providers/groups，root 0600，原子写 |
 | `/var/lib/clash/providers/<name>.yaml` | persistent（machine-state bind） | 每个 HTTP 源的 mihomo provider cache（0644，靠 0700 目录隔离） |
-| `/var/lib/clash/subscriptions/<name>.yaml` | persistent（machine-state bind） | 文件订阅源（用户提供 provider YAML） |
+| `/var/lib/clash/subscriptions/<name>.yaml` | persistent（machine-state bind） | materializer 从 file 源 age 明文生成的 provider YAML（0600） |
 | `/var/lib/clash/cache.db` | persistent（machine-state bind） | profile.store-selected（默认 true）落盘点（VM 实测：`-d/cache.db`，含 selected proxy/subscription-info/ETag）——**选中节点/组状态跨 boot 保留**（2026-08-28 起整体 bind `-d`，见下） |
 | `/var/lib/clash/`（除 providers、cache.db 外） | persistent（同上） | 随 `-d` 整体 bind；config.yaml 不存在于 -d（`-f` 指定） |
 | `/var/log/mihomo.log` | ephemeral | shepherd log-file，root 0640 |
@@ -92,50 +92,93 @@ consumer 均由 mihomo activation 强制 0700**（generic mechanism 只
 单一规则（2026-08-28：此前只 bind providers 时选中节点每 boot
 重置）。
 
-## 多订阅源 manifest
+## 多订阅源（SCM 声明 + 每源一个 age）
 
-secret 文件（历史 target-name `mihomo-subscription.url`）现在是一份
-manifest，而不是单个 URL：
+源清单的 authority 是
+`modules/guixcfg/system/mihomo/sources.scm` 的 `%mihomo-sources`。每个
+`mihomo-source` 对应**一个 age 文件**，明文只能是：
 
-```text
-# name=url-or-absolute-file-path
-airport=https://example.invalid/sub?token=...
-backup=https://example.invalid/backup
-home=/var/lib/clash/subscriptions/home.yaml
+- `kind = 'http`：一个 http(s) URL；
+- `kind = 'file`：一份 mihomo provider YAML 内容（含 `proxies:`）。
+
+示例：
+
+```scheme
+(define %mihomo-sources
+  (list
+   ;; 现有单 URL：保留历史 target-name，旧密文不用重做。
+   (mihomo-source "airport" 'http
+                  (local-file "secrets/mihomo-subscription.url.age"
+                              "mihomo-subscription.url.age")
+                  "mihomo-subscription.url")
+
+   ;; 第二个 HTTP 源；target-name 自动为 mihomo-source-backup.url
+   ;; (mihomo-source "backup" 'http
+   ;;                (local-file "secrets/backup.url.age" "backup.url.age"))
+
+   ;; 文件源；age 明文是 provider YAML，target-name 自动为
+   ;; mihomo-source-home.file；materializer 写到 subscriptions/home.yaml。
+   ;; (mihomo-source "home" 'file
+   ;;                (local-file "secrets/home.file.age" "home.file.age"))
+   ))
 ```
 
-- 每行 `name=value`；空行和 `#` 注释忽略；
-- 单行旧格式 URL 仍兼容，自动成为 `airport` 源；
-- name 限制为字母/数字/`-`/`_`，不能与 `DIRECT`/`REJECT`/`PROXY`/`GLOBAL` 冲突；
-- 每个源生成：
-  - `proxy-providers.<name>`：HTTP 源（`type: http`，缓存 `./providers/<name>.yaml`，interval 3600s，`proxy: DIRECT`）或文件源（`type: file`）；
-  - `proxy-groups.SRC-<name>`：`select` 组，`use: [<name>]`；
-- 顶层 `PROXY` 是 `select` 组，成员为所有 `SRC-*` 加 `DIRECT`；规则
-  `MATCH,PROXY` 指向它；
-- 文件源必须是 mihomo proxy-provider YAML（含 `proxies:`），路径必须在
-  `-d`（`/var/lib/clash`）之下；推荐放
-  `/var/lib/clash/subscriptions/<name>.yaml`，activation 已创建该目录；
-- 修改 manifest 或文件后需要 `herd restart mihomo`（materializer 会重跑）；
-- Noctalia 的 Update subscriptions 只刷新 `vehicleType == "HTTP"` 的
-  provider，文件源会自动跳过。
+新增源：
 
-**升级到多源不需要换 secret target-name**：把原密文解密后改成多行
-manifest，再用同一 age recipient 重新加密即可；旧的单行 URL 仍然可用。
+1. 为**单个 URL 或单份 provider YAML 内容**创建一份 age 密文，放在
+   `modules/guixcfg/system/mihomo/secrets/`；
+2. 在 `%mihomo-sources` 加一条 `mihomo-source`，显式指定 age 文件与
+   kind；
+3. `blue reconfigure` / `herd restart mihomo`。
+
+`target-name` 不写时自动派生：
+
+```text
+http → mihomo-source-<name>.url
+file → mihomo-source-<name>.file
+```
+
+运行期路径由 declared target-name 经 `runtime-secret-target` 派生，
+materializer 逐个读取后生成：
+
+- `proxy-providers.<name>`：HTTP 源（`type: http`，缓存
+  `./providers/<name>.yaml`，interval 3600s，`proxy: DIRECT`）或文件源
+  （`type: file`）；
+- `proxy-groups.SRC-<name>`：`select` 组，`use: [<name>]`；
+- 顶层 `PROXY`：`select` 组，成员为所有 `SRC-*` 加 `DIRECT`；规则
+  `MATCH,PROXY` 指向它。
+
+文件源：
+
+- age 明文必须是 mihomo proxy-provider YAML（含 `proxies:`），不是完整
+  Clash 配置；
+- materializer 把它原子写到
+  `/var/lib/clash/subscriptions/<name>.yaml`（0600，父目录 0700）；
+  provider 路径由 Guile 生成，不需要在 SCM 里写路径；
+- 修改文件内容 = 替换 age 密文后 reconfigure/restart，不要直接编辑
+  运行期生成的 `subscriptions/*.yaml`；
+- Noctalia 的 Update subscriptions 只刷新 `vehicleType == "HTTP"` 的
+  provider，文件源自动跳过。
+
+**旧 `airport` 源不需要迁移**：它仍是单 URL 密文，只是通过 SCM 声明
+接入；要加源时再创建新的 age 文件。
 
 ## secret 数据流与边界（诚实声明）
 
 ```
-modules/guixcfg/system/mihomo/secrets/mihomo-subscription.url.age
-    （ciphertext 与 mihomo 模块同置，单份全设备共用，可进 store）
+modules/guixcfg/system/mihomo/secrets/<source>.age
+    （每个源一份 ciphertext：单 URL 或单 provider 文件内容；与 mihomo
+      模块同置，单份全设备共用，可进 store）
     → boot：installed identity 解密（age；ordinary domain，不 gate login）
-    → /run/guixcfg-secrets-ordinary/system/mihomo-subscription.url（root 0400）
+    → /run/guixcfg-secrets-ordinary/system/<target-name>（root 0400）
     → mihomo-config materializer：
-        读取模板与 secret manifest；剥除末尾单个 LF/CRLF；解析
-        name=url/path 行；生成 proxy-providers 与 SRC-* / PROXY
-        groups；每个占位符恰好一次；tmp + fsync + atomic rename；
-        /run/mihomo 0700、config 0600
+        %mihomo-sources 逐个读取明文；HTTP 源剥除末尾单个 LF/CRLF 并
+        校验 URL；file 源原子写到 subscriptions/<name>.yaml（0600）；
+        生成 proxy-providers 与 SRC-* / PROXY groups；每个占位符恰好
+        一次；tmp + fsync + atomic rename；/run/mihomo 0700、config
+        0600
     → mihomo -f 读取 → 每个 HTTP 源拉取订阅（interval/cache/refresh
-        由 Mihomo 维护）；文件源直接从 -d 下读取
+        由 Mihomo 维护）；文件源读取生成的 subscriptions/*.yaml
 ```
 
 secret 泄漏面：
@@ -143,7 +186,7 @@ secret 泄漏面：
 - **不进 Git**（只有 age ciphertext）；**不进 /gnu/store**（只有
   ciphertext 与占位符模板；materializer 只嵌入路径常量）；
 - 不进 argv / environment（materializer 与 mihomo 均只传路径）；
-- materializer 日志只报输出路径，不打印 manifest/URL；
+- materializer 日志只报输出路径，不打印源明文/URL；
 - **Mihomo provider fetch 失败时，上游实现会把完整 URL（含 query
   token）写入 error log**（VM 实测：`[Provider] airport pull
   error: Get "http://…": EOF`）。当前接受该边界：日志 ephemeral
@@ -191,7 +234,7 @@ controller 可读取配置的安全路径。
 
 - 占位符 `@@MIHOMO_PROXY_PROVIDERS@@`、`@@MIHOMO_PROXY_GROUPS@@` 与
   `@@MIHOMO_NM_DNSMASQ_UID@@` 各恰好一次，模板不可直接运行；前两者由
-  manifest 生成，UID 由 `(guixcfg system dns nm-dnsmasq)` 的
+  `%mihomo-sources` 生成，UID 由 `(guixcfg system dns nm-dnsmasq)` 的
   `%nm-dnsmasq-uid` 注入；
 - `dns`：`listen: 127.0.0.1:53`、`redir-host`、固定 AliDNS
   `nameserver`（`https://223.5.5.5/dns-query` /
@@ -201,14 +244,16 @@ controller 可读取配置的安全路径。
 - `tun`：mixed stack、auto-route/auto-redirect/auto-detect-interface、
   `dns-hijack: any:53` + `tcp://any:53`、`exclude-uid`（nm-dnsmasq）；
 - `sniffer`：TLS/HTTP/QUIC 端口（DOMAIN/GEOSITE 分流前提）；
-- provider/groups：由 manifest 生成；每个源一个 provider 与
+- provider/groups：由 `%mihomo-sources` 生成；每个源一个 provider 与
   `SRC-<name>` select 组，顶层 `PROXY` select 汇聚所有源 + `DIRECT`。
   HTTP 源 `proxy: DIRECT`、`interval: 3600`、health-check lazy；文件源
-  `type: file`，路径必须在 `-d` 下；
+  `type: file`，materializer 生成的路径在 `-d` 下；
 - 规则：私网/loopback/ULA → DIRECT；Loyalsoldier `proxy` 规则集
   → PROXY；Loyalsoldier `direct` 规则集 → DIRECT；其余 → PROXY。
   rule-providers 每天更新（86400s），缓存放在 `-d` 根目录；
-- secret 的 target-name 契约：`mihomo-subscription.url`（与
-  `(guixcfg system mihomo config)` 的 `%mihomo-secret-path` 派生
-  一致；decl 由 `(guixcfg system mihomo service)` 的
-`%mihomo-secrets` 声明）。
+- secret 的 target-name 契约：每个源一个（airport 保留历史
+  `mihomo-subscription.url`，其余默认
+  `mihomo-source-<name>.url|.file`）；运行期路径由
+  `runtime-secret-target` 从 `%mihomo-sources` 声明派生，materializer
+  逐个读取；decl 由 `(guixcfg system mihomo service)` 的
+  `%mihomo-secrets` 声明）。

@@ -2,7 +2,8 @@
 #
 # 三个占位符由 mihomo-config materializer 在 boot 时替换：生成的
 # provider 块、生成的 group 块，以及 NetworkManager dnsmasq 的稳定
-# UID。订阅 manifest（secret，多源/文件源）是 materializer 的输入。
+# UID。源清单与每个源的 age 文件在 (guixcfg system mihomo sources) 中
+# 声明；materializer 读取各源明文后生成 provider/group 块。
 # 合成结果写入 /run/mihomo/config.yaml（root 0600）经 -f 交给 Mihomo。
 # 本模板【不可直接运行】——占位符不是合法值（materializer 的 fail-closed
 # 契约：每个占位符必须恰好出现一次，缺失/重复即失败；因此本注释不写出
@@ -103,9 +104,10 @@ rule-providers:
     url: https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt
     path: ./loyalsoldier-direct.yaml
     interval: 86400
-# 订阅源由 materializer 从 secret manifest 生成：
-#   airport=https://...        → provider airport + 组 SRC-airport
-#   home=/var/lib/clash/subscriptions/home.yaml → provider home + 组 SRC-home
+# 订阅源由 (guixcfg system mihomo sources) 的 %mihomo-sources 声明，
+# 每源一个 age 文件；materializer 读取单 URL/单路径后生成：
+#   airport (http) → provider airport + 组 SRC-airport
+#   home (file)    → provider home + 组 SRC-home
 # 顶层 PROXY 选择所有 SRC-* 组；文件源必须是 mihomo provider YAML。
 proxy-providers:
 @@MIHOMO_PROXY_PROVIDERS@@
