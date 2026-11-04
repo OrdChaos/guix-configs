@@ -18,7 +18,7 @@ Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`�
 │    ▼                      ▼                                     │
 │  mihomo DNS                mihomo 规则引擎                       │
 │  （127.0.0.1:53）          │ loopback/私网/ULA → DIRECT          │
-│    ├─ 固定 DoH#PROXY       │ 其余 → MATCH → PROXY[节点]          │
+│    ├─ 固定 AliDNS UDP       │ 其余 → MATCH → PROXY[节点]          │
 │    └─ fallback :15353      │                                     │
 │         ↓                  ▼                                     │
 │  NM dnsmasq             机场节点（v4-only，select 组）            │
@@ -30,10 +30,10 @@ Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`�
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-一句话语义：**mihomo 是应用 DNS 的唯一入口，固定 DoH（经代理）
-优先；连接失败、NXDOMAIN 或 LAN IP 时回退到 NetworkManager dnsmasq
-的当前 DHCP DNS；两边都失败则正常失败。** TUN 只决定业务流量是否
-进入 mihomo，不再切换 DNS 所有权。
+一句话语义：**mihomo 是应用 DNS 的唯一入口，固定 AliDNS
+（223.5.5.5 / 223.6.6.6，UDP）优先；连接失败、NXDOMAIN 或 LAN IP
+时回退到 NetworkManager dnsmasq 的当前 DHCP DNS；两边都失败则正常
+失败。** TUN 只决定业务流量是否进入 mihomo，不再切换 DNS 所有权。
 
 ---
 
@@ -44,8 +44,8 @@ Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`�
 | D1 | 应用 resolver 是 **mihomo DNS**，监听 127.0.0.1:53；NetworkManager dnsmasq 退到 127.0.0.1:15353 | mihomo 的 `fallback` 需要独立 DHCP 上游；:53 只能有一个 owner。NM 仍拥有 dnsmasq/当前 DHCP DNS | resolver 入口归 mihomo；dnsmasq 端口不是 53，`ss` 检查要同时看两个端口 |
 | D2 | `/etc/resolv.conf` 归 NetworkManager（rc-manager=resolvconf，pinned 编译期默认） | 无状态根每 boot 重建 /etc；NM 原生写 resolver 状态，repo 不覆盖 | NM 写 `127.0.0.1`（现在指向 mihomo:53） |
 | D3 | mihomo `fallback` / `direct-nameserver` 指向 `127.0.0.1:15353`（NM dnsmasq → 当前 DHCP DNS） | 保持 captive portal / 校园域可达；不把 DHCP 地址写死，也没有 `system` 回环 | DHCP 域名解析交给当前网络 DNS（可观察/伪造，知情接受） |
-| D4 | DNS 用 `redir-host`，不用 fake-ip；`fallback-lazy-query: true` + `fallback-filter.geoip-code: LAN` | 真实解析才能让 NXDOMAIN/空答案/失败触发 fallback；LAN 是地址分类而不是域名列表 | 无 fake-ip 的远端解析；内网名字会先被公共 DoH 看到（NXDOMAIN 后回退） |
-| D5 | 固定上游用 DoH（Cloudflare/Google，`#PROXY`）；节点域名用独立 `proxy-server-nameserver` | 不受 GFW 污染；DNS 查询本身经代理；节点 bootstrap 独立 | 代理完全不可用时首查失败后回退 DHCP；DoH 服务器用 IP 避免额外 bootstrap |
+| D4 | DNS 用 `redir-host`，不用 fake-ip；`fallback-lazy-query: true` + `fallback-filter.geoip-code: LAN` | 真实解析才能让 NXDOMAIN/空答案/失败触发 fallback；LAN 是地址分类而不是域名列表 | 无 fake-ip 的远端解析；内网名字会先被公共 AliDNS 看到（NXDOMAIN 后回退） |
+| D5 | 固定上游用阿里云 AliDNS `223.5.5.5` / `223.6.6.6`（UDP）；节点域名用独立 `proxy-server-nameserver` | 实现简单、低延迟；不需要 DoH 域名 bootstrap | UDP 不加密、不经代理，仍可能被本地网络劫持；需要抗污染时应改回 DoH/DoT |
 | D6 | `ipv6: false`：TUN 不捕获 v6 | 机场节点全是 v4，TUN 承载 v6 也送不到目标（实测 AAAA 目标经节点秒断）；v6 归系统原生路径 | 不承诺 v6 代理；笔记本上行有 v6 时 v6 直连绕过代理（泄露面，知情接受）；VM（SLIRP 无 v6）上 v6-only 服务不可达（快速失败） |
 | D7 | 订阅刷新直连（`proxy: DIRECT`） | 刷新不依赖代理组/节点可用性——节点全挂时订阅照常更新 | 宿主直连出站不稳时刷新失败（cache-first 兜底，换节点/修宿主后经 refresh API 恢复） |
 | D8 | **TUN 是唯一流量入口**：无 mixed-port、无 HTTP_PROXY 系统代理语义 | 单入口 = 可审计、无静默旁路；透明代理下应用零配置 | TUN off = 无显式回退口（干净宿主下自动退化为直连机器，见 §6） |
@@ -56,7 +56,7 @@ Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`�
 | D13 | 配置合成 fail-closed：两个 placeholder 各恰好一次、严格 YAML 转义、残留 CR/LF/NUL 拒绝 | 订阅 URL 是唯一 secret 注入点，坏输入必须失败而非产出可运行错配置 | 物化失败 → mihomo 起不来（显式失败优于静默错） |
 | D14 | machine-state 持久化整个 mihomo 数据目录（`/var/lib/clash`：providers cache + cache.db 选中节点/组状态，bind-directory，root-owned） | 订阅拉取结果与节点选择都是 machine-owned mutable state，重启后都要保留 | 单目录 bind，不扩权 |
 | D15 | controller loopback-only、无 secret | 控制面只给本机运维，不进网络面 | 需要本机 shell 才能换节点/刷新 |
-| D16 | SmartDNS 保持退役；DNS 收敛为 mihomo（:53，DoH + fallback）+ NM dnsmasq（:15353，DHCP DNS） | 不再维护自定义 resolver 状态机；不需要域名列表 | 所有 DNS 先走 DoH；内网名字有首查延迟/泄漏；mihomo 成为 DNS 单点 |
+| D16 | SmartDNS 保持退役；DNS 收敛为 mihomo（:53，AliDNS + fallback）+ NM dnsmasq（:15353，DHCP DNS） | 不再维护自定义 resolver 状态机；不需要域名列表 | 所有 DNS 先走 AliDNS UDP；内网名字有首查延迟/泄漏；mihomo 成为 DNS 单点 |
 
 ---
 
@@ -68,14 +68,14 @@ Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`�
 |---|---|---|
 | NM dns backend | `modules/guixcfg/hosts/vm.scm`、`modules/guixcfg/hosts/lenovo-legion-y7000p.scm` | `(dns "dnsmasq")` + `(dnsmasq-configuration-files (nm-dnsmasq-dnsmasq-configuration-files))` |
 | 专用账号/配置 | `modules/guixcfg/system/dns/nm-dnsmasq.scm` | 系统账号 `nm-dnsmasq`（显式 UID/GID 985）、`00-nm-dnsmasq-user.conf`（`user=`）、`10-listen-port.conf`（`port=15353`）、`account-service-type` 贡献 |
-| 应用 DNS 入口 | `modules/guixcfg/system/mihomo/template.yaml` | `listen: 127.0.0.1:53`；`redir-host`；DoH `#PROXY`；`fallback`/`direct-nameserver` = `127.0.0.1:15353`；`fallback-lazy-query: true`；`fallback-filter.geoip-code: LAN` |
+| 应用 DNS 入口 | `modules/guixcfg/system/mihomo/template.yaml` | `listen: 127.0.0.1:53`；`redir-host`；AliDNS `223.5.5.5`/`223.6.6.6`；`fallback`/`direct-nameserver` = `127.0.0.1:15353`；`fallback-lazy-query: true`；`fallback-filter.geoip-code: LAN` |
 | 递归切断 | 同上（`tun.exclude-uid`）+ 上表账号 | 模板 `@@MIHOMO_NM_DNSMASQ_UID@@` 由 `modules/guixcfg/system/mihomo/config.scm` 注入同一 UID |
 
 ### 3.2 代理层
 
 | 组件 | 位置 | 实现要点 |
 |---|---|---|
-| 模板 | `modules/guixcfg/system/mihomo/template.yaml` | TUN（mixed stack、auto-route/auto-redirect/auto-detect-interface、`dns-hijack: any:53` + `tcp://any:53`、`exclude-uid`）、`ipv6: false`；`dns` 段：`listen: 127.0.0.1:53`、`redir-host`、DoH `nameserver#PROXY`、`fallback`/`direct-nameserver` = `127.0.0.1:15353`、`fallback-lazy-query`、`fallback-filter.geoip-code: LAN`、`proxy-server-nameserver`、IP `default-nameserver`；`sniffer`；规则 = 私网/loopback/ULA DIRECT + `MATCH,PROXY`；provider：原生 http、`interval: 3600`、lazy health-check、`proxy: DIRECT`（D7）；占位符 `@@MIHOMO_SUBSCRIPTION_URL@@` 与 `@@MIHOMO_NM_DNSMASQ_UID@@` 各恰好一次 |
+| 模板 | `modules/guixcfg/system/mihomo/template.yaml` | TUN（mixed stack、auto-route/auto-redirect/auto-detect-interface、`dns-hijack: any:53` + `tcp://any:53`、`exclude-uid`）、`ipv6: false`；`dns` 段：`listen: 127.0.0.1:53`、`redir-host`、AliDNS `nameserver`（223.5.5.5/223.6.6.6）、`fallback`/`direct-nameserver` = `127.0.0.1:15353`、`fallback-lazy-query`、`fallback-filter.geoip-code: LAN`、`proxy-server-nameserver`、IP `default-nameserver`；`sniffer`；规则 = 私网/loopback/ULA DIRECT + `MATCH,PROXY`；provider：原生 http、`interval: 3600`、lazy health-check、`proxy: DIRECT`（D7）；占位符 `@@MIHOMO_SUBSCRIPTION_URL@@` 与 `@@MIHOMO_NM_DNSMASQ_UID@@` 各恰好一次 |
 | 配置合成 | `modules/guixcfg/system/mihomo/config.scm` | `compose-mihomo-config`：模板 + `/run` 明文订阅 URL + UID；尾 LF/CRLF 规整、严格双引号转义、CR/LF/NUL 残留、placeholder 唯一性 fail-closed（D13） |
 | 服务装配 | `modules/guixcfg/system/mihomo/service.scm` | `%mihomo-data-directory`（`/var/lib/clash`）、`mihomo-config-program`（物化器，one-shot `mihomo-config-ready`）、daemon `mihomo -d /var/lib/clash -f /run/mihomo/config.yaml`（requirement：loopback/networking/config-ready）、`mihomo-activation`、clash 系统账户、`%mihomo-secrets`（ordinary secret-decl） |
 | 机器状态 | `modules/guixcfg/system/mihomo/service.scm` + `modules/guixcfg/system/machine-state-persistence.scm` | `%mihomo-data-persistence-rule`：`/persist/system/state/mihomo/clash` → bind → `/var/lib/clash`（整个 `-d`） |
@@ -93,8 +93,8 @@ Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`�
 
 ### 3.4 测试锁定（tests/）
 
-- `tests/test-nm-dnsmasq.scm` N1-N7：NM `dns=dnsmasq`、专用账号配置内容 + 15353 端口、账号/组显式稳定 UID/GID、无 SmartDNS 残留、无 standalone dnsmasq、host 装配引用、mihomo 组合配置的 `exclude-uid`/`:53` 监听/`redir-host`/DoH/fallback 一致；
-- `tests/test-mihomo.scm` M1-M14：合成 fail-closed 矩阵、转义、两个 placeholder 唯一性、`:53`/redir-host/dns-hijack 存在、DoH#PROXY/fallback :15353/LAN 过滤、UID 占位符替换、controller loopback、**provider `proxy: DIRECT`**、TUN 参数、`ipv6: false`、daemon 参数与 requirement（无 smartdns）、machine-state rule、secret decl。
+- `tests/test-nm-dnsmasq.scm` N1-N7：NM `dns=dnsmasq`、专用账号配置内容 + 15353 端口、账号/组显式稳定 UID/GID、无 SmartDNS 残留、无 standalone dnsmasq、host 装配引用、mihomo 组合配置的 `exclude-uid`/`:53` 监听/`redir-host`/AliDNS/fallback 一致；
+- `tests/test-mihomo.scm` M1-M14：合成 fail-closed 矩阵、转义、两个 placeholder 唯一性、`:53`/redir-host/dns-hijack 存在、AliDNS/fallback :15353/LAN 过滤、UID 占位符替换、controller loopback、**provider `proxy: DIRECT`**、TUN 参数、`ipv6: false`、daemon 参数与 requirement（无 smartdns）、machine-state rule、secret decl。
 
 ---
 
@@ -102,11 +102,11 @@ Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`�
 
 | 流量 | 路径（TUN on/off 相同） | 验证 |
 |---|---|---|
-| 应用 DNS（固定优先） | app → nscd → mihomo(127.0.0.1:53) → DoH#PROXY | 公网域名解析；mihomo 日志有 DoH 记录 |
+| 应用 DNS（固定优先） | app → nscd → mihomo(127.0.0.1:53) → AliDNS 223.5.5.5/223.6.6.6 | 公网域名解析；mihomo 日志有上游记录 |
 | 应用 DNS（回退） | mihomo → NXDOMAIN/失败/私网 IP → dnsmasq(127.0.0.1:15353) → DHCP DNS | 校园域 / captive portal / 内网 FQDN |
 | 应用 DNS（双失败） | mihomo 返回 SERVFAIL/NXDOMAIN | 不再无限回退；应用看到正常失败 |
 | DIRECT 解析 | mihomo → `direct-nameserver: 127.0.0.1:15353` → dnsmasq → DHCP DNS | loopback，不进 TUN |
-| 代理侧解析 | mihomo → DoH（`nameserver`/`proxy-server-nameserver`） | DoH 域名经 `default-nameserver` IP bootstrap |
+| 代理节点解析 | mihomo → `proxy-server-nameserver` DoH | DoH 域名经 `default-nameserver` IP bootstrap |
 | dnsmasq 上游 | dnsmasq（UID 985）→ DHCP DNS，**绕过 TUN** | sing-tun `meta skuid` 排除（D10） |
 | 应用 HTTPS | app → TUN → 规则 → 节点 | github/bordeaux/ci.guix/codeberg 全 200 |
 | 订阅刷新 | mihomo → DIRECT（宿主直连）→ 订阅端点 | `updatedAt` 更新、无 EOF |
@@ -128,13 +128,13 @@ Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`�
 
 | 模式 | DNS | 应用流量 | 订阅刷新 | 结论 |
 |---|---|---|---|---|
-| TUN on + 节点活 | ✓ DoH#PROXY 优先；失败回退 DHCP | 经节点 | ✓ 直连（proxy: DIRECT） | 全功能 |
-| TUN on + 节点死 | ✓ DoH 首查失败 → fallback dnsmasq→DHCP；校园域/门户仍通 | ✗ | ✓ 直连（刷新不依赖节点） | 换活节点恢复业务流量 |
-| TUN off + 宿主干净 | ✓ 仍先 DoH#PROXY；代理不可用时回退 DHCP | ✓ 直连（无代理） | ✓ 直连 | 退化为普通直连机器；LAN 靠 fallback |
+| TUN on + 节点活 | ✓ AliDNS UDP 优先；失败回退 DHCP | 经节点 | ✓ 直连（proxy: DIRECT） | 全功能 |
+| TUN on + 节点死 | ✓ AliDNS 失败 → fallback dnsmasq→DHCP；校园域/门户仍通 | ✗ | ✓ 直连（刷新不依赖节点） | 换活节点恢复业务流量 |
+| TUN off + 宿主干净 | ✓ 仍先 AliDNS；不可用时回退 DHCP | ✓ 直连（无代理） | ✓ 直连 | 退化为普通直连机器；LAN 靠 fallback |
 | 两边 DNS 都失败 | ✗ mihomo 返回 SERVFAIL/NXDOMAIN | 部分失败 | — | 正常失败，不无限回退 |
 
 要点：TUN 只切业务流量，不再切 DNS；TUN off 不是“断网”，而是
-“无代理的直连态”，DNS 仍按固定 DoH 优先 + DHCP fallback 工作。
+“无代理的直连态”，DNS 仍按固定 AliDNS 优先 + DHCP fallback 工作。
 
 ---
 
