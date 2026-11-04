@@ -8,12 +8,11 @@
 # 占位符字面量）。
 #
 # DNS 所有权（docs/architecture/dns.md）：
-#   TUN off：应用 → 系统 resolver（/etc/resolv.conf 127.0.0.1）→
-#            NetworkManager dnsmasq → DHCP DNS。
-#   TUN on ：mihomo 接管 DNS（fake-ip + dns-hijack）；DIRECT/local 经
-#            `direct-nameserver: system` 回到 dnsmasq → DHCP DNS；代理侧
-#            经 DoH。NetworkManager dnsmasq 的上游以专用 UID 运行并被
-#            `tun.exclude-uid` 排除，切断递归。
+#   应用 → /etc/resolv.conf 127.0.0.1:53（mihomo DNS）。
+#   mihomo 先查固定 DoH（#PROXY）；连接失败、NXDOMAIN 或空答案时回退到
+#   NetworkManager dnsmasq（127.0.0.1:15353）→ 当前 DHCP DNS；两者都失败
+#   则正常返回失败。dnsmasq 的上游以专用 UID 运行并被 `tun.exclude-uid`
+#   排除，切断 DNS → TUN → mihomo 的递归。
 # self-update 关闭（binary 归 Guix）；controller 仅 loopback（secret
 # 置空是单用户 loopback-only 部署的明确选择）。
 
@@ -29,28 +28,32 @@ secret: ""
 dns:
   enable: true
   ipv6: false
-  # 仅供 mihomo 内部/hijack 使用；127.0.0.1:53 归 NetworkManager
-  # dnsmasq，这里用另一个端口避免冲突。
-  listen: "127.0.0.1:1053"
-  enhanced-mode: fake-ip
-  fake-ip-range: 198.18.0.1/16
-  fake-ip-filter:
-    - "*.lan"
-    - "+.local"
-    - "localhost.ptlogin2.qq.com"
+  # 应用 DNS 的唯一入口；NetworkManager dnsmasq 已让到 127.0.0.1:15353。
+  listen: "127.0.0.1:53"
+  # redir-host：先真实解析，失败/无答案才能触发 fallback；fake-ip 会在
+  # 本地直接生成假 IP，不产生可供 fallback 判断的失败信号。
+  enhanced-mode: redir-host
   # DoH 服务器域名的 bootstrap（必须是 IP，仅用于解析 nameserver /
   # proxy-server-nameserver 的域名；不承担普通系统解析）。
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
-  # DIRECT / local 流量解析经系统 resolver：/etc/resolv.conf（127.0.0.1）
-  # → NetworkManager dnsmasq → DHCP DNS（含 captive portal）。
+  # DIRECT / local 流量解析直接问 NM dnsmasq（当前 DHCP DNS）。
   direct-nameserver:
-    - system
-  # 代理侧可靠 DNS（DoH）。
+    - 127.0.0.1:15353
+  # 固定上游：Cloudflare / Google DoH，经当前 PROXY 组走代理。
   nameserver:
-    - https://doh.pub/dns-query
-    - https://dns.alidns.com/dns-query
+    - https://1.1.1.1/dns-query#PROXY
+    - https://8.8.8.8/dns-query#PROXY
+  # 固定上游失败/无解析时的兜底：NM dnsmasq 的 DHCP DNS。
+  fallback:
+    - 127.0.0.1:15353
+  fallback-lazy-query: true
+  # 主上游返回私网/回环/链路本地/未指定地址时也视为“不该采用”，回退
+  # dnsmasq。LAN 是地址分类，不是域名列表。
+  fallback-filter:
+    geoip: true
+    geoip-code: LAN
   # 代理节点域名的 bootstrap DNS（拨号节点前解析节点域名）。
   proxy-server-nameserver:
     - https://doh.pub/dns-query

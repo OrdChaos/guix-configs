@@ -1,65 +1,65 @@
-# System DNS ownership（NetworkManager dnsmasq + mihomo）
+# System DNS ownership（mihomo + NetworkManager dnsmasq）
 
 > 全链路横切总结（与 mihomo 的协作语义、设计决策表、降级矩阵、
 > 运维手册）见 `network.md`；本文件只讲 DNS 分领域细节。
 
 ## 目标链
 
-**TUN off**（无代理，基础联网）：
+应用 DNS 只有一个入口：mihomo 的 loopback DNS。
 
 ```
 Applications
     ↓
 /etc/resolv.conf（NetworkManager 经 openresolv 写入 nameserver 127.0.0.1）
     ↓
-NetworkManager 自带 dnsmasq（127.0.0.1:53，NM 直接 exec 构建期烘焙的 store 二进制）
-    ↓
-DHCP-provided DNS（含校园域 / captive portal）
+mihomo DNS（127.0.0.1:53）
+    ├─ 固定 DoH（Cloudflare / Google，经当前 PROXY 组）
+    ├─ 连接失败 / NXDOMAIN / 空答案 / 私网 IP
+    │      ↓
+    │  127.0.0.1:15353（NetworkManager dnsmasq → 当前 DHCP DNS）
+    └─ 两边都失败 → 正常返回失败（SERVFAIL/NXDOMAIN）
 ```
 
-**TUN on**（mihomo 接管）：
-
-```
-Applications DNS（发给任意 :53 的非 loopback 目标）
-    ↓ mihomo dns-hijack（any:53 + tcp://any:53）
-    ↓ mihomo fake-ip DNS
-    ├─ DIRECT / local → direct-nameserver: system
-    │                   → /etc/resolv.conf 127.0.0.1 → NM dnsmasq → DHCP DNS
-    └─ PROXY          → nameserver / proxy-server-nameserver（DoH）
-```
-
-`/etc/resolv.conf` 始终指向 NetworkManager dnsmasq；mihomo 的
-`direct-nameserver: system` 因此回到「系统 resolver → dnsmasq → DHCP
-DNS」，这是一个**被动**数据源，不发额外探测。
+- TUN on/off 都走这条链；TUN 只决定业务流量是否进入 mihomo。
+- 固定上游是**真实 DoH**，DNS 查询本身经代理组；不是把 UDP 53
+  直接交给机场。
+- 不使用 fake-ip：`redir-host` 才能让“无解析”产生 fallback 信号；
+  fake-ip 会在本地直接生成假 IP，绕过上游失败判断。
+- 不维护域名列表：LAN 判断是 `fallback-filter.geoip-code: LAN`
+  的**地址分类**，不是 `nameserver-policy` 的域名白名单。
 
 ## Ownership 分层
 
 | 层 | owner | 形态 |
 |---|---|---|
-| `NetworkManager` dns 配置 | `network-manager-configuration` 的 `(dns "dnsmasq")`（host 装配） | 生成 `/etc/NetworkManager/NetworkManager.conf` 的 `[main] dns=dnsmasq`；NM 自己 exec dnsmasq 并监听 127.0.0.1:53 |
-| dnsmasq.d 配置 | `dnsmasq-configuration-files` 字段（host 装配）→ `(guixcfg system dns nm-dnsmasq)` | `file-union` 物化 `/etc/NetworkManager/dnsmasq.d/00-nm-dnsmasq-user.conf`（`user=nm-dnsmasq`） |
+| `NetworkManager` dns 配置 | `network-manager-configuration` 的 `(dns "dnsmasq")`（host 装配） | 生成 `/etc/NetworkManager/NetworkManager.conf` 的 `[main] dns=dnsmasq`；NM 自己 exec dnsmasq |
+| dnsmasq.d 配置 | `dnsmasq-configuration-files` 字段（host 装配）→ `(guixcfg system dns nm-dnsmasq)` | `file-union` 物化 `/etc/NetworkManager/dnsmasq.d/00-nm-dnsmasq-user.conf`（`user=nm-dnsmasq`）与 `10-listen-port.conf`（`port=15353`） |
 | dnsmasq 运行账号 | `(guixcfg system dns nm-dnsmasq)` | 专用系统账号 `nm-dnsmasq`（显式 UID/GID 985）；经 `account-service-type` 贡献（非 `users` 字段） |
 | `/etc/resolv.conf` | NetworkManager（rc-manager=resolvconf，编译期默认） | NM 经构建期烘焙的 openresolv 写入 `nameserver 127.0.0.1`；ephemeral root 中由 NM 运行时创建/拥有——**repo 不再声明** |
-| mihomo DNS | `(guixcfg system mihomo config)` 模板 | `dns.enable` + `enhanced-mode: fake-ip` + `dns-hijack: any:53`；DIRECT 经 `direct-nameserver: system`，代理侧经 DoH |
+| mihomo DNS | `(guixcfg system mihomo config)` 模板 | 监听 `127.0.0.1:53`；`redir-host`；固定 DoH `nameserver`；`fallback`/`direct-nameserver` 指向 `127.0.0.1:15353`；`dns-hijack: any:53` 仍保留给进入 TUN 的外部 DNS |
 
-## 为什么 /etc/resolv.conf 归 NetworkManager
+## 为什么 mihomo 占 53、dnsmasq 退到 15353
 
-`dns=dnsmasq` 时 NM 的职责就是：自己跑 dnsmasq 并把 libc resolver 指向
-它。pinned 的 network-manager package 以
-`-Dconfig_dns_rc_manager_default=resolvconf` 构建，并烘焙了 openresolv
-路径；因此 NM 调 `resolvconf` 写 `/etc/resolv.conf`。这是 pinned 原生
-行为，repo 不自建第二套 glue：
+mihomo 的 `fallback` 是“主上游无 IP 或失败时再查 fallback”；如果
+fallback 写 `system`，而系统 resolver 又指向 mihomo，就会形成
+`mihomo → system → mihomo` 的回路。因此 fallback 必须指向一个
+**独立的、不会回到 mihomo 的 DHCP DNS 入口**：
 
-- 删除旧的静态 `/etc/resolv.conf`（127.0.0.1 SmartDNS）与
-  `/etc/resolvconf.conf`（重定向 set）etc-service 声明；
-- 不由 repo 任何 activation 覆盖 `/etc/resolv.conf`；
-- 不引入 standalone `dnsmasq-service-type`（避免 `:53` 双 owner）。
+- mihomo 独占 `127.0.0.1:53`，成为应用 DNS 的唯一入口；
+- NetworkManager dnsmasq 改听 `127.0.0.1:15353`（高位端口，避开
+  mDNS 的 5353），仍由 NM 提供当前 DHCP DNS；
+- mihomo 的 `fallback` 与 `direct-nameserver` 都指向
+  `127.0.0.1:15353`。
+
+端口常量由 `(guixcfg system dns nm-dnsmasq)` 单一拥有
+（`%nm-dnsmasq-port`），mihomo 模板中的 `15353` 由
+`tests/test-nm-dnsmasq.scm` N2/N7 契约锁定。
 
 ## 递归切断（关键不变量）
 
 TUN on 时 mihomo `auto-route` 把出站流量导进 TUN。dnsmasq 的上游
 DHCP DNS 查询若不排除，会进入 TUN → 被 `dns-hijack: any:53` 捕获 →
-mihomo DNS → 回到 `direct-nameserver: system` → dnsmasq → 递归。
+mihomo DNS，形成递归。
 
 切断方式（mihomo 官方机制，非硬编码 IP）：
 
@@ -75,31 +75,41 @@ mihomo DNS → 回到 `direct-nameserver: system` → dnsmasq → 递归。
 
 ## 决策记录
 
-- **SmartDNS 退役**：DNS 由 NetworkManager dnsmasq（基础）+ mihomo
-  （TUN 接管）承担，SmartDNS service / DHCP fallback include /
-  openresolv→/run 重定向 / NM dispatcher 全部删除。
-- **固定 upstream IP 退役**：旧的 SmartDNS 固定上游
-  （223.5.5.5、119.29.29.29）不再作为系统 resolver upstream。它们仅作为
-  mihomo `default-nameserver` 的 DoH bootstrap 保留（mihomo 要求
-  bootstrap 必须是 IP）；普通 DIRECT 解析经 `system`，不经过它们。
+- **SmartDNS 保持退役**：不引入额外 resolver 层；mihomo 的
+  `fallback` 已经覆盖“固定 DoH 优先、DHCP 兜底”，且不需要域名列表。
+- **固定 DoH 作为唯一系统上游**：Cloudflare/Google DoH 经
+  `PROXY` 组；DoH 服务器用 IP，避免额外 bootstrap 依赖。校园域 /
+  captive portal 由 fallback 的 DHCP DNS 兜底。
+- **不用 fake-ip**：`redir-host` 保留真实 IP，TUN off 也能直连；
+  fallback 的触发条件是“无 IP/失败”，fake-ip 会绕过它。
 - **UID 必须显式固定**：ephemeral root 每 boot 重建 `/etc/passwd`，
   动态系统账号会漂移；显式 UID 同时被 `(gnu build accounts)` 分配器
   跳过，不会与其他系统账号冲突。
-- **captive portal**：TUN off 时 `dnsmasq → DHCP DNS` 直接可达门户；
-  TUN on 时 mihomo `direct-nameserver: system` 同样经 DHCP DNS 完成
-  门户/校园域解析（无需 connectivity probe / polling / `dhcp://`）。
-- **不再需要探测/轮询/selector**：连通性切换由「是否经 TUN」这一
-  静态网络状态表达，不做 HTTP probe。
+- **不做探测/轮询/selector**：所有 DNS 都先走固定 DoH；失败由
+  mihomo 的 fallback 机制在请求内处理，不维护健康检查状态机。
+- **TUN off 也先走固定 DoH**：这是“固定上游优先”的直接结果；DHCP
+  DNS 只在 DoH 失败/无解析时使用。若需要 TUN off 完全回 DHCP，必须
+  额外的状态切换，不属于本设计。
+
+## 已知取舍
+
+- **内部域名会先被发往公共 DoH**：LAN 名字通常得到 NXDOMAIN，再
+  fallback 到 DHCP；存在首查延迟和内部名字泄漏。要避免只能维护域名
+  列表或本地域名规则（本设计明确不做）。
+- **所有 DNS 都依赖 mihomo 进程**：mihomo 停止时 53 无人监听，DNS
+  直接失败；这符合“两边都失败则正常失败”的语义。
+- **没有 fake-ip 的远端解析**：代理拿到的是真实 IP，不是域名；
+  anycast/CDN 场景可能不如 fake-ip 精确。
+- **DoH 经代理**：代理完全不可用时，公共域名的首查会先失败再走
+  DHCP；这是 fallback 的正常代价。
 
 ## 实施文件
 
-- `modules/guixcfg/system/dns/nm-dnsmasq.scm`（账号/组/UID/conf + NM 配置片段）
+- `modules/guixcfg/system/dns/nm-dnsmasq.scm`（账号/组/UID/端口/conf）
 - `modules/guixcfg/hosts/vm.scm`、`modules/guixcfg/hosts/lenovo-legion-y7000p.scm`
   （`(dns "dnsmasq")` + `dnsmasq-configuration-files`）
-- `modules/guixcfg/system/mihomo/template.yaml`（dns / fake-ip / dns-hijack /
-  exclude-uid / direct-nameserver）
+- `modules/guixcfg/system/mihomo/template.yaml`（dns / redir-host /
+  DoH / fallback / fallback-filter / dns-hijack / exclude-uid）
 - `modules/guixcfg/system/mihomo/config.scm`（UID 占位符替换）
 - `tests/test-nm-dnsmasq.scm`（N1-N7）
-- 删除（迁移前的 SmartDNS 控制平面）：旧 DNS ownership/smartdns 模块、
-  `resolv.conf`/`resolvconf.conf`/`smartdns.conf` 静态文件、旧
-  SmartDNS 测试文件。
+- `tests/test-mihomo.scm`（M7 DNS 契约）

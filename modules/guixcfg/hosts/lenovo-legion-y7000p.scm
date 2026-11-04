@@ -141,8 +141,9 @@
 (define %lenovo-legion-y7000p-services
   (modify-services (append (make-host-services
                             ;; 实机网络：NetworkManager（dnsmasq backend）+ 显式 wpa-supplicant。
-                            ;; DNS 语义同 VM（docs/architecture/dns.md）：dnsmasq 127.0.0.1:53 →
-                            ;; DHCP DNS，以专用稳定 UID 运行（mihomo TUN exclude-uid 引用）。
+                            ;; DNS 语义同 VM（docs/architecture/dns.md）：mihomo 占 127.0.0.1:53，
+                            ;; NM dnsmasq 听 127.0.0.1:15353 提供 DHCP fallback；dnsmasq 以专用
+                            ;; 稳定 UID 运行（mihomo TUN exclude-uid 引用）。
                             #:network-services (list (service
                                                       network-manager-service-type
                                                       (network-manager-configuration

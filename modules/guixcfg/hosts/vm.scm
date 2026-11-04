@@ -75,8 +75,8 @@
 (define %vm-services
   (make-host-services
    ;; QEMU user-mode 网络（SLIRP：DHCP 10.0.2.15 / DNS 10.0.2.3）。
-   ;; DNS 语义见 docs/architecture/dns.md：NetworkManager 自带 dnsmasq
-   ;; backend（127.0.0.1:53 → DHCP DNS），以专用稳定 UID 运行。
+   ;; DNS 语义见 docs/architecture/dns.md：mihomo 占 127.0.0.1:53，
+   ;; NM dnsmasq 听 127.0.0.1:15353 提供 DHCP fallback；以专用稳定 UID 运行。
    #:network-services (list (service network-manager-service-type
                                      (network-manager-configuration (dns
                                                                      "dnsmasq")

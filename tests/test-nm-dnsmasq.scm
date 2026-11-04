@@ -1,21 +1,20 @@
 ;;; NetworkManager dnsmasq resolver 契约测试（N1-N7）。
 ;;;
 ;;; 迁移后 DNS 所有权（docs/architecture/dns.md）：
-;;;   TUN off：应用 → 系统 resolver（/etc/resolv.conf 127.0.0.1）→
-;;;            NetworkManager 自带 dnsmasq → DHCP DNS。
-;;;   TUN on ：mihomo fake-ip + dns-hijack；DIRECT/local 经
-;;;            `direct-nameserver: system`；NetworkManager dnsmasq 以专用
-;;;            稳定 UID 运行并被 `tun.exclude-uid` 排除（切断递归）。
+;;;   应用 → /etc/resolv.conf 127.0.0.1:53（mihomo DNS）。
+;;;   mihomo 先查固定 DoH（#PROXY）；失败/NXDOMAIN/空答案回退到
+;;;   NetworkManager dnsmasq（127.0.0.1:15353）→ DHCP DNS。
+;;;   dnsmasq 以专用稳定 UID 运行并被 `tun.exclude-uid` 排除（切断递归）。
 ;;;
 ;;; 覆盖：
 ;;;   N1 NM dns backend = dnsmasq（%vm-os）
-;;;   N2 dnsmasq 专用账号配置内容（user=<name>）
+;;;   N2 dnsmasq 专用账号配置内容 + 15353 监听端口
 ;;;   N3 专用账号/组：显式稳定 UID/GID、system
 ;;;   N4 无 SmartDNS 服务残留
 ;;;   N5 无 standalone dnsmasq 服务（单一 resolver owner）
 ;;;   N6 host 装配引用 nm-dnsmasq 配置
-;;;   N7 mihomo 组合配置：exclude-uid 注入同一 UID + direct-nameserver
-;;;      system + fake-ip/dns-hijack
+;;;   N7 mihomo 组合配置：exclude-uid 注入同一 UID + :53 监听 +
+;;;      redir-host + DoH#PROXY + fallback/direct :15353 + LAN 过滤
 ;;;
 ;;; 不依赖公网、不构建 package（纯 record/gexp/字符串断言）。
 
@@ -68,6 +67,11 @@ wiring assertions survive formatting reflows."
 ;; ── N2：dnsmasq 专用账号配置 ────────────────────────────────
 (test-assert "N2: dnsmasq conf filename is namespaced"
              (string=? %nm-dnsmasq-conf-name "00-nm-dnsmasq-user.conf"))
+(test-assert "N2: dnsmasq listens on the dedicated loopback port"
+             (and (= %nm-dnsmasq-port 15353)
+                  (string=? %nm-dnsmasq-port-conf-name "10-listen-port.conf")
+                  (string-contains %nm-dnsmasq-port-conf-content
+                                   "port=15353")))
 
 ;; ── N3：专用账号/组 ─────────────────────────────────────────
 (define %accounts
@@ -129,12 +133,20 @@ wiring assertions survive formatting reflows."
              (string-contains %composed
                               (string-append "- "
                                              (number->string %nm-dnsmasq-uid))))
-(test-assert "N7: mihomo direct-nameserver uses the system resolver"
-             (string-contains %composed "direct-nameserver:\n    - system"))
-(test-assert "N7: fake-ip + dns-hijack present"
-             (and (string-contains %composed "enhanced-mode: fake-ip")
+(test-assert "N7: mihomo direct/fallback DNS use dnsmasq :15353"
+             (and (string-contains %composed
+                                   "direct-nameserver:\n    - 127.0.0.1:15353")
+                  (string-contains %composed
+                                   "fallback:\n    - 127.0.0.1:15353")))
+(test-assert "N7: mihomo owns :53 with redir-host + dns-hijack"
+             (and (string-contains %composed "listen: \"127.0.0.1:53\"")
+                  (string-contains %composed "enhanced-mode: redir-host")
                   (string-contains %composed "- any:53")
                   (string-contains %composed "tcp://any:53")))
+(test-assert "N7: fixed DoH is lazy with LAN fallback filter"
+             (and (string-contains %composed "https://1.1.1.1/dns-query#PROXY")
+                  (string-contains %composed "fallback-lazy-query: true")
+                  (string-contains %composed "geoip-code: LAN")))
 (test-assert "N7: no unresolved placeholders remain"
              (and (not (string-contains %composed
                                         "@@MIHOMO_SUBSCRIPTION_URL@@"))

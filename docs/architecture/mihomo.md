@@ -5,7 +5,7 @@
 
 Mihomo 作为系统级透明代理，由 Guix System + Shepherd 独占生命周期。
 binary 唯一 owner 是 Rosenthal channel 的 `mihomo` package（pin
-1.19.30，`(rosenthal packages networking)`，build tag `with_gvisor`）。
+1.19.32，`(rosenthal packages networking)`，build tag `with_gvisor`）。
 
 ## Ownership 边界
 
@@ -18,9 +18,8 @@ Guix / Shepherd
        └── Clash external-controller（127.0.0.1:9090，secret 置空）
 
 系统 DNS（docs/architecture/dns.md）
-  └── /etc/resolv.conf（NM 经 openresolv 写 127.0.0.1）→ NM dnsmasq → DHCP DNS
-      TUN on 时 mihomo 以 fake-ip + dns-hijack 接管；DIRECT 经
-      direct-nameserver: system 回落 dnsmasq
+  └── /etc/resolv.conf（NM 经 openresolv 写 127.0.0.1:53）→ mihomo DNS
+      固定 DoH（#PROXY）优先，失败/NXDOMAIN 回退 dnsmasq:15353 → DHCP DNS
 
 Noctalia Mihomo Control
   └── 仅经 Clash REST API 控制运行中的 Mihomo
@@ -72,7 +71,7 @@ boot 时序：activation（数据目录/backing 0700）→ file-systems
 | 路径 | 类别 | 内容 / 权限 |
 |---|---|---|
 | `/gnu/store/...-mihomo-template.yaml` | immutable | 公开模板（占位符恰好一次，无 secret） |
-| `/gnu/store/...-mihomo-1.19.30` | immutable | binary（Guix 唯一 owner；无 self-update） |
+| `/gnu/store/...-mihomo-1.19.32` | immutable | binary（Guix 唯一 owner；无 self-update） |
 | `/run/guixcfg-secrets-ordinary/system/mihomo-subscription.url` | runtime secret | age 解密产物，root 0400 |
 | `/run/mihomo/` | runtime | root 0700（materializer 创建） |
 | `/run/mihomo/config.yaml` | runtime | 模板+URL 合成，root 0600，原子写 |
@@ -128,24 +127,30 @@ controller 可读取配置的安全路径。
 
 ## DNS ownership 与边界
 
-- TUN on 时 mihomo **接管 DNS**：`dns.enable` +
-  `enhanced-mode: fake-ip` + `dns-hijack: any:53`（+ `tcp://any:53`）；
-  DIRECT/local 经 `direct-nameserver: system` 回落系统 resolver
-  （NetworkManager dnsmasq → DHCP DNS）；代理侧经 DoH
-  （`nameserver` / `proxy-server-nameserver`，域名经 IP
-  `default-nameserver` bootstrap）；
-- **递归切断**：NetworkManager dnsmasq 以专用系统账号
-  `nm-dnsmasq`（稳定 UID 985）运行，`tun.exclude-uid` 排除该 UID
-  （sing-tun 在 Linux 以 `meta skuid`/owner 规则使其上游 DHCP DNS 查询
-  不进入 TUN）。UID 由 `(guixcfg system dns nm-dnsmasq)` 单一拥有，
-  模板经 `@@MIHOMO_NM_DNSMASQ_UID@@` 注入；
-- TUN off 时 mihomo 不在数据路径上：/etc/resolv.conf（NM 写
-  127.0.0.1）→ NM dnsmasq → DHCP DNS 独立工作，captive portal 直接可达；
+- **mihomo 是应用 DNS 的唯一入口**：`dns.enable`，监听
+  `127.0.0.1:53`；`enhanced-mode: redir-host`（不用 fake-ip）。
+  固定上游是经 `PROXY` 组连接的 Cloudflare/Google DoH；主上游
+  失败、NXDOMAIN 或返回 LAN IP 时，`fallback` 查
+  `127.0.0.1:15353`（NetworkManager dnsmasq → 当前 DHCP DNS）。
+  两边都失败则由 DNS 协议正常返回失败；
+- **NetworkManager dnsmasq 退到 15353**：仍由 NM 管理、仍拿当前
+  DHCP DNS；`fallback` 和 `direct-nameserver` 都指向这个独立端口，
+  避免 `system` 指回 mihomo 的递归；
+- **递归切断**：dnsmasq 以专用系统账号 `nm-dnsmasq`（稳定 UID 985）
+  运行，`tun.exclude-uid` 排除该 UID（sing-tun 在 Linux 以
+  `meta skuid`/owner 规则使其上游 DHCP DNS 查询不进入 TUN）。UID 由
+  `(guixcfg system dns nm-dnsmasq)` 单一拥有，模板经
+  `@@MIHOMO_NM_DNSMASQ_UID@@` 注入；
+- **TUN on/off 同一 DNS 链**：TUN 只决定业务流量是否进入 mihomo；
+  DNS 始终先 DoH、再 DHCP 回退。`/etc/resolv.conf` 始终由 NM 写
+  `127.0.0.1`（mihomo:53）；
 - `ipv6: false`：机场节点全是 v4，TUN 捕获的 v6 流量经节点无法到达
   目标 v6 地址（节点自身无 v6，VM 实测 bordeaux/github AAAA 秒断）；
   关闭后系统 v6 走原生路径绕过 Mihomo（v4-only 机场的取舍）；
 - 不做 Mihomo self-update（binary 归 Guix）；
-- 不引入 geosite/geoip 规则系统（规则集为最小基础集 + sniffer）。
+- 不引入 geosite/geoip 规则系统（规则集为最小基础集 + sniffer）；
+- **已知取舍**：所有 DNS 先走 DoH，内网名字会先得到 NXDOMAIN 再回退
+  DHCP；这换来零域名列表和跨 Wi-Fi/有线一致性。
 
 ## 配置模板契约
 
@@ -155,8 +160,10 @@ controller 可读取配置的安全路径。
   各恰好一次，模板不可直接运行；UID 由
   `(guixcfg system dns nm-dnsmasq)` 的 `%nm-dnsmasq-uid` 经
   `modules/guixcfg/system/mihomo/config.scm` 注入；
-- `dns`：fake-ip + `direct-nameserver: system` + DoH
-  `nameserver`/`proxy-server-nameserver` + IP `default-nameserver`；
+- `dns`：`listen: 127.0.0.1:53`、`redir-host`、固定 DoH
+  `nameserver`（`#PROXY`）、`fallback` / `direct-nameserver` =
+  `127.0.0.1:15353`、`fallback-lazy-query: true`、
+  `fallback-filter.geoip-code: LAN`、IP `default-nameserver`；
 - `tun`：mixed stack、auto-route/auto-redirect/auto-detect-interface、
   `dns-hijack: any:53` + `tcp://any:53`、`exclude-uid`（nm-dnsmasq）；
 - `sniffer`：TLS/HTTP/QUIC 端口（DOMAIN/GEOSITE 分流前提）；

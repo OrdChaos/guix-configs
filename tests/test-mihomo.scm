@@ -160,14 +160,28 @@
                (and (string-contains text "dns-hijack:")
                     (string-contains text "- any:53")
                     (string-contains text "- tcp://any:53"))))
-(test-assert "M7: fake-ip DNS is enabled"
+(test-assert "M7: mihomo DNS owns loopback port 53"
              (let ((text (template-text)))
-               (and (string-contains text "enhanced-mode: fake-ip")
-                    (string-contains text "fake-ip-range:"))))
-(test-assert "M7: direct-nameserver uses the system resolver"
+               (and (string-contains text "listen: \"127.0.0.1:53\"")
+                    (not (string-contains text "listen: \"127.0.0.1:1053\"")))))
+(test-assert "M7: DNS uses redir-host, not fake-ip"
              (let ((text (template-text)))
-               (and (string-contains text "direct-nameserver:")
-                    (string-contains text "- system"))))
+               (and (string-contains text "enhanced-mode: redir-host")
+                    (not (string-contains text "enhanced-mode: fake-ip")))))
+(test-assert "M7: fixed DoH upstreams go through the PROXY group"
+             (let ((text (template-text)))
+               (and (string-contains text "https://1.1.1.1/dns-query#PROXY")
+                    (string-contains text "https://8.8.8.8/dns-query#PROXY"))))
+(test-assert "M7: DHCP fallback and direct DNS use NM dnsmasq :15353"
+             (let ((text (template-text)))
+               (and (string-contains text "fallback:\n    - 127.0.0.1:15353")
+                    (string-contains text
+                                     "direct-nameserver:\n    - 127.0.0.1:15353"))))
+(test-assert "M7: fallback is lazy and LAN-IP-filtered"
+             (let ((text (template-text)))
+               (and (string-contains text "fallback-lazy-query: true")
+                    (string-contains text "fallback-filter:")
+                    (string-contains text "geoip-code: LAN"))))
 (test-assert "M7: tun exclude-uid references the nm-dnsmasq uid placeholder"
              (let ((text (template-text)))
                (and (string-contains text "exclude-uid:")
@@ -225,8 +239,9 @@
    (and (memq 'mihomo-config-ready req)
         (memq 'networking req)
         (memq 'loopback req)
-        ;; DNS is owned by mihomo itself (fake-ip + hijack) and by
-        ;; NetworkManager dnsmasq; the old SmartDNS requirement is gone.
+        ;; DNS is owned by mihomo itself (loopback :53, DoH + DHCP
+        ;; fallback) and by NetworkManager dnsmasq (:15353); the old
+        ;; SmartDNS requirement is gone.
         (not (memq 'smartdns req)))))
 (test-assert "M11: materializer requires ordinary-secrets-ready"
              (memq 'ordinary-secrets-ready

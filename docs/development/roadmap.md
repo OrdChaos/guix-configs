@@ -46,6 +46,7 @@ PATH 前，无包机器（VM）上这些启动/按键会运行期失败（仅通
   NVIDIA open module adapter + niri iGPU/offload 机器事实）；剩余：
   实机 firmware 选择、microcode revision 验收、实机运行验证清单
   （prime-run/vulkaninfo/nvidia-smi/powerd，见 graphics.md）。
-- **DNS**：已迁移为 NetworkManager dnsmasq（基础）+ mihomo fake-ip
-  （TUN 接管）；`tun.exclude-uid` 排除 NM dnsmasq 的专用 UID 以切断
-  递归。后续可评估 nameserver-policy / geosite 分流与 DoH 供应商调整。
+- **DNS**：已迁移为 mihomo DNS 独占 `127.0.0.1:53`（固定 DoH#PROXY
+  优先，`fallback` 到 NM dnsmasq `127.0.0.1:15353` → 当前 DHCP DNS）；
+  `tun.exclude-uid` 排除 NM dnsmasq 的专用 UID 以切断递归。后续可评估
+  DoH 供应商与 fallback 策略调整（不引入域名列表）。
