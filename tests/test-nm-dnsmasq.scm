@@ -148,9 +148,14 @@ wiring assertions survive formatting reflows."
                                    "nameserver:\n    - https://223.5.5.5/dns-query\n    - https://223.6.6.6/dns-query")
                   (string-contains %composed "fallback-lazy-query: true")
                   (string-contains %composed "geoip-code: LAN")))
+(test-assert "N7: composed config generates airport source and PROXY group"
+             (and (string-contains %composed "  airport:\n    type: http")
+                  (string-contains %composed "- name: SRC-airport")
+                  (string-contains %composed "use: [airport]")
+                  (string-contains %composed "- name: PROXY")))
 (test-assert "N7: no unresolved placeholders remain"
-             (and (not (string-contains %composed
-                                        "@@MIHOMO_SUBSCRIPTION_URL@@"))
+             (and (not (string-contains %composed "@@MIHOMO_PROXY_PROVIDERS@@"))
+                  (not (string-contains %composed "@@MIHOMO_PROXY_GROUPS@@"))
                   (not (string-contains %composed "@@MIHOMO_NM_DNSMASQ_UID@@"))))
 
 (test-end "nm-dnsmasq")

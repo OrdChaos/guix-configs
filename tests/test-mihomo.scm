@@ -1,8 +1,8 @@
-;;; Mihomo system service 单元测试（M1-M12）。
+;;; Mihomo system service 单元测试（M1-M16）。
 ;;;
 ;;; 覆盖：
-;;;   M1-M6  config composition 纯逻辑（占位符、尾换行、CR/LF/NUL
-;;;          fail closed、YAML 双引号转义）
+;;;   M1-M6, M14, M16  config composition 纯逻辑（manifest 解析、多源/
+;;;          文件源、占位符、CR/LF/NUL fail closed、YAML 转义）
 ;;;   M7-M10 公开模板静态契约（占位符唯一、Phase 1 边界、controller
 ;;;          loopback、无 secret 泄漏面）
 ;;;   M11-M12 service graph（shepherd requirement/provision、
@@ -46,11 +46,12 @@
                                 (derivation->output-path out)))
       get-string-all)))
 
-;; 最小模板片段（纯逻辑测试用；占位符恰好一次）。
+;; 最小模板片段（纯逻辑测试用；providers/groups 占位符各恰好一次）。
 (define %mini-template
   "proxy-providers:
-  airport:
-    url: \"@@MIHOMO_SUBSCRIPTION_URL@@\"
+@@MIHOMO_PROXY_PROVIDERS@@
+proxy-groups:
+@@MIHOMO_PROXY_GROUPS@@
 ")
 
 (define (caught-error thunk)
@@ -63,7 +64,7 @@
 
 (test-begin "mihomo")
 
-;; ── M1：尾换行剥离（LF 与 CRLF 各一）────────────────────────
+;; ── M1：尾换行剥离与旧单 URL 兼容 ───────────────────────────
 (test-assert "M1: trailing LF stripped"
              (string-contains (compose-mihomo-config %mini-template
                                                      "https://a.invalid/x\n")
@@ -72,46 +73,54 @@
              (string-contains (compose-mihomo-config %mini-template
                                                      "https://a.invalid/x\r\n")
                               "url: \"https://a.invalid/x\""))
+(test-assert "M1: legacy single URL becomes airport source"
+             (let ((text (compose-mihomo-config %mini-template
+                                                "https://a.invalid/x\n")))
+               (and (string-contains text "  airport:\n    type: http")
+                    (string-contains text "- name: SRC-airport")
+                    (string-contains text "use: [airport]"))))
 
-;; ── M2：剥离后残留 CR/LF/NUL → fail closed ──────────────────
-(test-assert "M2: CR after strip fails closed"
+;; ── M2：control chars → fail closed ─────────────────────────
+(test-assert "M2: embedded CR fails closed"
              (caught-error (lambda ()
                              (compose-mihomo-config %mini-template
                                                     "https://a.invalid\rb"))))
-(test-assert "M2: double newline (only one strip) fails closed"
-             (caught-error (lambda ()
-                             (compose-mihomo-config %mini-template
-                                                    "https://a.invalid/b\n\n"))))
-(test-assert "M2: NUL after strip fails closed"
+(test-assert "M2: NUL fails closed"
              (caught-error (lambda ()
                              (compose-mihomo-config %mini-template
                                                     (string-append
                                                      "https://a.invalid"
                                                      (string #\nul) "b\n")))))
+(test-assert "M2: blank lines are ignored"
+             (compose-mihomo-config %mini-template
+                                    "airport=https://a.invalid/x\n\n"))
 
 ;; ── M3：占位符恰好一次 ──────────────────────────────────────
-(test-assert "M3: missing placeholder fails closed"
+(test-assert "M3: missing placeholders fail closed"
              (caught-error (lambda ()
                              (compose-mihomo-config "no placeholder here\n"
                                                     "https://a.invalid\n"))))
-(test-assert "M3: duplicated placeholder fails closed"
+(test-assert "M3: duplicated providers placeholder fails closed"
              (caught-error (lambda ()
-                             (compose-mihomo-config (string-append
-                                                     %mini-template
-                                                     "    x: \"@@MIHOMO_SUBSCRIPTION_URL@@\"\n")
-                                                    "https://a.invalid\n"))))
-(test-assert "M3: exact placeholder succeeds"
+                             (compose-mihomo-config
+                              (string-append %mini-template
+                                             "@@MIHOMO_PROXY_PROVIDERS@@\n")
+                              "https://a.invalid\n"))))
+(test-assert "M3: exact placeholders succeed"
              (string-contains (compose-mihomo-config %mini-template
                                                      "https://a.invalid\n")
                               "https://a.invalid"))
 
 ;; ── M4：YAML 双引号转义 ─────────────────────────────────────
 (test-assert "M4: double quote escaped"
-             (string-contains (compose-mihomo-config %mini-template
-                               "https://a.invalid/?q=\"x\"\n") "q=\\\"x\\\""))
+             (string-contains (compose-mihomo-config
+                               %mini-template
+                               "airport=https://a.invalid/?q=\"x\"\n")
+                              "q=\\\"x\\\""))
 (test-assert "M4: backslash escaped"
-             (string-contains (compose-mihomo-config %mini-template
-                                                     "https://a.invalid/a\\b\n")
+             (string-contains (compose-mihomo-config
+                               %mini-template
+                               "airport=https://a.invalid/a\\b\n")
                               "a\\\\b"))
 
 ;; ── M5：count-substring ─────────────────────────────────────
@@ -120,7 +129,7 @@
                   (= (count-substring "aaa" "aa") 1)
                   (= (count-substring "abc" "z") 0)))
 
-;; ── M6：compose 不打印 secret（输出只含模板+替换）───────────
+;; ── M6：compose 不打印 secret ───────────────────────────────
 (test-assert "M6: no secret in composition error messages"
              (not (string-contains (or (caught-error (lambda ()
                                                        (compose-mihomo-config
@@ -145,16 +154,73 @@
                                                      "https://a.invalid/x\n")
                               "https://a.invalid/x"))
 
+;; ── M16：多源与文件源 manifest ──────────────────────────────
+(define %multi-source-secret
+  (string-append
+   "# remote + local file\n"
+   "airport=https://a.invalid/x\n"
+   "home=/var/lib/clash/subscriptions/home.yaml\n"))
+
+(test-assert "M16: remote and file providers generated"
+             (let ((text (compose-mihomo-config %mini-template
+                                                %multi-source-secret)))
+               (and (string-contains text "  airport:\n    type: http")
+                    (string-contains text
+                                     "url: \"https://a.invalid/x\"")
+                    (string-contains text "  home:\n    type: file")
+                    (string-contains text
+                                     "path: \"/var/lib/clash/subscriptions/home.yaml\""))))
+(test-assert "M16: every source gets a SRC-* group"
+             (let ((text (compose-mihomo-config %mini-template
+                                                %multi-source-secret)))
+               (and (string-contains text "- name: SRC-airport")
+                    (string-contains text "use: [airport]")
+                    (string-contains text "- name: SRC-home")
+                    (string-contains text "use: [home]"))))
+(test-assert "M16: top PROXY group selects all sources"
+             (let ((text (compose-mihomo-config %mini-template
+                                                %multi-source-secret)))
+               (and (string-contains text "- name: PROXY")
+                    (string-contains text
+                                     "proxies: [SRC-airport, SRC-home, DIRECT]"))))
+(test-assert "M16: duplicate source names fail closed"
+             (caught-error (lambda ()
+                             (compose-mihomo-config
+                              %mini-template
+                              "a=https://a.invalid/x\na=https://b.invalid/y\n"))))
+(test-assert "M16: invalid source name fails closed"
+             (caught-error (lambda ()
+                             (compose-mihomo-config
+                              %mini-template
+                              "bad name=https://a.invalid/x\n"))))
+(test-assert "M16: bare URL in multi-line manifest fails closed"
+             (caught-error (lambda ()
+                             (compose-mihomo-config
+                              %mini-template
+                              "airport=https://a.invalid/x\nhttps://b.invalid/y\n"))))
+(test-assert "M16: file source requires absolute path"
+             (caught-error (lambda ()
+                             (compose-mihomo-config
+                              %mini-template
+                              "home=relative.yaml\n"))))
+(test-assert "M16: file source must live under the mihomo -d directory"
+             (caught-error (lambda ()
+                             (compose-mihomo-config
+                              %mini-template
+                              "home=/tmp/outside.yaml\n"))))
+
 ;; ── M7：模板静态契约 ────────────────────────────────────────
-(test-assert "M7: both placeholders appear exactly once in template"
+(test-assert "M7: provider/group/UID placeholders appear exactly once"
              (and (= (count-substring (template-text)
-                                      %mihomo-subscription-placeholder) 1)
+                                      %mihomo-proxy-providers-placeholder) 1)
+                  (= (count-substring (template-text)
+                                      %mihomo-proxy-groups-placeholder) 1)
                   (= (count-substring (template-text)
                                       %mihomo-nm-dnsmasq-uid-placeholder) 1)))
-(test-assert "M7: no subscription URL value in public template"
-             (and (string-contains (template-text)
-                                   "url: \"@@MIHOMO_SUBSCRIPTION_URL@@\"")
-                  (not (string-contains (template-text) "token="))))
+(test-assert "M7: no source URL or legacy placeholder in public template"
+             (let ((text (template-text)))
+               (and (not (string-contains text "@@MIHOMO_SUBSCRIPTION_URL@@"))
+                    (not (string-contains text "token=")))))
 (test-assert "M7: dns-hijack hijacks UDP+TCP 53"
              (let ((text (template-text)))
                (and (string-contains text "dns-hijack:")
@@ -207,8 +273,10 @@
 ;; proxy: DIRECT——订阅刷新不依赖代理组/节点可用性（节点全挂时刷新
 ;; 照常；直连可行性：节点域名经 mihomo `proxy-server-nameserver`
 ;; 解析 + 宿主直连出站可信，2026-08-28 VM 实测直连拉取成功）。
-(test-assert "M9: provider refresh dials DIRECT"
-             (string-contains (template-text) "proxy: DIRECT"))
+(test-assert "M9: composed remote provider refresh dials DIRECT"
+             (string-contains (compose-mihomo-config %mini-template
+                                                     "https://a.invalid/x\n")
+                              "proxy: DIRECT"))
 
 ;; ── M15：国内直连 / 国外代理规则 ────────────────────────────
 (test-assert "M15: Loyalsoldier CN-direct and proxy rule providers"

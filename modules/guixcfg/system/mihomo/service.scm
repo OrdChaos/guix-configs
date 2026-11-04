@@ -30,7 +30,7 @@
 ;;; secret 边界（诚实声明，见 docs/architecture/mihomo.md）：
 ;;;   - ciphertext colocate 本模块（secrets/mihomo-subscription.url.age，
 ;;;     单份密文、stable recipient 加密，所有设备共用——无 host 层）；
-;;;   - plaintext subscription URL 不进 Git、不进 /gnu/store；
+;;;   - plaintext subscription manifest 不进 Git、不进 /gnu/store；
 ;;;   - runtime config 在 /run（0600 root）；
 ;;;   - Mihomo provider fetch 失败时，上游实现会把完整 URL（含 query
 ;;;     token）写入 error log（VM 实测 "[Provider] airport pull
@@ -71,9 +71,10 @@
 (define %mihomo-template-file
   (local-file "template.yaml" "mihomo-template.yaml"))
 
-;; subscription URL 的 secret-decl（单一 owner = 本模块；所有设备共用
-;; 同一密文，target-name 契约见 (guixcfg system mihomo config) 的
-;; %mihomo-secret-path）。仓库中的 age 密文是实际订阅 URL；plaintext
+;; subscription manifest 的 secret-decl（单一 owner = 本模块；所有设备
+;; 共用同一密文，target-name 契约见 (guixcfg system mihomo config) 的
+;; %mihomo-secret-path）。target-name 沿用历史名；仓库中的 age 密文现在
+;; 是 manifest（单行旧 URL，或多行 name=url-or-file-path）；plaintext
 ;; 只在运行期由 stable identity 解密，不进入 store。
 (define %mihomo-secrets
   (list (secret-decl (name 'mihomo-subscription)
@@ -104,10 +105,10 @@
 
 (define (mihomo-config-program)
   "生成 mihomo-config 程序：读公开模板（store）与已解密的
-subscription URL（/run，root 0400），按 (guixcfg system
-mihomo-config) 的 fail-closed 契约合成完整配置，原子写入
-/run/mihomo/config.yaml（0700 目录 / 0600 文件）。不联网、不用
-shell；URL 绝不进 argv/environment/日志（成功日志只报路径）。"
+subscription manifest（/run，root 0400），按 (guixcfg system
+mihomo-config) 的 fail-closed 契约生成多 provider/group 配置，原子
+写入 /run/mihomo/config.yaml（0700 目录 / 0600 文件）。不联网、不用
+shell；manifest 绝不进 argv/environment/日志（成功日志只报路径）。"
   (program-file "mihomo-config"
                 (with-imported-modules (source-module-closure '((guixcfg
                                                                  system mihomo
@@ -193,7 +194,7 @@ mihomo-config-ready——mihomo daemon 显式依赖它（声明式 ordering，
                           (one-shot? #t)
                           (respawn? #f)
                           (documentation
-                           "Compose the runtime Mihomo configuration from the public template and the decrypted subscription URL into /run/mihomo/config.yaml (root 0600).")
+                           "Compose the runtime Mihomo configuration from the public template and the decrypted subscription manifest into /run/mihomo/config.yaml (root 0600).")
                           (start #~(lambda ()
                                      (zero? (system* #$(mihomo-config-program)))))
                           (stop #~(const #f)))))
@@ -224,11 +225,12 @@ mihomo-config-ready——mihomo daemon 显式依赖它（声明式 ordering，
 ;; ────────────────────────────────────────────────────────────
 
 (define (mihomo-activation)
-  "系统 activation：数据目录与其 machine-state backing 的 mkdir + 0700。
-路径从 %mihomo-data-persistence-rule 派生（backing 相对 %machine-state-root、
-consumer 绝对），避免与规则漂移。generic machine-state activation 只 mkdir
-0755；本 activation 无论先后都最终强制 0700——Mihomo 以 0644 写 provider
-cache 文件，隔离靠不可遍历的 0700 parent。"
+  "系统 activation：数据目录、machine-state backing 与 subscriptions/
+ 的 mkdir + 0700。路径从 %mihomo-data-persistence-rule 派生（backing
+相对 %machine-state-root、consumer 绝对），避免与规则漂移。generic
+machine-state activation 只 mkdir 0755；本 activation 无论先后都最终
+强制 0700——Mihomo 以 0644 写 provider/rule cache 文件，隔离靠不可
+遍历的 0700 parent。subscriptions/ 供 manifest 中的文件订阅源使用。"
   (with-imported-modules (source-module-closure '((guix build utils)))
                          #~(begin
                              (use-modules (guix build utils))
@@ -241,7 +243,11 @@ cache 文件，隔离靠不可遍历的 0700 parent。"
                                (mkdir-p backing)
                                (chmod backing #o700)
                                (mkdir-p consumer)
-                               (chmod consumer #o700)))))
+                               (chmod consumer #o700)
+                               (let ((subscriptions
+                                      (string-append consumer "/subscriptions")))
+                                 (mkdir-p subscriptions)
+                                 (chmod subscriptions #o700))))))
 
 (define (mihomo-account)
   "clash 系统组（daemon 以 root 运行 + clash 组；TUN 需要 root，
@@ -266,7 +272,7 @@ cache 文件，隔离靠不可遍历的 0700 parent。"
                 (default-value #t)
                 (description
                  "Run Mihomo as the system transparent proxy with a runtime-composed
-configuration (subscription URL never in the store).")))
+configuration (subscription manifest never in the store).")))
 
 (define (mihomo-service)
   "Mihomo system service 实例（Phase 1 固定契约，无可配置字段）。"

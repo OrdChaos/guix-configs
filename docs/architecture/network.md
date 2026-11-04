@@ -53,7 +53,7 @@ Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`�
 | D10 | **递归切断**：dnsmasq 以专用稳定 UID（`nm-dnsmasq`）运行，mihomo `tun.exclude-uid` 排除该 UID | dnsmasq 上游 DHCP DNS 必须绕过 TUN，否则进 dns-hijack → mihomo DNS，形成递归 | 依赖 sing-tun 的 UID 过滤（Linux；`auto-route` 前提）——见 dns.md「递归切断」 |
 | D11 | `:53` 归 mihomo，`:15353` 归 NM dnsmasq；不引入 standalone resolver | 单一应用 DNS 入口 + 独立 DHCP fallback；避免 `system` 指回 mihomo 的回环 | 两个端口都要在运维检查中覆盖 |
 | D12 | 订阅密文与引用者同置（mihomo/secrets/），domain ordinary | secret taxonomy（secrets.md）；订阅不可用只影响刷新，节点仍可从本地 cache 工作 | 解密失败不阻塞登录、只降级订阅刷新 |
-| D13 | 配置合成 fail-closed：两个 placeholder 各恰好一次、严格 YAML 转义、残留 CR/LF/NUL 拒绝 | 订阅 URL 是唯一 secret 注入点，坏输入必须失败而非产出可运行错配置 | 物化失败 → mihomo 起不来（显式失败优于静默错） |
+| D13 | 配置合成 fail-closed：providers/groups/UID 三个 placeholder 各恰好一次、manifest 行校验、严格 YAML 转义、NUL/CR 拒绝 | manifest 是唯一 secret 注入点，坏输入/坏源名/重复源必须失败而非产出可运行错配置 | 物化失败 → mihomo 起不来（显式失败优于静默错） |
 | D14 | machine-state 持久化整个 mihomo 数据目录（`/var/lib/clash`：providers cache + cache.db 选中节点/组状态，bind-directory，root-owned） | 订阅拉取结果与节点选择都是 machine-owned mutable state，重启后都要保留 | 单目录 bind，不扩权 |
 | D15 | controller loopback-only、无 secret | 控制面只给本机运维，不进网络面 | 需要本机 shell 才能换节点/刷新 |
 | D16 | SmartDNS 保持退役；DNS 收敛为 mihomo（:53，AliDNS IP DoH + fallback）+ NM dnsmasq（:15353，DHCP DNS） | 不再维护自定义 resolver 状态机；不需要域名列表 | 所有 DNS 先走 AliDNS DoH；内网名字有首查延迟/泄漏；mihomo 成为 DNS 单点 |
@@ -75,11 +75,12 @@ Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`�
 
 | 组件 | 位置 | 实现要点 |
 |---|---|---|
-| 模板 | `modules/guixcfg/system/mihomo/template.yaml` | TUN（mixed stack、auto-route/auto-redirect/auto-detect-interface、`dns-hijack: any:53` + `tcp://any:53`、`exclude-uid`）、`ipv6: false`；`dns` 段：`listen: 127.0.0.1:53`、`redir-host`、AliDNS IP DoH `nameserver`、`fallback`/`direct-nameserver` = `127.0.0.1:15353`、`fallback-lazy-query`、`fallback-filter.geoip-code: LAN`、`proxy-server-nameserver`、IP `default-nameserver`；`sniffer`；规则 = 私网/loopback/ULA DIRECT + Loyalsoldier proxy/direct 规则集 + `MATCH,PROXY`；provider：原生 http、`interval: 3600`、lazy health-check、`proxy: DIRECT`（D7）；占位符 `@@MIHOMO_SUBSCRIPTION_URL@@` 与 `@@MIHOMO_NM_DNSMASQ_UID@@` 各恰好一次 |
-| 配置合成 | `modules/guixcfg/system/mihomo/config.scm` | `compose-mihomo-config`：模板 + `/run` 明文订阅 URL + UID；尾 LF/CRLF 规整、严格双引号转义、CR/LF/NUL 残留、placeholder 唯一性 fail-closed（D13） |
+| 模板 | `modules/guixcfg/system/mihomo/template.yaml` | TUN（mixed stack、auto-route/auto-redirect/auto-detect-interface、`dns-hijack: any:53` + `tcp://any:53`、`exclude-uid`）、`ipv6: false`；`dns` 段：`listen: 127.0.0.1:53`、`redir-host`、AliDNS IP DoH `nameserver`、`fallback`/`direct-nameserver` = `127.0.0.1:15353`、`fallback-lazy-query`、`fallback-filter.geoip-code: LAN`、`proxy-server-nameserver`、IP `default-nameserver`；`sniffer`；规则 = 私网/loopback/ULA DIRECT + Loyalsoldier proxy/direct 规则集 + `MATCH,PROXY`；provider/groups 由 manifest 生成（`@@MIHOMO_PROXY_PROVIDERS@@` / `@@MIHOMO_PROXY_GROUPS@@`），UID 为 `@@MIHOMO_NM_DNSMASQ_UID@@`，三者各恰好一次 |
+| 配置合成 | `modules/guixcfg/system/mihomo/config.scm` | `compose-mihomo-config`：模板 + `/run` 明文 subscription manifest + UID；解析 `name=url-or-file-path`，生成每源 provider 与 `SRC-*` select 组、顶层 `PROXY`；尾 LF/CRLF 规整、严格双引号转义、NUL/CR 拒绝、placeholder 唯一性 fail-closed（D13） |
 | 服务装配 | `modules/guixcfg/system/mihomo/service.scm` | `%mihomo-data-directory`（`/var/lib/clash`）、`mihomo-config-program`（物化器，one-shot `mihomo-config-ready`）、daemon `mihomo -d /var/lib/clash -f /run/mihomo/config.yaml`（requirement：loopback/networking/config-ready）、`mihomo-activation`、clash 系统账户、`%mihomo-secrets`（ordinary secret-decl） |
 | 机器状态 | `modules/guixcfg/system/mihomo/service.scm` + `modules/guixcfg/system/machine-state-persistence.scm` | `%mihomo-data-persistence-rule`：`/persist/system/state/mihomo/clash` → bind → `/var/lib/clash`（整个 `-d`） |
-| Secret 链 | `modules/guixcfg/system/mihomo/secrets/mihomo-subscription.url.age` | 真实密文；age stable identity（`/persist/system/keys/age/identity`）→ ordinary 域 deploy → `/run/guixcfg-secrets-ordinary/system/mihomo-subscription.url`（0600）→ 物化器读取合成；URL 明文不进 git/store |
+| Secret 链 | `modules/guixcfg/system/mihomo/secrets/mihomo-subscription.url.age` | 真实密文；age stable identity（`/persist/system/keys/age/identity`）→ ordinary 域 deploy → `/run/guixcfg-secrets-ordinary/system/mihomo-subscription.url`（0600）→ 物化器读取并生成多源配置；manifest 明文不进 git/store |
+| 文件订阅源 | `/var/lib/clash/subscriptions/` | activation 创建 0700 目录；manifest 行 `name=/var/lib/clash/subscriptions/file.yaml`；文件必须是 provider YAML |
 
 ### 3.3 运行时产物与生命周期
 
@@ -94,7 +95,7 @@ Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`�
 ### 3.4 测试锁定（tests/）
 
 - `tests/test-nm-dnsmasq.scm` N1-N7：NM `dns=dnsmasq`、专用账号配置内容 + 15353 端口、账号/组显式稳定 UID/GID、无 SmartDNS 残留、无 standalone dnsmasq、host 装配引用、mihomo 组合配置的 `exclude-uid`/`:53` 监听/`redir-host`/AliDNS/fallback 一致；
-- `tests/test-mihomo.scm` M1-M14：合成 fail-closed 矩阵、转义、两个 placeholder 唯一性、`:53`/redir-host/dns-hijack 存在、AliDNS/fallback :15353/LAN 过滤、UID 占位符替换、controller loopback、**provider `proxy: DIRECT`**、TUN 参数、`ipv6: false`、daemon 参数与 requirement（无 smartdns）、machine-state rule、secret decl。
+- `tests/test-mihomo.scm` M1-M16：合成 fail-closed 矩阵、转义、三个 placeholder 唯一性、多源/文件源/重复名/非法名、`:53`/redir-host/dns-hijack 存在、AliDNS/fallback :15353/LAN 过滤、UID 占位符替换、controller loopback、**provider `proxy: DIRECT`**、TUN 参数、`ipv6: false`、daemon 参数与 requirement（无 smartdns）、machine-state rule、secret decl。
 
 ---
 
@@ -144,7 +145,7 @@ Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`�
 |---|---|
 | 换节点 | `PUT http://127.0.0.1:9090/proxies/PROXY {"name":"…"}`；选择持久化于 `/var/lib/clash` |
 | 全节点健康检查 | `GET /group/PROXY/delay?url=…&timeout=5000` |
-| 手动刷订阅 | `PUT http://127.0.0.1:9090/providers/proxies/airport` |
+| 手动刷订阅 | `PUT http://127.0.0.1:9090/providers/proxies/<name>`（文件源跳过） |
 | 热改运行配置 | 改 `/run/mihomo/config.yaml` 后 **copy 到 `/var/lib/clash/config.yaml` 再 `PUT /configs {"path":"/var/lib/clash/config.yaml"}`**（SAFE_PATHS 只允许 `-d` 目录）。**不要 `herd restart mihomo`**——它会重跑物化器覆盖手工改动 |
 | 清 DNS 缓存 | `herd restart mihomo`（清 mihomo 缓存）；nscd：`herd stop nscd` → `rm /var/db/nscd/hosts` → `herd start nscd` |
 | 查 DNS owner | `ss -lntup | grep -E ':53|:15353'`：mihomo 应在 127.0.0.1:53，dnsmasq 应在 127.0.0.1:15353；`ps -o user,pid,args -C dnsmasq`（用户应为 `nm-dnsmasq`） |
