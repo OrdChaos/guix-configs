@@ -108,7 +108,7 @@ consumer 均由 mihomo activation 强制 0700**（generic mechanism 只
   (list
    ;; 当前机场源：age 明文是一个订阅 URL。
    (mihomo-source "kuromis" 'http
-                  (local-file "secrets/kuromis.age" "kuromis.age"))
+                  (local-file "secrets/kuromis.http.age" "kuromis.http.age"))
 
    ;; 本地 provider：age 明文是一份 provider YAML。
    (mihomo-source "edge" 'file

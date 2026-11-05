@@ -79,7 +79,7 @@ YAML 内容）；SECRET-FILE 是该源对应的 age 密文 local-file。TARGET-N
   (list
    ;; 机场 HTTP 订阅。
    (mihomo-source "kuromis" 'http
-                  (local-file "secrets/kuromis.age" "kuromis.age"))
+                  (local-file "secrets/kuromis.http.age" "kuromis.http.age"))
 
    ;; 本地 provider：age 明文是一份 provider YAML。
    (mihomo-source "edge" 'file
