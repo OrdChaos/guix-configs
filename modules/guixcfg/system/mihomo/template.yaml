@@ -123,6 +123,8 @@ rules:
   - IP-CIDR6,fc00::/7,DIRECT,no-resolve
   - IP-CIDR6,fe80::/10,DIRECT,no-resolve
   - IP-CIDR6,::1/128,DIRECT,no-resolve
+  # 国内目标 IP 直连：游戏服务器等没有域名命中的流量不落到 MATCH,PROXY。
+  - GEOIP,CN,DIRECT
   # proxy 在 direct 之前：两表重叠时优先走代理。
   - RULE-SET,loyalsoldier-proxy,PROXY
   - RULE-SET,loyalsoldier-direct,DIRECT
