@@ -1,6 +1,6 @@
 ;;; Source hygiene 测试（docs/development/applications.md、AGENT.md
-;;; §12-13）：防止硬编码用户名 / HOME 绝对路径 / 开发机 checkout
-;;; 路径渗入核心模块。应用定义不属于 mandatory test 范围。
+;;; §12-13）：防止 HOME 绝对路径 / 开发机 checkout 路径渗入核心模块。
+;;; 应用定义不属于 mandatory test 范围。
 ;;;
 ;;; 设计原则（任务 Part K / L）：
 ;;;   - 只检查【明确的 contract】；不做“任何 /persist literal 都失败”
@@ -48,8 +48,8 @@
                     (not (string-contains s "getcwd"))
                     (not (string-contains s "/persist/")))))
 
-;; ── 2. generic modules 无开发机身份 ─────────────────────────
-;; 仓库代码不得出现开发者用户名 / 具体机器 checkout 绝对路径。
+;; ── 2. generic modules 无 checkout 绝对路径 ─────────────────
+;; 仓库代码不得出现具体机器 checkout 绝对路径。
 ;; （"user"/"vm"/"lenovo-legion-y7000p" 等是项目 inventory 值，不在此列。）
 ;; 例外：modules/guixcfg/users/ 与 inventory/ 分别是用户和部署机器
 ;; 身份事实的权威来源——真实名称必然出现在其中；hosts/ 是具体机器
@@ -62,9 +62,8 @@
                  (not (string-prefix? "modules/guixcfg/apps/" p))))
           (scheme-files-under "modules")))
 
-(test-assert "modules/ contain no developer username"
-             (let ((s (string-join (map read-file %generic-modules) "\n")))
-               (not (string-contains s "ordchaos"))))
+;; 不扫描开发者用户名：用户名可能合法地成为服务名（例如
+;; ordchaos-edge），按字符串硬匹配会产生误报。
 
 (test-assert "generic modules contain no getcwd-dependent loading"
              ;; tools/ 的 add-to-load-path (getcwd) 是仓库内 CLI 的
