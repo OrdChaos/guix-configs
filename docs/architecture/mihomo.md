@@ -250,8 +250,9 @@ controller 可读取配置的安全路径。
   `<name>` select 组，顶层 `PROXY` select 汇聚所有源 + `DIRECT`。
   HTTP 源 `proxy: DIRECT`、`interval: 3600`、health-check lazy；文件源
   `type: file`，materializer 生成的路径在 `-d` 下；
-- 规则：私网/loopback/ULA → DIRECT；`GEOIP,CN` → DIRECT（游戏
-  服务器等无域名目标不落到 MATCH）；Loyalsoldier `proxy` 规则集
+- 规则：私网/loopback/ULA → DIRECT；`47.116.0.0/16` 与
+  `cn-ip`（Loyalsoldier cncidr）→ DIRECT（游戏服务器等无域名目标
+  不落到 MATCH）；Loyalsoldier `proxy` 规则集
   → PROXY；Loyalsoldier `direct` 规则集 → DIRECT；其余 → PROXY。
   rule-providers 每天更新（86400s），缓存放在 `-d` 根目录；
 - secret 的 target-name 契约：每个源一个，默认
