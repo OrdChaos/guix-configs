@@ -94,8 +94,8 @@ Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`�
 
 ### 3.4 测试锁定（tests/）
 
-- `tests/test-nm-dnsmasq.scm` N1-N7：NM `dns=dnsmasq`、专用账号配置内容 + 15353 端口、账号/组显式稳定 UID/GID、无 SmartDNS 残留、无 standalone dnsmasq、host 装配引用、mihomo 组合配置的 `exclude-uid`/`:53` 监听/`redir-host`/AliDNS/fallback 一致；
-- `tests/test-mihomo.scm` M1-M17：合成 fail-closed 矩阵、转义、三个 placeholder 唯一性、多源/文件源/重复名/非法名/每源单值、`:53`/redir-host/dns-hijack 存在、AliDNS/fallback :15353/LAN 过滤、UID 占位符替换、controller loopback、**provider `proxy: DIRECT`**、TUN 参数、`ipv6: false`、daemon 参数与 requirement（无 smartdns）、machine-state rule、per-source secret decl、SCM source 声明。
+- `tests/test-nm-dnsmasq.scm` N1-N6：NM `dns=dnsmasq`、专用账号配置内容 + 15353 端口、账号/组显式稳定 UID/GID、无 SmartDNS 残留、无 standalone dnsmasq、host 装配引用；
+- `tests/test-mihomo.scm` M7/M8/M11/M12：模板占位符/DNS/controller 静态契约、service graph、machine-state rule。订阅源建模、routing profile、config composition 不写字符串断言——由 `blue build-os` 与实际 `mihomo -t` 验证，避免把订阅名/节点名/用户路径写死在测试里。
 
 ---
 

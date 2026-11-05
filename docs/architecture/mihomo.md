@@ -70,9 +70,9 @@ boot 时序：activation（数据目录/backing 0700）→ file-systems
 
 | 路径 | 类别 | 内容 / 权限 |
 |---|---|---|
-| `/gnu/store/...-mihomo-template.yaml` | immutable | 公开模板（三个占位符各恰好一次，无 secret） |
+| `/gnu/store/...-mihomo-template.yaml` | immutable | 公开模板（四个占位符各恰好一次，无 secret） |
 | `/gnu/store/...-mihomo-1.19.33` | immutable | binary（Guix 唯一 owner；无 self-update） |
-| `/run/guixcfg-secrets-ordinary/system/mihomo-source-*` | runtime secret | 每个源一份 age 明文（`.url` 或 `.file`），root 0400；airport 保留旧 target `mihomo-subscription.url` |
+| `/run/guixcfg-secrets-ordinary/system/mihomo-source-*` | runtime secret | 每个源一份 age 明文（`.url` 或 `.file`），root 0400 |
 | `/run/mihomo/` | runtime | root 0700（materializer 创建） |
 | `/run/mihomo/config.yaml` | runtime | 模板 + 各源生成的 providers/groups，root 0600，原子写 |
 | `/var/lib/clash/providers/<name>.yaml` | persistent（machine-state bind） | 每个 HTTP 源的 mihomo provider cache（0644，靠 0700 目录隔离） |
@@ -106,20 +106,18 @@ consumer 均由 mihomo activation 强制 0700**（generic mechanism 只
 ```scheme
 (define %mihomo-sources
   (list
-   ;; 现有单 URL：保留历史 target-name，旧密文不用重做。
-   (mihomo-source "airport" 'http
-                  (local-file "secrets/mihomo-subscription.url.age"
-                              "mihomo-subscription.url.age")
-                  "mihomo-subscription.url")
+   ;; 当前机场源：age 明文是一个订阅 URL。
+   (mihomo-source "kuromis" 'http
+                  (local-file "secrets/kuromis.age" "kuromis.age"))
 
-   ;; 第二个 HTTP 源；target-name 自动为 mihomo-source-backup.url
+   ;; edge 文件源示例：age 明文是一份 provider YAML，包含
+   ;; Hysteria2/Reality；启用 protocol 模式前取消注释。
+   ;; (mihomo-source "edge" 'file
+   ;;                (local-file "secrets/edge.file.age" "edge.file.age"))
+
+   ;; 第二个 HTTP 源示例：
    ;; (mihomo-source "backup" 'http
    ;;                (local-file "secrets/backup.url.age" "backup.url.age"))
-
-   ;; 文件源；age 明文是 provider YAML，target-name 自动为
-   ;; mihomo-source-home.file；materializer 写到 subscriptions/home.yaml。
-   ;; (mihomo-source "home" 'file
-   ;;                (local-file "secrets/home.file.age" "home.file.age"))
    ))
 ```
 
@@ -148,6 +146,19 @@ materializer 逐个读取后生成：
 - 顶层 `PROXY`：`select` 组，成员为所有 `SRC-*` 加 `DIRECT`；规则
   `MATCH,PROXY` 指向它。
 
+**routing profile（机场兼容）**：
+
+- `%mihomo-routing-mode 'domain`（默认）：机场/普通订阅走
+  `SRC-*` + `PROXY`，规则为私网直连 + Loyalsoldier proxy/direct +
+  `MATCH,PROXY`；
+- `%mihomo-routing-mode 'protocol`：仅用于专用 edge provider；生成
+  `UDP-HY2` / `TCP-REALITY` 两个 `select` 组（`use` + `filter`），规则
+  为 UDP→HY2、TCP→Reality；
+- protocol 模式由 `%mihomo-protocol-source` 指定 provider，默认
+  `edge`；该源不存在时 SCM 加载失败；
+- 两种 profile 不能在同一份 rules 中按目标自动切换；使用机场时保持
+  `'domain`，不要开启 protocol 模式。
+
 文件源：
 
 - age 明文必须是 mihomo proxy-provider YAML（含 `proxies:`），不是完整
@@ -160,8 +171,9 @@ materializer 逐个读取后生成：
 - Noctalia 的 Update subscriptions 只刷新 `vehicleType == "HTTP"` 的
   provider，文件源自动跳过。
 
-**旧 `airport` 源不需要迁移**：它仍是单 URL 密文，只是通过 SCM 声明
-接入；要加源时再创建新的 age 文件。
+**机场与 edge 的切换**：机场源保持 `'domain`；只有专用 edge provider
+声明并选择 `'protocol` 时才启用 HY2/Reality 分流。不要对机场 provider
+设置 protocol。
 
 ## secret 数据流与边界（诚实声明）
 
@@ -188,7 +200,7 @@ secret 泄漏面：
 - 不进 argv / environment（materializer 与 mihomo 均只传路径）；
 - materializer 日志只报输出路径，不打印源明文/URL；
 - **Mihomo provider fetch 失败时，上游实现会把完整 URL（含 query
-  token）写入 error log**（VM 实测：`[Provider] airport pull
+  token）写入 error log**（VM 实测：`[Provider] <name> pull
   error: Get "http://…": EOF`）。当前接受该边界：日志 ephemeral
   且仅 root 可读（0640）。**不声称 secret“绝不落盘”。**
 
@@ -232,10 +244,10 @@ controller 可读取配置的安全路径。
 
 `modules/guixcfg/system/mihomo/template.yaml`（public authority）：
 
-- 占位符 `@@MIHOMO_PROXY_PROVIDERS@@`、`@@MIHOMO_PROXY_GROUPS@@` 与
-  `@@MIHOMO_NM_DNSMASQ_UID@@` 各恰好一次，模板不可直接运行；前两者由
-  `%mihomo-sources` 生成，UID 由 `(guixcfg system dns nm-dnsmasq)` 的
-  `%nm-dnsmasq-uid` 注入；
+- 占位符 `@@MIHOMO_PROXY_PROVIDERS@@`、`@@MIHOMO_PROXY_GROUPS@@`、
+  `@@MIHOMO_RULES@@` 与 `@@MIHOMO_NM_DNSMASQ_UID@@` 各恰好一次，模板
+  不可直接运行；前三者由 `%mihomo-sources` + routing profile 生成，
+  UID 由 `(guixcfg system dns nm-dnsmasq)` 的 `%nm-dnsmasq-uid` 注入；
 - `dns`：`listen: 127.0.0.1:53`、`redir-host`、固定 AliDNS
   `nameserver`（`https://223.5.5.5/dns-query` /
   `https://223.6.6.6/dns-query`）、`fallback` / `direct-nameserver` =
@@ -246,14 +258,16 @@ controller 可读取配置的安全路径。
 - `sniffer`：TLS/HTTP/QUIC 端口（DOMAIN/GEOSITE 分流前提）；
 - provider/groups：由 `%mihomo-sources` 生成；每个源一个 provider 与
   `SRC-<name>` select 组，顶层 `PROXY` select 汇聚所有源 + `DIRECT`。
-  HTTP 源 `proxy: DIRECT`、`interval: 3600`、health-check lazy；文件源
+  routing-mode=protocol 时另生成 `UDP-HY2`/`TCP-REALITY` 组。HTTP 源
+  `proxy: DIRECT`、`interval: 3600`、health-check lazy；文件源
   `type: file`，materializer 生成的路径在 `-d` 下；
+- rules：由 routing-mode 生成；domain 用 Loyalsoldier proxy/direct，
+  protocol 用 NETWORK udp/tcp；
 - 规则：私网/loopback/ULA → DIRECT；Loyalsoldier `proxy` 规则集
   → PROXY；Loyalsoldier `direct` 规则集 → DIRECT；其余 → PROXY。
   rule-providers 每天更新（86400s），缓存放在 `-d` 根目录；
-- secret 的 target-name 契约：每个源一个（airport 保留历史
-  `mihomo-subscription.url`，其余默认
-  `mihomo-source-<name>.url|.file`）；运行期路径由
+- secret 的 target-name 契约：每个源一个，默认
+  `mihomo-source-<name>.url|.file`；运行期路径由
   `runtime-secret-target` 从 `%mihomo-sources` 声明派生，materializer
   逐个读取；decl 由 `(guixcfg system mihomo service)` 的
   `%mihomo-secrets` 声明）。

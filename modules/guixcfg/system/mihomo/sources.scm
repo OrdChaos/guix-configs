@@ -13,8 +13,14 @@
 ;;; target-name 是 secret 发布路径的稳定名；不写时按 name/kind 派生：
 ;;;   http → mihomo-source-<name>.url
 ;;;   file → mihomo-source-<name>.file
-;;; 旧 airport 源显式保留 target-name "mihomo-subscription.url" 以兼容
-;;; 已安装的密文/运行期路径。
+;;;
+;;; routing：
+;;;   - 'domain：机场/普通订阅。私网直连 + Loyalsoldier 国内直连/国外
+;;;     proxy + MATCH,PROXY；
+;;;   - 'protocol：专用 edge 订阅。UDP → UDP-HY2 组，TCP → TCP-REALITY
+;;;     组；组用 active provider 的固定 filter 选择节点。
+;;; 机场默认 'domain；不要对机场开 'protocol（机场节点不保证存在
+;;; Hysteria2/Reality，也不保证 UDP 能力）。
 
 (define-module (guixcfg system mihomo sources)
   #:use-module (guix gexp) ;local-file
@@ -27,7 +33,11 @@
             mihomo-source-kind
             mihomo-source-secret-file
             mihomo-source-target-name
-            %mihomo-sources))
+            %mihomo-sources
+            %mihomo-routing-mode
+            %mihomo-protocol-source
+            %mihomo-protocol-udp-filter
+            %mihomo-protocol-tcp-filter))
 
 (define-record-type <mihomo-source>
   (make-mihomo-source name kind secret-file target-name)
@@ -75,18 +85,29 @@ YAML 内容）；SECRET-FILE 是该源对应的 age 密文 local-file。TARGET-N
               (cons name names)
               (cons target targets))))))
 
+;; ── routing profile ─────────────────────────────────────────
+;; 机场默认 domain；切到 edge 专用协议分流时改成 'protocol，并确保
+;; %mihomo-sources 中存在 %mihomo-protocol-source。
+(define %mihomo-routing-mode 'domain)
+
+;; protocol 模式使用哪个源作为 UDP/TCP 节点提供者。
+(define %mihomo-protocol-source "edge")
+
+;; 节点名 filter（mihomo regex；对 provider 里的节点名匹配）。
+(define %mihomo-protocol-udp-filter "^Hysteria2$")
+(define %mihomo-protocol-tcp-filter "^Reality$")
+
 (define %mihomo-sources
   (list
-   ;; 现有单 URL 密文继续作为 airport 源；target-name 保持旧值。
-   (mihomo-source "airport" 'http
-                  (local-file "secrets/mihomo-subscription.url.age"
-                              "mihomo-subscription.url.age")
-                  "mihomo-subscription.url")
+   ;; 当前机场源：一个 URL age 文件。
+   (mihomo-source "kuromis" 'http
+                  (local-file "secrets/kuromis.age" "kuromis.age"))
 
-   ;; 文件源示例：age 明文是一份 provider YAML；materializer 会写到
-   ;; /var/lib/clash/subscriptions/<name>.yaml。
-   ;; (mihomo-source "home" 'file
-   ;;                (local-file "secrets/home.file.age" "home.file.age"))
+   ;; edge 文件源示例：age 明文是一份 provider YAML，包含
+   ;; Hysteria2/Reality 节点；启用 protocol 模式前取消注释并改
+   ;; %mihomo-routing-mode 为 'protocol。
+   ;; (mihomo-source "edge" 'file
+   ;;                (local-file "secrets/edge.file.age" "edge.file.age"))
 
    ;; 第二个 HTTP 源示例：
    ;; (mihomo-source "backup" 'http
@@ -94,3 +115,12 @@ YAML 内容）；SECRET-FILE 是该源对应的 age 密文 local-file。TARGET-N
    ))
 
 (validate-sources %mihomo-sources)
+(unless (memq %mihomo-routing-mode '(domain protocol))
+  (error "invalid mihomo routing mode" %mihomo-routing-mode))
+(when (eq? %mihomo-routing-mode 'protocol)
+  (unless (find (lambda (source)
+                  (string=? (mihomo-source-name source)
+                            %mihomo-protocol-source))
+                %mihomo-sources)
+    (error "protocol routing source is not declared"
+           %mihomo-protocol-source)))

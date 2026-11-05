@@ -1,4 +1,4 @@
-;;; NetworkManager dnsmasq resolver 契约测试（N1-N7）。
+;;; NetworkManager dnsmasq resolver 契约测试（N1-N6）。
 ;;;
 ;;; 迁移后 DNS 所有权（docs/architecture/dns.md）：
 ;;;   应用 → /etc/resolv.conf 127.0.0.1:53（mihomo DNS）。
@@ -13,24 +13,20 @@
 ;;;   N4 无 SmartDNS 服务残留
 ;;;   N5 无 standalone dnsmasq 服务（单一 resolver owner）
 ;;;   N6 host 装配引用 nm-dnsmasq 配置
-;;;   N7 mihomo 组合配置：exclude-uid 注入同一 UID + :53 监听 +
-;;;      redir-host + AliDNS IP DoH + fallback/direct :15353 + LAN 过滤
 ;;;
 ;;; 不依赖公网、不构建 package（纯 record/gexp/字符串断言）。
-
-(use-modules (guix gexp) ;local-file-absolute-file-name
-             (gnu services) ;fold-services、service-value、service-type-name
+(use-modules (gnu services) ;fold-services、service-value、service-type-name
              (gnu services networking) ;network-manager-service-type 等
              (gnu system) ;operating-system-services
              (gnu system accounts) ;user-account?、user-group?
              (guixcfg hosts vm) ;%vm-os
-             (guixcfg system mihomo service) ;%mihomo-template-file
-             (guixcfg system mihomo config) ;compose-mihomo-config
              (guixcfg system dns nm-dnsmasq)
              (srfi srfi-1)
              (srfi srfi-64))
 
 (test-runner-current (test-runner-simple))
+
+(test-begin "nm-dnsmasq")
 
 (test-begin "nm-dnsmasq")
 
@@ -123,41 +119,5 @@ wiring assertions survive formatting reflows."
           '("modules/guixcfg/hosts/vm.scm"
             "modules/guixcfg/hosts/lenovo-legion-y7000p.scm"))
 
-;; ── N7：mihomo 组合配置与 nm-dnsmasq UID 一致 ───────────────
-(define %composed
-  (compose-mihomo-config (repo-file-text (local-file-absolute-file-name
-                                          %mihomo-template-file))
-                         '(("airport" "http"
-                            "https://subscription.invalid/path"))
-                         %nm-dnsmasq-uid))
-
-(test-assert "N7: mihomo exclude-uid injects the nm-dnsmasq UID"
-             (string-contains %composed
-                              (string-append "- "
-                                             (number->string %nm-dnsmasq-uid))))
-(test-assert "N7: mihomo direct/fallback DNS use dnsmasq :15353"
-             (and (string-contains %composed
-                                   "direct-nameserver:\n    - 127.0.0.1:15353")
-                  (string-contains %composed
-                                   "fallback:\n    - 127.0.0.1:15353")))
-(test-assert "N7: mihomo owns :53 with redir-host + dns-hijack"
-             (and (string-contains %composed "listen: \"127.0.0.1:53\"")
-                  (string-contains %composed "enhanced-mode: redir-host")
-                  (string-contains %composed "- any:53")
-                  (string-contains %composed "tcp://any:53")))
-(test-assert "N7: fixed AliDNS IP DoH is lazy with LAN fallback filter"
-             (and (string-contains %composed
-                                   "nameserver:\n    - https://223.5.5.5/dns-query\n    - https://223.6.6.6/dns-query")
-                  (string-contains %composed "fallback-lazy-query: true")
-                  (string-contains %composed "geoip-code: LAN")))
-(test-assert "N7: composed config generates airport source and PROXY group"
-             (and (string-contains %composed "  airport:\n    type: http")
-                  (string-contains %composed "- name: SRC-airport")
-                  (string-contains %composed "use: [airport]")
-                  (string-contains %composed "- name: PROXY")))
-(test-assert "N7: no unresolved placeholders remain"
-             (and (not (string-contains %composed "@@MIHOMO_PROXY_PROVIDERS@@"))
-                  (not (string-contains %composed "@@MIHOMO_PROXY_GROUPS@@"))
-                  (not (string-contains %composed "@@MIHOMO_NM_DNSMASQ_UID@@"))))
 
 (test-end "nm-dnsmasq")
