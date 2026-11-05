@@ -83,7 +83,7 @@ YAML 内容）；SECRET-FILE 是该源对应的 age 密文 local-file。TARGET-N
 
    ;; 本地 provider：age 明文是一份 provider YAML。
    (mihomo-source "edge" 'file
-                  (local-file "secrets/edge.file.age" "edge.file.age"))
+                  (local-file "secrets/ordchaos-edge.file.age" "ordchaos-edge.file.age"))
 
    ;; 第二个 HTTP 源示例：
    ;; (mihomo-source "backup" 'http
