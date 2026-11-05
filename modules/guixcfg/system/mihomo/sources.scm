@@ -4,8 +4,8 @@
 ;;;   - kind = 'http：一个 http(s) URL；
 ;;;   - kind = 'file：一份 mihomo provider YAML（含 proxies:）。
 ;;;
-;;; 每个源生成一个 provider + 一个 SRC-<name> 子策略组；顶层 PROXY
-;;; 选择这些 SRC-* 子组作为提供方。
+;;; 每个源生成一个 provider + 一个 <name> 子策略组；顶层 PROXY
+;;; 选择这些 <name> 子组作为提供方。
 ;;;
 ;;; 新增源：
 ;;;   1. 创建 age 密文（单个 URL 或单个 provider 文件内容）放到

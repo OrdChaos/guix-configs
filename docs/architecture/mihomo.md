@@ -138,14 +138,14 @@ file → mihomo-source-<name>.file
 运行期路径由 declared target-name 经 `runtime-secret-target` 派生，
 materializer 逐个读取后生成：
 
-- `proxy-providers.<name>`：HTTP 源（`type: http`，缓存
-  `./providers/<name>.yaml`，interval 3600s，`proxy: DIRECT`）或文件源
-  （`type: file`）；
-- `proxy-groups.SRC-<name>`：`select` 组，`use: [<name>]`；
-- 顶层 `PROXY`：`select` 组，成员为所有 `SRC-*` 加 `DIRECT`；规则
-  `MATCH,PROXY` 指向它。
+- `proxy-providers.provider-<name>`：HTTP 源（`type: http`，缓存
+  `./providers/provider-<name>.yaml`，interval 3600s，`proxy: DIRECT`）
+  或文件源（`type: file`）；
+- `proxy-groups.<name>`：`select` 组，`use: [provider-<name>]`；
+- 顶层 `PROXY`：`select` 组，成员为所有 `<name>` 子组加 `DIRECT`；
+  规则 `MATCH,PROXY` 指向它。
 
-**routing**：只有 `SRC-<name>` 子组和顶层 `PROXY`；不按 UDP/TCP 协议
+**routing**：只有 `<name>` 子组和顶层 `PROXY`；不按 UDP/TCP 协议
 拆分。每个 age 的 provider 是一个子组，顶层 `PROXY` 选择子组作为
 提供方。
 
@@ -161,8 +161,8 @@ materializer 逐个读取后生成：
 - Noctalia 的 Update subscriptions 只刷新 `vehicleType == "HTTP"` 的
   provider，文件源自动跳过。
 
-**每个 age 的 provider 是一个子策略组**：`SRC-<name>` 负责在该
-provider 的节点里选择；顶层 `PROXY` 只选择 `SRC-*` 子组，不直接
+**每个 age 的 provider 是一个子策略组**：`<name>` 负责在该
+provider 的节点里选择；顶层 `PROXY` 只选择 `<name>` 子组，不直接
 暴露 provider 节点。
 
 ## secret 数据流与边界（诚实声明）
@@ -176,7 +176,7 @@ modules/guixcfg/system/mihomo/secrets/<source>.age
     → mihomo-config materializer：
         %mihomo-sources 逐个读取明文；HTTP 源剥除末尾单个 LF/CRLF 并
         校验 URL；file 源原子写到 subscriptions/<name>.yaml（0600）；
-        生成 proxy-providers 与 SRC-* / PROXY groups；每个占位符恰好
+        生成 proxy-providers 与 <name> / PROXY groups；每个占位符恰好
         一次；tmp + fsync + atomic rename；/run/mihomo 0700、config
         0600
     → mihomo -f 读取 → 每个 HTTP 源拉取订阅（interval/cache/refresh
@@ -247,7 +247,7 @@ controller 可读取配置的安全路径。
   `dns-hijack: any:53` + `tcp://any:53`、`exclude-uid`（nm-dnsmasq）；
 - `sniffer`：TLS/HTTP/QUIC 端口（DOMAIN/GEOSITE 分流前提）；
 - provider/groups：由 `%mihomo-sources` 生成；每个源一个 provider 与
-  `SRC-<name>` select 组，顶层 `PROXY` select 汇聚所有源 + `DIRECT`。
+  `<name>` select 组，顶层 `PROXY` select 汇聚所有源 + `DIRECT`。
   HTTP 源 `proxy: DIRECT`、`interval: 3600`、health-check lazy；文件源
   `type: file`，materializer 生成的路径在 `-d` 下；
 - 规则：私网/loopback/ULA → DIRECT；Loyalsoldier `proxy` 规则集

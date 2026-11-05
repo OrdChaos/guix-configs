@@ -106,9 +106,9 @@ rule-providers:
     interval: 86400
 # 订阅源由 (guixcfg system mihomo sources) 的 %mihomo-sources 声明，
 # 每源一个 age 文件；materializer 读取单 URL/provider YAML 后生成：
-#   kuromis (http) → provider kuromis + 组 SRC-kuromis
-#   edge (file)    → provider edge + 组 SRC-edge
-# 顶层 PROXY 选择这些 SRC-* 子组；文件源必须是 mihomo provider YAML。
+#   kuromis (http) → provider-kuromis + 组 kuromis
+#   edge (file)    → provider-edge + 组 edge
+# 顶层 PROXY 选择这些 <name> 子组；文件源必须是 mihomo provider YAML。
 proxy-providers:
 @@MIHOMO_PROXY_PROVIDERS@@
 proxy-groups:

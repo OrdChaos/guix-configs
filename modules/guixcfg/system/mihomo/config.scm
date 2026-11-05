@@ -12,8 +12,8 @@
 ;;;   - http → 一个 http(s) URL；
 ;;;   - file → materializer 从 age 内容生成的 /var/lib/clash 路径
 ;;;     （compose 本身不解析 provider YAML）。
-;;; 每个源生成一个 proxy-provider + 一个 SRC-<name> select 组；顶层
-;;; PROXY select 组包含所有 SRC-* 与 DIRECT。
+;;; 每个源生成一个 proxy-provider + 一个 <name> select 组；顶层
+;;; PROXY select 组包含所有 <name> 子组与 DIRECT。
 ;;;
 ;;; 运行时路径契约（single-owner constants）：
 ;;;   - secret 路径/target 名由 (guixcfg system mihomo sources) 声明，
@@ -184,19 +184,26 @@ string-count——它只数字符不数子串）。"
    "    type: file\n"
    "    path: \"" (yaml-double-quote-escape path) "\"\n"))
 
+(define (provider-id name)
+  "Provider name 与策略组名分开：组用用户可见的 <name>，provider 用
+provider-<name>，避免同名组被 provider 遮蔽。"
+  (string-append "provider-" name))
+
 (define (provider-block sources)
   (apply string-append
          (map (lambda (source)
                 (match source
-                  ((name "http" url) (http-provider-block name url))
-                  ((name "file" path) (file-provider-block name path))))
+                  ((name "http" url)
+                   (http-provider-block (provider-id name) url))
+                  ((name "file" path)
+                   (file-provider-block (provider-id name) path))))
               sources)))
 
 (define (source-group-block name)
   (string-append
-   "  - name: SRC-" name "\n"
+   "  - name: " name "\n"
    "    type: select\n"
-   "    use: [" name "]\n"))
+   "    use: [" (provider-id name) "]\n"))
 
 (define (group-block sources)
   (let* ((names (map car sources))
@@ -205,10 +212,7 @@ string-count——它只数字符不数子串）。"
                "  - name: PROXY\n"
                "    type: select\n"
                "    proxies: ["
-               (string-join (map (lambda (name)
-                                   (string-append "SRC-" name))
-                                 names)
-                            ", ")
+               (string-join names ", ")
                ", DIRECT]\n")))
     (apply string-append (append source-groups (list top)))))
 
