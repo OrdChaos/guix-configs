@@ -110,10 +110,9 @@ consumer 均由 mihomo activation 强制 0700**（generic mechanism 只
    (mihomo-source "kuromis" 'http
                   (local-file "secrets/kuromis.age" "kuromis.age"))
 
-   ;; edge 文件源示例：age 明文是一份 provider YAML，包含
-   ;; Hysteria2/Reality；启用 protocol 模式前取消注释。
-   ;; (mihomo-source "edge" 'file
-   ;;                (local-file "secrets/edge.file.age" "edge.file.age"))
+   ;; 本地 provider：age 明文是一份 provider YAML。
+   (mihomo-source "edge" 'file
+                  (local-file "secrets/edge.file.age" "edge.file.age"))
 
    ;; 第二个 HTTP 源示例：
    ;; (mihomo-source "backup" 'http
@@ -146,18 +145,9 @@ materializer 逐个读取后生成：
 - 顶层 `PROXY`：`select` 组，成员为所有 `SRC-*` 加 `DIRECT`；规则
   `MATCH,PROXY` 指向它。
 
-**routing profile（机场兼容）**：
-
-- `%mihomo-routing-mode 'domain`（默认）：机场/普通订阅走
-  `SRC-*` + `PROXY`，规则为私网直连 + Loyalsoldier proxy/direct +
-  `MATCH,PROXY`；
-- `%mihomo-routing-mode 'protocol`：仅用于专用 edge provider；生成
-  `UDP-HY2` / `TCP-REALITY` 两个 `select` 组（`use` + `filter`），规则
-  为 UDP→HY2、TCP→Reality；
-- protocol 模式由 `%mihomo-protocol-source` 指定 provider，默认
-  `edge`；该源不存在时 SCM 加载失败；
-- 两种 profile 不能在同一份 rules 中按目标自动切换；使用机场时保持
-  `'domain`，不要开启 protocol 模式。
+**routing**：只有 `SRC-<name>` 子组和顶层 `PROXY`；不按 UDP/TCP 协议
+拆分。每个 age 的 provider 是一个子组，顶层 `PROXY` 选择子组作为
+提供方。
 
 文件源：
 
@@ -171,9 +161,9 @@ materializer 逐个读取后生成：
 - Noctalia 的 Update subscriptions 只刷新 `vehicleType == "HTTP"` 的
   provider，文件源自动跳过。
 
-**机场与 edge 的切换**：机场源保持 `'domain`；只有专用 edge provider
-声明并选择 `'protocol` 时才启用 HY2/Reality 分流。不要对机场 provider
-设置 protocol。
+**每个 age 的 provider 是一个子策略组**：`SRC-<name>` 负责在该
+provider 的节点里选择；顶层 `PROXY` 只选择 `SRC-*` 子组，不直接
+暴露 provider 节点。
 
 ## secret 数据流与边界（诚实声明）
 
@@ -244,10 +234,10 @@ controller 可读取配置的安全路径。
 
 `modules/guixcfg/system/mihomo/template.yaml`（public authority）：
 
-- 占位符 `@@MIHOMO_PROXY_PROVIDERS@@`、`@@MIHOMO_PROXY_GROUPS@@`、
-  `@@MIHOMO_RULES@@` 与 `@@MIHOMO_NM_DNSMASQ_UID@@` 各恰好一次，模板
-  不可直接运行；前三者由 `%mihomo-sources` + routing profile 生成，
-  UID 由 `(guixcfg system dns nm-dnsmasq)` 的 `%nm-dnsmasq-uid` 注入；
+- 占位符 `@@MIHOMO_PROXY_PROVIDERS@@`、`@@MIHOMO_PROXY_GROUPS@@` 与
+  `@@MIHOMO_NM_DNSMASQ_UID@@` 各恰好一次，模板不可直接运行；前两者由
+  `%mihomo-sources` 生成，UID 由 `(guixcfg system dns nm-dnsmasq)` 的
+  `%nm-dnsmasq-uid` 注入；
 - `dns`：`listen: 127.0.0.1:53`、`redir-host`、固定 AliDNS
   `nameserver`（`https://223.5.5.5/dns-query` /
   `https://223.6.6.6/dns-query`）、`fallback` / `direct-nameserver` =
@@ -258,11 +248,8 @@ controller 可读取配置的安全路径。
 - `sniffer`：TLS/HTTP/QUIC 端口（DOMAIN/GEOSITE 分流前提）；
 - provider/groups：由 `%mihomo-sources` 生成；每个源一个 provider 与
   `SRC-<name>` select 组，顶层 `PROXY` select 汇聚所有源 + `DIRECT`。
-  routing-mode=protocol 时另生成 `UDP-HY2`/`TCP-REALITY` 组。HTTP 源
-  `proxy: DIRECT`、`interval: 3600`、health-check lazy；文件源
+  HTTP 源 `proxy: DIRECT`、`interval: 3600`、health-check lazy；文件源
   `type: file`，materializer 生成的路径在 `-d` 下；
-- rules：由 routing-mode 生成；domain 用 Loyalsoldier proxy/direct，
-  protocol 用 NETWORK udp/tcp；
 - 规则：私网/loopback/ULA → DIRECT；Loyalsoldier `proxy` 规则集
   → PROXY；Loyalsoldier `direct` 规则集 → DIRECT；其余 → PROXY。
   rule-providers 每天更新（86400s），缓存放在 `-d` 根目录；

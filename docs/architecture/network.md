@@ -95,7 +95,7 @@ Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`�
 ### 3.4 测试锁定（tests/）
 
 - `tests/test-nm-dnsmasq.scm` N1-N6：NM `dns=dnsmasq`、专用账号配置内容 + 15353 端口、账号/组显式稳定 UID/GID、无 SmartDNS 残留、无 standalone dnsmasq、host 装配引用；
-- `tests/test-mihomo.scm` M7/M8/M11/M12：模板占位符/DNS/controller 静态契约、service graph、machine-state rule。订阅源建模、routing profile、config composition 不写字符串断言——由 `blue build-os` 与实际 `mihomo -t` 验证，避免把订阅名/节点名/用户路径写死在测试里。
+- `tests/test-mihomo.scm` M7/M8/M11/M12：模板占位符/DNS/controller 静态契约、service graph、machine-state rule。订阅源建模、provider/group 组合不写字符串断言——由 `blue build-os` 与实际 `mihomo -t` 验证，避免把订阅名/节点名/用户路径写死在测试里。
 
 ---
 

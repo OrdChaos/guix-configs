@@ -15,12 +15,6 @@
 ;;; 每个源生成一个 proxy-provider + 一个 SRC-<name> select 组；顶层
 ;;; PROXY select 组包含所有 SRC-* 与 DIRECT。
 ;;;
-;;; routing-mode：
-;;;   - domain：机场/普通订阅。私网直连 + Loyalsoldier proxy/direct + PROXY；
-;;;   - protocol：edge 专用。UDP → UDP-HY2，TCP → TCP-REALITY；两个组
-;;;     用协议源 provider + filter 选节点，规则在私网直连之后。
-;;; 两种 profile 不能在同一份 rules 中按目标自动切换；由 SCM 选择。
-;;;
 ;;; 运行时路径契约（single-owner constants）：
 ;;;   - secret 路径/target 名由 (guixcfg system mihomo sources) 声明，
 ;;;     service 侧用 runtime-secret-target 派生后传给 materializer；
@@ -33,7 +27,6 @@
   #:use-module (ice-9 match)
   #:export (%mihomo-proxy-providers-placeholder
             %mihomo-proxy-groups-placeholder
-            %mihomo-rules-placeholder
             %mihomo-nm-dnsmasq-uid-placeholder
             %mihomo-runtime-dir
             %mihomo-runtime-config-path
@@ -47,9 +40,6 @@
 
 (define %mihomo-proxy-groups-placeholder
   "@@MIHOMO_PROXY_GROUPS@@")
-
-(define %mihomo-rules-placeholder
-  "@@MIHOMO_RULES@@")
 
 ;; NetworkManager dnsmasq 的稳定 UID 占位符。
 (define %mihomo-nm-dnsmasq-uid-placeholder
@@ -208,85 +198,27 @@ string-count——它只数字符不数子串）。"
    "    type: select\n"
    "    use: [" name "]\n"))
 
-(define (protocol-group-block name source filter)
-  (string-append
-   "  - name: " name "\n"
-   "    type: select\n"
-   "    use: [" source "]\n"
-   "    filter: \"" (yaml-double-quote-escape filter) "\"\n"))
-
-(define (group-block sources routing-mode protocol-source
-                     protocol-udp-filter protocol-tcp-filter)
+(define (group-block sources)
   (let* ((names (map car sources))
          (source-groups (map source-group-block names))
-         (protocol-groups
-          (if (eq? routing-mode 'protocol)
-              (list (protocol-group-block "UDP-HY2" protocol-source
-                                          protocol-udp-filter)
-                    (protocol-group-block "TCP-REALITY" protocol-source
-                                          protocol-tcp-filter))
-              '()))
-         (members
-          (append
-           (if (eq? routing-mode 'protocol)
-               '("UDP-HY2" "TCP-REALITY")
-               '())
-           (map (lambda (name)
-                  (string-append "SRC-" name))
-                names)))
          (top (string-append
                "  - name: PROXY\n"
                "    type: select\n"
                "    proxies: ["
-               (string-join (append members '("DIRECT")) ", ")
-               "]\n")))
-    (apply string-append
-           (append source-groups protocol-groups (list top)))))
-
-(define %mihomo-private-rules
-  (string-append
-   "  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve\n"
-   "  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve\n"
-   "  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve\n"
-   "  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve\n"
-   "  - IP-CIDR,169.254.0.0/16,DIRECT,no-resolve\n"
-   "  - IP-CIDR,224.0.0.0/4,DIRECT,no-resolve\n"
-   "  - IP-CIDR6,fc00::/7,DIRECT,no-resolve\n"
-   "  - IP-CIDR6,fe80::/10,DIRECT,no-resolve\n"
-   "  - IP-CIDR6,::1/128,DIRECT,no-resolve\n"))
-
-(define (rules-block routing-mode)
-  (string-append
-   %mihomo-private-rules
-   (if (eq? routing-mode 'protocol)
-       (string-append
-        "  - NETWORK,udp,UDP-HY2\n"
-        "  - NETWORK,tcp,TCP-REALITY\n"
-        "  - MATCH,TCP-REALITY\n")
-       (string-append
-        "  # proxy 在 direct 之前：两表重叠时优先走代理。\n"
-        "  - RULE-SET,loyalsoldier-proxy,PROXY\n"
-        "  - RULE-SET,loyalsoldier-direct,DIRECT\n"
-        "  - MATCH,PROXY\n"))))
+               (string-join (map (lambda (name)
+                                   (string-append "SRC-" name))
+                                 names)
+                            ", ")
+               ", DIRECT]\n")))
+    (apply string-append (append source-groups (list top)))))
 
 (define* (compose-mihomo-config template sources
-                                #:optional (nm-dnsmasq-uid #f)
-                                #:key (routing-mode 'domain)
-                                      (protocol-source #f)
-                                      (protocol-udp-filter "^Hysteria2$")
-                                      (protocol-tcp-filter "^Reality$"))
-  "TEMPLATE（公开模板，含恰好一次 providers/groups/rules 占位符）+
+                                #:optional (nm-dnsmasq-uid #f))
+  "TEMPLATE（公开模板，含恰好一次 providers/groups 占位符）+
 SOURCES（((name kind value) ...)，kind 为 \"http\"/\"file\"）→ 完整
-runtime config 文本。ROUTING-MODE 为 'domain（机场/普通）或 'protocol
-（UDP-HY2 / TCP-REALITY）；protocol 模式必须给出存在的 PROTOCOL-SOURCE。
-可选 NM-DNSMASQ-UID（整数）启用 `tun.exclude-uid` 占位符替换。违反
-契约时 (throw 'mihomo-config-error MESSAGE) fail closed；不打印、不
-返回值之外地暴露源值。"
-  (unless (memq routing-mode '(domain protocol))
-    (config-error "routing-mode must be domain or protocol"))
-  (when (and (eq? routing-mode 'protocol)
-             (not protocol-source))
-    (config-error "protocol routing requires protocol-source"))
+runtime config 文本。可选 NM-DNSMASQ-UID（整数）启用 `tun.exclude-uid`
+占位符替换。违反契约时 (throw 'mihomo-config-error MESSAGE) fail closed；
+不打印、不返回值之外地暴露源值。"
   (let* ((template* (if nm-dnsmasq-uid
                         (begin
                           (unless (= (count-substring template
@@ -297,17 +229,10 @@ runtime config 文本。ROUTING-MODE 为 'domain（机场/普通）或 'protocol
                            %mihomo-nm-dnsmasq-uid-placeholder
                            (number->string nm-dnsmasq-uid))) template))
          (sources* (normalize-sources sources)))
-    (when (and (eq? routing-mode 'protocol)
-               (not (member protocol-source
-                            (map car sources*))))
-      (config-error (string-append "protocol source not declared: "
-                                   protocol-source)))
     (unless (= (count-substring template* %mihomo-proxy-providers-placeholder) 1)
       (config-error "proxy-providers placeholder must appear exactly once"))
     (unless (= (count-substring template* %mihomo-proxy-groups-placeholder) 1)
       (config-error "proxy-groups placeholder must appear exactly once"))
-    (unless (= (count-substring template* %mihomo-rules-placeholder) 1)
-      (config-error "rules placeholder must appear exactly once"))
     (let* ((with-providers
             (string-replace-substring template*
              %mihomo-proxy-providers-placeholder
@@ -315,10 +240,5 @@ runtime config 文本。ROUTING-MODE 为 'domain（机场/普通）或 'protocol
            (with-groups
             (string-replace-substring with-providers
              %mihomo-proxy-groups-placeholder
-             (group-block sources* routing-mode protocol-source
-                          protocol-udp-filter protocol-tcp-filter)))
-           (with-rules
-            (string-replace-substring with-groups
-             %mihomo-rules-placeholder
-             (rules-block routing-mode))))
-      with-rules)))
+             (group-block sources*))))
+      with-groups)))

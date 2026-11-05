@@ -210,15 +210,7 @@ shell；源明文绝不进 argv/environment/日志（成功日志只报路径）
                                                       (let ((config (compose-mihomo-config
                                                                      template
                                                                      sources
-                                                                     #$%nm-dnsmasq-uid
-                                                                     #:routing-mode
-                                                                     '#$%mihomo-routing-mode
-                                                                     #:protocol-source
-                                                                     #$%mihomo-protocol-source
-                                                                     #:protocol-udp-filter
-                                                                     #$%mihomo-protocol-udp-filter
-                                                                     #:protocol-tcp-filter
-                                                                     #$%mihomo-protocol-tcp-filter)))
+                                                                     #$%nm-dnsmasq-uid)))
                                                         (unless (file-exists?
                                                                  %mihomo-runtime-dir)
                                                           (mkdir

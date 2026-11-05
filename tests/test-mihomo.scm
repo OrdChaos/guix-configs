@@ -1,6 +1,6 @@
 ;;; Mihomo system service 测试：只保留模板静态契约与 service graph。
 ;;;
-;;; 订阅源建模、routing profile、config composition 的行为不在这里写
+;;; 订阅源建模、provider/group 组合的行为不在这里写
 ;;; 字符串断言——那些由实际 mihomo -t / build 验证，避免把订阅名、
 ;;; 节点名、用户路径写死在测试里。
 
@@ -41,13 +41,11 @@
 (test-begin "mihomo")
 
 ;; ── M7：模板静态契约 ────────────────────────────────────────
-(test-assert "M7: provider/group/rules/UID placeholders appear exactly once"
+(test-assert "M7: provider/group/UID placeholders appear exactly once"
              (and (= (count-substring (template-text)
                                       %mihomo-proxy-providers-placeholder) 1)
                   (= (count-substring (template-text)
                                       %mihomo-proxy-groups-placeholder) 1)
-                  (= (count-substring (template-text)
-                                      %mihomo-rules-placeholder) 1)
                   (= (count-substring (template-text)
                                       %mihomo-nm-dnsmasq-uid-placeholder) 1)))
 (test-assert "M7: no source URL or legacy placeholder in public template"
