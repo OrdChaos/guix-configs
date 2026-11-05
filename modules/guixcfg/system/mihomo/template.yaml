@@ -107,9 +107,9 @@ rule-providers:
   cn-ip:
     type: http
     behavior: ipcidr
-    format: yaml
-    url: https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/cncidr.txt
-    path: ./cncidr.yaml
+    format: text
+    url: https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/cn.txt
+    path: ./cncidr.txt
     interval: 86400
 # 订阅源由 (guixcfg system mihomo sources) 的 %mihomo-sources 声明，
 # 每源一个 age 文件；materializer 读取单 URL/provider YAML 后生成：
@@ -131,8 +131,6 @@ rules:
   - IP-CIDR6,fe80::/10,DIRECT,no-resolve
   - IP-CIDR6,::1/128,DIRECT,no-resolve
   # 国内目标 IP 直连：游戏服务器等没有域名命中的流量不落到 MATCH,PROXY。
-  # cncidr 当前不覆盖 47.116.0.0/16（阿里云上海游戏段），单独保留。
-  - IP-CIDR,47.116.0.0/16,DIRECT,no-resolve
   - RULE-SET,cn-ip,DIRECT,no-resolve
   # proxy 在 direct 之前：两表重叠时优先走代理。
   - RULE-SET,loyalsoldier-proxy,PROXY
