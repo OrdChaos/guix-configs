@@ -12,9 +12,9 @@
   #:export (dsh-extension-tui))
 
 (define-public dsh-extension-tui
-  (let ((base (dsh-npm-bundle "@deepseek-harness-tui/dsh-tui" "0.18.0"
+  (let ((base (dsh-npm-bundle "@deepseek-harness-tui/dsh-tui" "0.19.0"
                               (base32
-                               "1ksy7q8j2pwv81rlxx75pwhwr8h88i8q7wjynbw4747mbz6qmf4k"))))
+                               "19rdnb5fwf6r4l37q5sanfvpq8pgx9zn7mg4ij38zilzqqj1p955"))))
     (package
       (inherit base)
       (arguments
