@@ -95,6 +95,12 @@
                     (string-contains s "write-group")
                     (string-contains s "write-shadow"))))
 
+(test-assert "projection rejects duplicate UID/GID"
+             (let ((s (gexp-source projection-gexp)))
+               (and (string-contains s "duplicate account database ID")
+                    (string-contains s "password-entry-uid")
+                    (string-contains s "group-entry-gid"))))
+
 (test-assert "projection does NOT use upstream flock activation"
              (let ((s (gexp-source projection-gexp)))
                (not (or (string-contains s "with-file-lock")

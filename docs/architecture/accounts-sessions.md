@@ -40,8 +40,8 @@ FFI——上游 `activate-users+groups` 的 flock 在 boot 环境失败会导致
 - interactive（非系统、非 root）用户的 credential 在写库前从
   persistent verifier 读入并校验；
 - **fail-closed**：verifier 缺失/非法、user 不在拓扑、最终 shadow
-  缺 user / password 为空/`!`/与 verifier 不符 → projection 抛错
-  中止，不写任何文件，login 不开放；
+  缺 user / password 为空/`!`/与 verifier 不符、最终 passwd/group
+  出现重复 UID/GID → projection 抛错中止，不写任何文件，login 不开放；
 - `account-state-ready` 由只读验证服务（`guixcfg-account-databases-
   verify`）在**验证最终 /etc/shadow** 后才 provision；该服务绝不写
   文件。
