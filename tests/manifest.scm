@@ -61,6 +61,7 @@
     "tests/test-desktop.scm"
     "tests/test-mihomo.scm"
     "tests/test-nm-dnsmasq.scm"
+    "tests/test-smartdns.scm"
     "tests/test-session-env.scm"
     "tests/test-apps.scm"
     "tests/test-home.scm"

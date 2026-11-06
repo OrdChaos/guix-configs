@@ -4,11 +4,11 @@
 ;;; dnsmasq（store 路径编译进 NM binary），默认监听 127.0.0.1:53 并读取
 ;;; `--conf-dir=/etc/NetworkManager/dnsmasq.d`。本模块拥有该层唯一的
 ;;; project-specific 语义：
-;;;   - dnsmasq 监听 127.0.0.1:15353，把 :53 让给 mihomo DNS
-;;;     （mihomo 是应用 DNS 的唯一入口，负责 DoH 优先 + DHCP 回退）；
+;;;   - dnsmasq 监听 127.0.0.1:15353，把 :53 让给 SmartDNS
+;;;     （SmartDNS 是应用 DNS 的唯一入口；dhcp 模式只向这里转发）；
 ;;;   - dnsmasq 以**稳定 UID** 的专用系统账号运行，使 mihomo TUN 可以用
-;;;     `exclude-uid` 把 dnsmasq 的上游 DHCP DNS 查询排除出 TUN
-;;;     （切断 DNS → TUN → mihomo DNS 的递归）。
+;;;     `exclude-uid` 把 dnsmasq 的上游 DHCP DNS 查询排除出 TUN；
+;;;   - fixed 模式完全不引用此端口，不允许把 DHCP DNS 当 fallback。
 ;;;
 ;;; 单一事实来源：
 ;;;   - 账号名 / UID / GID / 端口：本模块常量；
@@ -18,9 +18,8 @@
 ;;;     （`user=<name>`）与 10-listen-port.conf（`port=15353`），由 host 的
 ;;;     network-manager-configuration `dnsmasq-configuration-files` 字段
 ;;;     声明式物化；
-;;;   - mihomo 的 `tun.exclude-uid` 引用同一 UID，`fallback` /
-;;;     `direct-nameserver` 引用同一 `127.0.0.1:15353`（见
-;;;     (guixcfg system mihomo config) 的模板契约）。
+;;;   - mihomo 的 `tun.exclude-uid` 引用同一 UID；SmartDNS 的 dhcp
+;;;     配置引用同一 `127.0.0.1:15353`（见 (guixcfg system dns smartdns)）。
 ;;;
 ;;; UID 必须显式固定：ephemeral-root 每 boot 重建 /etc/passwd，
 ;;; 动态系统账号会漂移；显式 UID 同时被 (gnu build accounts) 的
@@ -56,9 +55,9 @@
 (define %nm-dnsmasq-gid
   985)
 
-;; dnsmasq 的 loopback DNS 端口。:53 由 mihomo 独占（应用 DNS 入口），
-;; 这里用高位端口，避开 mDNS 的 5353。mihomo 模板中的 fallback /
-;; direct-nameserver 引用同一端口。
+;; dnsmasq 的 loopback DNS 端口。:53 由 SmartDNS 独占（应用 DNS
+;; 入口），这里用高位端口，避开 mDNS 的 5353。SmartDNS 的 dhcp
+;; 配置引用同一端口。
 (define %nm-dnsmasq-port
   15353)
 

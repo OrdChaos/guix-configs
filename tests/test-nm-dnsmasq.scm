@@ -1,17 +1,18 @@
 ;;; NetworkManager dnsmasq resolver 契约测试（N1-N6）。
 ;;;
 ;;; 迁移后 DNS 所有权（docs/architecture/dns.md）：
-;;;   应用 → /etc/resolv.conf 127.0.0.1:53（mihomo DNS）。
-;;;   mihomo 先查固定 AliDNS IP DoH（223.5.5.5 / 223.6.6.6）；失败/NXDOMAIN/空答案回退到
-;;;   NetworkManager dnsmasq（127.0.0.1:15353）→ DHCP DNS。
-;;;   dnsmasq 以专用稳定 UID 运行并被 `tun.exclude-uid` 排除（切断递归）。
+;;;   应用 → /etc/resolv.conf 127.0.0.1:53（SmartDNS）。
+;;;   fixed 模式只查 AliDNS IP DoH；dhcp 模式只查 NetworkManager
+;;;   dnsmasq（127.0.0.1:15353）→ 当前 DHCP DNS。
+;;;   dnsmasq 以专用稳定 UID 运行并被 `tun.exclude-uid` 排除；它是
+;;;   DHCP DNS source，不是 fixed 模式的 fallback。
 ;;;
 ;;; 覆盖：
 ;;;   N1 NM dns backend = dnsmasq（%vm-os）
 ;;;   N2 dnsmasq 专用账号配置内容 + 15353 监听端口
 ;;;   N3 专用账号/组：显式稳定 UID/GID、system
-;;;   N4 无 SmartDNS 服务残留
-;;;   N5 无 standalone dnsmasq 服务（单一 resolver owner）
+;;;   N4 SmartDNS resolver 服务存在
+;;;   N5 无 standalone dnsmasq 服务（NM 是唯一 dnsmasq owner）
 ;;;   N6 host 装配引用 nm-dnsmasq 配置
 ;;;
 ;;; 不依赖公网、不构建 package（纯 record/gexp/字符串断言）。
@@ -100,10 +101,9 @@ wiring assertions survive formatting reflows."
                   (>= %nm-dnsmasq-uid 100)
                   (<= %nm-dnsmasq-uid 999)))
 
-;; ── N4：无 SmartDNS 残留 ────────────────────────────────────
-(test-assert "N4: no SmartDNS service remains"
-             (not (service-by-type-name 'smartdns)))
-
+;; ── N4：SmartDNS resolver 服务存在 ─────────────────────────
+(test-assert "N4: SmartDNS resolver service is present"
+             (and (service-by-type-name 'smartdns) #t))
 ;; ── N5：单一 resolver owner ─────────────────────────────────
 (test-assert "N5: no standalone dnsmasq service (NM is the only owner)"
              (not (service-by-type-name 'dnsmasq)))

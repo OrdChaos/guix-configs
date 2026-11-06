@@ -1,160 +1,151 @@
 # System networking architecture（网络全链路）
 
-本文件是网络架构的**横切总结**：把 DNS ownership（见 `dns.md`）、
-Mihomo 透明代理（见 `mihomo.md`）、订阅 secret 链（见 `secrets.md`）
-与实测得到的宿主侧环境约束串成一张完整图。组件细节以各分文件为准，
-本文件只讲全链路的**设计决策与实现方式**。
-
----
+本文件是横切总结；DNS 细节见 `dns.md`，Mihomo 细节见
+`mihomo.md`，订阅 secret 链见 `secrets.md`。
 
 ## 1. 全景图
 
-```
-┌─ 设备（VM / 笔记本，同一 repo 语义）─────────────────────────────┐
-│                                                                 │
-│  App（curl/guix/浏览器）                                        │
-│    │ DNS: getaddrinfo → nscd ─→ 127.0.0.1:53 (mihomo)            │
-│    │ TCP: 出站流量 ─→ 默认路由 ─→ TUN (mihomo0)                 │
-│    ▼                      ▼                                     │
-│  mihomo DNS                mihomo 规则引擎                       │
-│  （127.0.0.1:53）          │ loopback/私网/ULA → DIRECT          │
-│    ├─ 固定 AliDNS IP DoH  │ 其余 → MATCH → PROXY[节点]          │
-│    └─ fallback :15353      │                                     │
-│         ↓                  ▼                                     │
-│  NM dnsmasq             机场节点（v4-only，select 组）            │
-│  （127.0.0.1:15353）       │                                     │
-│    ↓ upstream             └── 节点出口：代理业务流量              │
-│  DHCP-provided DNS（校园域 / captive portal）                     │
-│                                                                 │
-│  DIRECT 旁路：eth0 → SLIRP/上行 → 公网（DNS 直连 + 私网）         │
-└─────────────────────────────────────────────────────────────────┘
+```text
+App
+  │ DNS: /etc/resolv.conf 127.0.0.1
+  ▼
+SmartDNS（127.0.0.1:53，UID 984）
+  ├─ fixed：AliDNS IP DoH
+  └─ dhcp ：NetworkManager dnsmasq（127.0.0.1:15353，UID 985）
+                └─ 当前 DHCP DNS
+
+App TCP/UDP
+  ↓
+TUN（mihomo0）
+  ↓
+Mihomo 规则引擎（sniffer + cn-ip + domain rule sets）
+  ├─ DIRECT → 宿主上行
+  └─ PROXY  → 机场节点
 ```
 
-一句话语义：**mihomo 是应用 DNS 的唯一入口，固定 AliDNS IP DoH
-（223.5.5.5 / 223.6.6.6）优先；连接失败、NXDOMAIN 或 LAN IP
-时回退到 NetworkManager dnsmasq 的当前 DHCP DNS；两边都失败则正常
-失败。** TUN 只决定业务流量是否进入 mihomo，不再切换 DNS 所有权。
+一句话：**SmartDNS 是唯一应用 resolver；Mihomo 只做 TUN/规则/代理，
+不再拥有 DNS。DNS 模式由用户显式选择，fixed=DoH only，
+dhcp=DHCP DNS only，不跨模式 fallback。**
 
 ---
 
-## 2. 设计决策逐条（决策 → 理由 → 代价）
+## 2. 设计决策
 
 | # | 决策 | 理由 | 代价 / 边界 |
 |---|---|---|---|
-| D1 | 应用 resolver 是 **mihomo DNS**，监听 127.0.0.1:53；NetworkManager dnsmasq 退到 127.0.0.1:15353 | mihomo 的 `fallback` 需要独立 DHCP 上游；:53 只能有一个 owner。NM 仍拥有 dnsmasq/当前 DHCP DNS | resolver 入口归 mihomo；dnsmasq 端口不是 53，`ss` 检查要同时看两个端口 |
-| D2 | `/etc/resolv.conf` 归 NetworkManager（rc-manager=resolvconf，pinned 编译期默认） | 无状态根每 boot 重建 /etc；NM 原生写 resolver 状态，repo 不覆盖 | NM 写 `127.0.0.1`（现在指向 mihomo:53） |
-| D3 | mihomo `fallback` / `direct-nameserver` 指向 `127.0.0.1:15353`（NM dnsmasq → 当前 DHCP DNS） | 保持 captive portal / 校园域可达；不把 DHCP 地址写死，也没有 `system` 回环 | DHCP 域名解析交给当前网络 DNS（可观察/伪造，知情接受） |
-| D4 | DNS 用 `redir-host`，不用 fake-ip；`fallback-lazy-query: true` + `fallback-filter.geoip-code: LAN` | 真实解析才能让 NXDOMAIN/空答案/失败触发 fallback；LAN 是地址分类而不是域名列表 | 无 fake-ip 的远端解析；内网名字会先被公共 AliDNS 看到（NXDOMAIN 后回退） |
-| D5 | 固定上游用阿里云 AliDNS IP DoH（`https://223.5.5.5/dns-query` / `https://223.6.6.6/dns-query`）；节点域名用独立 `proxy-server-nameserver` | 固定 IP、TLS 证书含 IP，避免 UDP 53 被 TUN hijack 回环，也不需要域名 bootstrap | DoH 直连、不经代理；代理不可用不影响 DNS |
-| D6 | `ipv6: false`：TUN 不捕获 v6 | 机场节点全是 v4，TUN 承载 v6 也送不到目标（实测 AAAA 目标经节点秒断）；v6 归系统原生路径 | 不承诺 v6 代理；笔记本上行有 v6 时 v6 直连绕过代理（泄露面，知情接受）；VM（SLIRP 无 v6）上 v6-only 服务不可达（快速失败） |
-| D7 | 订阅刷新直连（`proxy: DIRECT`） | 刷新不依赖代理组/节点可用性——节点全挂时订阅照常更新 | 宿主直连出站不稳时刷新失败（cache-first 兜底，换节点/修宿主后经 refresh API 恢复） |
-| D8 | **TUN 是唯一流量入口**：无 mixed-port、无 HTTP_PROXY 系统代理语义 | 单入口 = 可审计、无静默旁路；透明代理下应用零配置 | TUN off = 无显式回退口（干净宿主下自动退化为直连机器，见 §6） |
-| D9 | 节点选择是**运行时偏好**，repo 只声明 select 组 | 节点健康随机场变化，不是 declarative 事实 | 重启/换节点后选择持久化于 `/var/lib/clash` 缓存；repo 不 pin 节点 |
-| D10 | **递归切断**：dnsmasq 以专用稳定 UID（`nm-dnsmasq`）运行，mihomo `tun.exclude-uid` 排除该 UID | dnsmasq 上游 DHCP DNS 必须绕过 TUN，否则进 dns-hijack → mihomo DNS，形成递归 | 依赖 sing-tun 的 UID 过滤（Linux；`auto-route` 前提）——见 dns.md「递归切断」 |
-| D11 | `:53` 归 mihomo，`:15353` 归 NM dnsmasq；不引入 standalone resolver | 单一应用 DNS 入口 + 独立 DHCP fallback；避免 `system` 指回 mihomo 的回环 | 两个端口都要在运维检查中覆盖 |
-| D12 | 订阅密文与引用者同置（mihomo/secrets/），domain ordinary | secret taxonomy（secrets.md）；订阅不可用只影响刷新，节点仍可从本地 cache 工作 | 解密失败不阻塞登录、只降级订阅刷新 |
-| D13 | 配置合成 fail-closed：providers/groups/UID 三个 placeholder 各恰好一次、每源单值校验、严格 YAML 转义、NUL/CR 拒绝 | 每个 age 是唯一 secret 注入点，坏输入/坏源名/重复源必须失败而非产出可运行错配置 | 物化失败 → mihomo 起不来（显式失败优于静默错） |
-| D14 | machine-state 持久化整个 mihomo 数据目录（`/var/lib/clash`：providers cache + cache.db 选中节点/组状态，bind-directory，root-owned） | 订阅拉取结果与节点选择都是 machine-owned mutable state，重启后都要保留 | 单目录 bind，不扩权 |
-| D15 | controller loopback-only、无 secret | 控制面只给本机运维，不进网络面 | 需要本机 shell 才能换节点/刷新 |
-| D16 | SmartDNS 保持退役；DNS 收敛为 mihomo（:53，AliDNS IP DoH + fallback）+ NM dnsmasq（:15353，DHCP DNS） | 不再维护自定义 resolver 状态机；不需要域名列表 | 所有 DNS 先走 AliDNS DoH；内网名字有首查延迟/泄漏；mihomo 成为 DNS 单点 |
+| D1 | 应用 resolver 是 SmartDNS（127.0.0.1:53）；NM dnsmasq 退到 15353 | DNS 与 Mihomo 解耦；Mihomo 崩溃不导致断网 | 多一个独立 resolver 进程 |
+| D2 | `/etc/resolv.conf` 仍归 NM（openresolv），写 127.0.0.1 | ephemeral root 由 NM 原生管理；不新增 resolv.conf owner | NM 不知道 53 现在是 SmartDNS，但语义不变 |
+| D3 | DNS 模式由用户显式选择，持久化在 `/var/lib/guixcfg-dns/mode` | 不做连接类型自动推断；选择即事实 | fixed 选在 DHCP 网络时本地名字不可用 |
+| D4 | fixed 只允许 AliDNS IP DoH；dhcp 只允许 NM dnsmasq | 两模式严格二选一；固定模式不泄漏 DHCP DNS | fixed 模式无 DHCP fallback |
+| D5 | 不维护本地域名列表、无 `nameserver-policy`、无 fallback | 避免 SmartDNS 旧式复杂状态机；行为可预测 | fixed 模式本地名字不解析 |
+| D6 | `ipv6: false`：TUN 不捕获 v6 | 机场节点 v4-only；v6 经节点不可达 | v6 直连绕过 Mihomo |
+| D7 | 订阅刷新直连（provider `proxy: DIRECT`） | 节点全挂时订阅仍可刷新 | 宿主直连不稳时刷新失败 |
+| D8 | TUN 是唯一流量入口；无 mixed-port 系统代理 | 单入口可审计 | TUN off = 无代理直连态 |
+| D9 | 节点选择是运行时偏好，持久化于 `/var/lib/clash` | 节点健康随网络变化 | repo 不 pin 节点 |
+| D10 | SmartDNS 与 dnsmasq 的上游以 UID 984/985 排除出 TUN | 切断 DNS → TUN 递归；DoH 不依赖 Mihomo | 依赖 sing-tun `exclude-uid` |
+| D11 | 没有自定义 DNS CLI；面板写 mode 文件，root applier 执行 | 不引入 setuid/sudo/socket；只有 mode 一个可写输入 | 面板依赖文件权限 |
+| D12 | 订阅密文与引用者同置，ordinary domain | secret taxonomy | 解密失败不阻塞登录 |
+| D13 | 配置合成 fail-closed；providers/groups/两个 UID 占位符各一次 | 坏输入必须失败 | materializer 失败 → Mihomo 起不来 |
+| D14 | `/var/lib/clash` 整体 machine-state 持久化 | provider cache + selected node 都需跨 boot | 单目录 bind |
+| D15 | controller loopback-only、无 secret | 单用户本机控制面 | 需要本机 shell |
 
 ---
 
-## 3. 具体实现方式
+## 3. DNS 控制面
 
-### 3.1 DNS 层
+```text
+Noctalia Network Layer DNS card
+  ↓ 直接写 /var/lib/guixcfg-dns/mode（fixed|dhcp）
+root guixcfg-dns-mode applier
+  ├─ 校验 fixed/dhcp
+  ├─ 原子切换 /run/guixcfg-dns/smartdns.conf
+  ├─ herd restart smartdns
+  └─ 写 /run/guixcfg-dns/applied、status
+```
 
-| 组件 | 位置 | 实现要点 |
+- 无 NM dispatcher、无自动连接分类、无自定义 CLI。
+- 模式持久化：`/persist/system/state/guixcfg-dns` bind →
+  `/var/lib/guixcfg-dns`。
+- 文件缺失默认 fixed；非法值忽略。
+- 模式切换不自动回退。
+
+### 组件
+
+| 组件 | 位置 | 职责 |
 |---|---|---|
-| NM dns backend | `modules/guixcfg/hosts/vm.scm`、`modules/guixcfg/hosts/lenovo-legion-y7000p.scm` | `(dns "dnsmasq")` + `(dnsmasq-configuration-files (nm-dnsmasq-dnsmasq-configuration-files))` |
-| 专用账号/配置 | `modules/guixcfg/system/dns/nm-dnsmasq.scm` | 系统账号 `nm-dnsmasq`（显式 UID/GID 985）、`00-nm-dnsmasq-user.conf`（`user=`）、`10-listen-port.conf`（`port=15353`）、`account-service-type` 贡献 |
-| 应用 DNS 入口 | `modules/guixcfg/system/mihomo/template.yaml` | `listen: 127.0.0.1:53`；`redir-host`；AliDNS IP DoH `https://223.5.5.5/dns-query`/`https://223.6.6.6/dns-query`；`fallback`/`direct-nameserver` = `127.0.0.1:15353`；`fallback-lazy-query: true`；`fallback-filter.geoip-code: LAN` |
-| 递归切断 | 同上（`tun.exclude-uid`）+ 上表账号 | 模板 `@@MIHOMO_NM_DNSMASQ_UID@@` 由 `modules/guixcfg/system/mihomo/config.scm` 注入同一 UID |
+| SmartDNS | `modules/guixcfg/system/dns/smartdns.scm` | resolver、两份静态配置、mode applier、账号/UID |
+| NM dnsmasq | `modules/guixcfg/system/dns/nm-dnsmasq.scm` | DHCP DNS source，15353，UID 985 |
+| DNS mode state | `/var/lib/guixcfg-dns/mode` | 唯一 desired state |
+| Route/applied/status | `/run/guixcfg-dns/` | 运行时反馈 |
+| `/etc/resolv.conf` | NetworkManager | `nameserver 127.0.0.1` |
+| Mihomo | `modules/guixcfg/system/mihomo` | TUN/规则/代理；DNS 关闭 |
 
-### 3.2 代理层
+---
 
-| 组件 | 位置 | 实现要点 |
+## 4. 代理层
+
+| 组件 | 位置 | 要点 |
 |---|---|---|
-| 模板 | `modules/guixcfg/system/mihomo/template.yaml` | TUN（mixed stack、auto-route/auto-redirect/auto-detect-interface、`dns-hijack: any:53` + `tcp://any:53`、`exclude-uid`）、`ipv6: false`；`dns` 段：`listen: 127.0.0.1:53`、`redir-host`、AliDNS IP DoH `nameserver`、`fallback`/`direct-nameserver` = `127.0.0.1:15353`、`fallback-lazy-query`、`fallback-filter.geoip-code: LAN`、`proxy-server-nameserver`、IP `default-nameserver`；`sniffer`；规则 = 私网/loopback/ULA DIRECT + `cn-ip` CIDR DIRECT + Loyalsoldier proxy/direct 规则集 + `MATCH,PROXY`；provider/groups 由 `%mihomo-sources` 生成（`@@MIHOMO_PROXY_PROVIDERS@@` / `@@MIHOMO_PROXY_GROUPS@@`），UID 为 `@@MIHOMO_NM_DNSMASQ_UID@@`，三者各恰好一次 |
-| 配置合成 | `modules/guixcfg/system/mihomo/config.scm` | `compose-mihomo-config`：模板 + 各源 age 明文 + UID；按 `(name kind value)` 生成每源 `provider-<name>` 与 `<name>` select 组、顶层 `PROXY`；尾 LF/CRLF 规整、严格双引号转义、NUL/CR 拒绝、placeholder 唯一性 fail-closed（D13） |
-| 服务装配 | `modules/guixcfg/system/mihomo/service.scm` | `%mihomo-data-directory`（`/var/lib/clash`）、`mihomo-config-program`（物化器，one-shot `mihomo-config-ready`）、daemon `mihomo -d /var/lib/clash -f /run/mihomo/config.yaml`（requirement：loopback/networking/config-ready）、`mihomo-activation`、clash 系统账户、`%mihomo-secrets`（ordinary secret-decl） |
-| 机器状态 | `modules/guixcfg/system/mihomo/service.scm` + `modules/guixcfg/system/machine-state-persistence.scm` | `%mihomo-data-persistence-rule`：`/persist/system/state/mihomo/clash` → bind → `/var/lib/clash`（整个 `-d`） |
-| Secret 链 | `modules/guixcfg/system/mihomo/secrets/*.age` | 每源一份真实密文（单 URL 或单 provider YAML 内容）；age stable identity（`/persist/system/keys/age/identity`）→ ordinary 域 deploy → `/run/guixcfg-secrets-ordinary/system/<target-name>`（0600）→ 物化器逐个读取并生成多源配置；明文不进 git/store |
-| 文件订阅源 | `/var/lib/clash/subscriptions/` | file 源 age 明文是 provider YAML；materializer 原子写到 `<name>.yaml`（0600，目录 0700）；文件必须是 provider 格式 |
+| 模板 | `mihomo/template.yaml` | 无 `dns` 段；TUN mixed stack、auto-route/redirect、exclude UID 984/985；sniffer；规则 |
+| 配置合成 | `mihomo/config.scm` | 四个占位符各一次；两个 UID 同时注入；严格转义/fail-closed |
+| 服务 | `mihomo/service.scm` | materializer one-shot + daemon；-d `/var/lib/clash`、-f `/run/mihomo/config.yaml` |
+| 持久化 | `%mihomo-data-persistence-rule` | `/persist/system/state/mihomo/clash` → `/var/lib/clash` |
+| Secret | `mihomo/secrets/*.age` + sources | 每源一个 age；ordinary deploy |
 
-### 3.3 运行时产物与生命周期
+### 流量
 
-| 产物 | 生命周期 |
+| 流量 | 路径 |
 |---|---|
-| `/run/mihomo/config.yaml`（0700） | 物化器合成；**每次 `herd restart mihomo` 会连带重跑 one-shot 物化器重新生成**（requirement 重跑语义）——手工改它会被覆盖，热改要走 `PUT /configs`（§8） |
-| `/run/guixcfg-secrets-ordinary/system/…` | secrets deploy 产物；reconfigure/重启时重建 |
-| `/var/lib/clash/`（providers cache、节点选择缓存） | machine-state 持久化 |
-| `/etc/resolv.conf` | NetworkManager 经 openresolv 运行时写入；ephemeral root 中每次 boot 重建 |
-| nscd db | 运行时可重建；会缓存污染答案（§8 清法） |
-
-### 3.4 测试锁定（tests/）
-
-- `tests/test-nm-dnsmasq.scm` N1-N6：NM `dns=dnsmasq`、专用账号配置内容 + 15353 端口、账号/组显式稳定 UID/GID、无 SmartDNS 残留、无 standalone dnsmasq、host 装配引用；
-- `tests/test-mihomo.scm` M7/M8/M11/M12：模板占位符/DNS/controller 静态契约、service graph、machine-state rule。订阅源建模、provider/group 组合不写字符串断言——由 `blue build-os` 与实际 `mihomo -t` 验证，避免把订阅名/节点名/用户路径写死在测试里。
+| 应用 DNS | app → 127.0.0.1:53 → SmartDNS |
+| fixed DNS | SmartDNS → AliDNS IP DoH |
+| dhcp DNS | SmartDNS → dnsmasq:15353 → DHCP DNS |
+| 应用 TCP/UDP | TUN → 规则 → DIRECT/PROXY |
+| DIRECT 解析 | SmartDNS；不需要 Mihomo DNS |
+| 代理节点域名 | SmartDNS（Noctalia/host resolver） |
+| 订阅刷新 | Mihomo DIRECT |
+| loopback/私网 | 规则 DIRECT |
 
 ---
 
-## 4. 实测流量路径
+## 5. 失败矩阵
 
-| 流量 | 路径（TUN on/off 相同） | 验证 |
+| 故障 | DNS | 业务流量 |
 |---|---|---|
-| 应用 DNS（固定优先） | app → nscd → mihomo(127.0.0.1:53) → AliDNS IP DoH 223.5.5.5/223.6.6.6 | 公网域名解析；mihomo 日志有上游记录 |
-| 应用 DNS（回退） | mihomo → NXDOMAIN/失败/私网 IP → dnsmasq(127.0.0.1:15353) → DHCP DNS | 校园域 / captive portal / 内网 FQDN |
-| 应用 DNS（双失败） | mihomo 返回 SERVFAIL/NXDOMAIN | 不再无限回退；应用看到正常失败 |
-| DIRECT 解析 | mihomo → `direct-nameserver: 127.0.0.1:15353` → dnsmasq → DHCP DNS | loopback，不进 TUN |
-| 代理节点解析 | mihomo → `proxy-server-nameserver` DoH | DoH 域名经 `default-nameserver` IP bootstrap |
-| dnsmasq 上游 | dnsmasq（UID 985）→ DHCP DNS，**绕过 TUN** | sing-tun `meta skuid` 排除（D10） |
-| 应用 HTTPS | app → TUN → 规则 → 节点 | github/bordeaux/ci.guix/codeberg 全 200 |
-| 订阅刷新 | mihomo → DIRECT（宿主直连）→ 订阅端点 | `updatedAt` 更新、无 EOF |
-| 节点健康检查 | 节点 → gstatic generate_204（lazy） | 全节点延迟可查 |
-| 本地流量 | loopback/私网规则 DIRECT | 不经过任何外部 |
+| Mihomo 崩溃 | SmartDNS 继续工作 | TUN 消失，直连/失败；DNS 不受影响 |
+| SmartDNS 崩溃 | 失败；Shepherd respawn | 已建立连接不受影响；新解析失败 |
+| fixed DoH 不可达 | 失败；不回退 DHCP | 新域名连接失败 |
+| dhcp DNS 不可达 | 失败；不回退 DoH | 新域名连接失败 |
+| mode 文件非法 | 保持已应用模式 | 无额外影响 |
+| mode 切换失败 | applied 不更新，status=error | 旧模式继续 |
+| TUN on | SmartDNS 独立 | 业务经代理；DNS 走 UID 排除 |
+| TUN off | SmartDNS 独立 | 业务直连 |
 
 ---
 
-## 5. v6 语义（D6 展开）
-
-- **解析**：AAAA 照常解析；resolver 入口是 v4 loopback（mihomo DNS 监听 127.0.0.1:53）。
-- **代理**：永不——mihomo 不捕获 v6（`ipv6: false`），v6 流量不进入规则引擎、不受代理策略约束。
-- **连接**：设备上行决定——VM（SLIRP 无全局 v6）v6-only 不可达、快速失败；笔记本原生 v6 直连（绕过代理 = 知情接受的泄露面）。
-- **模板中的 `IP-CIDR6,fc00::/7 等 → DIRECT`**：当前不生效的防御性规则。
-
----
-
-## 6. 降级矩阵
-
-| 模式 | DNS | 应用流量 | 订阅刷新 | 结论 |
-|---|---|---|---|---|
-| TUN on + 节点活 | ✓ AliDNS IP DoH 优先；失败回退 DHCP | 经节点 | ✓ 直连（proxy: DIRECT） | 全功能 |
-| TUN on + 节点死 | ✓ AliDNS 失败 → fallback dnsmasq→DHCP；校园域/门户仍通 | ✗ | ✓ 直连（刷新不依赖节点） | 换活节点恢复业务流量 |
-| TUN off + 宿主干净 | ✓ 仍先 AliDNS；不可用时回退 DHCP | ✓ 直连（无代理） | ✓ 直连 | 退化为普通直连机器；LAN 靠 fallback |
-| 两边 DNS 都失败 | ✗ mihomo 返回 SERVFAIL/NXDOMAIN | 部分失败 | — | 正常失败，不无限回退 |
-
-要点：TUN 只切业务流量，不再切 DNS；TUN off 不是“断网”，而是
-“无代理的直连态”，DNS 仍按固定 AliDNS 优先 + DHCP fallback 工作。
-
----
-
-## 8. 运维手册（VM 实测校准）
+## 6. 运维
 
 | 操作 | 方法 |
 |---|---|
-| 换节点 | `PUT http://127.0.0.1:9090/proxies/PROXY {"name":"…"}`；选择持久化于 `/var/lib/clash` |
-| 全节点健康检查 | `GET /group/PROXY/delay?url=…&timeout=5000` |
-| 手动刷订阅 | `PUT http://127.0.0.1:9090/providers/proxies/<name>`（文件源跳过） |
-| 热改运行配置 | 改 `/run/mihomo/config.yaml` 后 **copy 到 `/var/lib/clash/config.yaml` 再 `PUT /configs {"path":"/var/lib/clash/config.yaml"}`**（SAFE_PATHS 只允许 `-d` 目录）。**不要 `herd restart mihomo`**——它会重跑物化器覆盖手工改动 |
-| 清 DNS 缓存 | `herd restart mihomo`（清 mihomo 缓存）；nscd：`herd stop nscd` → `rm /var/db/nscd/hosts` → `herd start nscd` |
-| 查 DNS owner | `ss -lntup | grep -E ':53|:15353'`：mihomo 应在 127.0.0.1:53，dnsmasq 应在 127.0.0.1:15353；`ps -o user,pid,args -C dnsmasq`（用户应为 `nm-dnsmasq`） |
+| 切换 DNS 模式 | Noctalia Network Layer → DNS 卡片 |
+| 查看期望/已应用模式 | `cat /var/lib/guixcfg-dns/mode /run/guixcfg-dns/applied` |
+| 查看切换错误 | `cat /run/guixcfg-dns/status` |
+| 查 DNS owner | `ss -lntup | grep -E ':53|:15353'`（SmartDNS / dnsmasq） |
+| 查 SmartDNS 日志 | `/var/log/smartdns.log` |
+| 查 mode applier 日志 | `/var/log/guixcfg-dns-mode.log` |
+| 换节点 | `PUT /proxies/PROXY`；持久化在 `/var/lib/clash` |
+| 刷订阅 | `PUT /providers/proxies/<name>` |
+| 清 DNS 缓存 | restart smartdns / restart mihomo（视缓存 owner） |
 
 ---
 
-## 9. 跨文件索引
+## 7. 测试
 
-- `dns.md`：DNS ownership 分文件（目标链、递归切断、D1-D3/D10/D16 细节）；
-- `mihomo.md`：代理分文件（D4-D9、D13-D15 细节）；
-- `secrets.md`：age secret 机制与订阅 secret 链（D12）；
-- `machine-state.md`：mihomo 数据目录持久化机制（D14）。
+- `tests/test-smartdns.scm`：配置互斥、UID、mode persistence、
+  Shepherd 图、mode applier 真实 `--check`。
+- `tests/test-nm-dnsmasq.scm`：NM dns=dnsmasq、15353、UID 985、
+  SmartDNS 服务存在、无 standalone dnsmasq。
+- `tests/test-mihomo.scm`：模板无 DNS/hijack、四个占位符、
+  两个 UID 的 materializer 替换、服务图、machine-state。
+- `tests/test-machine-state-persistence.scm`：通用机制。
+
+测试不依赖公网实际 DNS 或 DHCP 地址，只验证机制与 ownership。

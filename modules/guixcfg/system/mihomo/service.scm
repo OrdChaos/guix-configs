@@ -49,6 +49,7 @@
   #:use-module (guixcfg system mihomo config)
   #:use-module (guixcfg system mihomo sources)
   #:use-module (guixcfg system dns nm-dnsmasq) ;%nm-dnsmasq-uid（exclude-uid）
+  #:use-module (guixcfg system dns smartdns) ;%smartdns-uid（exclude-uid）
   #:use-module (guixcfg security secrets) ;secret-decl（per-source secrets）
   #:use-module (guixcfg system machine-state-persistence) ;%machine-state-root
   #:export (%mihomo-data-directory %mihomo-log-file
@@ -210,7 +211,8 @@ shell；源明文绝不进 argv/environment/日志（成功日志只报路径）
                                                       (let ((config (compose-mihomo-config
                                                                      template
                                                                      sources
-                                                                     #$%nm-dnsmasq-uid)))
+                                                                     #$%nm-dnsmasq-uid
+                                                                     #$%smartdns-uid)))
                                                         (unless (file-exists?
                                                                  %mihomo-runtime-dir)
                                                           (mkdir

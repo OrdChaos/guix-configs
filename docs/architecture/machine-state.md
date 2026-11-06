@@ -129,6 +129,10 @@ pinned Guix 的 NetworkManager activation 也会 `mkdir-p` 同一 consumer，
   dbus-uuidgen --ensure 执行（host 组装置 services 列表末尾，
   test-machine-identity.scm 断言时序）。详见
   docs/architecture/persistence.md（Machine identity）。
+- **guixcfg-dns**（system/dns/smartdns.scm）：DNS 模式选择，
+  `/persist/system/state/guixcfg-dns` → `/var/lib/guixcfg-dns`。
+  `mode` 是唯一的用户可写 desired state（0666；root applier 校验）；
+  `applied` / `status` 在 `/run/guixcfg-dns`，不持久化。
 - **mihomo**（system/mihomo/service.scm）：providers cache + 选中
   节点/组状态，root-owned（0700，mihomo activation 强制）。
 - **guix-root-cache**（system/guix-cache.scm，2026-10-04）：

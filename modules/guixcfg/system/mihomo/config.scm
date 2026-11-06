@@ -28,6 +28,7 @@
   #:export (%mihomo-proxy-providers-placeholder
             %mihomo-proxy-groups-placeholder
             %mihomo-nm-dnsmasq-uid-placeholder
+            %mihomo-smartdns-uid-placeholder
             %mihomo-runtime-dir
             %mihomo-runtime-config-path
             %mihomo-data-directory
@@ -44,6 +45,10 @@
 ;; NetworkManager dnsmasq 的稳定 UID 占位符。
 (define %mihomo-nm-dnsmasq-uid-placeholder
   "@@MIHOMO_NM_DNSMASQ_UID@@")
+
+;; SmartDNS 的稳定 UID 占位符。
+(define %mihomo-smartdns-uid-placeholder
+  "@@MIHOMO_SMARTDNS_UID@@")
 
 (define %mihomo-runtime-dir
   "/run/mihomo")
@@ -217,21 +222,35 @@ provider-<name>，避免同名组被 provider 遮蔽。"
     (apply string-append (append source-groups (list top)))))
 
 (define* (compose-mihomo-config template sources
-                                #:optional (nm-dnsmasq-uid #f))
+                                #:optional (nm-dnsmasq-uid #f)
+                                (smartdns-uid #f))
   "TEMPLATE（公开模板，含恰好一次 providers/groups 占位符）+
 SOURCES（((name kind value) ...)，kind 为 \"http\"/\"file\"）→ 完整
-runtime config 文本。可选 NM-DNSMASQ-UID（整数）启用 `tun.exclude-uid`
-占位符替换。违反契约时 (throw 'mihomo-config-error MESSAGE) fail closed；
-不打印、不返回值之外地暴露源值。"
-  (let* ((template* (if nm-dnsmasq-uid
-                        (begin
-                          (unless (= (count-substring template
-                                      %mihomo-nm-dnsmasq-uid-placeholder) 1)
-                            (config-error
-                             "nm-dnsmasq uid placeholder must appear exactly once"))
-                          (string-replace-substring template
-                           %mihomo-nm-dnsmasq-uid-placeholder
-                           (number->string nm-dnsmasq-uid))) template))
+runtime config 文本。可选 NM-DNSMASQ-UID / SMARTDNS-UID（整数）
+启用两个 `tun.exclude-uid` 占位符替换；只给一个视为错误。违反契约时
+(throw 'mihomo-config-error MESSAGE) fail closed；不打印、不返回值
+之外地暴露源值。"
+  (let* ((template*
+          (cond
+            ((and nm-dnsmasq-uid smartdns-uid)
+             (for-each (lambda (placeholder name)
+                         (unless (= (count-substring template placeholder) 1)
+                           (config-error
+                            (string-append name
+                                           " uid placeholder must appear exactly once"))))
+                       (list %mihomo-nm-dnsmasq-uid-placeholder
+                             %mihomo-smartdns-uid-placeholder)
+                       '("nm-dnsmasq" "smartdns"))
+             (string-replace-substring
+              (string-replace-substring template
+                                        %mihomo-nm-dnsmasq-uid-placeholder
+                                        (number->string nm-dnsmasq-uid))
+              %mihomo-smartdns-uid-placeholder
+              (number->string smartdns-uid)))
+            ((or nm-dnsmasq-uid smartdns-uid)
+             (config-error
+              "both nm-dnsmasq and smartdns uids must be provided"))
+            (else template)))
          (sources* (normalize-sources sources)))
     (unless (= (count-substring template* %mihomo-proxy-providers-placeholder) 1)
       (config-error "proxy-providers placeholder must appear exactly once"))

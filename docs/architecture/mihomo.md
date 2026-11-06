@@ -18,8 +18,9 @@ Guix / Shepherd
        └── Clash external-controller（127.0.0.1:9090，secret 置空）
 
 系统 DNS（docs/architecture/dns.md）
-  └── /etc/resolv.conf（NM 经 openresolv 写 127.0.0.1:53）→ mihomo DNS
-      固定 AliDNS IP DoH（223.5.5.5 / 223.6.6.6）优先，失败/NXDOMAIN 回退 dnsmasq:15353 → DHCP DNS
+  └── SmartDNS 独占 127.0.0.1:53（独立于 Mihomo）
+      fixed → AliDNS IP DoH；dhcp → NM dnsmasq:15353 → DHCP DNS
+      Mihomo 不监听 53、不解析 DNS、不劫持 DNS
 
 Noctalia Mihomo Control
   └── 仅经 Clash REST API 控制运行中的 Mihomo
@@ -203,48 +204,38 @@ controller 可读取配置的安全路径。
 
 ## DNS ownership 与边界
 
-- **mihomo 是应用 DNS 的唯一入口**：`dns.enable`，监听
-  `127.0.0.1:53`；`enhanced-mode: redir-host`（不用 fake-ip）。
-  固定上游是阿里云 AliDNS 的 IP DoH 端点
-  （`https://223.5.5.5/dns-query` / `https://223.6.6.6/dns-query`）；主上游
-  失败、NXDOMAIN 或返回 LAN IP 时，`fallback` 查
-  `127.0.0.1:15353`（NetworkManager dnsmasq → 当前 DHCP DNS）。
-  两边都失败则由 DNS 协议正常返回失败；
-- **NetworkManager dnsmasq 退到 15353**：仍由 NM 管理、仍拿当前
-  DHCP DNS；`fallback` 和 `direct-nameserver` 都指向这个独立端口，
-  避免 `system` 指回 mihomo 的递归；
-- **递归切断**：dnsmasq 以专用系统账号 `nm-dnsmasq`（稳定 UID 985）
-  运行，`tun.exclude-uid` 排除该 UID（sing-tun 在 Linux 以
-  `meta skuid`/owner 规则使其上游 DHCP DNS 查询不进入 TUN）。UID 由
-  `(guixcfg system dns nm-dnsmasq)` 单一拥有，模板经
-  `@@MIHOMO_NM_DNSMASQ_UID@@` 注入；
-- **TUN on/off 同一 DNS 链**：TUN 只决定业务流量是否进入 mihomo；
-  DNS 始终先 AliDNS、再 DHCP 回退。`/etc/resolv.conf` 始终由 NM 写
-  `127.0.0.1`（mihomo:53）；
+- **Mihomo 不再拥有 DNS**：模板没有 `dns:` 段，不监听 53，不做
+  `dns-hijack`。应用 resolver 是独立的 SmartDNS（见 `dns.md`）；
+- **SmartDNS** 绑定 127.0.0.1:53，fixed 模式只查 AliDNS IP DoH，
+  dhcp 模式只查 NetworkManager dnsmasq (:15353)。模式由用户在
+  Noctalia 面板显式选择，持久化在 `/var/lib/guixcfg-dns/mode`；
+- **NetworkManager dnsmasq** 仍是当前 DHCP DNS 的 source；它不参与
+  fixed 模式，没有跨模式 fallback；
+- **递归切断**：SmartDNS（UID 984）与 dnsmasq（UID 985）均在
+  `tun.exclude-uid` 中；sing-tun 以 `meta skuid`/owner 规则使它们的
+  上游查询不进入 TUN；
+- **TUN on/off**：只决定业务流量是否经过 mihomo；DNS 始终由 SmartDNS
+  处理，不随 TUN 切换；
 - `ipv6: false`：机场节点全是 v4，TUN 捕获的 v6 流量经节点无法到达
-  目标 v6 地址（节点自身无 v6，VM 实测 bordeaux/github AAAA 秒断）；
-  关闭后系统 v6 走原生路径绕过 Mihomo（v4-only 机场的取舍）；
+  目标 v6 地址；关闭后系统 v6 走原生路径绕过 Mihomo；
 - 不做 Mihomo self-update（binary 归 Guix）；
 - 不引入 geosite/geoip 规则系统（规则集为最小基础集 + sniffer）；
-- **已知取舍**：所有 DNS 先走 AliDNS IP DoH，内网名字会先得到
-  NXDOMAIN 再回退 DHCP；这换来零域名列表和跨 Wi-Fi/有线一致性。
-  DoH 直连、不经代理，固定 IP 端点避免域名 bootstrap。
+- **已知取舍**：Mihomo 关闭后，TUN 规则和流量代理消失，但 DNS 不再
+  随之失败；域名规则依赖 sniffer，IP CIDR 规则基于 SmartDNS 返回的
+  真实地址。
 
 ## 配置模板契约
 
 `modules/guixcfg/system/mihomo/template.yaml`（public authority）：
 
-- 占位符 `@@MIHOMO_PROXY_PROVIDERS@@`、`@@MIHOMO_PROXY_GROUPS@@` 与
-  `@@MIHOMO_NM_DNSMASQ_UID@@` 各恰好一次，模板不可直接运行；前两者由
-  `%mihomo-sources` 生成，UID 由 `(guixcfg system dns nm-dnsmasq)` 的
-  `%nm-dnsmasq-uid` 注入；
-- `dns`：`listen: 127.0.0.1:53`、`redir-host`、固定 AliDNS
-  `nameserver`（`https://223.5.5.5/dns-query` /
-  `https://223.6.6.6/dns-query`）、`fallback` / `direct-nameserver` =
-  `127.0.0.1:15353`、`fallback-lazy-query: true`、
-  `fallback-filter.geoip-code: LAN`、IP `default-nameserver`；
+- 占位符 `@@MIHOMO_PROXY_PROVIDERS@@`、`@@MIHOMO_PROXY_GROUPS@@`、
+  `@@MIHOMO_NM_DNSMASQ_UID@@`、`@@MIHOMO_SMARTDNS_UID@@` 各恰好
+  一次，模板不可直接运行；前两者由 `%mihomo-sources` 生成，UID 由
+  `(guixcfg system dns nm-dnsmasq)` / `(guixcfg system dns smartdns)`
+  注入；
+- **没有 `dns` 段**；resolver 不在 mihomo 内；
 - `tun`：mixed stack、auto-route/auto-redirect/auto-detect-interface、
-  `dns-hijack: any:53` + `tcp://any:53`、`exclude-uid`（nm-dnsmasq）；
+  `exclude-uid`（nm-dnsmasq + smartdns）；
 - `sniffer`：TLS/HTTP/QUIC 端口（DOMAIN/GEOSITE 分流前提）；
 - provider/groups：由 `%mihomo-sources` 生成；每个源一个 provider 与
   `<name>` select 组，顶层 `PROXY` select 汇聚所有源 + `DIRECT`。
@@ -252,12 +243,3 @@ controller 可读取配置的安全路径。
   `type: file`，materializer 生成的路径在 `-d` 下；
 - 规则：私网/loopback/ULA → DIRECT；`cn-ip`
   （Loyalsoldier geoip 的 `cn.txt`，覆盖 47.96.0.0/11 等阿里云段）
-  → DIRECT（游戏服务器等无域名目标不落到 MATCH）；Loyalsoldier
-  `proxy` 规则集 → PROXY；Loyalsoldier `direct` 规则集 → DIRECT；
-  其余 → PROXY。rule-providers 每天更新（86400s），缓存放在 `-d`
-  根目录；
-- secret 的 target-name 契约：每个源一个，默认
-  `mihomo-source-<name>.url|.file`；运行期路径由
-  `runtime-secret-target` 从 `%mihomo-sources` 声明派生，materializer
-  逐个读取；decl 由 `(guixcfg system mihomo service)` 的
-  `%mihomo-secrets` 声明）。

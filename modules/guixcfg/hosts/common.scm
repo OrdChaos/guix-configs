@@ -56,6 +56,7 @@
   #:use-module (guixcfg system mount-metadata) ;gvfs-mount-metadata-service
   #:use-module (guixcfg system mihomo service) ;mihomo-service（透明代理）
   #:use-module (guixcfg system dns nm-dnsmasq) ;NetworkManager dnsmasq 专用账号
+  #:use-module (guixcfg system dns smartdns) ;SmartDNS resolver + mode applier
   #:use-module (guixcfg system machine-state-persistence) ;machine-state bind（mihomo providers）
   #:use-module (guixcfg system machine-identity) ;/etc/machine-id 持久化（先于 D-Bus activation）
   #:use-module (guixcfg system noctalia-greeter) ;noctalia-greeter machine-state bind + 系统集成
@@ -104,6 +105,7 @@ SEED-SELECTIONS 透传给 application rules（决定 seed 变体）。"
 ;; state binds belong to the shared base OS rather than each host assembly.
 (define %common-machine-state-file-systems
   (machine-state-persistence-file-systems (list %mihomo-data-persistence-rule
+                                           %smartdns-mode-persistence-rule
                                            %noctalia-greeter-persistence-rule
                                            %guix-root-cache-persistence-rule)))
 
@@ -151,6 +153,8 @@ SEED-SELECTIONS 透传给 application rules（决定 seed 变体）。"
                         ;; GVfs 桌面 metadata（x-gvfs-hide/x-gvfs-trash → utab）。
                         (gvfs-mount-metadata-service
                          persistent-mount-file-systems)
+                        ;; SmartDNS 是应用 resolver；与 mihomo 完全解耦。
+                        (smartdns-service)
                         ;; Mihomo 系统透明代理（docs/architecture/mihomo.md）。
                         (mihomo-service)))
           ;; 无状态根的用户态服务：登录确认 + 旧 generation 清理。

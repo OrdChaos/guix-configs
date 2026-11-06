@@ -1,119 +1,184 @@
-# System DNS ownership（mihomo + NetworkManager dnsmasq）
+# System DNS ownership（SmartDNS + NetworkManager dnsmasq）
 
-> 全链路横切总结（与 mihomo 的协作语义、设计决策表、降级矩阵、
-> 运维手册）见 `network.md`；本文件只讲 DNS 分领域细节。
+> 全链路横切总结见 `network.md`；Mihomo 的流量/TUN 细节见
+> `mihomo.md`。本文件只讲 DNS ownership、模式选择与 resolver 语义。
 
 ## 目标链
 
-应用 DNS 只有一个入口：mihomo 的 loopback DNS。
+应用 DNS 只有一个入口：独立于 Mihomo 的 SmartDNS。
 
-```
+```text
 Applications
     ↓
-/etc/resolv.conf（NetworkManager 经 openresolv 写入 nameserver 127.0.0.1）
+/etc/resolv.conf（NetworkManager 写 nameserver 127.0.0.1）
     ↓
-mihomo DNS（127.0.0.1:53）
-    ├─ 固定 AliDNS IP DoH（223.5.5.5 / 223.6.6.6）
-    ├─ 连接失败 / NXDOMAIN / 空答案 / 私网 IP
-    │      ↓
-    │  127.0.0.1:15353（NetworkManager dnsmasq → 当前 DHCP DNS）
-    └─ 两边都失败 → 正常返回失败（SERVFAIL/NXDOMAIN）
+SmartDNS（127.0.0.1:53）
+    ├─ fixed 模式：只查 AliDNS IP DoH
+    └─ dhcp  模式：只查 127.0.0.1:15353
+                       ↓
+                 NetworkManager dnsmasq
+                       ↓
+                 当前 DHCP DNS
 ```
 
-- TUN on/off 都走这条链；TUN 只决定业务流量是否进入 mihomo。
-- 固定上游是**阿里云 AliDNS 的 IP DoH 端点**
-  （`https://223.5.5.5/dns-query`、`https://223.6.6.6/dns-query`），
-  直接 HTTPS 443；不使用 UDP/TCP 53（TUN 的 `dns-hijack` 会把 mihomo
-  自己的 53 查询劫回自身），也不经代理。
-- 不使用 fake-ip：`redir-host` 才能让“无解析”产生 fallback 信号；
-  fake-ip 会在本地直接生成假 IP，绕过上游失败判断。
-- 不维护域名列表：LAN 判断是 `fallback-filter.geoip-code: LAN`
-  的**地址分类**，不是 `nameserver-policy` 的域名白名单。
+- SmartDNS 不依赖 Mihomo。Mihomo 崩溃时 DNS 继续工作。
+- TUN on/off 不影响 resolver；TUN 只承载业务流量。
+- SmartDNS 和 dnsmasq 的上游都以稳定 UID 运行，并被
+  `tun.exclude-uid` 排除，避免 DNS → TUN 递归。
+- 不使用 fake-ip；Mihomo 不再做 DNS，SmartDNS 返回真实 IP。
+
+## 模式选择：手动、全局、持久
+
+DNS 模式不是按 NetworkManager 连接自动推断的。它由用户在
+Network Layer 面板的 DNS 卡片显式选择：
+
+```text
+Noctalia Network Layer
+    ↓ 写 /var/lib/guixcfg-dns/mode（fixed|dhcp）
+root mode applier
+    ↓ 切换 SmartDNS 配置 + 重启 SmartDNS
+```
+
+- `mode` 文件是唯一的 desired state。
+- `applied` 与 `status` 是 `/run` 下的运行时反馈。
+- 模式文件不通过自定义 CLI 修改；没有 `guixcfg-dns-mode` 命令。
+- 选择立即写入；root applier 监听文件变化并应用。
+- 重启/断电后模式保留。
+
+持久化与 Mihomo 当前节点选择同类：
+
+```text
+/var/lib/guixcfg-dns/mode
+    ↓ machine-state bind
+/persist/system/state/guixcfg-dns/mode
+```
+
+权限：
+
+```text
+/var/lib/guixcfg-dns/       root 0755
+/var/lib/guixcfg-dns/mode   root 0666（用户可写；root applier 读取）
+```
+
+默认值：文件不存在时为 `fixed`，优先保证不会泄漏到 DHCP DNS。
+
+## fixed 模式
+
+```text
+SmartDNS → AliDNS IP DoH
+```
+
+- 只配置 `server-https`。
+- 不出现 `127.0.0.1:15353`。
+- 没有 fallback、没有域名列表。
+- DoH 失败即失败；不会偷偷用 DHCP DNS。
+- 本地名字不解析；这是无域名列表模型的明确边界。
+
+## dhcp 模式
+
+```text
+SmartDNS → 127.0.0.1:15353 → NM dnsmasq → 当前 DHCP DNS
+```
+
+- 只配置 `server 127.0.0.1:15353`。
+- 不出现任何 DoH 上游。
+- 没有 fallback 到 DoH。
+- 本地名字由 DHCP DNS 自己回答；无域名列表。
+
+## 配置
+
+SmartDNS 固定绑定 loopback：
+
+```text
+bind 127.0.0.1:53
+bind-tcp 127.0.0.1:53
+user smartdns
+cache-size 4096
+speed-check-mode none
+```
+
+- fixed 只有 AliDNS IP DoH。
+- dhcp 只有 NM dnsmasq。
+- 两份配置是 store 内的静态文件；root applier 只切换
+  `/run/guixcfg-dns/smartdns.conf` 软链接。
+- 没有 `fallback`、`domain-rules`、`nameserver /domain/`。
 
 ## Ownership 分层
 
 | 层 | owner | 形态 |
 |---|---|---|
-| `NetworkManager` dns 配置 | `network-manager-configuration` 的 `(dns "dnsmasq")`（host 装配） | 生成 `/etc/NetworkManager/NetworkManager.conf` 的 `[main] dns=dnsmasq`；NM 自己 exec dnsmasq |
-| dnsmasq.d 配置 | `dnsmasq-configuration-files` 字段（host 装配）→ `(guixcfg system dns nm-dnsmasq)` | `file-union` 物化 `/etc/NetworkManager/dnsmasq.d/00-nm-dnsmasq-user.conf`（`user=nm-dnsmasq`）与 `10-listen-port.conf`（`port=15353`） |
-| dnsmasq 运行账号 | `(guixcfg system dns nm-dnsmasq)` | 专用系统账号 `nm-dnsmasq`（显式 UID/GID 985）；经 `account-service-type` 贡献（非 `users` 字段） |
-| `/etc/resolv.conf` | NetworkManager（rc-manager=resolvconf，编译期默认） | NM 经构建期烘焙的 openresolv 写入 `nameserver 127.0.0.1`；ephemeral root 中由 NM 运行时创建/拥有——**repo 不再声明** |
-| mihomo DNS | `(guixcfg system mihomo config)` 模板 | 监听 `127.0.0.1:53`；`redir-host`；固定 AliDNS `nameserver`；`fallback`/`direct-nameserver` 指向 `127.0.0.1:15353`；`dns-hijack: any:53` 仍保留给进入 TUN 的外部 DNS |
+| 应用 resolver | SmartDNS | `127.0.0.1:53`，UID 984 |
+| DHCP DNS source | NetworkManager dnsmasq | `127.0.0.1:15353`，UID 985 |
+| DHCP DNS | 当前连接 | 由 NM/dnsmasq 提供，不写死 |
+| 模式 desired state | 用户/面板 | `/var/lib/guixcfg-dns/mode` |
+| 模式执行 | root applier | 切换配置、重启 SmartDNS |
+| `/etc/resolv.conf` | NetworkManager | 写 `nameserver 127.0.0.1` |
+| TUN / 流量 | Mihomo | DNS 关闭，只做 TUN/规则/代理 |
+| DNS 控件 | Noctalia Network Layer | 两段模式选择器，无域名列表 |
 
-## 为什么 mihomo 占 53、dnsmasq 退到 15353
+## 递归切断与 UID
 
-mihomo 的 `fallback` 是“主上游无 IP 或失败时再查 fallback”；如果
-fallback 写 `system`，而系统 resolver 又指向 mihomo，就会形成
-`mihomo → system → mihomo` 的回路。因此 fallback 必须指向一个
-**独立的、不会回到 mihomo 的 DHCP DNS 入口**：
+```text
+SmartDNS UID 984   → TUN exclude
+nm-dnsmasq UID 985 → TUN exclude
+```
 
-- mihomo 独占 `127.0.0.1:53`，成为应用 DNS 的唯一入口；
-- NetworkManager dnsmasq 改听 `127.0.0.1:15353`（高位端口，避开
-  mDNS 的 5353），仍由 NM 提供当前 DHCP DNS；
-- mihomo 的 `fallback` 与 `direct-nameserver` 都指向
-  `127.0.0.1:15353`。
+- SmartDNS 的 DoH 不进入 TUN，因此不依赖 Mihomo。
+- dnsmasq 的 DHCP 上游不进入 TUN。
+- Mihomo 的 TUN 不再设置 `dns-hijack`。
 
-端口常量由 `(guixcfg system dns nm-dnsmasq)` 单一拥有
-（`%nm-dnsmasq-port`），mihomo 模板中的 `15353` 由
-`tests/test-nm-dnsmasq.scm` N2/N7 契约锁定。
+## 失败语义
 
-## 递归切断（关键不变量）
-
-TUN on 时 mihomo `auto-route` 把出站流量导进 TUN。dnsmasq 的上游
-DHCP DNS 查询若不排除，会进入 TUN → 被 `dns-hijack: any:53` 捕获 →
-mihomo DNS，形成递归。
-
-切断方式（mihomo 官方机制，非硬编码 IP）：
-
-- dnsmasq 以专用 UID `nm-dnsmasq`（985）运行（privilege drop）；
-- mihomo `tun.exclude-uid: [985]`——sing-tun 在 Linux 的
-  `auto-redirect`/`auto-route` nftables 规则中以 `meta skuid`（iptables
-  路径为 `-m owner --uid-owner`）对匹配 UID 直接 `return`，使 dnsmasq
-  的上游流量**不进入 TUN**。
-
-该机制与具体 DHCP DNS 地址、Wi-Fi/宿舍/热点/酒店无关，满足任意 DHCP
-网络；UID 由 `(guixcfg system dns nm-dnsmasq)` 单一拥有，mihomo 模板经
-`@@MIHOMO_NM_DNSMASQ_UID@@` 占位符注入同一值。
-
-## 决策记录
-
-- **SmartDNS 保持退役**：不引入额外 resolver 层；mihomo 的
-  `fallback` 已经覆盖“固定 AliDNS 优先、DHCP 兜底”，且不需要域名列表。
-- **固定 AliDNS IP DoH 作为唯一系统上游**：`223.5.5.5` /
-  `223.6.6.6` 的 DoH 端点（TLS 证书含 IP）直接查询；不使用 DoH
-  域名，也不需要额外 bootstrap。校园域 / captive portal 由 fallback
-  的 DHCP DNS 兜底。
-- **不用 fake-ip**：`redir-host` 保留真实 IP，TUN off 也能直连；
-  fallback 的触发条件是“无 IP/失败”，fake-ip 会绕过它。
-- **UID 必须显式固定**：ephemeral root 每 boot 重建 `/etc/passwd`，
-  动态系统账号会漂移；显式 UID 同时被 `(gnu build accounts)` 分配器
-  跳过，不会与其他系统账号冲突。
-- **不做探测/轮询/selector**：所有 DNS 都先走固定 AliDNS；失败由
-  mihomo 的 fallback 机制在请求内处理，不维护健康检查状态机。
-- **TUN off 也先走固定 AliDNS**：这是“固定上游优先”的直接结果；DHCP
-  DNS 只在 AliDNS 失败/无解析时使用。若需要 TUN off 完全回 DHCP，必须
-  额外的状态切换，不属于本设计。
-
-## 已知取舍
-
-- **内部域名会先被发往公共 AliDNS**：LAN 名字通常得到 NXDOMAIN，再
-  fallback 到 DHCP；存在首查延迟和内部名字泄漏。要避免只能维护域名
-  列表或本地域名规则（本设计明确不做）。
-- **AliDNS IP DoH 直连**：DoH 查询走 HTTPS 443，不经过代理；固定 IP
-  避免域名 bootstrap 依赖。TLS 证书校验由 mihomo 负责（AliDNS 的
-  证书包含 223.5.5.5/223.6.6.6）。
-- **所有 DNS 都依赖 mihomo 进程**：mihomo 停止时 53 无人监听，DNS
-  直接失败；这符合“两边都失败则正常失败”的语义。
-- **没有 fake-ip 的远端解析**：代理拿到的是真实 IP，不是域名；
-  anycast/CDN 场景可能不如 fake-ip 精确。
+| 故障 | 行为 |
+|---|---|
+| Mihomo 崩溃 | SmartDNS 继续解析；流量按 TUN 是否存活退化 |
+| SmartDNS 崩溃 | DNS 失败；Shepherd respawn；不自动换模式 |
+| fixed DoH 不可达 | DNS 失败；不回退 DHCP DNS |
+| dhcp DNS 不可达 | DNS 失败；不回退 DoH |
+| mode 文件非法 | root applier 忽略，保持已应用模式 |
+| mode 切换失败 | `status` 记录错误；`applied` 不更新 |
+| 面板无法写 mode 文件 | UI 显示错误；不假装成功 |
 
 ## 实施文件
 
-- `modules/guixcfg/system/dns/nm-dnsmasq.scm`（账号/组/UID/端口/conf）
-- `modules/guixcfg/hosts/vm.scm`、`modules/guixcfg/hosts/lenovo-legion-y7000p.scm`
-  （`(dns "dnsmasq")` + `dnsmasq-configuration-files`）
-- `modules/guixcfg/system/mihomo/template.yaml`（dns / redir-host /
-  AliDNS / fallback / fallback-filter / dns-hijack / exclude-uid）
-- `modules/guixcfg/system/mihomo/config.scm`（UID 占位符替换）
-- `tests/test-nm-dnsmasq.scm`（N1-N7）
-- `tests/test-mihomo.scm`（M7 DNS 契约）
+- `modules/guixcfg/system/dns/smartdns.scm`
+  - SmartDNS 账号/UID、两份配置、Shepherd 服务、mode applier、
+    activation、machine-state rule。
+- `modules/guixcfg/system/dns/nm-dnsmasq.scm`
+  - dnsmasq 仍是 DHCP DNS source；:15353、UID 985。
+- `modules/guixcfg/system/mihomo/template.yaml`
+  - 删除 DNS 段与 dns-hijack；TUN exclude 两个 UID。
+- `modules/guixcfg/system/mihomo/config.scm`
+  - 两个 UID placeholder；materializer 必须同时替换。
+- `modules/guixcfg/hosts/common.scm`
+  - SmartDNS service、mode persistence rule。
+- `custom-noctalia-plugins/network-layer`
+  - DNS 卡片、mode 文件写入/状态读取。
+
+## 验证
+
+静态/机制：
+
+- fixed 配置没有 15353；
+- dhcp 配置没有 DoH；
+- mode 文件是唯一 desired-state 输入；
+- mihomo 无 DNS/listen/hijack；
+- `exclude-uid` 同时包含 984/985；
+- mode applier 的 `--check` 真实可执行。
+
+运行时：
+
+- `ss`：SmartDNS 53、dnsmasq 15353、mihomo 不监听 53；
+- fixed：仅 DoH；无 15353 查询；
+- dhcp：仅 dnsmasq；无 DoH；
+- 面板切换后 `applied` 更新；
+- 重启后模式保持；
+- `herd stop mihomo` 后 DNS 仍可用。
+
+## 已知边界
+
+- fixed 模式下本地名字无法解析。
+- fixed 模式如果当前连接仍提供 DHCP search domain，应用可能把
+  短名字补全后发往 DoH；这是 `/etc/resolv.conf` 搜索域与 resolver
+  的边界，当前不通过域名列表或额外 resolv.conf 管理解决。
+- IPv6-only 连接没有独立模式判定；当前系统语义以 IPv4 为主。

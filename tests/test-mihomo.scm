@@ -14,6 +14,8 @@
              (gnu system shadow) ;user-group?
              (guixcfg system mihomo service)
              (guixcfg system mihomo config)
+             (guixcfg system dns nm-dnsmasq)
+             (guixcfg system dns smartdns)
              (guixcfg system machine-state-persistence) ;rule 校验
              (guixcfg hosts vm) ;%vm-os
              (ice-9 textual-ports)
@@ -41,56 +43,58 @@
 (test-begin "mihomo")
 
 ;; ── M7：模板静态契约 ────────────────────────────────────────
-(test-assert "M7: provider/group/UID placeholders appear exactly once"
-             (and (= (count-substring (template-text)
-                                      %mihomo-proxy-providers-placeholder) 1)
-                  (= (count-substring (template-text)
-                                      %mihomo-proxy-groups-placeholder) 1)
-                  (= (count-substring (template-text)
-                                      %mihomo-nm-dnsmasq-uid-placeholder) 1)))
+(test-assert "M7: provider/group and both resolver UID placeholders appear once"
+             (let ((text (template-text)))
+               (and (= (count-substring text
+                                        %mihomo-proxy-providers-placeholder) 1)
+                    (= (count-substring text
+                                        %mihomo-proxy-groups-placeholder) 1)
+                    (= (count-substring text
+                                        %mihomo-nm-dnsmasq-uid-placeholder) 1)
+                    (= (count-substring text
+                                        %mihomo-smartdns-uid-placeholder) 1))))
 (test-assert "M7: no source URL or legacy placeholder in public template"
              (let ((text (template-text)))
                (and (not (string-contains text "@@MIHOMO_SUBSCRIPTION_URL@@"))
                     (not (string-contains text "token=")))))
-(test-assert "M7: dns-hijack hijacks UDP+TCP 53"
+(test-assert "M7: mihomo no longer owns or hijacks DNS"
              (let ((text (template-text)))
-               (and (string-contains text "dns-hijack:")
-                    (string-contains text "- any:53")
-                    (string-contains text "- tcp://any:53"))))
-(test-assert "M7: mihomo DNS owns loopback port 53"
-             (let ((text (template-text)))
-               (and (string-contains text "listen: \"127.0.0.1:53\"")
-                    (not (string-contains text "listen: \"127.0.0.1:1053\"")))))
-(test-assert "M7: DNS uses redir-host, not fake-ip"
-             (let ((text (template-text)))
-               (and (string-contains text "enhanced-mode: redir-host")
-                    (not (string-contains text "enhanced-mode: fake-ip")))))
-(test-assert "M7: fixed upstream is AliDNS IP DoH"
-             (let ((text (template-text)))
-               (and (string-contains text
-                                     "nameserver:\n    - https://223.5.5.5/dns-query\n    - https://223.6.6.6/dns-query")
-                    (not (string-contains text "- 223.5.5.5\n    - 223.6.6.6"))
-                    (not (string-contains text "1.1.1.1/dns-query"))
-                    (not (string-contains text "8.8.8.8/dns-query")))))
-(test-assert "M7: DHCP fallback and direct DNS use NM dnsmasq :15353"
-             (let ((text (template-text)))
-               (and (string-contains text "fallback:\n    - 127.0.0.1:15353")
-                    (string-contains text
-                                     "direct-nameserver:\n    - 127.0.0.1:15353"))))
-(test-assert "M7: fallback is lazy and LAN-IP-filtered"
-             (let ((text (template-text)))
-               (and (string-contains text "fallback-lazy-query: true")
-                    (string-contains text "fallback-filter:")
-                    (string-contains text "geoip-code: LAN"))))
-(test-assert "M7: tun exclude-uid references the nm-dnsmasq uid placeholder"
+               (and (not (string-contains text "\ndns:"))
+                    (not (string-contains text "listen: \"127.0.0.1:53\""))
+                    (not (string-contains text "dns-hijack:"))
+                    (not (string-contains text "enhanced-mode: redir-host"))
+                    (not (string-contains text "enhanced-mode: fake-ip"))
+                    (not (string-contains text "fallback:"))
+                    (not (string-contains text "fallback-filter:"))
+                    (not (string-contains text "proxy-server-nameserver:")))))
+(test-assert "M7: tun exclude-uid references both resolver UIDs"
              (let ((text (template-text)))
                (and (string-contains text "exclude-uid:")
                     (string-contains text
                                      (string-append "- "
-                                      %mihomo-nm-dnsmasq-uid-placeholder)))))
-(test-assert "M7: no default DNS hijack target"
-             (not (string-contains (template-text) "0.0.0.0:53")))
-
+                                      %mihomo-nm-dnsmasq-uid-placeholder))
+                    (string-contains text
+                                     (string-append "- "
+                                      %mihomo-smartdns-uid-placeholder)))))
+(test-assert "M7: compose replaces both resolver UID placeholders"
+             (let ((config (compose-mihomo-config
+                            (template-text)
+                            '(("fixture" "file"
+                               "/var/lib/clash/fixture.yaml"))
+                            %nm-dnsmasq-uid
+                            %smartdns-uid)))
+               (and (not (string-contains config
+                                          %mihomo-nm-dnsmasq-uid-placeholder))
+                    (not (string-contains config
+                                          %mihomo-smartdns-uid-placeholder))
+                    (string-contains config
+                                     (string-append "- "
+                                                    (number->string
+                                                     %nm-dnsmasq-uid)))
+                    (string-contains config
+                                     (string-append "- "
+                                                    (number->string
+                                                     %smartdns-uid))))))
 ;; ── M8：controller 仅 loopback ──────────────────────────────
 (test-assert "M8: external-controller is loopback-only"
              (and (string-contains (template-text)

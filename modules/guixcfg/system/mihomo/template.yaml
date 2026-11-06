@@ -1,7 +1,8 @@
 # Mihomo base config template（repository authority，docs/architecture/mihomo.md）。
 #
-# 三个占位符由 mihomo-config materializer 在 boot 时替换：生成的
-# provider 块、group 块，以及 NetworkManager dnsmasq 的稳定 UID。
+# 四个占位符由 mihomo-config materializer 在 boot 时替换：生成的
+# provider 块、group 块、NetworkManager dnsmasq 的稳定 UID，以及
+# SmartDNS 的稳定 UID。
 # 源清单与每个源的 age 文件在 (guixcfg system mihomo sources) 中声明；
 # materializer 读取各源明文后生成 provider/group 块。
 # 合成结果写入 /run/mihomo/config.yaml（root 0600）经 -f 交给 Mihomo。
@@ -9,12 +10,12 @@
 # 契约：每个占位符必须恰好出现一次，缺失/重复即失败；因此本注释不写出
 # 占位符字面量）。
 #
-# DNS 所有权（docs/architecture/dns.md）：
-#   应用 → /etc/resolv.conf 127.0.0.1:53（mihomo DNS）。
-#   mihomo 先查固定 DoH（#PROXY）；连接失败、NXDOMAIN 或空答案时回退到
-#   NetworkManager dnsmasq（127.0.0.1:15353）→ 当前 DHCP DNS；两者都失败
-#   则正常返回失败。dnsmasq 的上游以专用 UID 运行并被 `tun.exclude-uid`
-#   排除，切断 DNS → TUN → mihomo 的递归。
+# DNS 已与 mihomo 解耦（docs/architecture/dns.md）：
+#   应用 → /etc/resolv.conf 127.0.0.1:53（SmartDNS）。
+#   fixed 模式只查 AliDNS IP DoH；dhcp 模式只查 NM dnsmasq。
+#   mihomo 不再监听 53、不解析 DNS、不劫持 DNS；TUN 只承载业务流量。
+#   两个 resolver 上游 UID 都在 tun.exclude-uid 中，避免 DNS → TUN
+#   的递归或 DNS 对 mihomo 的依赖。
 # self-update 关闭（binary 归 Guix）；controller 仅 loopback（secret
 # 置空是单用户 loopback-only 部署的明确选择）。
 
@@ -27,41 +28,6 @@ log-level: info
 ipv6: false
 external-controller: 127.0.0.1:9090
 secret: ""
-dns:
-  enable: true
-  ipv6: false
-  # 应用 DNS 的唯一入口；NetworkManager dnsmasq 已让到 127.0.0.1:15353。
-  listen: "127.0.0.1:53"
-  # redir-host：先真实解析，失败/无答案才能触发 fallback；fake-ip 会在
-  # 本地直接生成假 IP，不产生可供 fallback 判断的失败信号。
-  enhanced-mode: redir-host
-  # DoH 服务器域名的 bootstrap（必须是 IP，仅用于解析 nameserver /
-  # proxy-server-nameserver 的域名；不承担普通系统解析）。
-  default-nameserver:
-    - 223.5.5.5
-    - 119.29.29.29
-  # DIRECT / local 流量解析直接问 NM dnsmasq（当前 DHCP DNS）。
-  direct-nameserver:
-    - 127.0.0.1:15353
-  # 固定上游：阿里云 AliDNS 的 IP DoH 端点（TLS 证书含 IP）。
-  # 不用 UDP 53：TUN 的 dns-hijack 会把 mihomo 自己的 UDP/TCP 53
-  # 查询重新劫回 mihomo，形成递归。
-  nameserver:
-    - https://223.5.5.5/dns-query
-    - https://223.6.6.6/dns-query
-  # 固定上游失败/无解析时的兜底：NM dnsmasq 的 DHCP DNS。
-  fallback:
-    - 127.0.0.1:15353
-  fallback-lazy-query: true
-  # 主上游返回私网/回环/链路本地/未指定地址时也视为“不该采用”，回退
-  # dnsmasq。LAN 是地址分类，不是域名列表。
-  fallback-filter:
-    geoip: true
-    geoip-code: LAN
-  # 代理节点域名的 bootstrap DNS（拨号节点前解析节点域名）。
-  proxy-server-nameserver:
-    - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
 sniffer:
   enable: true
   sniff:
@@ -75,17 +41,16 @@ tun:
   enable: true
   stack: mixed
   device: mihomo0
-  dns-hijack:
-    - any:53
-    - tcp://any:53
   auto-route: true
   auto-redirect: true
   auto-detect-interface: true
-  # NetworkManager dnsmasq 的专用稳定 UID：其上游 DHCP DNS 查询必须
-  # 绕过 TUN（否则进入 dns-hijack → mihomo DNS → 递归）。UID 由
+  # SmartDNS 与 NetworkManager dnsmasq 的上游必须绕过 TUN：
+  # DNS 现在独立于 mihomo，不能被 TUN 捕获，否则会重新依赖代理进程。
+  # UID 由 (guixcfg system dns smartdns) 与
   # (guixcfg system dns nm-dnsmasq) 单一拥有。
   exclude-uid:
     - @@MIHOMO_NM_DNSMASQ_UID@@
+    - @@MIHOMO_SMARTDNS_UID@@
 # 国内直连 / 国外代理。Loyalsoldier/clash-rules 的 release 分支每天由
 # CI 重新生成（当前约 29k stars）；payload 是 Clash domain 规则。
 # 文件放在 -d 根目录，避免额外创建 rules/ 子目录。
