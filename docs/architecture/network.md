@@ -9,7 +9,7 @@
 App
   │ DNS: /etc/resolv.conf 127.0.0.1
   ▼
-SmartDNS（127.0.0.1:53，UID 984）
+SmartDNS（127.0.0.1:53，UID 974）
   ├─ fixed：AliDNS IP DoH
   └─ dhcp ：NetworkManager dnsmasq（127.0.0.1:15353，UID 985）
                 └─ 当前 DHCP DNS
@@ -42,7 +42,7 @@ dhcp=DHCP DNS only，不跨模式 fallback。**
 | D7 | 订阅刷新直连（provider `proxy: DIRECT`） | 节点全挂时订阅仍可刷新 | 宿主直连不稳时刷新失败 |
 | D8 | TUN 是唯一流量入口；无 mixed-port 系统代理 | 单入口可审计 | TUN off = 无代理直连态 |
 | D9 | 节点选择是运行时偏好，持久化于 `/var/lib/clash` | 节点健康随网络变化 | repo 不 pin 节点 |
-| D10 | SmartDNS 与 dnsmasq 的上游以 UID 984/985 排除出 TUN | 切断 DNS → TUN 递归；DoH 不依赖 Mihomo | 依赖 sing-tun `exclude-uid` |
+| D10 | SmartDNS 与 dnsmasq 的上游以 UID 974/985 排除出 TUN | 切断 DNS → TUN 递归；DoH 不依赖 Mihomo | 依赖 sing-tun `exclude-uid` |
 | D11 | 没有自定义 DNS CLI；面板写 mode 文件，root applier 执行 | 不引入 setuid/sudo/socket；只有 mode 一个可写输入 | 面板依赖文件权限 |
 | D12 | 订阅密文与引用者同置，ordinary domain | secret taxonomy | 解密失败不阻塞登录 |
 | D13 | 配置合成 fail-closed；providers/groups/两个 UID 占位符各一次 | 坏输入必须失败 | materializer 失败 → Mihomo 起不来 |
@@ -86,7 +86,7 @@ root guixcfg-dns-mode applier
 
 | 组件 | 位置 | 要点 |
 |---|---|---|
-| 模板 | `mihomo/template.yaml` | 无 `dns` 段；TUN mixed stack、auto-route/redirect、exclude UID 984/985；sniffer；规则 |
+| 模板 | `mihomo/template.yaml` | 无 `dns` 段；TUN mixed stack、auto-route/redirect、exclude UID 974/985；sniffer；规则 |
 | 配置合成 | `mihomo/config.scm` | 四个占位符各一次；两个 UID 同时注入；严格转义/fail-closed |
 | 服务 | `mihomo/service.scm` | materializer one-shot + daemon；-d `/var/lib/clash`、-f `/run/mihomo/config.yaml` |
 | 持久化 | `%mihomo-data-persistence-rule` | `/persist/system/state/mihomo/clash` → `/var/lib/clash` |

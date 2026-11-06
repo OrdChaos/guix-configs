@@ -109,7 +109,7 @@ speed-check-mode none
 
 | 层 | owner | 形态 |
 |---|---|---|
-| 应用 resolver | SmartDNS | `127.0.0.1:53`，UID 984 |
+| 应用 resolver | SmartDNS | `127.0.0.1:53`，UID 974 |
 | DHCP DNS source | NetworkManager dnsmasq | `127.0.0.1:15353`，UID 985 |
 | DHCP DNS | 当前连接 | 由 NM/dnsmasq 提供，不写死 |
 | 模式 desired state | 用户/面板 | `/var/lib/guixcfg-dns/mode` |
@@ -121,7 +121,7 @@ speed-check-mode none
 ## 递归切断与 UID
 
 ```text
-SmartDNS UID 984   → TUN exclude
+SmartDNS UID 974   → TUN exclude
 nm-dnsmasq UID 985 → TUN exclude
 ```
 
@@ -165,7 +165,7 @@ nm-dnsmasq UID 985 → TUN exclude
 - dhcp 配置没有 DoH；
 - mode 文件是唯一 desired-state 输入；
 - mihomo 无 DNS/listen/hijack；
-- `exclude-uid` 同时包含 984/985；
+- `exclude-uid` 同时包含 974/985；
 - mode applier 的 `--check` 真实可执行。
 
 运行时：

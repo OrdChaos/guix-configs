@@ -10,7 +10,7 @@
 ;;;
 ;;; 账号与 TUN：
 ;;;   SmartDNS 以 root 启动、绑定 127.0.0.1:53 后降权到 smartdns
-;;;   （显式 UID 984）。Mihomo 的 tun.exclude-uid 同时排除 smartdns
+;;;   （显式 UID 974）。Mihomo 的 tun.exclude-uid 同时排除 smartdns
 ;;;   与 nm-dnsmasq，使 DoH / DHCP 上游都不进入 TUN，切断 DNS 递归。
 ;;;
 ;;; 配置不变量：
@@ -42,12 +42,12 @@
 (define %smartdns-user
   "smartdns")
 
-;; 显式、稳定的系统 ID（100..999 段）。985 已由 nm-dnsmasq 使用；
-;; 984 为空闲。显式 UID 会被 ephemeral-root 的账号分配器跳过。
+;; 显式、稳定的系统 ID（100..999 段）。985 已由 nm-dnsmasq 使用；984 与 sshd 冲突，
+;; 974 在 sshd 984 冲突后重新选取；显式 UID 会被 ephemeral-root 的账号分配器跳过。
 (define %smartdns-uid
-  984)
+  974)
 (define %smartdns-gid
-  984)
+  974)
 
 (define %smartdns-state-directory
   "/var/lib/guixcfg-dns")
@@ -230,8 +230,8 @@
 
                       (define (run)
                         (ensure-mode-file!)
-                        (write-health!)
                         (let loop ((last #f))
+                          (write-health!)
                           (let* ((raw (read-file mode-file))
                                  (mode (normalize-mode raw)))
                             (if (and mode (not (equal? mode last)))

@@ -211,7 +211,7 @@ controller 可读取配置的安全路径。
   Noctalia 面板显式选择，持久化在 `/var/lib/guixcfg-dns/mode`；
 - **NetworkManager dnsmasq** 仍是当前 DHCP DNS 的 source；它不参与
   fixed 模式，没有跨模式 fallback；
-- **递归切断**：SmartDNS（UID 984）与 dnsmasq（UID 985）均在
+- **递归切断**：SmartDNS（UID 974）与 dnsmasq（UID 985）均在
   `tun.exclude-uid` 中；sing-tun 以 `meta skuid`/owner 规则使它们的
   上游查询不进入 TUN；
 - **TUN on/off**：只决定业务流量是否经过 mihomo；DNS 始终由 SmartDNS
