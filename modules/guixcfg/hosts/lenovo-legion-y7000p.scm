@@ -115,10 +115,10 @@
 ;;   - GUI-created NetworkManager keyfile profiles only (derived/volatile
 ;;     state under /var/lib/NetworkManager stays ephemeral);
 ;;   - BlueZ pairing state (/var/lib/bluetooth).
-(define %laptop-machine-state-file-systems
-  (machine-state-persistence-file-systems (list
-                                           %network-manager-connections-persistence-rule
-                                           %laptop-bluetooth-persistence-rule)))
+(define %laptop-additional-machine-state-rules
+  (list %network-manager-connections-persistence-rule
+        %laptop-bluetooth-persistence-rule))
+
 
 ;; Wine may exceed the inherited 4096 descriptor limit while streaming game
 ;; resources.  Set both limits so the graphical PAM session passes 65536 to
@@ -187,9 +187,8 @@
                             %lenovo-legion-y7000p-seed-selections)
                            #:flatpak-environment-overrides
                            %flatpak-prime-environment-overrides
-                           #:additional-machine-state-persistence-rules (list
-                                                                         %network-manager-connections-persistence-rule
-                                                                         %laptop-bluetooth-persistence-rule)
+                           #:additional-machine-state-persistence-rules
+                           %laptop-additional-machine-state-rules
                            #:secrets %lenovo-legion-y7000p-secrets
                            #:home-environment %lenovo-legion-y7000p-guix-home))
 
@@ -200,8 +199,8 @@
                                                 "lenovo-legion-y7000p")
                                    #:persistent-mount-file-systems
                                    %persistent-mount-file-systems
-                                   #:additional-machine-state-file-systems
-                                   %laptop-machine-state-file-systems
+                                   #:additional-machine-state-rules
+                                   %laptop-additional-machine-state-rules
                                    #:user-services
                                    %lenovo-legion-y7000p-user-services))
 

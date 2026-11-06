@@ -101,13 +101,20 @@ SEED-SELECTIONS 透传给 application rules（决定 seed 变体）。"
             #:seed-selections seed-selections)
            (user-profile-name %primary-user))))
 
-;; Mihomo and Noctalia are common system services, so their machine-owned
-;; state binds belong to the shared base OS rather than each host assembly.
+;; Mihomo, SmartDNS, Noctalia and the Guix root cache are common system
+;; services, so their machine-owned state binds belong to the shared base OS
+;; rather than each host assembly.  Keep one rule list as the source for both
+;; the bind file systems and the activation that creates their backing
+;; directories; keeping two hand-maintained lists is how the SmartDNS backing
+;; was missed.
+(define %common-machine-state-rules
+  (list %mihomo-data-persistence-rule
+        %smartdns-mode-persistence-rule
+        %noctalia-greeter-persistence-rule
+        %guix-root-cache-persistence-rule))
+
 (define %common-machine-state-file-systems
-  (machine-state-persistence-file-systems (list %mihomo-data-persistence-rule
-                                           %smartdns-mode-persistence-rule
-                                           %noctalia-greeter-persistence-rule
-                                           %guix-root-cache-persistence-rule)))
+  (machine-state-persistence-file-systems %common-machine-state-rules))
 
 ;;; ── TTY login prompt 的强语义（docs/architecture/accounts-sessions.md）
 ;;; login: 出现 = interactive-session-ready 已过——mingetty 延迟到
@@ -208,11 +215,8 @@ sentinel + mihomo + applications）；HOME-ENVIRONMENT 是挂入 system
                  (user-profile-name %primary-user))
                 (flatpak-overrides-activation flatpak-environment-overrides)
                 ;; machine-state persistence（root-owned system state）。
-                (machine-state-persistence-service (append (list
-                                                            %mihomo-data-persistence-rule
-                                                            %smartdns-mode-persistence-rule
-                                                            %noctalia-greeter-persistence-rule
-                                                            %guix-root-cache-persistence-rule)
+                (machine-state-persistence-service (append
+                                                    %common-machine-state-rules
                                                     additional-machine-state-persistence-rules))
                 ;; noctalia-greeter persistence backing 的 owner/mode
                 ;; （activation 先于 file-systems 挂载，与 channel
@@ -249,7 +253,8 @@ sentinel + mihomo + applications）；HOME-ENVIRONMENT 是挂入 system
 
 (define* (make-base-host-operating-system #:key host-name
                                           persistent-mount-file-systems
-                                          (additional-machine-state-file-systems '())
+
+                                          (additional-machine-state-rules '())
                                           user-services)
   "基础 OS：与最终 OS 完全相同，只是不含 account-databases 投影与
 final transformation。仅用于折叠 account 列表；真正启动用
@@ -281,7 +286,8 @@ make-host-operating-system 的产物。"
                           persistent-mount-file-systems
                           ;; machine-state binds（root-owned / greeter-owned）
                           %common-machine-state-file-systems
-                          additional-machine-state-file-systems
+                          (machine-state-persistence-file-systems
+                           additional-machine-state-rules)
                           %base-file-systems))
 
     (swap-devices %swap-spaces)
