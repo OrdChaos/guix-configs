@@ -109,6 +109,23 @@
                   (string-prefix? "/run/" %smartdns-applied-file)
                   (string-prefix? "/run/" %smartdns-status-file)))
 
+(define %vm-activation
+  (service-value (fold-services %os-services
+                                #:target-type activation-service-type)))
+
+(define (gexp-source g)
+  (call-with-output-string
+    (lambda (p) (write (gexp->approximate-sexp g) p))))
+
+(test-assert "S5: host activation prepares guixcfg-dns backing"
+             (any (lambda (g)
+                    (and (gexp? g)
+                         (let ((s (gexp-source g)))
+                           (and (string-contains s "/persist/system/state")
+                                (string-contains s "guixcfg-dns")
+                                (string-contains s "/var/lib/guixcfg-dns")))))
+                  %vm-activation))
+
 ;; ── S6：service / Shepherd graph ───────────────────────────
 (define (find-service type-name)
   (find (lambda (svc)

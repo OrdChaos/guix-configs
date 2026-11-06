@@ -210,6 +210,7 @@ sentinel + mihomo + applications）；HOME-ENVIRONMENT 是挂入 system
                 ;; machine-state persistence（root-owned system state）。
                 (machine-state-persistence-service (append (list
                                                             %mihomo-data-persistence-rule
+                                                            %smartdns-mode-persistence-rule
                                                             %noctalia-greeter-persistence-rule
                                                             %guix-root-cache-persistence-rule)
                                                     additional-machine-state-persistence-rules))
