@@ -4,6 +4,7 @@
 ;;; HOME 侧中间层 owner 归还）。
 
 (use-modules (gnu system file-systems)
+             (guixcfg system persistence)
              (guix gexp)
              (guixcfg system user-persistence)
              (guixcfg system mount-metadata) ;%persistent-home-mount-options
@@ -103,22 +104,21 @@
              (and (gexp->script "user-persistence-check"
                                 (user-persistence-activation "user")) #t))
 
-;; /home/user 自身 ownership 恢复（file-systems 挂载点创建会以 root
-;; 建出 home，guix activate-user-home 对已存在 home 跳过——由本
-;; activation 恢复 0700 + 用户所有）。<gexp> 的 printer 会打印 body。
-(test-assert "activation restores /home/user ownership"
-             (let ((s (object->string (user-persistence-activation "user"))))
-               (and (string-contains s "/home/")
-                    (string-contains s "chown")
-                    (string-contains s "chmod"))))
-
-;; 嵌套 consumer 的 HOME 侧中间父目录 owner 归还走共享原语
-;; (guixcfg utils home-path)（当前无嵌套 consumer——Trash 已按实证
-;; 移除；机制保留，未来嵌套 consumer 直接复用）。
-(test-assert "activation uses the shared home-parent ownership primitive"
-             (let ((s (object->string (user-persistence-activation "user"))))
-               (string-contains s "ensure-home-parent-directories!")))
-
+;; Generic projection carries HOME ownership/mode and HOME-relative
+;; consumer facts; the shared operation itself is exercised by the generic
+;; persistence projection test and by the executor at runtime.
+(test-assert "projection restores home with 0700 user ownership"
+             (let ((p (car (user-persistence-projections "user"))))
+               (and (string=? "/home/user"
+                              (persistence-projection-home p))
+                    (= #o700 (persistence-projection-home-mode p))
+                    (eq? 'user (persistence-projection-owner p))
+                    (string=? "user"
+                              (persistence-projection-owner-user p)))))
+(test-assert "projection consumer is resolved under home"
+             (let ((p (car (user-persistence-projections "user"))))
+               (string-prefix? "/home/user/"
+                               (persistence-projection-consumer p))))
 ;; Guix Home 环境跨重启由官方 guix-home-service-type 恢复（见
 ;; test-home.scm 的绑定断言），本模块不持久化任何 Home 生成物。
 

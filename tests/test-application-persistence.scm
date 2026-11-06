@@ -12,6 +12,7 @@
 ;;; 无 data-nobackup mapping、无 copy/sync 实现。
 
 (use-modules (guixcfg system application-persistence)
+             (guixcfg system persistence)
              (guixcfg apps model) ;application（seed selection 聚合）
              (gnu services)
              (gnu system file-systems)
@@ -178,27 +179,16 @@
                       (string-prefix? "/persist/data-app/"
                                       (file-system-device m))) coexist-mounts))
 
-;; ── bind-file activation 生成：regular-file 原语在场 ────────
-(test-assert "bind-file activation gexp can be generated"
-             (let (#~(application-persistence-activation (list bind-file-rule)
-                                                         "alice"))
-               (and (gexp? gexp)
-                    (pair? (gexp->approximate-sexp gexp)))))
-(test-assert
- "bind-file activation creates regular files (no directory backing for the file rule)"
- (let ((s (object->string (gexp->approximate-sexp (application-persistence-activation
-                                                   (list bind-file-rule)
-                                                   "alice")))))
-   (and (string-contains s "state.json")
-        (string-contains s "call-with-output-file")
-        (string-contains s "stat:type"))))
-(test-assert "bind-file activation still carries consumer-parent machinery"
-             (let ((s (object->string (gexp->approximate-sexp (application-persistence-activation
-                                                               (list
-                                                                bind-file-rule)
-                                                               "alice")))))
-               (and (string-contains s "ensure-home-parent-directories!")
-                    (string-contains s "chown"))))
+;; ── bind-file projection keeps file exposure/owner facts ───
+(test-assert "bind-file projection preserves exposure"
+             (let ((p (car (application-persistence-projections
+                             (list bind-file-rule) "alice"))))
+               (and (eq? 'bind-file (persistence-projection-exposure p))
+                    (string=? "/home/alice/.config/synthetic-test/state.json"
+                              (persistence-projection-consumer p))
+                    (eq? 'user (persistence-projection-owner p))
+                    (string=? "alice"
+                              (persistence-projection-owner-user p)))))
 
 ;; ── seeds 字段（seed-once）─────────────────────────────────
 (test-assert "rule with seeds passes validation"
@@ -360,36 +350,31 @@
                                                                   ".local/state/x")))
                                                           "alice")))
 
-;; ── activation 可生成（backing 创建 + consumer parent ownership）─
-(test-assert "activation gexp can be generated"
-             (let (#~(application-persistence-activation (list rule) "alice"))
-               (and (gexp? gexp)
-                    (pair? (gexp->approximate-sexp gexp)))))
-
-(test-assert "activation references /persist/data-app and consumer parent"
-             (let ((s (object->string (gexp->approximate-sexp (application-persistence-activation
-                                                               (list rule)
-                                                               "alice")))))
-               (and (string-contains s "/persist/data-app")
-                    (string-contains s "synthetic-test")
-                    (string-contains s "mkdir-p")
-                    (string-contains s "chown"))))
-
-;; ── seed-once 接线：activation 含 seed 目标 / marker / 状态机 ─
-(test-assert
- "seeded activation references seed target, marker and state machine"
- (let ((s (object->string (gexp->approximate-sexp (application-persistence-activation
-                                                   (list seeded-rule) "alice")))))
-   (and (string-contains s "seeded-test/state")
-        (string-contains s "settings.toml")
-        (string-contains s ".seed-provided")
-        (string-contains s "seed-once-file!")
-        (string-contains s "chown"))))
-(test-assert "unseeded activation carries no seed machinery"
-             (let ((s (object->string (gexp->approximate-sexp (application-persistence-activation
-                                                               (list rule)
-                                                               "alice")))))
-               (not (string-contains s "seed-once-file!"))))
+;; ── projection carries consumer/owner and seed facts ───────
+(test-assert "projection resolves consumer against owner home"
+             (let ((p (car (application-persistence-projections
+                             (list rule) "alice"))))
+               (and (string=? "/persist/data-app/synthetic-test/state"
+                              (string-append (persistence-projection-root p)
+                                             "/"
+                                             (persistence-projection-backing p)))
+                    (string=? "/home/alice/.config/synthetic-test"
+                              (persistence-projection-consumer p))
+                    (eq? 'user (persistence-projection-owner p))
+                    (string=? "alice"
+                              (persistence-projection-owner-user p))
+                    (string=? "/home/alice"
+                              (persistence-projection-home p)))))
+(test-assert "seeded projection retains seed targets"
+             (let ((p (car (application-persistence-projections
+                             (list seeded-rule) "alice"))))
+               (and (pair? (persistence-projection-seeds p))
+                    (string=? "settings.toml"
+                              (car (car (persistence-projection-seeds p)))))))
+(test-assert "unseeded projection has no seeds"
+             (let ((p (car (application-persistence-projections
+                             (list rule) "alice"))))
+               (null? (persistence-projection-seeds p))))
 
 ;; ── 无 copy/sync 实现 ───────────────────────────────────────
 (test-assert "no copy/sync primitives in generated artifacts"

@@ -51,6 +51,7 @@
   #:use-module (guixcfg utils home-path) ;ensure-home-parent-directories!
   #:use-module (guixcfg utils seed-once) ;seed-once-file!、%seed-marker-suffix
   #:use-module (guixcfg system mount-metadata) ;%persistent-home-mount-options
+  #:use-module (guixcfg system persistence)
   #:use-module (guixcfg utils module-closure) ;guixcfg-module-select?
   #:use-module (guix gexp)
   #:use-module (guix modules) ;source-module-closure
@@ -69,6 +70,7 @@
             application-persistence-rule-for-variant
             %application-persistence-root
             valid-application-persistence-rule?
+            application-persistence-projections
             application-persistence-file-systems
             application-persistence-activation
             application-persistence-service))
@@ -221,183 +223,45 @@ docs/architecture/persistence.md 与 secrets.md 的 flatpak 例子）。"
         (application-persistence-rule (inherit rule) (seeds chosen))
         rule)))
 
+(define (application-persistence-projections rules user)
+  "Convert application rules to generic persistence projections.  The
+consumer is resolved against USER's home; ownership is the user; seeds and
+bind-file exposure are preserved."
+  (let ((home (string-append "/home/" user)))
+    (map (lambda (rule)
+           (validate-application-persistence-rule rule)
+           (persistence-projection
+             (name (application-persistence-rule-name rule))
+             (root %application-persistence-root)
+             (backing (application-persistence-rule-backing rule))
+             (consumer (string-append home "/"
+                                      (application-persistence-rule-consumer
+                                       rule)))
+             (exposure (application-persistence-rule-exposure rule))
+             (owner 'user)
+             (owner-user user)
+             (mode #f)
+             (options %persistent-home-mount-options)
+             (home home)
+             (seeds (application-persistence-rule-seeds rule))))
+         rules)))
+
 (define (application-persistence-file-systems rules user)
   "RULES 的 bind mount 声明（/persist/data-app/<backing> →
-/home/<USER>/<consumer>）。挂载点由 file-systems 阶段创建
-（bind-directory：create-mount-point? #t）；intermediate parent
-ownership 由 activation 恢复。options 带桌面集成 metadata
-（x-gvfs-hide, x-gvfs-trash——共享常量 (guixcfg system mount-metadata)，
-与 user-persistence 同一语义：GVfs 隐藏实现性挂载 + 允许 mount-local
-trash）。
-
-bind-file 必须 create-mount-point? #f：shepherd 对
-create-mount-point? 的实现是预 mkdir-p（pinned Guix
-gnu/services/base.scm file-system-shepherd-service）——会建出
-directory，而 file→file bind 要求 regular-file 挂载点。regular-file
-挂载点由 activation 预建（三路径安全）；pinned Guix 的
-mount-file-system 对 bind mount + non-directory source 也原生自动
-创建 regular-file target（gnu/build/file-systems.scm——防御第二层）。"
-  (map (lambda (rule)
-         (validate-application-persistence-rule rule)
-         (file-system
-           (device (string-append %application-persistence-root "/"
-                                  (application-persistence-rule-backing rule)))
-           (mount-point (string-append "/home/" user "/"
-                                       (application-persistence-rule-consumer
-                                        rule)))
-           (type "none")
-           (flags '(bind-mount))
-           (options %persistent-home-mount-options)
-           (create-mount-point? (eq? 'bind-directory
-                                     (application-persistence-rule-exposure
-                                      rule)))
-           (check? #f))) rules))
+/home/<USER>/<consumer>），由通用 persistence executor 派生。"
+  (persistence-set-file-systems
+    (persistence-set (projections
+                       (application-persistence-projections rules user)))))
 
 (define (application-persistence-activation rules user)
-  "activation gexp：准备 backing 与 consumer 挂载点（bind-directory：
-backing 目录 + consumer parent 层级 ownership；bind-file：backing
-parent 目录 + backing regular file + consumer parent 层级 + consumer
-regular-file 挂载点——类型错误 fail closed，绝不静默重建/替换已有
-state），并对 rule 声明的 seeds 执行 seed-once（目标从未存在时原子
-写入初始状态；此后 repository 永久放弃 ownership——机制见
-(guixcfg utils seed-once)）。
-create-mount-point? 以 root 建挂载点，本 activation 的 mkdir-p 也以
-root 建出整条 parent 路径，必须把【所有中间层】都归还 USER。只
-chown 直接 parent 会留下 root-owned 的 ~/.local：后续以 USER 身份
-运行的 Guix Home activation（guix-home-user → he/activate → mkdir-p
-$XDG_DATA_HOME）会在 root-owned 目录下 mkdir 时 EACCES，整个 Home
-activation 失败（boot 实测 2026-08-19；回归测试
-test-runtime-exec.scm AP1）。只补缺失目录/文件、不重建已有数据
-（persistence 不自动迁移/覆盖/删除 consumer data）。seed 检查发生
-在 canonical backing 侧（/persist/data-app/<backing>，needed-for-boot
-子卷挂载先于 activation，绑定投影在 file-systems 阶段之后）——
-持久化状态与 seed 判断天然同一位置：已有持久化 state 时 seed-once
-直接看到目标已存在，不做任何事（生命周期顺序正确，无 restore/seed
-竞态）。没有任何 rule 声明 seeds 时生成与旧版完全相同的 activation
-（seed 代码按构造期条件拼接，不给无 seed 的 rule 增加运行时依赖）。"
-  (define has-seeds?
-    (any (lambda (rule)
-           (pair? (application-persistence-rule-seeds rule))) rules))
-  (define seed-closure-modules
-    (if has-seeds?
-        '((guixcfg utils seed-once))
-        '()))
-  (define seed-loop
-    (if has-seeds?
-        #~(for-each (lambda (entry)
-                      (let ((dest (string-append src "/"
-                                                 (car entry)))
-                            (marker (string-append src "/"
-                                                   (car entry)
-                                                   #$%seed-marker-suffix)))
-                        ;; seed 目标可落在 backing 内尚不存在的子目录
-                        ;; （如 flatpak app 的 data/ElyOffice/）：mkdir
-                        ;; 以 root 建层级，必须逐层归还 USER，否则应用
-                        ;; 以后无法在自己的设置目录里写入/重命名。
-                        (mkdir-p (dirname dest))
-                        (let loop ((dir (dirname dest)))
-                          (unless (string=? dir src)
-                            (chown dir uid gid)
-                            (loop (dirname dir))))
-                        (case (seed-once-file! dest
-                                               (cadr entry) marker)
-                          ((seeded)
-                           (chown dest uid gid)
-                           (chown marker uid gid))
-                          ((preserved)
-                           (chown marker uid gid))))) seeds)
-        ;; 空语句：#~#t（不能用 #~(begin)——空 begin 是语法错误，
-        ;; AP1 runtime-exec 实测捕获）。
-        #~#t))
-  (with-imported-modules (source-module-closure `((guix build utils)
-                                                  (guixcfg utils home-path)
-                                                  ,@seed-closure-modules)
-                                                #:select?
-                                                guixcfg-module-select?)
-                         #~(begin
-                             (use-modules (guix build utils)
-                                          (guixcfg utils home-path)
-                                          #$@seed-closure-modules)
-                             (let* ((uid (passwd:uid (getpw #$user)))
-                                    (gid (passwd:gid (getpw #$user)))
-                                    (home (string-append "/home/"
-                                                         #$user)))
-                               (for-each (lambda (spec)
-                                           (let* ((backing (car spec))
-                                                  (consumer (cadr spec))
-                                                  (exposure (caddr spec))
-                                                  (seeds (cadddr spec))
-                                                  (src (string-append #$%application-persistence-root
-                                                                      "/"
-                                                                      backing))
-                                                  (dst (string-append home "/"
-                                                        consumer)))
-                                             ;; consumer parent 全层级归还 USER（共享原语：
-                                             ;; (guixcfg utils home-path)；/home/USER 本身由
-                                             ;; user-persistence activation 负责）。
-                                             (ensure-home-parent-directories!
-                                              home consumer uid gid)
-                                             (case exposure
-                                               ((bind-directory)
-                                                (mkdir-p src)
-                                                (chown src uid gid)
-                                                ;; seed-once：目标从未存在才写入；seed 后 repo 永久
-                                                ;; 放弃 ownership（marker 记录；写出的文件归还 USER）。
-                                                #$seed-loop)
-                                               ((bind-file)
-                                                ;; backing parent（/persist/data-app/<app> 层级）先建
-                                                ;; ——call-with-output-file 不会建父目录。backing：
-                                                ;; canonical mutable state 唯一权威——不存在时建空
-                                                ;; regular file；存在但非 regular file → fail closed
-                                                ;; （绝不静默重建/替换已有 state）。
-                                                (mkdir-p (dirname src))
-                                                (if (file-exists? src)
-                                                    (unless (eq? 'regular
-                                                                 (stat:type (stat
-                                                                             src)))
-                                                      (error
-                                                       "application persistence bind-file backing exists but is not a regular file"
-                                                       src))
-                                                    (begin
-                                                      (call-with-output-file src
-                                                        (lambda (p)
-                                                          #t))
-                                                      (chown src uid gid)))
-                                                ;; consumer mount point：regular file，不是 directory
-                                                ;; （file→file bind 要求；bind-directory 的 shepherd
-                                                ;; mkdir-p 语义在此不适用）。挂载已激活时该文件存在
-                                                ;; ——幂等 no-op；存在但非 regular → fail closed。
-                                                (if (file-exists? dst)
-                                                    (unless (eq? 'regular
-                                                                 (stat:type (stat
-                                                                             dst)))
-                                                      (error
-                                                       "application persistence bind-file consumer mount point exists but is not a regular file"
-                                                       dst))
-                                                    (begin
-                                                      (call-with-output-file dst
-                                                        (lambda (p)
-                                                          #t))
-                                                      (chown dst uid gid)))))))
-                                         '(#$@(map (lambda (rule)
-                                                     (list (application-persistence-rule-backing
-                                                            rule)
-                                                           (application-persistence-rule-consumer
-                                                            rule)
-                                                           (application-persistence-rule-exposure
-                                                            rule)
-                                                           (map (lambda (s)
-                                                                  (list (car s)
-                                                                        (cadr
-                                                                         s)))
-                                                                (application-persistence-rule-seeds
-                                                                 rule))))
-                                                   rules)))))))
+  "activation gexp：由通用 persistence executor 创建 backing、consumer
+挂载点、ownership、seed-once；bind-file 语义与规则校验保持一致。"
+  (persistence-set-activation
+    (persistence-set (projections
+                       (application-persistence-projections rules user)))))
 
 (define (application-persistence-service rules user)
-  "把 RULES 的 backing/parent 创建挂到系统 activation（bind mounts
-本身经 application-persistence-file-systems 声明）。RULES 为空时
-返回 #f（不产生无意义服务）。"
-  (if (null? rules) #f
-      (simple-service 'application-persistence activation-service-type
-                      (application-persistence-activation rules user))))
+  "把 RULES 的 activation 挂到系统 activation。RULES 为空时返回 #f。"
+  (persistence-set-service
+    (persistence-set (projections
+                       (application-persistence-projections rules user)))))
