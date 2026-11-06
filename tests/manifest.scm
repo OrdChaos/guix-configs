@@ -76,6 +76,7 @@
     "tests/test-doc-hygiene.scm"
     "tests/test-seed-once.scm"
     "tests/test-source-hygiene.scm"
+    "tests/test-persistence-projection.scm"
     "tests/test-machine-state-persistence.scm"
     "tests/test-network-manager-persistence.scm"
     "tests/test-machine-identity.scm"

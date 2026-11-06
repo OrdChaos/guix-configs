@@ -44,6 +44,7 @@
   #:use-module (guix records)
   #:use-module (guixcfg storage model) ;persist-mount-point
   #:use-module (guixcfg utils paths) ;valid-relative-path?（persistence 契约共享）
+  #:use-module (guixcfg system persistence)
   #:use-module (srfi srfi-1) ;every
   #:export (<machine-state-persistence-rule> machine-state-persistence-rule
             make-machine-state-persistence-rule
@@ -55,6 +56,7 @@
             machine-state-persistence-rule-lifecycle
             %machine-state-root
             valid-machine-state-persistence-rule?
+            machine-state-persistence-projections
             machine-state-persistence-file-systems
             machine-state-persistence-activation
             machine-state-persistence-service))
@@ -133,44 +135,43 @@ roots 下）。"
          (lambda (k . a)
            #f)))
 
+(define (machine-state-persistence-projections rules)
+  "Convert machine-state rules to generic persistence projections.  Root
+ownership is represented explicitly; domain-specific ownership (mihomo
+0700, greeter 0750) remains in the owning module's activation."
+  (map (lambda (rule)
+         (validate-machine-state-persistence-rule rule)
+         (persistence-projection
+           (name (machine-state-persistence-rule-name rule))
+           (root %machine-state-root)
+           (backing (machine-state-persistence-rule-backing rule))
+           (consumer (machine-state-persistence-rule-consumer rule))
+           (exposure 'bind-directory)
+           (owner 'root)
+           (mode #f)
+           (options #f)
+           (home #f)
+           (seeds '())))
+       rules))
+
 (define (machine-state-persistence-file-systems rules)
   "RULES 的 bind mount 声明（/persist/system/state/<backing> →
 <consumer>）。挂载点由 file-systems 阶段创建（create-mount-point?
-#t）；backing 与 consumer parent 由 activation 准备。"
-  (map (lambda (rule)
-         (validate-machine-state-persistence-rule rule)
-         (file-system
-           (device (string-append %machine-state-root "/"
-                                  (machine-state-persistence-rule-backing rule)))
-           (mount-point (machine-state-persistence-rule-consumer rule))
-           (type "none")
-           (flags '(bind-mount))
-           (create-mount-point? #t)
-           (check? #f))) rules))
+#t）；backing/consumer 由统一 persistence activation 准备。"
+  (persistence-set-file-systems
+    (persistence-set (projections
+                       (machine-state-persistence-projections rules)))))
 
 (define (machine-state-persistence-activation rules)
-  "activation gexp：创建 backing 目录（root-owned）与 consumer parent
-目录。只补缺失目录、不重建已有数据（不自动迁移/覆盖 consumer data）。
-与 application-persistence 同一 ordering 审计：activation 先于
-shepherd file-systems 服务挂载（boot/init/reconfigure 三路径安全）。"
-  (with-imported-modules (source-module-closure '((guix build utils)))
-                         #~(begin
-                             (use-modules (guix build utils))
-                             (for-each (lambda (spec)
-                                         (let* ((backing (car spec))
-                                                (consumer (cadr spec)))
-                                           (mkdir-p (string-append #$%machine-state-root
-                                                                   "/" backing))
-                                           (mkdir-p (dirname consumer))))
-                                       '(#$@(map (lambda (rule)
-                                                   (list (machine-state-persistence-rule-backing
-                                                          rule)
-                                                         (machine-state-persistence-rule-consumer
-                                                          rule))) rules))))))
+  "activation gexp：由通用 persistence executor 创建 backing 与 consumer
+（root-owned；只补缺失目录，不重建已有数据）。"
+  (persistence-set-activation
+    (persistence-set (projections
+                       (machine-state-persistence-projections rules)))))
 
 (define (machine-state-persistence-service rules)
-  "把 RULES 的 backing/parent 创建挂到系统 activation。RULES 为空时
+  "把 RULES 的 backing/consumer 创建挂到系统 activation。RULES 为空时
 返回 #f（不产生无意义服务）。"
-  (if (null? rules) #f
-      (simple-service 'machine-state-persistence activation-service-type
-                      (machine-state-persistence-activation rules))))
+  (persistence-set-service
+    (persistence-set (projections
+                       (machine-state-persistence-projections rules)))))

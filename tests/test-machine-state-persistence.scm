@@ -8,6 +8,7 @@
 ;;; 无 data-app backing、无 HOME-relative consumer、无 copy/sync。
 
 (use-modules (guixcfg system machine-state-persistence)
+             (guixcfg system persistence)
              (guixcfg storage model) ;persist-mount-point
              (gnu services)
              (gnu system file-systems)
@@ -147,14 +148,21 @@
                (and (gexp? gexp)
                     (pair? (gexp->approximate-sexp gexp)))))
 
-(test-assert "activation references machine-state root and consumer parent"
-             (let ((s (object->string (gexp->approximate-sexp (machine-state-persistence-activation
-                                                               (list rule))))))
-               (and (string-contains s "/persist/system/state")
-                    (string-contains s "synthetic-daemon")
-                    (string-contains s "example-daemon")
-                    (string-contains s "mkdir-p"))))
-
+(test-assert "projection conversion preserves rule facts"
+             (let* ((rule (machine-state-persistence-rule
+                            (name 'synthetic-daemon)
+                            (backing "synthetic-daemon/state")
+                            (consumer "/var/lib/example-daemon")))
+                    (p (car (machine-state-persistence-projections
+                              (list rule)))))
+               (and (eq? 'synthetic-daemon (persistence-projection-name p))
+                    (string=? %machine-state-root
+                              (persistence-projection-root p))
+                    (string=? "synthetic-daemon/state"
+                              (persistence-projection-backing p))
+                    (string=? "/var/lib/example-daemon"
+                              (persistence-projection-consumer p))
+                    (eq? 'root (persistence-projection-owner p)))))
 ;; ── 无 copy/sync 实现 ───────────────────────────────────────
 (test-assert "no copy/sync primitives in generated artifacts"
              (let ((s (object->string (gexp->approximate-sexp (machine-state-persistence-activation
