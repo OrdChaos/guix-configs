@@ -73,6 +73,49 @@ Guix channel cache 经 selected user persistence
 toolchains are declared Home-profile references and create no runtime cache or
 indirect GC roots.
 
+
+## Unified projection executor
+
+`modules/guixcfg/system/persistence.scm` is the single executor for bind
+projections. A `<persistence-projection>` is one canonical backing plus its
+consumer:
+
+```text
+root/backing  → bind → consumer
+```
+
+The same projection derives:
+
+- the bind file-system (`device`, `mount-point`, bind flag, options,
+  create-mount-point? for directory vs regular-file consumer);
+- the system activation that creates backing/consumer, applies owner/mode,
+  restores HOME parent ownership and executes seed-once targets.
+
+A `<persistence-set>` is the host's single authored persistence value. Host
+assembly passes that one set to the base OS and to user-service assembly:
+
+```text
+domain constructors
+  user-persistence-projections
+  application-persistence-projections
+  machine-state-persistence-projections
+        ↓
+<persistence-set>
+        ├─ persistence-set-file-systems
+        └─ persistence-set-service
+```
+
+Domain modules keep their own validation and rule records where needed
+(application seeds/variants, machine-state consumer policy); they only
+convert their final rules to projections at the executor boundary. This
+preserves semantics while making file-systems and activation impossible to
+drift apart at the host composition boundary.
+
+Special ownership that is not a simple owner/mode contract (mihomo's
+subdirectories, Noctalia greeter consumer ownership, NetworkManager profile
+ownership) remains in the owning module's activation; it consumes the same
+canonical paths and is idempotent with the generic activation.
+
 ## Application persistence（/persist/data-app）
 
 generic engine：`modules/guixcfg/system/application-persistence.scm`
