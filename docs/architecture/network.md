@@ -60,7 +60,7 @@ root guixcfg-dns-mode applier
   ├─ 校验 fixed/dhcp
   ├─ 原子切换 /run/guixcfg-dns/smartdns.conf
   ├─ herd restart smartdns
-  └─ 写 /run/guixcfg-dns/applied、status
+  └─ 写 /run/guixcfg-dns/applied、status、smartdns-status
 ```
 
 - 无 NM dispatcher、无自动连接分类、无自定义 CLI。
@@ -76,7 +76,7 @@ root guixcfg-dns-mode applier
 | SmartDNS | `modules/guixcfg/system/dns/smartdns.scm` | resolver、两份静态配置、mode applier、账号/UID |
 | NM dnsmasq | `modules/guixcfg/system/dns/nm-dnsmasq.scm` | DHCP DNS source，15353，UID 985 |
 | DNS mode state | `/var/lib/guixcfg-dns/mode` | 唯一 desired state |
-| Route/applied/status | `/run/guixcfg-dns/` | 运行时反馈 |
+|  Route/applied/status/health | `/run/guixcfg-dns/` | 运行时反馈 |
 | `/etc/resolv.conf` | NetworkManager | `nameserver 127.0.0.1` |
 | Mihomo | `modules/guixcfg/system/mihomo` | TUN/规则/代理；DNS 关闭 |
 
@@ -128,7 +128,7 @@ root guixcfg-dns-mode applier
 |---|---|
 | 切换 DNS 模式 | Noctalia Network Layer → DNS 卡片 |
 | 查看期望/已应用模式 | `cat /var/lib/guixcfg-dns/mode /run/guixcfg-dns/applied` |
-| 查看切换错误 | `cat /run/guixcfg-dns/status` |
+| 查看切换错误 | `cat /run/guixcfg-dns/status /run/guixcfg-dns/smartdns-status` |
 | 查 DNS owner | `ss -lntup | grep -E ':53|:15353'`（SmartDNS / dnsmasq） |
 | 查 SmartDNS 日志 | `/var/log/smartdns.log` |
 | 查 mode applier 日志 | `/var/log/guixcfg-dns-mode.log` |

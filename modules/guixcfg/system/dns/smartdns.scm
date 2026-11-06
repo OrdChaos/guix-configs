@@ -31,7 +31,7 @@
   #:export (%smartdns-user %smartdns-uid %smartdns-gid
             %smartdns-state-directory %smartdns-run-directory
             %smartdns-mode-file %smartdns-applied-file
-            %smartdns-status-file %smartdns-runtime-config
+            %smartdns-status-file %smartdns-health-file %smartdns-runtime-config
             %smartdns-log-file
             %smartdns-fixed-config %smartdns-dhcp-config
             %smartdns-fixed-config-content %smartdns-dhcp-config-content
@@ -59,6 +59,8 @@
   (string-append %smartdns-run-directory "/applied"))
 (define %smartdns-status-file
   (string-append %smartdns-run-directory "/status"))
+(define %smartdns-health-file
+  (string-append %smartdns-run-directory "/smartdns-status"))
 (define %smartdns-runtime-config
   (string-append %smartdns-run-directory "/smartdns.conf"))
 (define %smartdns-log-file
@@ -133,10 +135,12 @@
                   #~(begin
                       (use-modules (guix build utils)
                                    (ice-9 textual-ports)
+                                   (ice-9 ftw)
                                    (srfi srfi-13))
                       (define mode-file #$%smartdns-mode-file)
                       (define applied-file #$%smartdns-applied-file)
                       (define status-file #$%smartdns-status-file)
+                      (define health-file #$%smartdns-health-file)
                       (define runtime-config #$%smartdns-runtime-config)
                       (define herd #$(file-append shepherd "/bin/herd"))
                       (define configs
@@ -198,8 +202,35 @@
                                         #o644)
                             #f)))
 
+                      (define (smartdns-running?)
+                        (catch #t
+                          (lambda ()
+                            (let loop ((pids (scandir "/proc"
+                                                      (lambda (name)
+                                                        (string->number name)))))
+                              (if (null? pids)
+                                  #f
+                                  (let ((comm (read-file
+                                               (string-append "/proc/"
+                                                              (car pids)
+                                                              "/comm"))))
+                                    (if (and comm
+                                             (string=? (string-trim-both comm)
+                                                       "smartdns"))
+                                        #t
+                                        (loop (cdr pids)))))))
+                          (lambda args #f)))
+
+                      (define (write-health!)
+                        (write-file health-file
+                                    (if (smartdns-running?)
+                                        "running\n"
+                                        "stopped\n")
+                                    #o644))
+
                       (define (run)
                         (ensure-mode-file!)
+                        (write-health!)
                         (let loop ((last #f))
                           (let* ((raw (read-file mode-file))
                                  (mode (normalize-mode raw)))

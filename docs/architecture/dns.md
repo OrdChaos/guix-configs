@@ -40,7 +40,9 @@ root mode applier
 ```
 
 - `mode` 文件是唯一的 desired state。
-- `applied` 与 `status` 是 `/run` 下的运行时反馈。
+- `applied` / `status` 是 `/run` 下的模式应用反馈。
+- `smartdns-status` 是 applier 扫描 `/proc` 得到的 SmartDNS 运行状态
+  （running/stopped）；只用于 UI 展示，不参与模式决策。
 - 模式文件不通过自定义 CLI 修改；没有 `guixcfg-dns-mode` 命令。
 - 选择立即写入；root applier 监听文件变化并应用。
 - 重启/断电后模式保留。
