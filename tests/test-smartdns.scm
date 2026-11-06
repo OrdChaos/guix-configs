@@ -22,6 +22,7 @@
              (gnu system accounts)
              (guixcfg system dns smartdns)
              (guixcfg system machine-state-persistence)
+             (guixcfg system persistence)
              (guixcfg hosts vm)
              (ice-9 textual-ports)
              (srfi srfi-1)
@@ -117,15 +118,18 @@
   (call-with-output-string
     (lambda (p) (write (gexp->approximate-sexp g) p))))
 
-(test-assert "S5: host activation prepares guixcfg-dns backing"
-             (any (lambda (g)
-                    (and (gexp? g)
-                         (let ((s (gexp-source g)))
-                           (and (string-contains s "/persist/system/state")
-                                (string-contains s "guixcfg-dns")
-                                (string-contains s "/var/lib/guixcfg-dns")))))
-                  %vm-activation))
-
+(test-assert "S5: host persistence includes guixcfg-dns machine state"
+             (let ((p (find (lambda (projection)
+                              (and (string=? "guixcfg-dns"
+                                             (persistence-projection-backing
+                                              projection))
+                                   (string=? "/var/lib/guixcfg-dns"
+                                             (persistence-projection-consumer
+                                              projection))))
+                            (persistence-set-projections %vm-persistence))))
+               (and p
+                    (string=? "/persist/system/state"
+                              (persistence-projection-root p)))))
 ;; ── S6：service / Shepherd graph ───────────────────────────
 (define (find-service type-name)
   (find (lambda (svc)

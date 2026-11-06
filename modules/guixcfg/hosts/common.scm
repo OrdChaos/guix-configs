@@ -58,6 +58,7 @@
   #:use-module (guixcfg system dns nm-dnsmasq) ;NetworkManager dnsmasq 专用账号
   #:use-module (guixcfg system dns smartdns) ;SmartDNS resolver + mode applier
   #:use-module (guixcfg system machine-state-persistence) ;machine-state bind（mihomo providers）
+  #:use-module (guixcfg system persistence)
   #:use-module (guixcfg system machine-identity) ;/etc/machine-id 持久化（先于 D-Bus activation）
   #:use-module (guixcfg system noctalia-greeter) ;noctalia-greeter machine-state bind + 系统集成
   #:use-module (guixcfg system guix-cache) ;root guix 缓存 machine-state bind
@@ -73,8 +74,7 @@
                                make-host-operating-system
                                ;; Flatpak 应用 persistence（共享结构事实：
                                ;; 2026-09 从 VM-only 提升到 common 层）
-                               host-application-persistence-rules
-                               host-persistent-mount-file-systems))
+                               host-persistence))
 
 ;;; ── 共享 application persistence 事实（Flatpak 是所有 host 的结构
 ;;; 事实，2026-09 从 VM-only 提升到 common 层——不再由 host 各自
@@ -91,16 +91,6 @@ host 的 logical seed selection（(application-name . variant) alist），
                                     #:seed-selections seed-selections)
           (flatpak-persistence-rules)))
 
-(define* (host-persistent-mount-file-systems #:key (seed-selections '()))
-  "HOME persistence bind 列表（user data + app state，含 Flatpak）。
-gvfs-mount-metadata 服务与 file-systems 字段共用同一列表。
-SEED-SELECTIONS 透传给 application rules（决定 seed 变体）。"
-  (append (user-persistence-file-systems (user-profile-name %primary-user))
-          (application-persistence-file-systems
-           (host-application-persistence-rules
-            #:seed-selections seed-selections)
-           (user-profile-name %primary-user))))
-
 ;; Mihomo, SmartDNS, Noctalia and the Guix root cache are common system
 ;; services, so their machine-owned state binds belong to the shared base OS
 ;; rather than each host assembly.  Keep one rule list as the source for both
@@ -112,9 +102,6 @@ SEED-SELECTIONS 透传给 application rules（决定 seed 变体）。"
         %smartdns-mode-persistence-rule
         %noctalia-greeter-persistence-rule
         %guix-root-cache-persistence-rule))
-
-(define %common-machine-state-file-systems
-  (machine-state-persistence-file-systems %common-machine-state-rules))
 
 ;;; ── TTY login prompt 的强语义（docs/architecture/accounts-sessions.md）
 ;;; login: 出现 = interactive-session-ready 已过——mingetty 延迟到
@@ -140,15 +127,32 @@ SEED-SELECTIONS 透传给 application rules（决定 seed 变体）。"
                                                                         svc))
                                            "tty1"))) gated)))
     no-tty1))
-
+(define* (host-persistence #:key
+                           (additional-machine-state-rules '())
+                           (seed-selections '())
+                           (user (user-profile-name %primary-user)))
+  "Single persistence set for a host: common machine state + host machine
+state + selected user directories + application state.  File systems and
+activation are both derived from this one value."
+  (let ((application-rules
+         (host-application-persistence-rules
+           #:seed-selections seed-selections)))
+    (persistence-set
+      (projections
+        (append
+          (machine-state-persistence-projections
+            (append %common-machine-state-rules
+                    additional-machine-state-rules))
+          (user-persistence-projections user)
+          (application-persistence-projections application-rules user))))))
 (define* (make-host-services #:key (network-services '())
                              keep-root-generations
-                             persistent-mount-file-systems
+                             persistence
                              (additional-system-services '()))
   "共享 system services 列表。NETWORK-SERVICES 是 host 的网络服务
  头（NetworkManager（dns=dnsmasq）+ 可选 wpa-supplicant）；
  KEEP-ROOT-GENERATIONS 是 storage policy 的 keep 数；
- PERSISTENT-MOUNT-FILE-SYSTEMS 是 HOME persistence bind 列表
+ PERSISTENCE 是 host 的单一 persistence set
  （gvfs-mount-metadata 与 file-systems 字段共用）；
   ADDITIONAL-SYSTEM-SERVICES 是 host-only system services；
   gaming 基础设施（steam-devices udev + 游戏库目录 activation）
@@ -159,7 +163,7 @@ SEED-SELECTIONS 透传给 application rules（决定 seed 变体）。"
                         (nm-dnsmasq-account-service)
                         ;; GVfs 桌面 metadata（x-gvfs-hide/x-gvfs-trash → utab）。
                         (gvfs-mount-metadata-service
-                         persistent-mount-file-systems)
+                         (persistence-set-file-systems persistence))
                         ;; SmartDNS 是应用 resolver；与 mihomo 完全解耦。
                         (smartdns-service)
                         ;; Mihomo 系统透明代理（docs/architecture/mihomo.md）。
@@ -191,33 +195,20 @@ SEED-SELECTIONS 透传给 application rules（决定 seed 变体）。"
           desktop-services))
 
 (define* (make-host-user-services #:key system-services
-                                  (seed-selections '())
-                                  (application-persistence-rules
-                                   (host-application-persistence-rules
-                                    #:seed-selections seed-selections))
+                                  persistence
                                   (flatpak-environment-overrides '())
-                                  (additional-machine-state-persistence-rules '())
                                   secrets
                                   home-environment)
   "共享 user services 列表（不含 account-databases 投影本身）。
 SYSTEM-SERVICES 是 host 的 system services 列表（make-host-services
-的产物）；APPLICATION-PERSISTENCE-RULES 默认 = 全部 application +
-Flatpak 平台规则（host-application-persistence-rules，所有 host
-共享）；ADDITIONAL-MACHINE-STATE-PERSISTENCE-RULES 是 host-only
-machine state；SECRETS 是全部声明式 secrets（host 的 inventory：测试
-sentinel + mihomo + applications）；HOME-ENVIRONMENT 是挂入 system
-的 Guix Home。"
+的产物）；PERSISTENCE 是 host 的单一 persistence set（全部 user、
+application、machine-state 投影）；SECRETS 是全部声明式 secrets（host
+的 inventory：测试 sentinel + mihomo + applications）；
+HOME-ENVIRONMENT 是挂入 system 的 Guix Home。"
   (append (list (secure-ssh-service)
                 (ssh-host-key-service)
-                (user-persistence-service (user-profile-name %primary-user))
-                ;; application persistence（generic executor）。
-                (application-persistence-service application-persistence-rules
-                 (user-profile-name %primary-user))
+                (persistence-set-service persistence)
                 (flatpak-overrides-activation flatpak-environment-overrides)
-                ;; machine-state persistence（root-owned system state）。
-                (machine-state-persistence-service (append
-                                                    %common-machine-state-rules
-                                                    additional-machine-state-persistence-rules))
                 ;; noctalia-greeter persistence backing 的 owner/mode
                 ;; （activation 先于 file-systems 挂载，与 channel
                 ;; activation 幂等无冲突）。
@@ -252,9 +243,8 @@ sentinel + mihomo + applications）；HOME-ENVIRONMENT 是挂入 system
                   (login-gate-services))))
 
 (define* (make-base-host-operating-system #:key host-name
-                                          persistent-mount-file-systems
+                                          persistence
 
-                                          (additional-machine-state-rules '())
                                           user-services)
   "基础 OS：与最终 OS 完全相同，只是不含 account-databases 投影与
 final transformation。仅用于折叠 account 列表；真正启动用
@@ -282,14 +272,10 @@ make-host-operating-system 的产物。"
     ;; 无状态根（docs/architecture/storage.md）。
     (initrd microcode-ephemeral-initrd)
     (file-systems (append (system-file-systems %ephemeral-root-file-system)
-                          ;; selected user persistence（bind mounts，登录前就位）
-                          persistent-mount-file-systems
-                          ;; machine-state binds（root-owned / greeter-owned）
-                          %common-machine-state-file-systems
-                          (machine-state-persistence-file-systems
-                           additional-machine-state-rules)
+                          ;; all persistence projections derive bind mounts
+                          ;; from the same set as activation
+                          (persistence-set-file-systems persistence)
                           %base-file-systems))
-
     (swap-devices %swap-spaces)
 
     (users (list (primary-user-account)))

@@ -180,9 +180,9 @@
 ;; %vm-os 自 mihomo Phase 1 起合法含 machine-state（mihomo providers
 ;; bind），断言收紧为：%vm-os 的 machine-state 服务恰好是 mihomo 那
 ;; 一个，且任何 machine-state bind 都不得指向 keyrings 路径。
-(test-equal "GK4: machine-state service in %vm-os is exactly the mihomo one" 1
+(test-equal "GK4: persistence activation service is present in %vm-os" 1
             (count (lambda (svc)
-                     (eq? 'machine-state-persistence
+                     (eq? 'persistence
                           (service-type-name (service-kind svc))))
                    (operating-system-services %vm-os)))
 

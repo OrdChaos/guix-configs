@@ -104,13 +104,6 @@
   (append %mihomo-secrets
           (applications-secrets %applications)))
 
-;; HOME persistence bind mounts（user data + app state；单一定义，
-;; %lenovo-legion-y7000p-services 的 gvfs-mount-metadata 服务与 file-systems 字段
-;; 共用）。Flatpak 部分使用 common 的共享事实（全局 selection 投影）。
-(define %persistent-mount-file-systems
-  (host-persistent-mount-file-systems
-   #:seed-selections %lenovo-legion-y7000p-seed-selections))
-
 ;; Machine-owned system state on the ephemeral root:
 ;;   - GUI-created NetworkManager keyfile profiles only (derived/volatile
 ;;     state under /var/lib/NetworkManager stays ephemeral);
@@ -119,6 +112,11 @@
   (list %network-manager-connections-persistence-rule
         %laptop-bluetooth-persistence-rule))
 
+
+(define %laptop-persistence
+  (host-persistence
+    #:additional-machine-state-rules %laptop-additional-machine-state-rules
+    #:seed-selections %lenovo-legion-y7000p-seed-selections))
 
 ;; Wine may exceed the inherited 4096 descriptor limit while streaming game
 ;; resources.  Set both limits so the graphical PAM session passes 65536 to
@@ -154,8 +152,7 @@
                                                       wpa-supplicant-service-type))
                             #:keep-root-generations (host-storage-policy-keep-root-generations
                                                      %lenovo-legion-y7000p-storage-policy)
-                            #:persistent-mount-file-systems
-                            %persistent-mount-file-systems
+                            #:persistence %laptop-persistence
                             ;; UPower publishes battery and charging state on the system bus for
                             ;; Noctalia.  It is a physical-laptop capability, not a VM service.
                             #:additional-system-services (append (list (service
@@ -181,14 +178,7 @@
 ;; 完整 user services（不含 account-databases 投影本身）。
 (define %lenovo-legion-y7000p-user-services
   (make-host-user-services #:system-services %lenovo-legion-y7000p-services
-                           #:application-persistence-rules
-                           (host-application-persistence-rules
-                            #:seed-selections
-                            %lenovo-legion-y7000p-seed-selections)
-                           #:flatpak-environment-overrides
-                           %flatpak-prime-environment-overrides
-                           #:additional-machine-state-persistence-rules
-                           %laptop-additional-machine-state-rules
+                           #:persistence %laptop-persistence
                            #:secrets %lenovo-legion-y7000p-secrets
                            #:home-environment %lenovo-legion-y7000p-guix-home))
 
@@ -197,10 +187,7 @@
 (define %os-without-account-databases
   (make-base-host-operating-system #:host-name (host-name-for-id
                                                 "lenovo-legion-y7000p")
-                                   #:persistent-mount-file-systems
-                                   %persistent-mount-file-systems
-                                   #:additional-machine-state-rules
-                                   %laptop-additional-machine-state-rules
+                                   #:persistence %laptop-persistence
                                    #:user-services
                                    %lenovo-legion-y7000p-user-services))
 

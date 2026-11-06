@@ -32,7 +32,7 @@
   #:use-module (guixcfg apps model) ;applications-secrets
   #:use-module (guixcfg system mihomo service) ;%mihomo-secrets、%mihomo-data-persistence-rule
   #:use-module (guixcfg system dns nm-dnsmasq) ;dnsmasq 专用账号配置
-  #:export (%vm-storage-policy %vm-services %vm-test-secrets %vm-os))
+  #:export (%vm-storage-policy %vm-services %vm-test-secrets %vm-persistence %vm-os))
 
 ;; 保留 host 模块原有导出名；实际 policy 放在纯存储模块中，避免早期
 ;; disk-install 为取 policy 而加载完整 OS/UKI/channel 依赖。
@@ -65,12 +65,8 @@
 (define %vm-seed-selections
   '((noctalia . vm)))
 
-;; HOME persistence bind mounts（user data + app state；单一定义，
-;; %vm-services 的 gvfs-mount-metadata 服务与 file-systems 字段共用）。
-;; Flatpak 部分使用 common 的共享事实（全局 selection 投影）。
-(define %persistent-mount-file-systems
-  (host-persistent-mount-file-systems
-   #:seed-selections %vm-seed-selections))
+(define %vm-persistence
+  (host-persistence #:seed-selections %vm-seed-selections))
 
 (define %vm-services
   (make-host-services
@@ -85,14 +81,12 @@
                                                                     (shepherd-requirement '()))))
    #:keep-root-generations (host-storage-policy-keep-root-generations
                             %vm-storage-policy)
-   #:persistent-mount-file-systems %persistent-mount-file-systems))
+   #:persistence %vm-persistence))
 
 ;; 完整 user services（不含 account-databases 投影本身）。
 (define %vm-user-services
   (make-host-user-services #:system-services %vm-services
-                           #:application-persistence-rules
-                           (host-application-persistence-rules
-                            #:seed-selections %vm-seed-selections)
+                           #:persistence %vm-persistence
                            #:secrets (append %vm-test-secrets %mihomo-secrets
                                              (applications-secrets
                                               %applications))
@@ -102,8 +96,7 @@
 ;; 仅用于折叠 account 列表；真正启动用 %vm-os。
 (define %os-without-account-databases
   (make-base-host-operating-system #:host-name (host-name-for-id "vm")
-                                   #:persistent-mount-file-systems
-                                   %persistent-mount-file-systems
+                                   #:persistence %vm-persistence
                                    #:user-services %vm-user-services))
 
 ;; 最终 OS：account fold + machine-identity + account-databases 投影

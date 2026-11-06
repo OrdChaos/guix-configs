@@ -361,7 +361,7 @@
 (test-assert
  "D8: application-persistence activation service present in %vm-os"
  (any (lambda (svc)
-        (eq? 'application-persistence
+        (eq? 'persistence
              (service-type-name (service-kind svc))))
       (operating-system-services %vm-os)))
 
