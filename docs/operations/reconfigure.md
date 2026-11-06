@@ -162,7 +162,9 @@ sudo 清理用户 channel load path 后重新编译整份 blueprint）→
   → Home generation 切换后，Home Shepherd 重跑 gsettings-reconcile
     one-shot（desired 声明 build-time 嵌入 wrapper——声明变即重跑，
     runtime dconf 立即更新；docs/architecture/gsettings.md）
-  → 通过 Shepherd protocol 验证 Home 链接与 readiness capability 状态
+  → 若 readiness capability 已有成功但 one-shot 已停止，先
+    herd start interactive-session-ready 补跑缺失 prerequisite，
+    再通过 Shepherd protocol 验证 Home 链接与 capability 状态
   → 打开 gate
 ```
 

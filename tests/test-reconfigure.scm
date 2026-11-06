@@ -356,6 +356,42 @@
   (test-assert "readiness query failure: gate stays closed"
                (gate-closed? gate-dir)))
 
+
+;; ── 6b. readiness service stopped → barrier retry → success ──
+
+(let ((sandbox (make-sandbox))
+      (ready? #f)
+      (log '()))
+  (define gate-dir
+    (second sandbox))
+  (define home-dir
+    (third sandbox))
+  (ready-home! home-dir)
+  (define result
+    (reconfigure-transaction! "vm"
+                              "alice"
+                              #:root "/repo"
+                              #:gate-dir gate-dir
+                              #:home-dir home-dir
+                              #:run-command (lambda (argv)
+                                              (set! log
+                                                    (cons argv log))
+                                              (when (equal? argv
+                                                            '("herd" "start"
+                                                              "interactive-session-ready"))
+                                                (set! ready? #t))
+                                              0)
+                              #:service-ready? (lambda (service)
+                                                 ready?)
+                              #:sleep-proc (lambda (s)
+                                             #t)))
+  (test-equal "barrier retry: exit code 0" 0 result)
+  (test-assert "barrier retry: gate reopened"
+               (not (gate-closed? gate-dir)))
+  (test-assert "barrier retry: barrier was started"
+               (member '("herd" "start" "interactive-session-ready")
+                       log)))
+
 ;; ── 7. 成功、Home 未变 → gate 重开、exit 0 ──
 
 (let ((sandbox (make-sandbox)))

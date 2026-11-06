@@ -238,22 +238,36 @@ HOST 与 HOME-USER 由调用方显式传入（Blue 的 privilege handoff）。"
                                    pivot
                                    home-link
                                    host) 2)
-                                ;; 6. readiness 复查：直接读取 Shepherd protocol；
-                                ;; running 服务或成功完成的 one-shot 才算 ready。
-                                (let ((failed (find (lambda (svc)
-                                                      (not (service-ready? svc)))
-                                                    %readiness-capabilities)))
-                                  (if failed
-                                      (begin
-                                        (format (current-error-port)
-                                         "reconfigure: capability ~a was not confirmed ready; gate remains CLOSED.~%  Fix the cause, then re-run blue reconfigure ~a to recover.~%"
-                                         failed host) 2)
-                                      (begin
-                                        (open-gate!)
-                                        (if (equal? new-home old-home)
-                                            (format #t
-                                             "reconfigure: OK (Home closure unchanged; link idempotent: ~a)~%"
-                                             new-home)
-                                            (format #t
-                                             "reconfigure: OK (Home hot-switched ~a -> ~a)~%"
-                                             old-home new-home)) 0))))))))))))))
+                                (begin
+                                  ;; 6. readiness 复查：直接读取 Shepherd protocol；
+                                  ;; running 服务或成功完成的 one-shot 才算 ready。
+                                  ;; A one-shot readiness service may have completed
+                                  ;; earlier and be stopped now; reconfigure does not
+                                  ;; restart unchanged one-shots.  Re-run the barrier
+                                  ;; so missing prerequisites are started before the
+                                  ;; final probe.  The barrier itself only opens the
+                                  ;; gate when every prerequisite succeeds.
+                                  (let ((failed (find (lambda (svc)
+                                                        (not (service-ready? svc)))
+                                                      %readiness-capabilities)))
+                                    (when failed
+                                      (run-command '("herd" "start"
+                                                     "interactive-session-ready"))
+                                      (set! failed
+                                            (find (lambda (svc)
+                                                    (not (service-ready? svc)))
+                                                  %readiness-capabilities)))
+                                    (if failed
+                                        (begin
+                                          (format (current-error-port)
+                                           "reconfigure: capability ~a was not confirmed ready; gate remains CLOSED.~%  Fix the cause, then re-run blue reconfigure ~a to recover.~%"
+                                           failed host) 2)
+                                        (begin
+                                          (open-gate!)
+                                          (if (equal? new-home old-home)
+                                              (format #t
+                                               "reconfigure: OK (Home closure unchanged; link idempotent: ~a)~%"
+                                               new-home)
+                                              (format #t
+                                               "reconfigure: OK (Home hot-switched ~a -> ~a)~%"
+                                               old-home new-home)) 0)))))))))))))))
