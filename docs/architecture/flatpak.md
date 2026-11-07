@@ -80,7 +80,7 @@ an-anime-game-launcher sleepy-launcher steam`，extension selection 含
 `gamescope proton-ge`。两个消费方：
 
 - **Home/System 投影**（offline）：`guix-home` 与
-  `host-persistent-mount-file-systems` 直接使用 registry 的全局
+  `host-persistence` 的 persistence set 直接使用 registry 的全局
   selection——override 文件与 persistence mounts 在所有设备相同；
 - **`blue flatpak`**：直接使用 registry 的全局 selection，不再按
   hostname 反查 host 模块或动态加载 host inventory。

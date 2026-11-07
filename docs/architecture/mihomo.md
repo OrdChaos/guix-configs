@@ -83,15 +83,15 @@ boot 时序：activation（数据目录/backing 0700）→ file-systems
 | `/var/log/mihomo.log` | ephemeral | shepherd log-file，root 0640 |
 
 machine-state rule：`/persist/system/state/mihomo/clash` →
-bind → `/var/lib/clash`（**整个 -d 数据目录**）。**backing 与
-consumer 均由 mihomo activation 强制 0700**（generic mechanism 只
-建 0755 目录；Mihomo 以 0644 写 provider cache 文件，隔离靠不可
-遍历的 parent）。整体 bind 的理由：providers cache 与 cache.db
-（选中节点/组状态）都是 machine-owned mutable state，都应在重启
-后保留；machine-state 只支持 bind-directory（single-file bind 不是
-仓库标准机制，AGENT.md §12），`-d` 整体 bind 是覆盖两者的最小
-单一规则（2026-08-28：此前只 bind providers 时选中节点每 boot
-重置）。
+bind → `/var/lib/clash`（**整个 -d 数据目录**）。rule 声明
+`owner root` / `mode 0700`，由通用 persistence projection 与
+mihomo activation 两侧幂等强制（Mihomo 以 0644 写 provider cache
+文件，隔离靠不可遍历的 0700 parent）。整体 bind 的理由：providers
+cache 与 cache.db（选中节点/组状态）都是 machine-owned mutable
+state，都应在重启后保留；machine-state 只支持 bind-directory
+（single-file bind 不是仓库标准机制，AGENT.md §12），`-d` 整体
+bind 是覆盖两者的最小单一规则（2026-08-28：此前只 bind providers
+时选中节点每 boot 重置）。
 
 ## 多订阅源（SCM 声明 + 每源一个 age）
 

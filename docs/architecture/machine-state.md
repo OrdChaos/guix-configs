@@ -47,6 +47,10 @@ backing   machine-state root 相对路径
 consumer  absolute system runtime path
 exposure  仅 bind-directory
 lifecycle 仅 machine-owned
+owner     root | user | named
+owner-user owner 用户名（user/named 必填）
+owner-group 可选 group
+mode      可选目录权限
 ```
 
 ### Root ownership layering

@@ -26,7 +26,9 @@
                                   (backing
                                    "network-manager/system-connections")
                                   (consumer
-                                   %network-manager-system-connections-directory)))
+                                   %network-manager-system-connections-directory)
+                                  (owner 'root)
+                                  (mode #o700)))
 
 (define (network-manager-connections-ownership-activation)
   "Create both sides of the connection-profile projection as root:root 0700.

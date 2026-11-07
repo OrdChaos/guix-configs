@@ -111,10 +111,12 @@ convert their final rules to projections at the executor boundary. This
 preserves semantics while making file-systems and activation impossible to
 drift apart at the host composition boundary.
 
-Special ownership that is not a simple owner/mode contract (mihomo's
-subdirectories, Noctalia greeter consumer ownership, NetworkManager profile
-ownership) remains in the owning module's activation; it consumes the same
-canonical paths and is idempotent with the generic activation.
+Simple owner/mode contracts are carried by the projection itself (for
+example mihomo and NetworkManager 0700, Noctalia greeter 0750). Extra
+module-specific work that is not a simple owner/mode contract (mihomo
+subdirectories, channel-owned consumer setup) remains in the owning
+module's activation; it consumes the same canonical paths and is idempotent
+with the generic activation.
 
 ## Application persistence（/persist/data-app）
 
@@ -208,7 +210,7 @@ source)` 两元素列表；source 为 file-like），语义是"只负责创建�
   `(variant . seeds)` 的 alist；每个变体是一份**完整**的 seeds 列表
   （整份替换 base，不做 merge）。host 只做 logical selection
   （`(application-name . variant)` alist，经
-  `host-application-persistence-rules #:seed-selections` 传入），
+  `host-persistence #:seed-selections` 传入），
   不接触文件或路径；未选中的 host 使用 base seeds。base 必须保持
   可移植（无 `/home`、无显示器 connector/面板尺寸），机器专属内容
   只放在变体里。

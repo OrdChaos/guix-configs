@@ -67,6 +67,7 @@ modules/guixcfg/      全部配置模块（guile/repl 用绝对 -L；guix system
   storage/             磁盘/子卷/generation 纯模型 + 安装器
   system/              OS 组装、readiness、accounts、ssh、
                        user-persistence、application-persistence、
+                       persistence（通用 projection/set executor）、
                        session-gate（login gate 唯一 authority：
                        path/close/open/message + activation gexp
                        builder）、install.scm（blue install 的安装

@@ -109,14 +109,15 @@
 ;; 覆盖 providers cache（订阅节点列表）与 cache.db（选中节点/组
 ;; 状态）——两者都是 machine-owned mutable state，重启后都应保留
 ;; （2026-08-28：只持久化 providers 时，选中节点每 boot 重置）。
-;; backing 与 consumer 的 0700 由 mihomo-activation 强制（generic
-;; mechanism 只 mkdir 0755；Mihomo 以 0644 写 provider cache 文件，
+;; backing 与 consumer 的 0700 同时由通用 projection 和
+;; mihomo-activation 强制（Mihomo 以 0644 写 provider cache 文件，
 ;; 隔离靠不可遍历的 0700 parent——用户设计契约）。
 (define %mihomo-data-persistence-rule
   (machine-state-persistence-rule (name 'mihomo-data)
                                   (backing "mihomo/clash")
-                                  (consumer "/var/lib/clash")))
-
+                                  (consumer "/var/lib/clash")
+                                  (owner 'root)
+                                  (mode #o700)))
 ;; ────────────────────────────────────────────────────────────
 ;; runtime config materializer（只做 config composition，不下载订阅）
 ;; ────────────────────────────────────────────────────────────
