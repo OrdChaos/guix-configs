@@ -1,9 +1,9 @@
-config_version = 15
+config_version = 16
 
 [bar.default]
 center = [ "clock", "weather" ]
 concave_edge_corners = false
-end = [ "tray", "notifications", "widget", "network", "bluetooth", "volume", "brightness", "battery", "session" ]
+end = [ "tray", "notifications", "status", "network", "bluetooth", "volume", "brightness", "battery", "session" ]
 margin_edge = 6
 margin_ends = 6
 padding = 4
@@ -65,7 +65,7 @@ widget_order = [ "lockscreen-login-box@eDP-1", "lockscreen-login-box@Virtual-1",
     type = "login_box"
 
         [lockscreen_widgets.widget."lockscreen-login-box@Virtual-1".settings]
-        background_color = "surface_variant"
+        background_color = "surface_container"
         background_opacity = 0.88
         background_radius = 12.0
         center_password_text = false
@@ -92,7 +92,7 @@ widget_order = [ "lockscreen-login-box@eDP-1", "lockscreen-login-box@Virtual-1",
     type = "login_box"
 
         [lockscreen_widgets.widget."lockscreen-login-box@eDP-1".settings]
-        background_color = "surface_variant"
+        background_color = "surface_container"
         background_opacity = 0.88
         background_radius = 12.0
         center_password_text = false
@@ -128,11 +128,9 @@ enable_daemon = true
 position = "top_right"
 position_vertical = "top_right"
 
-[plugin_settings."mdj2812/mihomo-control"]
-panel_placement = "attached"
 
 [plugins]
-enabled = [ "mdj2812/mihomo-control" ]
+enabled = [ "ordchaos/network-layer" ]
 
     [[plugins.source]]
     kind = "git"
@@ -250,6 +248,7 @@ pinned = [ "fcitx5" ]
 [widget.volume]
 capsule = true
 
-[widget.widget]
+
+[widget.status]
 capsule = true
-type = "mdj2812/mihomo-control:widget"
+type = "ordchaos/network-layer:status"

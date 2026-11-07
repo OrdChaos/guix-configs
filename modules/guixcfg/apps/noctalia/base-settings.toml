@@ -1,9 +1,9 @@
-config_version = 13
+config_version = 16
 
 [bar.default]
 center = [ "clock", "weather" ]
 concave_edge_corners = false
-end = [ "tray", "notifications", "widget", "network", "bluetooth", "volume", "brightness", "battery", "session" ]
+end = [ "tray", "notifications", "status", "network", "bluetooth", "volume", "brightness", "battery", "session" ]
 margin_edge = 6
 margin_ends = 6
 padding = 4
@@ -40,6 +40,8 @@ auto_locate = false
 
 [lockscreen]
 enabled = true
+transition = [ "fade" ]
+transition_duration = 300
 
 [lockscreen_widgets]
 enabled = false
@@ -57,11 +59,9 @@ enable_daemon = true
 position = "top_right"
 position_vertical = "top_right"
 
-[plugin_settings."mdj2812/mihomo-control"]
-panel_placement = "attached"
 
 [plugins]
-enabled = [ "mdj2812/mihomo-control" ]
+enabled = [ "ordchaos/network-layer" ]
 
     [[plugins.source]]
     kind = "git"
@@ -81,14 +81,17 @@ enabled = [ "mdj2812/mihomo-control" ]
 [shell]
 app_icon_color = "primary"
 avatar_path = "~/.local/share/avatars/avatar.png"
+external_ip_enabled = true
 settings_show_advanced = false
 setup_wizard_enabled = false
 telemetry_enabled = false
 
     [shell.launcher]
-    categories = true
-    show_icons = true
+    category_icons_only = true
+    layout = "simple"
+    show_app_origin_indicator = false
     sort_by_usage = false
+    track_usage = false
 
     [shell.panel]
     open_near_click_control_center = true
@@ -173,6 +176,7 @@ pinned = [ "fcitx5" ]
 [widget.volume]
 capsule = true
 
-[widget.widget]
+
+[widget.status]
 capsule = true
-type = "mdj2812/mihomo-control:widget"
+type = "ordchaos/network-layer:status"
