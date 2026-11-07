@@ -74,13 +74,13 @@ path DSL。
    Guix 行为，与 application-persistence 同一审计）；
 9. 不新增 readiness capability（filesystem topology concern）；
 10. 默认 root ownership（机器状态属 root）；真实 daemon 需要
-    owner/group/mode 时，在 backing 与 consumer 两侧强制（bind
-    语义：mount 后 consumer 可见权限 = backing 权限）——现有生产
-    先例：mihomo（root，0700，mihomo activation 两侧强制）、
-    noctalia-greeter（greeter 用户，0750：consumer 侧由 channel
-    service 的 activation 负责，backing 侧由本仓库
-    noctalia-greeter-backing-ownership-activation 负责）；generic
-    层暂不扩展 owner/group/mode 字段，不建 ACL framework。
+    owner/group/mode 时，通过 machine-state rule 的
+    owner/owner-user/owner-group/mode 进入通用 persistence
+    projection（bind 语义：mount 后 consumer 可见权限 = backing
+    权限）。现有生产先例：mihomo（root，0700，mihomo activation
+    两侧强制）、noctalia-greeter（named greeter，0750，通用
+    projection + channel consumer activation 双重幂等）。业务性
+    额外目录仍由 owner 模块的 activation 处理，不建 ACL framework。
 
 ## 与 host secret 的区别（重要）
 

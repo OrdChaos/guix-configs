@@ -163,6 +163,20 @@
                     (string=? "/var/lib/example-daemon"
                               (persistence-projection-consumer p))
                     (eq? 'root (persistence-projection-owner p)))))
+(test-assert "projection conversion preserves named owner and mode"
+             (let* ((rule (machine-state-persistence-rule
+                            (name 'synthetic-named)
+                            (backing "synthetic-named/state")
+                            (consumer "/var/lib/synthetic-named")
+                            (owner 'named)
+                            (owner-user "synthetic-owner")
+                            (mode #o750)))
+                    (p (car (machine-state-persistence-projections
+                              (list rule)))))
+               (and (eq? 'named (persistence-projection-owner p))
+                    (string=? "synthetic-owner"
+                              (persistence-projection-owner-user p))
+                    (= #o750 (persistence-projection-mode p)))))
 ;; ── 无 copy/sync 实现 ───────────────────────────────────────
 (test-assert "no copy/sync primitives in generated artifacts"
              (let ((s (object->string (gexp->approximate-sexp (machine-state-persistence-activation

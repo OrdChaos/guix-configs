@@ -56,15 +56,16 @@
   ;; mutable state 的 machine-state 持久化声明（backing 归
   ;; /persist/system/state/noctalia-greeter；bind 挂载在 host
   ;; assembly 接线——docs/architecture/machine-state.md，与 mihomo
-  ;; 同一模式）。consumer 侧 owner/mode 由 channel service 的
-  ;; activation 负责；backing 侧（bind 的权限来源）由本仓库的
-  ;; noctalia-greeter-backing-ownership-activation 负责——bind
-  ;; 语义：mount 后 consumer 可见 owner/mode = backing 的
-  ;; owner/mode，两侧都必须 0750 greeter:greeter（channel
-  ;; activation 不管理 backing）。
+  ;; 同一模式）。owner/mode 进入通用 persistence projection，因此
+  ;; generic activation 与 noctalia-greeter-backing-ownership 都会
+  ;; 把 backing/consumer 置为 0750 greeter:greeter——bind 语义下
+  ;; mount 后 consumer 可见权限 = backing 权限，两侧一致。
   (machine-state-persistence-rule (name 'noctalia-greeter)
                                   (backing "noctalia-greeter")
-                                  (consumer %noctalia-greeter-state-dir)))
+                                  (consumer %noctalia-greeter-state-dir)
+                                  (owner 'named)
+                                  (owner-user "greeter")
+                                  (mode #o750)))
 
 (define (noctalia-greeter-backing-ownership-activation)
   "activation gexp：只负责 persistence backing 侧

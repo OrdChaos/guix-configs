@@ -93,7 +93,15 @@
   (exposure machine-state-persistence-rule-exposure ;symbol：仅 'bind-directory
             (default 'bind-directory))
   (lifecycle machine-state-persistence-rule-lifecycle ;symbol：仅 'machine-owned
-             (default 'machine-owned)))
+             (default 'machine-owned))
+  (owner machine-state-persistence-rule-owner ;root | user | named
+         (default 'root))
+  (owner-user machine-state-persistence-rule-owner-user ;string or #f
+              (default #f))
+  (owner-group machine-state-persistence-rule-owner-group ;string or #f
+               (default #f))
+  (mode machine-state-persistence-rule-mode ;integer or #f
+        (default #f)))
 
 (define (valid-absolute-consumer? consumer)
   "CONSUMER 是否是合法的 absolute system consumer（非根、不在禁止
@@ -123,6 +131,20 @@ roots 下）。"
     (unless (memq exposure %allowed-exposures)
       (error "unsupported machine-state exposure"
              (machine-state-persistence-rule-name rule) exposure))
+    (unless (memq (machine-state-persistence-rule-owner rule)
+                  '(root user named))
+      (error "unsupported machine-state owner"
+             (machine-state-persistence-rule-name rule)
+             (machine-state-persistence-rule-owner rule)))
+    (when (memq (machine-state-persistence-rule-owner rule)
+                '(user named))
+      (unless (string? (machine-state-persistence-rule-owner-user rule))
+        (error "named machine-state owner requires owner-user"
+               (machine-state-persistence-rule-name rule))))
+    (when (machine-state-persistence-rule-mode rule)
+      (unless (integer? (machine-state-persistence-rule-mode rule))
+        (error "machine-state mode must be an integer or #f"
+               (machine-state-persistence-rule-name rule))))
     (unless (memq lifecycle %allowed-lifecycles)
       (error "unsupported machine-state lifecycle"
              (machine-state-persistence-rule-name rule) lifecycle)) #t))
@@ -147,8 +169,10 @@ ownership is represented explicitly; domain-specific ownership (mihomo
            (backing (machine-state-persistence-rule-backing rule))
            (consumer (machine-state-persistence-rule-consumer rule))
            (exposure 'bind-directory)
-           (owner 'root)
-           (mode #f)
+           (owner (machine-state-persistence-rule-owner rule))
+           (owner-user (machine-state-persistence-rule-owner-user rule))
+           (owner-group (machine-state-persistence-rule-owner-group rule))
+           (mode (machine-state-persistence-rule-mode rule))
            (options #f)
            (home #f)
            (seeds '())))
