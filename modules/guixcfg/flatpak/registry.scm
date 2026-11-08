@@ -26,6 +26,7 @@
   #:use-module (guixcfg flatpak applications sleepy-launcher definition)
   #:use-module (guixcfg flatpak applications steam definition)
   #:use-module (guixcfg flatpak applications telegram definition)
+  #:use-module (guixcfg flatpak applications platen definition)
   #:use-module (guixcfg flatpak applications tuba definition)
   #:use-module (guixcfg flatpak applications discord definition)
   #:use-module (guixcfg flatpak applications newsflash definition)
@@ -73,6 +74,7 @@
         %flatpak-sleepy-launcher
         %flatpak-steam
         %flatpak-telegram
+        %flatpak-platten
         %flatpak-tuba
         %flatpak-discord
         %flatpak-newsflash
@@ -95,6 +97,7 @@
        sleepy-launcher
        steam
        telegram
+       platen
        tuba
        discord
        newsflash
