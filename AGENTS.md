@@ -34,7 +34,7 @@
 - `guix build --dry-run` 安全是因为 CLI 注册了 build-handler（请求被
   累积不执行）。
 - **substitute-urls 显式列表**（system/common.scm，顺序即优先级）：
-  SJTU 镜像 → cache-cdn.guix.moe → 官方 ci/bordeaux →
+  cache-cdn.guix.moe → bordeaux → SJTU 镜像 → ci →
   substitutes.nonguix.org（origin 兜底）；nonguix key 已授权
   （system/nonguix-key.pub，2026-10-04 恢复——nonguix.org 与
   guix.moe 已合并运营）。nonguix 包 dry-run 显示

@@ -51,13 +51,15 @@
 ;; ——不在这里。
 ;;
 ;; Substitute policy（所有 host 共享，不 per-host 重复）：
-;;   substitute-urls 显式全列（镜像优先，官方兜底；显式列表而非
-;;   guix-extension 追加，因为顺序即优先级）：
-;;   - mirror.sjtu.edu.cn/guix：SJTU 镜像，官方 berlin 签名 narinfo
-;;     的纯镜像（实测 2026-10-04），免新密钥；
+;;   substitute-urls 显式全列（稳定优先，官方与镜像互为兜底；显式列表
+;;   而非 guix-extension 追加，因为顺序即优先级）：
 ;;   - cache-cdn.guix.moe：guix.moe 农场的镜像——narinfo 由源站直出、
 ;;     nar 经 nars.guix.moe（Cloudflare anycast，与代理出口区域无关）；
-;;   - 官方 ci/bordeaux 兜底主线内容；
+;;   - bordeaux.guix.gnu.org：官方主线 substitute，作为首个官方兜底；
+;;   - mirror.sjtu.edu.cn/guix：官方 berlin 签名 narinfo 的纯镜像，免新
+;;     密钥；热对象很快，但 2026-11-11 实测部分冷 NAR 长期仅 8–18 KiB/s，
+;;     HTTP 仍持续返回导致 Guix 不会回退，故置于 bordeaux 之后；
+;;   - ci.guix.gnu.org：第二个官方主线兜底；
 ;;   - substitutes.nonguix.org：nonguix 包（linux-7.2/firmware/
 ;;     microcode）的 substitute 源，同时是 guix.moe 农场的源站
 ;;     （2026-08-23 nonguix.org 与 guix.moe 基础设施合并，见
@@ -78,10 +80,10 @@
   (list (service guix-service-type
                  (guix-configuration (tmpdir "/var/tmp")
                                      (generate-substitute-key? #f)
-                                     (substitute-urls '("https://mirror.sjtu.edu.cn/guix"
-                                                        "https://cache-cdn.guix.moe"
-                                                        "https://ci.guix.gnu.org"
+                                     (substitute-urls '("https://cache-cdn.guix.moe"
                                                         "https://bordeaux.guix.gnu.org"
+                                                        "https://mirror.sjtu.edu.cn/guix"
+                                                        "https://ci.guix.gnu.org"
                                                         "https://substitutes.nonguix.org"))
                                      ;; Keep Guix's official signing keys; this field
                                      ;; replaces its default rather than extending it.
