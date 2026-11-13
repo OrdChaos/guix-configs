@@ -223,10 +223,10 @@ reconfigure 后的 best-effort 维护步骤（失败只 WARNING，不改变已�
 
 (define (%capture command)
   "运行命令并捕获 stdout，返回 (values output status)。用于纯只读
-preflight（git status / describe 等）——blue -n 下也真实执行，以提供
+preflight（git status / 频道解析等）——blue -n 下也真实执行，以提供
 有效验证。调用方负责检查 status。stderr 显式转发到当前 error port：
-blue 的 popen 默认把 stderr 并入 stdout，`guix describe` 的 channel
-list 会被 channel 警告与拉取进度污染（blue update 曾据此写坏
+blue 的 popen 默认把 stderr 并入 stdout，频道解析的 progress 与
+channel 警告会污染 stdout 的 channel list（blue update 曾据此写坏
 channels.lock.scm）。"
   (let ((port (open-output-string)))
     (let ((status (popen (car command) (cdr command) #:output port
@@ -615,7 +615,9 @@ to-delete); no mutation, no sudo."))
                  (category 'maintenance)
                  (synopsis "Rewrite channels.lock.scm from mutable channels.scm")
                  (help "Resolve mutable channels.scm and atomically rewrite
-channels.lock.scm. Never builds, deploys, runs guix pull, or commits.
+channels.lock.scm. Resolution runs the pinned Guix's channel machinery
+(git fetch + introduction authentication) and never instantiates the
+channel Guix: never builds, deploys, runs guix pull, or commits.
 With blue -n: command preview only -- no network access, no lock
 rewrite, no knowledge of future channel revisions."))
                 (unless (null? arguments)
@@ -640,8 +642,8 @@ rewrite, no knowledge of future channel revisions."))
                          (catch #t
                            (lambda () (%channel-commits content))
                            (lambda (key . args)
-                             (error "blue update: 'guix describe' output is \
-not a channel list; channels.lock.scm left unchanged"
+                             (error "blue update: channel resolution output \
+is not a channel list; channels.lock.scm left unchanged"
                                     key args)))
                          (atomic-write-file! lock
                                              (lambda (port) (display content port)))

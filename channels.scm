@@ -4,7 +4,9 @@
 ;;;   guix time-machine -C channels.lock.scm -- <command>
 ;;;
 ;;; 需要升级上游时，重建锁（联网，会拉到当时的最新 master）：
-;;;   guix time-machine -C channels.scm -- describe -f channels > channels.lock.scm
+;;;   blue update
+;;; 它只做频道解析（git fetch + introduction 认证），不实例化频道自身
+;;; 的 Guix。
 ;;; 重建后先用新锁跑一遍 tests/run-tests.scm 和 system build，
 ;;; 确认无误再把 channels.lock.scm 一起提交。
 ;;; 见 docs/operations/reconfigure.md。

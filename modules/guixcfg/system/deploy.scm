@@ -310,15 +310,18 @@ ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMM
                             ,target)))
 
 (define (channel-lock-refresh-argv root)
-  ;; blue update 的 argv：channels.scm:6-9 的文档化流程——用可变频道
-  ;; 定义 describe 并重写锁。不 build、不 deploy、不 commit。
-  `("guix" "time-machine"
-    "-C"
-    ,(string-append root "/" %channels-file)
-    "--"
-    "describe"
-    "-f"
-    "channels"))
+  ;; blue update 的 argv：在【锁定的】Guix 环境里运行
+  ;; tools/channel-lock.scm 解析 channels.scm 的每个频道到最新 commit，
+  ;; 输出 channels.lock.scm 格式（与 describe -f channels 同构）。
+  ;; 不用 `time-machine -C channels.scm -- describe`：那需要先计算并
+  ;; 构建频道自身 Guix 的 derivation，会在 inferior 里求值整棵上游
+  ;; package 模块树（blue update 的契约是“不 build”；且上游模块一旦
+  ;; 有循环弃用别名就会产生无界警告流——见 tools/channel-lock.scm 头
+  ;; 注释）。latest-channel-instances 只做 fetch + 认证，不实例化任何
+  ;; 东西。
+  (guix-time-machine-argv root %channels-lock-file
+                          `("repl" "tools/channel-lock.scm"
+                            "--" ,(string-append root "/" %channels-file))))
 
 (define (git-status-porcelain-argv root)
   `("git" "-C"

@@ -286,13 +286,22 @@
 (define update-argv
   (channel-lock-refresh-argv %root))
 
-(test-assert "update resolves mutable channels.scm (not the lock)"
-             (and (member "/repo/channels.scm" update-argv)
-                  (not (member "/repo/channels.lock.scm" update-argv))))
+(test-equal "update resolves channels.scm with the pinned channel resolver"
+            '("env" "GUILE_LOAD_PATH=/repo/modules"
+              "GUILE_LOAD_COMPILED_PATH=/repo/modules"
+              "guix" "time-machine" "-C" "/repo/channels.lock.scm"
+              "--" "repl" "tools/channel-lock.scm"
+              "--" "/repo/channels.scm")
+            update-argv)
 
-(test-equal "update runs guix describe -f channels"
-            '("describe" "-f" "channels")
-            (cdr (member "--" update-argv)))
+(test-assert "update hands channels.scm to the resolver, not to time-machine"
+             (and (equal? "/repo/channels.lock.scm"
+                          (option-value update-argv "-C"))
+                  (equal? '("/repo/channels.scm")
+                          (last-pair update-argv))))
+
+(test-assert "update never falls back to guix describe (which builds)"
+             (not (member "describe" update-argv)))
 
 (test-assert "update argv has no shell metacharacters"
              (no-shell-metacharacters? update-argv))
