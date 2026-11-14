@@ -23,7 +23,9 @@
 ;;;   VC5  languagepacks.json / clp 不被仓库生成（非 home-files
 ;;;        target——VS Code 自维护的 mutable state / derived cache）；
 ;;;   VC7  serve-web server-data rule（只有 data/ 持久化）；
-;;;   VC8  无自动启动、无 launcher（官方命令手工执行）；
+;;;   VC8  `code serve-web-local`（wrapper 子命令；web commit 记录在
+;;;        package property；VSCODE_WEB_TOKEN_FILE 指向 runtime
+;;;        secret；无自动启动、无独立 launcher）；
 ;;;   VC9  serve-web cache / extensions 声明式 symlink；token 是
 ;;;        repository-owned ordinary secret（HOME 无明文 token）。
 
@@ -61,6 +63,15 @@
           (eq? name
                (application-persistence-rule-name r)))
         (application-persistence %vscode-app)))
+
+(define %vscode-token-decl
+  (find (lambda (d)
+          (eq? 'vscode-connection-token (secret-decl-name d)))
+        (application-secrets %vscode-app)))
+
+(define %vscode-token-target
+  (runtime-secret-target %vscode-token-decl
+                         (user-profile-name %primary-user)))
 
 (define (vscode-home-file-targets)
   "home-files 声明目标的全部 target 列表（.config 与 HOME dotfile）。"
@@ -230,6 +241,28 @@
  (every (lambda (svc)
           (not (eq? (service-kind svc) home-shepherd-service-type)))
         (application-home-services %vscode-app)))
+
+(define (vscode-env-ref name)
+  "vscode app 的 simple-service 环境贡献里 NAME 的值（无则 #f）。
+
+simple-service 的 service-kind 是匿名 service type（扩展目标
+service type），所以按值形状匹配，而不是比较 kind。"
+  (any (lambda (svc)
+         (let ((v (service-value svc)))
+           (and (list? v)
+                (assoc-ref v name))))
+       (application-home-services %vscode-app)))
+
+(test-assert "VC8: code wrapper exposes serve-web-local (web commit recorded)"
+ (let ((p (package-named "vscode-with-extensions")))
+   (and p
+        (string=? %vscode-commit
+                  (assq-ref (package-properties p) 'vscode-web-commit)))))
+
+(test-assert "VC8: VSCODE_WEB_TOKEN_FILE points at the runtime secret"
+ (let ((v (vscode-env-ref "VSCODE_WEB_TOKEN_FILE")))
+   (and v
+        (string=? v %vscode-token-target))))
 
 ;; ── VC9：声明式 symlink + token 是 repository secret ─────────
 (test-assert

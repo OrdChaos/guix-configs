@@ -131,7 +131,8 @@ master credential 是 **stable credential**：normal reconfigure 不
 serve-web` 的 connection token（scope=user、domain=ordinary）：
 ordinary publisher 解密到 `/run/guixcfg-secrets-ordinary/users/
 <user>/vscode-connection-token`（owner=user，0400）；终端里手工执行
-`code serve-web --connection-token-file …` 时只读该 runtime 文件。
+`code serve-web-local`（wrapper 子命令，经 `VSCODE_WEB_TOKEN_FILE`
+以 `--connection-token-file` 传入）时只读该 runtime 文件。
 它不是 Home 层的第二份明文，也不在启动时生成/轮换——stable
 credential；需要更换时重新加密该文件并 reconfigure。
 

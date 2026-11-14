@@ -149,7 +149,10 @@
   "vscode-url-handler.desktop")
 
 (define %vscode-package
-  (vscode-with-extensions vscode %vscode-extensions))
+  (vscode-with-extensions vscode %vscode-extensions
+                          ;; 让 wrapper 额外提供 `code serve-web-local`
+                          ;;（官方 CLI + 本地打包 server）。
+                          #:web-commit %vscode-commit))
 
 ;; Upstream resources/linux/code-url-handler.desktop: --open-url %U.
 ;; Virelith 3a5d2b5 明确把 MIME integration 留给配置层，只提供普通
@@ -194,11 +197,17 @@ Keywords=vscode;
 
 ;; runtime plaintext 目标（canonical convention 推导）：
 ;; /run/guixcfg-secrets-ordinary/users/<user>/vscode-connection-token
-;; ── 手工启动 Web / Tunnel server（无 launcher）───────────────
-;; 不自动启动，也没有启动脚本：声明式基础由本 app 准备好后，直接在
-;; 终端跑官方 CLI（前台进程，Ctrl-C 结束）。
-;;
-;; 声明式准备（本 app 负责）：
+(define %vscode-connection-token-target
+  (runtime-secret-target %vscode-connection-token
+                         (user-profile-name %primary-user)))
+
+;; ── Web server：`code serve-web-local` ───────────────────────
+;; 不自动启动，也没有独立脚本：入口是 profile 里 `code` wrapper 的
+;; 子命令（virelith vscode-with-extensions 的 #:web-commit 机制）。
+;; 它把官方 `serve-web` 接到本地打包的 server（commit 固定），token
+;; 取 $VSCODE_WEB_TOKEN_FILE，数据在 $VSCODE_WEB_DATA_DIR，监听
+;; $VSCODE_WEB_HOST:$VSCODE_WEB_PORT（默认 0.0.0.0:8000）；其余参数
+;; 原样透传。声明式基础由本 app 准备：
 ;;   - ~/.vscode/cli/serve-web/<commit> → store 里的 vscode-server
 ;;     （home-files 投影；commit 来自 (virelith packages vscode) 的
 ;;     %vscode-commit，单一事实源）；
@@ -208,18 +217,14 @@ Keywords=vscode;
 ;;     /run/guixcfg-secrets-ordinary/users/<user>/vscode-connection-token；
 ;;   - mutable state 只持久化 ~/.local/share/vscode-server/data。
 ;;
-;; 启动命令（手工执行）：
+;; 启动（前台，Ctrl-C 结束；server 会打印带 ?tkn= 的 URL）：
 ;;
-;;   touch /tmp/vscode-skip-server-requirements-check
-;;   code serve-web --host 0.0.0.0 --port 8000 \
-;;     --connection-token-file \
-;;       /run/guixcfg-secrets-ordinary/users/<user>/vscode-connection-token \
-;;     --commit-id "$(basename ~/.vscode/cli/serve-web/*)" \
-;;     --server-data-dir "$HOME/.local/share/vscode-server" \
-;;     --accept-server-license-terms
+;;   code serve-web-local
 ;;
-;; touch 的一行是 pinned CLI 的前置检查逃生口（Guix 没有 /usr/lib64
-;; 和 ldconfig；prereqs.rs 审计）。server 启动后会打印带 ?tkn= 的 URL。
+;; 可选覆盖：VSCODE_WEB_HOST / VSCODE_WEB_PORT / VSCODE_WEB_DATA_DIR；
+;; 额外参数原样传给 serve-web（例如 --default-folder DIR）。
+;; 前置检查逃生口（/tmp/vscode-skip-server-requirements-check，Guix
+;; 没有 /usr/lib64 和 ldconfig；prereqs.rs 审计）由 wrapper 负责。
 
 (define %vscode
   (application (name 'vscode)
@@ -264,6 +269,13 @@ Keywords=vscode;
                                                        ,(file-append
                                                          %vscode-package
                                                          "/share/vscode/extensions"))))
+                                    ;; wrapper 的 serve-web-local 只认
+                                    ;; VSCODE_WEB_TOKEN_FILE（runtime
+                                    ;; secret；路径是 app-owned policy）。
+                                    (simple-service 'vscode-web-token-file
+                                     home-environment-variables-service-type
+                                     `(("VSCODE_WEB_TOKEN_FILE"
+                                        . ,%vscode-connection-token-target)))
                                     (simple-service 'vscode-url-handler
                                      home-xdg-data-files-service-type
                                      (list (list (string-append
