@@ -8,7 +8,7 @@
 ;;; vscode 两条新 rule。
 ;;;
 ;;; 覆盖：
-;;;   VC1  app 启用；persistence 恰好 5 条（extensions rule 已于
+;;;   VC1  app 启用；persistence 6 条（extensions rule 已于
 ;;;        2026-10-04 随不可变扩展模型落地后移除）；无
 ;;;        整体 ~/.config/Code consumer；ephemeral 路径不持久化；
 ;;;   VC2  languagepacks.json → bind-file（单文件 application-owned）；
@@ -21,14 +21,20 @@
 ;;;        locale=zh-cn）、settings.json、keybindings.json 经
 ;;;        home-files 声明；
 ;;;   VC5  languagepacks.json / clp 不被仓库生成（非 home-files
-;;;        target——VS Code 自维护的 mutable state / derived cache）。
+;;;        target——VS Code 自维护的 mutable state / derived cache）；
+;;;   VC7  serve-web server-data rule（只有 data/ 持久化）；
+;;;   VC8  手工启动 launcher（home-files，无自动启动）；
+;;;   VC9  serve-web cache / extensions 声明式 symlink；token 是
+;;;        repository-owned ordinary secret（HOME 无明文 token）。
 
 (use-modules (guixcfg hosts vm) ;%vm-os（assembly 真实接线）
              (guixcfg apps model)
              (guixcfg apps registry) ;%applications
+             (guixcfg security secrets) ;secret-decl accessors
              (guixcfg system application-persistence) ;rule accessors
              (guixcfg users user) ;%primary-user
              (guix packages) ;package-name
+             (virelith packages vscode) ;%vscode-commit
              (gnu home services) ;home-files-service-type
              (gnu home services shepherd) ;home-shepherd-service-type
              (gnu system) ;operating-system-file-systems
@@ -208,7 +214,7 @@
    (and r
         (string=? "vscode/server-data"
                   (application-persistence-rule-backing r))
-        (string=? ".local/share/vscode-server"
+        (string=? ".local/share/vscode-server/data"
                   (application-persistence-rule-consumer r))
         (eq? 'bind-directory
              (application-persistence-rule-exposure r))
@@ -224,5 +230,33 @@
  (every (lambda (svc)
           (not (eq? (service-kind svc) home-shepherd-service-type)))
         (application-home-services %vscode-app)))
+
+;; ── VC9：声明式 symlink + token 是 repository secret ─────────
+(test-assert
+ "VC9: serve-web cache symlink is projected by home-files at the pinned commit"
+ (member (string-append ".vscode/cli/serve-web/" %vscode-commit)
+         (vscode-home-file-targets)))
+
+(test-assert
+ "VC9: server extensions dir is projected by home-files (store symlink)"
+ (member ".local/share/vscode-server/extensions"
+         (vscode-home-file-targets)))
+
+(test-assert
+ "VC9: connection token is a user-scope ordinary repository secret"
+ (let ((s (find (lambda (d)
+                  (eq? 'vscode-connection-token
+                       (secret-decl-name d)))
+                (application-secrets %vscode-app))))
+   (and s
+        (eq? 'user (secret-decl-scope s))
+        (eq? 'ordinary (secret-decl-domain s))
+        (string=? "vscode-connection-token"
+                  (secret-decl-target-name s)))))
+
+(test-assert
+ "VC9: token is not a repo-owned HOME file (only the runtime secret exists)"
+ (not (member ".local/share/vscode-server/token"
+              (vscode-home-file-targets))))
 
 (test-end "vscode")

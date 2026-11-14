@@ -129,13 +129,15 @@
   #:use-module (gnu services) ;simple-service
   #:use-module (guix gexp) ;local-file、mixed-text-file、file-append
   #:use-module (guix records)
-  #:use-module (virelith packages vscode) ;vscode（自建 channel）
+  #:use-module (virelith packages vscode) ;vscode、vscode-server、%vscode-commit
   #:use-module (virelith packages vscode-extensions)
   #:use-module (guixcfg apps vscode extensions)
   #:use-module (guixcfg apps model)
+  #:use-module (guixcfg security secrets) ;secret-decl、runtime-secret-target
   #:use-module (guixcfg system application-persistence) ;rule
+  #:use-module (guixcfg users user) ;%primary-user
   #:export (%vscode %vscode-desktop-entry %vscode-url-desktop-entry
-                  %vscode-server-launcher))
+                  %vscode-server-launcher %vscode-connection-token))
 
 ;; VS Code 的 XDG desktop entry（store 内实际构建产物
 ;; share/applications/ 核实）。纯数据常量：供统一 XDG 策略模块
@@ -176,21 +178,47 @@ NoDisplay=true
 Keywords=vscode;
 "))
 
+;; connection token：repository-owned encrypted application secret
+;; （ordinary domain——解密失败绝不阻塞 login）。runtime plaintext 由
+;; generic publisher 投影到 /run（owner=user，0400）；启动脚本只读它，
+;; 不生成第二份、不把明文写进 HOME。ciphertext 与引用者同置。
+(define %vscode-connection-token
+  (secret-decl (name 'vscode-connection-token)
+               (scope 'user)
+               (domain 'ordinary)
+               (source (local-file "secrets/connection-token.age"
+                                   "vscode-connection-token.age"))
+               (target-name "vscode-connection-token")
+               (owner-user (user-profile-name %primary-user))
+               (mode 256)))
+
+;; runtime plaintext 目标（canonical convention 推导）：
+;; /run/guixcfg-secrets-ordinary/users/<user>/vscode-connection-token
+(define %vscode-connection-token-target
+  (runtime-secret-target %vscode-connection-token
+                         (user-profile-name %primary-user)))
+
 ;; ── 手工启动的 Web / Tunnel server ─────────────────────────────
 ;; 明确不自动启动：用户在终端运行 `vscode-server [folder]` 显式拉起
 ;; （前台进程，Ctrl-C 结束）。进程模型是 VS Code 官方 `code
-;; serve-web`：平板浏览器连接，扩展/终端/调试全部在主机执行；服务端
-;; 扩展目录指向不可变 extension union（与桌面同一集合）。
+;; serve-web`：平板浏览器连接，扩展/终端/调试全部在主机执行。
 ;;
-;; virelith 的 vscode-server 包已把 commit 固定的 server bundle（含
-;; 浏览器 workbench）打进 store 并修好 node。CLI 启动时若
-;; ~/.vscode/cli/serve-web/<commit> 已存在就复用、不下载，所以这里
-;; 建立该符号链接，并读 server 的 product.json 取 commit（避免在
-;; 仓库里重复维护 commit 常量）。
+;; 两处运行期“准备”都不在启动脚本里做，而是声明式：
+;;   - server bundle：virelith 的 vscode-server 已打进 store；CLI 复用
+;;     ~/.vscode/cli/serve-web/<commit> 的既有目录、不下载。该 symlink
+;;     由 home-files 直接投影，commit 常量从 (virelith packages vscode)
+;;     导入（单一事实源，不在本仓库重复维护）；
+;;   - 服务端 extensions/：home-files 投影到不可变 extension union。
+;;
+;; connection token 是 repository-owned encrypted application secret
+;; （apps/vscode/secrets/connection-token.age，ordinary domain——解密
+;; 失败绝不阻塞登录）：publisher 在 boot 时解密到
+;; /run/guixcfg-secrets-ordinary/users/<user>/vscode-connection-token，
+;; 启动脚本只读该 runtime 文件；缺失即 fail loud（不生成第二份 token，
+;; 不把明文写进 HOME）。
 ;;
 ;; mutable state（settings/logs/state）落在
-;; ~/.local/share/vscode-server（persistence rule server-data）；
-;; extensions/ 是每次启动重建的 store 符号链接，不是 mutable 数据。
+;; ~/.local/share/vscode-server/data（persistence rule server-data）。
 ;;
 ;; 前置检查：CLI 启动前要求 /usr/lib64/libstdc++.so.6 或 ldconfig，
 ;; Guix 两者都没有；/tmp/vscode-skip-server-requirements-check 是
@@ -208,116 +236,36 @@ Keywords=vscode;
                   (lambda () (mkdir path))
                   (lambda args #t))))
 
-       (define (hex-byte n)
-         (let ((digits "0123456789abcdef"))
-           (string (string-ref digits (quotient n 16))
-                   (string-ref digits (remainder n 16)))))
-
-       (define (read-token path)
-         (call-with-input-file path
-           (lambda (port)
-             (let loop ((chars '()))
-               (let ((c (read-char port)))
-                 (if (or (eof-object? c) (char=? c #\newline))
-                     (list->string (reverse chars))
-                     (loop (cons c chars))))))))
-
-       (define (write-token path)
-         (let* ((port (open-input-file "/dev/urandom" #:binary #t))
-                (text (let loop ((i 0) (acc ""))
-                        (if (= i 16)
-                            acc
-                            (loop (+ i 1)
-                                  (string-append
-                                   acc
-                                   (hex-byte
-                                    (char->integer (read-char port)))))))))
-           (close-port port)
-           (call-with-output-file path
-             (lambda (out) (display text out)))
-           (chmod path #o600)))
-
-       (define (replace-symlink path target)
-         (let ((existing (false-if-exception (lstat path))))
-           (if existing
-               (if (eq? (stat:type existing) 'symlink)
-                   (begin (delete-file path)
-                          (symlink target path))
-                   (format (current-error-port)
-                           "vscode-server: ~a exists and is not a symlink; leaving it~%"
-                           path))
-               (symlink target path))))
-
-       (define (json-string content key)
-         (let* ((needle (string-append "\"" key "\": \""))
-                (start (string-contains content needle)))
-           (and start
-                (let ((from (+ start (string-length needle))))
-                  (let loop ((i from))
-                    (if (char=? (string-ref content i) #\")
-                        (substring content from i)
-                        (loop (+ i 1))))))))
-
-       (define (slurp path)
-         (call-with-input-file path
-           (lambda (port)
-             (let loop ((chars '()))
-               (let ((c (read-char port)))
-                 (if (eof-object? c)
-                     (list->string (reverse chars))
-                     (loop (cons c chars))))))))
-
-       (define (read-commit product)
-         (json-string (slurp product) "commit"))
-
        (let* ((home (getenv "HOME"))
-              (data-home (or (getenv "XDG_DATA_HOME")
-                             (string-append home "/.local/share")))
-              (data (string-append data-home "/vscode-server"))
-              (token (string-append data "/token"))
-              (extensions (string-append data "/extensions"))
-              (server #$(file-append vscode-server "/server"))
-              (cli-dir (string-append home "/.vscode/cli/serve-web"))
-              (commit (read-commit (string-append server "/product.json")))
+              (data (string-append home "/.local/share/vscode-server"))
+              (token #$%vscode-connection-token-target)
               (args (cdr (command-line)))
               (folder (and (pair? args) (car args))))
-         (if commit
-             (begin
-               (mkdir-p* data)
-               (mkdir-p* cli-dir)
-               (unless (file-exists? token) (write-token token))
-               (replace-symlink (string-append cli-dir "/" commit) server)
-               (replace-symlink extensions
-                                #$(file-append %vscode-package
-                                               "/share/vscode/extensions"))
-               (catch 'system-error
-                      (lambda ()
-                        (call-with-output-file
-                            "/tmp/vscode-skip-server-requirements-check"
-                          (lambda (out) #t)))
-                      (lambda args #t))
-               (format (current-output-port)
-                       "VS Code Server (commit ~a)~%  token: ~a~%  open: http://<this-host>:8000/?tkn=~a~%"
-                       commit (read-token token) (read-token token))
-               (force-output)
-               (apply execl
-                      #$(file-append %vscode-package "/bin/code")
-                      (append (list "code" "serve-web"
-                                    "--host" "0.0.0.0"
-                                    "--port" "8000"
-                                    "--connection-token-file" token
-                                    "--accept-server-license-terms"
-                                    "--disable-telemetry"
-                                    "--commit-id" commit
-                                    "--server-data-dir" data)
-                              (if folder
-                                  (list "--default-folder" folder)
-                                  '()))))
-             (begin
-               (format (current-error-port)
-                       "vscode-server: cannot read commit from ~a/product.json~%"
-                       server)
-               (exit 1)))))))
+         (unless (file-exists? token)
+           (format (current-error-port)
+                   "vscode-server: runtime token ~a is missing (ordinary secret publisher not ready?)~%"
+                   token)
+           (exit 1))
+         (mkdir-p* data)
+         (catch 'system-error
+                (lambda ()
+                  (call-with-output-file
+                      "/tmp/vscode-skip-server-requirements-check"
+                    (lambda (out) #t)))
+                (lambda args #t))
+         (apply execl
+                #$(file-append %vscode-package "/bin/code")
+                (append (list "code" "serve-web"
+                              "--host" "0.0.0.0"
+                              "--port" "8000"
+                              "--connection-token-file" token
+                              "--accept-server-license-terms"
+                              "--disable-telemetry"
+                              "--commit-id" #$%vscode-commit
+                              "--server-data-dir" data)
+                        (if folder
+                            (list "--default-folder" folder)
+                            '())))))))
 
 (define %vscode
   (application (name 'vscode)
@@ -351,6 +299,26 @@ Keywords=vscode;
                                                     home-files-service-type
                                                     `((".local/bin/vscode-server"
                                                        ,%vscode-server-launcher)))
+                                    ;; CLI 的 server 缓存路径声明式投影：
+                                    ;; CLI 复用既有目录、不下载；commit 常量
+                                    ;; 来自 (virelith packages vscode)。
+                                    (simple-service 'vscode-server-cache
+                                                    home-files-service-type
+                                                    `((,(string-append
+                                                         ".vscode/cli/serve-web/"
+                                                         %vscode-commit)
+                                                       ,(file-append
+                                                         vscode-server
+                                                         "/server"))))
+                                    ;; 服务端 extensions 目录 = 桌面同一
+                                    ;; 不可变 union（store symlink；server 对
+                                    ;; 它的写入失败属预期）。
+                                    (simple-service 'vscode-server-extensions
+                                                    home-files-service-type
+                                                    `((".local/share/vscode-server/extensions"
+                                                       ,(file-append
+                                                         %vscode-package
+                                                         "/share/vscode/extensions"))))
                                     (simple-service 'vscode-url-handler
                                      home-xdg-data-files-service-type
                                      (list (list (string-append
@@ -389,13 +357,15 @@ Keywords=vscode;
                                                                 (exposure 'bind-file)
                                                                 (lifecycle 'application-owned))
                                   ;; serve-web 服务端 mutable state（settings/
-                                  ;; logs/state，不含 extensions——那是每次启动
-                                  ;; 重建的 store 符号链接）。
+                                  ;; logs/state）。extensions/ 不在这个 bind
+                                  ;; 内——它是 home-files 投影的 store
+                                  ;; symlink（服务端数据根目录保持
+                                  ;; ephemeral，只有 data/ 持久化）。
                                   (application-persistence-rule (name 'server-data)
                                                                 (backing
                                                                  "vscode/server-data")
                                                                 (consumer
-                                                                 ".local/share/vscode-server")
+                                                                 ".local/share/vscode-server/data")
                                                                 (exposure 'bind-directory)
                                                                 (lifecycle 'application-owned))
                                   ;; NLS compiled cache：derived/rebuildable（clp/<hash>.
@@ -407,4 +377,5 @@ Keywords=vscode;
                                                                 (consumer
                                                                  ".config/Code/clp")
                                                                 (exposure 'bind-directory)
-                                                                (lifecycle 'application-owned))))))
+                                                                (lifecycle 'application-owned))))
+               (secrets (list %vscode-connection-token))))
