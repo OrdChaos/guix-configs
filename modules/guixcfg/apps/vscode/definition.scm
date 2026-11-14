@@ -133,11 +133,11 @@
   #:use-module (virelith packages vscode-extensions)
   #:use-module (guixcfg apps vscode extensions)
   #:use-module (guixcfg apps model)
-  #:use-module (guixcfg security secrets) ;secret-decl、runtime-secret-target
+  #:use-module (guixcfg security secrets) ;secret-decl
   #:use-module (guixcfg system application-persistence) ;rule
   #:use-module (guixcfg users user) ;%primary-user
   #:export (%vscode %vscode-desktop-entry %vscode-url-desktop-entry
-                  %vscode-server-launcher %vscode-connection-token))
+                  %vscode-connection-token))
 
 ;; VS Code 的 XDG desktop entry（store 内实际构建产物
 ;; share/applications/ 核实）。纯数据常量：供统一 XDG 策略模块
@@ -180,8 +180,8 @@ Keywords=vscode;
 
 ;; connection token：repository-owned encrypted application secret
 ;; （ordinary domain——解密失败绝不阻塞 login）。runtime plaintext 由
-;; generic publisher 投影到 /run（owner=user，0400）；启动脚本只读它，
-;; 不生成第二份、不把明文写进 HOME。ciphertext 与引用者同置。
+;; generic publisher 投影到 /run（owner=user，0400）；手工启动命令只
+;; 读它，不生成第二份、不把明文写进 HOME。ciphertext 与引用者同置。
 (define %vscode-connection-token
   (secret-decl (name 'vscode-connection-token)
                (scope 'user)
@@ -194,78 +194,32 @@ Keywords=vscode;
 
 ;; runtime plaintext 目标（canonical convention 推导）：
 ;; /run/guixcfg-secrets-ordinary/users/<user>/vscode-connection-token
-(define %vscode-connection-token-target
-  (runtime-secret-target %vscode-connection-token
-                         (user-profile-name %primary-user)))
-
-;; ── 手工启动的 Web / Tunnel server ─────────────────────────────
-;; 明确不自动启动：用户在终端运行 `vscode-server [folder]` 显式拉起
-;; （前台进程，Ctrl-C 结束）。进程模型是 VS Code 官方 `code
-;; serve-web`：平板浏览器连接，扩展/终端/调试全部在主机执行。
+;; ── 手工启动 Web / Tunnel server（无 launcher）───────────────
+;; 不自动启动，也没有启动脚本：声明式基础由本 app 准备好后，直接在
+;; 终端跑官方 CLI（前台进程，Ctrl-C 结束）。
 ;;
-;; 两处运行期“准备”都不在启动脚本里做，而是声明式：
-;;   - server bundle：virelith 的 vscode-server 已打进 store；CLI 复用
-;;     ~/.vscode/cli/serve-web/<commit> 的既有目录、不下载。该 symlink
-;;     由 home-files 直接投影，commit 常量从 (virelith packages vscode)
-;;     导入（单一事实源，不在本仓库重复维护）；
-;;   - 服务端 extensions/：home-files 投影到不可变 extension union。
+;; 声明式准备（本 app 负责）：
+;;   - ~/.vscode/cli/serve-web/<commit> → store 里的 vscode-server
+;;     （home-files 投影；commit 来自 (virelith packages vscode) 的
+;;     %vscode-commit，单一事实源）；
+;;   - 服务端 extensions/ → 不可变 extension union（home-files 投影）；
+;;   - connection token → apps/vscode/secrets/connection-token.age
+;;     （ordinary domain），publisher 发布到
+;;     /run/guixcfg-secrets-ordinary/users/<user>/vscode-connection-token；
+;;   - mutable state 只持久化 ~/.local/share/vscode-server/data。
 ;;
-;; connection token 是 repository-owned encrypted application secret
-;; （apps/vscode/secrets/connection-token.age，ordinary domain——解密
-;; 失败绝不阻塞登录）：publisher 在 boot 时解密到
-;; /run/guixcfg-secrets-ordinary/users/<user>/vscode-connection-token，
-;; 启动脚本只读该 runtime 文件；缺失即 fail loud（不生成第二份 token，
-;; 不把明文写进 HOME）。
+;; 启动命令（手工执行）：
 ;;
-;; mutable state（settings/logs/state）落在
-;; ~/.local/share/vscode-server/data（persistence rule server-data）。
+;;   touch /tmp/vscode-skip-server-requirements-check
+;;   code serve-web --host 0.0.0.0 --port 8000 \
+;;     --connection-token-file \
+;;       /run/guixcfg-secrets-ordinary/users/<user>/vscode-connection-token \
+;;     --commit-id "$(basename ~/.vscode/cli/serve-web/*)" \
+;;     --server-data-dir "$HOME/.local/share/vscode-server" \
+;;     --accept-server-license-terms
 ;;
-;; 前置检查：CLI 启动前要求 /usr/lib64/libstdc++.so.6 或 ldconfig，
-;; Guix 两者都没有；/tmp/vscode-skip-server-requirements-check 是
-;; pinned 1.145.2 prereqs.rs 内置的逃生口，启动时 touch。
-(define %vscode-server-launcher
-  (program-file
-   "vscode-server"
-   #~(begin
-       (define (mkdir-p* path)
-         (unless (file-exists? path)
-           (let ((parent (dirname path)))
-             (unless (string=? parent path)
-               (mkdir-p* parent)))
-           (catch 'system-error
-                  (lambda () (mkdir path))
-                  (lambda args #t))))
-
-       (let* ((home (getenv "HOME"))
-              (data (string-append home "/.local/share/vscode-server"))
-              (token #$%vscode-connection-token-target)
-              (args (cdr (command-line)))
-              (folder (and (pair? args) (car args))))
-         (unless (file-exists? token)
-           (format (current-error-port)
-                   "vscode-server: runtime token ~a is missing (ordinary secret publisher not ready?)~%"
-                   token)
-           (exit 1))
-         (mkdir-p* data)
-         (catch 'system-error
-                (lambda ()
-                  (call-with-output-file
-                      "/tmp/vscode-skip-server-requirements-check"
-                    (lambda (out) #t)))
-                (lambda args #t))
-         (apply execl
-                #$(file-append %vscode-package "/bin/code")
-                (append (list "code" "serve-web"
-                              "--host" "0.0.0.0"
-                              "--port" "8000"
-                              "--connection-token-file" token
-                              "--accept-server-license-terms"
-                              "--disable-telemetry"
-                              "--commit-id" #$%vscode-commit
-                              "--server-data-dir" data)
-                        (if folder
-                            (list "--default-folder" folder)
-                            '())))))))
+;; touch 的一行是 pinned CLI 的前置检查逃生口（Guix 没有 /usr/lib64
+;; 和 ldconfig；prereqs.rs 审计）。server 启动后会打印带 ?tkn= 的 URL。
 
 (define %vscode
   (application (name 'vscode)
@@ -290,15 +244,6 @@ Keywords=vscode;
                                                     `((".vscode/argv.json" ,(local-file
                                                                              "argv.json"
                                                                              "vscode-argv.json"))))
-                                    ;; 手工启动入口（无自动启动：不用
-                                    ;; shepherd service，niri 也不 spawn）。
-                                    ;; ~/.local/bin 进 PATH 由 session
-                                    ;; 基础设施 (guixcfg home environment)
-                                    ;; 单点拥有。
-                                    (simple-service 'vscode-server-launcher
-                                                    home-files-service-type
-                                                    `((".local/bin/vscode-server"
-                                                       ,%vscode-server-launcher)))
                                     ;; CLI 的 server 缓存路径声明式投影：
                                     ;; CLI 复用既有目录、不下载；commit 常量
                                     ;; 来自 (virelith packages vscode)。

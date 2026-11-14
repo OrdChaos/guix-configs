@@ -23,7 +23,7 @@
 ;;;   VC5  languagepacks.json / clp 不被仓库生成（非 home-files
 ;;;        target——VS Code 自维护的 mutable state / derived cache）；
 ;;;   VC7  serve-web server-data rule（只有 data/ 持久化）；
-;;;   VC8  手工启动 launcher（home-files，无自动启动）；
+;;;   VC8  无自动启动、无 launcher（官方命令手工执行）；
 ;;;   VC9  serve-web cache / extensions 声明式 symlink；token 是
 ;;;        repository-owned ordinary secret（HOME 无明文 token）。
 
@@ -221,10 +221,10 @@
         (eq? 'application-owned
              (application-persistence-rule-lifecycle r)))))
 
-;; ── VC8：手工启动入口，无自动启动 ───────────────────────────
-(test-assert "VC8: manual server launcher is a home-files target"
-             (member ".local/bin/vscode-server"
-                     (vscode-home-file-targets)))
+;; ── VC8：无自动启动、无 launcher ────────────────────────────
+(test-assert "VC8: no launcher script is projected (official command is manual)"
+ (not (member ".local/bin/vscode-server"
+              (vscode-home-file-targets))))
 
 (test-assert "VC8: no auto-start service for the server (manual process only)"
  (every (lambda (svc)
