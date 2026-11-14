@@ -30,6 +30,7 @@
              (guixcfg users user) ;%primary-user
              (guix packages) ;package-name
              (gnu home services) ;home-files-service-type
+             (gnu home services shepherd) ;home-shepherd-service-type
              (gnu system) ;operating-system-file-systems
              (gnu system file-systems) ;file-system-*
              (gnu services)
@@ -68,7 +69,8 @@
  (and (not (rule-by-name 'extensions))
       (rule-by-name 'global-storage)
       (rule-by-name 'workspace-storage)
-      (rule-by-name 'local-history)))
+      (rule-by-name 'local-history)
+      (rule-by-name 'server-data)))
 
 (test-assert
  "VC1: no whole ~/.config/Code consumer (logs/caches stay ephemeral)"
@@ -124,7 +126,7 @@
                                  (file-system-device fs))))
           (operating-system-file-systems %vm-os)))
 
-(test-equal "VC3: five vscode bind mounts declared in %vm-os" 5
+(test-equal "VC3: six vscode bind mounts declared in %vm-os" 6
             (length %vscode-mounts))
 
 (test-assert
@@ -154,14 +156,14 @@
         (file-system-create-mount-point? fs))))
 
 (test-assert
- "VC3: original three directory mounts keep create-mount-point? #t"
+ "VC3: directory mounts keep create-mount-point? #t"
  (let ((mounts (filter (lambda (f)
                          (not (or (string-suffix? "/languagepacks.json"
                                                   (file-system-mount-point f))
                                   (string-suffix? "/clp"
                                                   (file-system-mount-point f)))))
                        %vscode-mounts)))
-   (and (= 3
+   (and (= 4
            (length mounts))
         (every file-system-create-mount-point? mounts))))
 
@@ -199,5 +201,28 @@
 (test-assert "VC6: exactly one vscode-with-extensions wrapper, no bare vscode"
  (and (package-named "vscode-with-extensions")
       (not (package-named "vscode"))))
+
+;; ── VC7：serve-web server 的 mutable state ───────────────────
+(test-assert "VC7: server-data is a bind-directory application-owned rule"
+ (let ((r (rule-by-name 'server-data)))
+   (and r
+        (string=? "vscode/server-data"
+                  (application-persistence-rule-backing r))
+        (string=? ".local/share/vscode-server"
+                  (application-persistence-rule-consumer r))
+        (eq? 'bind-directory
+             (application-persistence-rule-exposure r))
+        (eq? 'application-owned
+             (application-persistence-rule-lifecycle r)))))
+
+;; ── VC8：手工启动入口，无自动启动 ───────────────────────────
+(test-assert "VC8: manual server launcher is a home-files target"
+             (member ".local/bin/vscode-server"
+                     (vscode-home-file-targets)))
+
+(test-assert "VC8: no auto-start service for the server (manual process only)"
+ (every (lambda (svc)
+          (not (eq? (service-kind svc) home-shepherd-service-type)))
+        (application-home-services %vscode-app)))
 
 (test-end "vscode")

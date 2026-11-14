@@ -257,7 +257,10 @@ production consumers：
   `docs/architecture/flatpak.md`（persistence/lifecycle））；
 - vscode（global-storage/workspace-storage/local-history 三条
   directory bind + `languagepacks.json` 单文件 bind-file + `clp/`
-  NLS cache directory bind；共 5 条。`~/.vscode/extensions` 的 rule
+  NLS cache directory bind + `~/.local/share/vscode-server` 一条
+  （手工启动的 `code serve-web` server 的 mutable state：settings/
+  logs/state；server 的 `extensions/` 是每次启动重建的 store 符号
+  链接，不是 mutable 数据）；共 6 条。`~/.vscode/extensions` 的 rule
   与旧 mutable 数据已于 2026-10-04 一并移除——不可变扩展模型下
   VS Code 以 `--extensions-dir` 指向 store union，默认目录被完全
   忽略（实测 CLI/GUI 均不再列出）。边界四类划分与扩展模型见
