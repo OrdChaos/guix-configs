@@ -41,6 +41,12 @@ single-owner mechanism 执行：
 - secrets → `(guixcfg security secrets)` publisher（ciphertext
   file-like 由 app definition 解析；见 secrets.md）。
 
+**Session environment 单点 ownership**：`~/.local/bin` 进 PATH 的
+前缀由 `(guixcfg home environment)` 的 session-environment 单点声明
+（Home `home-environment-variables-service-type` 共享 sink）。应用只
+经 home-files 投放自己的 `~/.local/bin/<name>` 稳定访问名，不各自
+追加 PATH——否则第一个需要它的应用会成为事实上的 owner。
+
 **Configuration variant selection**：application 声明可选配置变体
 （资源 colocate 在应用目录）；host/profile 层只做 logical
 selection（`(guixcfg apps selection)`：application 名 + variant 名，

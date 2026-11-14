@@ -5,9 +5,9 @@
 ;;; boundary）、graphics.md）。
 ;;;
 ;;; 机制：home-environment-variables-service-type 共享 sink 的
-;;; native extension（与 apps/polkit-gnome 的 PATH 同款模式）——
-;;; 变量经 Home setup-environment 进入会话环境，niri 及其 spawn
-;;; 的进程自然继承。
+;;; native extension——变量经 Home setup-environment 进入会话环境，
+;;; niri 及其 spawn 的进程自然继承。本服务同时是所有 app 的
+;;; ~/.local/bin 稳定访问名在 PATH 中的唯一 owner。
 ;;;
 ;;; 已删除（由其它层正确管理，不在此重复声明）：
 ;;;   - FC_LANG "zh-cn"：system locale（%common-locale
@@ -31,8 +31,15 @@
   #:export (%session-environment-service))
 
 ;; 桌面会话环境变量（host-agnostic 用户偏好）。
+;;
+;; PATH 的 ~/.local/bin 前缀由本层单点拥有：它是会话级约定（所有 app
+;; 经 home-files 投放的稳定访问名都在这里），不属于任何一个 app。
+;; 各 app 只声明自己的 wrapper（home-files），不再各自追加 PATH——
+;; 否则第一个需要它的 app 就成了事实上的 owner（历史：apps/
+;; polkit-gnome 曾代管）。
 (define %session-environment-service
   (simple-service 'session-environment home-environment-variables-service-type
-                  '(("QT_QPA_PLATFORMTHEME" . "gtk3")
+                  '(("PATH" . "$HOME/.local/bin:$PATH")
+                    ("QT_QPA_PLATFORMTHEME" . "gtk3")
                     ("ELECTRON_OZONE_PLATFORM_HINT" . "auto")
                     ("PROTON_ENABLE_WAYLAND" . "1"))))

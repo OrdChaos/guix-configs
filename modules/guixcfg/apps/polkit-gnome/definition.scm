@@ -6,8 +6,9 @@
 ;;; PATH、也没有 FHS 的 /usr/lib/polkit-gnome 路径。因此：
 ;;;   - home-files 提供 ~/.local/bin/polkit-gnome-authentication-agent-1
 ;;;     wrapper（program-file，guix 构建期注入 store 绝对路径——
-;;;     仓库不硬编码 store 路径字面量）；
-;;;   - PATH 增加 ~/.local/bin（session 基础设施 env contribution）；
+;;;     仓库不硬编码 store 路径字面量）；~/.local/bin 进 PATH 是
+;;;     session 基础设施（(guixcfg home environment) 的 session-
+;;;     environment），本 app 不声明 PATH；
 ;;;   - niri config.kdl 用稳定名 spawn
 ;;;     （spawn-at-startup "polkit-gnome-authentication-agent-1"）。
 ;;;
@@ -35,9 +36,4 @@
                                                         #~(execl #$(file-append
                                                                     polkit-gnome
                                                                     "/libexec/polkit-gnome-authentication-agent-1")
-                                                           "polkit-gnome-authentication-agent-1")))))
-                                    ;; wrapper 可解析所需：~/.local/bin 进 session PATH
-                                    ;; （home-environment-variables 共享 sink 的 native extension）。
-                                    (simple-service 'polkit-gnome-path
-                                     home-environment-variables-service-type
-                                     '(("PATH" . "$HOME/.local/bin:$PATH")))))))
+                                                           "polkit-gnome-authentication-agent-1")))))))))

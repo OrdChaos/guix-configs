@@ -71,9 +71,10 @@ login authentication（greetd/PAM）与 keyring unlocking（本服务）完全
   niri `spawn-at-startup "polkit-gnome-authentication-agent-1"` 启动
   一次、会话结束自然结束。agent 二进制在 libexec（不在 PATH，无 FHS
   路径）——app 经 home-files 提供 `~/.local/bin` wrapper（store 路径
-  由 guix 构建期注入，仓库无 store 字面量）并把 `~/.local/bin`
-  加入 session PATH。不拥有 polkitd / rules / system D-Bus；无
-  persistence、无 declarative secrets。
+  由 guix 构建期注入，仓库无 store 字面量）；`~/.local/bin` 进
+  session PATH 的前缀由 `(guixcfg home environment)` 的
+  session-environment 单点拥有（app 不声明 PATH）。不拥有 polkitd /
+  rules / system D-Bus；无 persistence、无 declarative secrets。
 
 ## 2. Secret Service：repository-owned master credential
 

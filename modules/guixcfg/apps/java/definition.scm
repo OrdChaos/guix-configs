@@ -69,9 +69,9 @@
 ;;; **可执行文件**路径；javac/jar 等属"用哪个版本编什么"的场景，默认
 ;;; 版本已由 profile 直接提供。若要给某版本加 javac，在
 ;;; %java-version-table 的 wrapper 生成里加一项即可（不预生成 4×N
-;;; 个 wrapper）。~/.local/bin 进 PATH 的唯一 owner 是 apps/
-;;; polkit-gnome 的 PATH 贡献（gtk 同款约定）——本单元
-;;; 不声明第二次 PATH。
+;;; 个 wrapper）。~/.local/bin 进 PATH 的唯一 owner 是 session
+;;; 基础设施 (guixcfg home environment) 的 session-environment——
+;;; 本单元只声明 wrapper，不声明 PATH。
 ;;;
 ;;; JAVA_HOME：默认 JDK 的 "jdk" output（home-environment-variables
 ;;; 共享 sink 的 native extension，build 期注入 store 路径——不是

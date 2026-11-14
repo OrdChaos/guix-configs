@@ -344,8 +344,9 @@ Keywords=vscode;
                                                                              "vscode-argv.json"))))
                                     ;; 手工启动入口（无自动启动：不用
                                     ;; shepherd service，niri 也不 spawn）。
-                                    ;; ~/.local/bin 的 PATH owner 是
-                                    ;; apps/java（单 owner）。
+                                    ;; ~/.local/bin 进 PATH 由 session
+                                    ;; 基础设施 (guixcfg home environment)
+                                    ;; 单点拥有。
                                     (simple-service 'vscode-server-launcher
                                                     home-files-service-type
                                                     `((".local/bin/vscode-server"
