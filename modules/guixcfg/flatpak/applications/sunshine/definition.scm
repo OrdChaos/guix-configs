@@ -2,28 +2,34 @@
 ;;; docs/architecture/flatpak.md（application model））。
 ;;;
 ;;; 选型理由：Sunshine 的 Linux 分发以 Flatpak 官方包为主（Flathub
-;;; dev.lizardbyte.app.Sunshine），Guix/Nonguix 无对应包；niri 的
-;;; 虚拟输出（PR #3800）可被 Sunshine 的 wlr 采集后端通过
-;;; wlr-screencopy 捕获——Sunshine 的 WLR_EXPORT_DMABUF 标志实际由
-;;; zwlr_screencopy_manager_v1 绑定置位，不依赖 zwlr-export-dmabuf。
+;;; dev.lizardbyte.app.Sunshine），Guix/Nonguix 无对应包。
+;;;
+;;; 采集方式（2026-11 实机结论）：Flatpak 1.16+ 在 compositor 支持
+;;; wp-security-context-v1 时会为 app 创建带 security context 的
+;;; Wayland socket；niri 把这类 client 标记为 restricted 并隐藏
+;;; zwlr_screencopy_manager_v1（Sunshine 的 wlr 后端依赖它，源码里
+;;; WLR_EXPORT_DMABUF 枚举实际由 screencopy bind 置位）。因此
+;;; Flatpak 版不能用 capture=wlr；只能走 portal（Sunshine 的
+;;; portalgrab 在 RemoteDesktop 不可用时回退 ScreenCast-only，
+;;; niri 实现 org.gnome.Mutter.ScreenCast）。wlr-screencopy 的
+;;; 直接采集（含 output_name 选择）只对非 Flatpak 的 Sunshine 可用。
 ;;;
 ;;; app-id/branch 以 Flathub 官方页面核实（branch=stable）。
 ;;;
 ;;; override policy：'external——上游 manifest 已含 --socket=wayland、
-;;; --device=all（/dev/dri、/dev/uinput）与 --talk-name=
-;;; org.freedesktop.Flatpak（prep-cmd 经 flatpak-spawn --host 调
-;;; host 的 niri msg）；实机验证发现真正需要 delta 时再按 Flatseal
+;;; --device=all（/dev/dri、/dev/uinput）、--filesystem=xdg-run/
+;;; pipewire-0 与 --talk-name=org.freedesktop.Flatpak；portal 采集
+;;; 不需要额外 override。实机验证发现真正需要 delta 时再按 Flatseal
 ;;; 工作流改为 managed-overrides。
 ;;;
 ;;; persistence：默认 ~/.var/app/dev.lizardbyte.app.Sunshine 由 ID
 ;;; 推导（service 投影，无需在此声明）。
 ;;;
 ;;; seeds：首次初始化写入 config/sunshine/sunshine.conf（seed-once）：
-;;; capture=wlr 让 Sunshine 走 niri 的 screencopy（该键不在普通 UI
-;;; 里），output_name=virtual 与 apps/niri 的全局虚拟输出同名；不
-;;; seed apps.json——由 Sunshine 首次启动生成默认 Desktop app。编码器
-;;; 由 Sunshine 运行时选择（Intel 走 vaapi，NVIDIA 走 nvenc），不在
-;;; seed 里硬编码。
+;;; capture=portal 是 Flatpak 下唯一可行的采集方式（见上）；
+;;; output_name 在 portal 路径下不参与选择（由 portal picker/
+;;; restore token 决定），保留以兼容将来切回非 Flatpak 的 wlr 后端。
+;;; 不 seed apps.json——由 Sunshine 首次启动生成默认 Desktop app。
 
 (define-module (guixcfg flatpak applications sunshine definition)
   #:use-module (guix gexp) ;local-file
