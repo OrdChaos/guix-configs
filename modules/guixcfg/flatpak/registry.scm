@@ -28,7 +28,6 @@
   #:use-module (guixcfg flatpak applications telegram definition)
   #:use-module (guixcfg flatpak applications platen definition)
   #:use-module (guixcfg flatpak applications tuba definition)
-  #:use-module (guixcfg flatpak applications sunshine definition)
   #:use-module (guixcfg flatpak applications discord definition)
   #:use-module (guixcfg flatpak applications newsflash definition)
   #:use-module (guixcfg flatpak applications thunderbird definition)
@@ -77,7 +76,6 @@
         %flatpak-telegram
         %flatpak-platten
         %flatpak-tuba
-        %flatpak-sunshine
         %flatpak-discord
         %flatpak-newsflash
         %flatpak-thunderbird
@@ -101,7 +99,6 @@
        telegram
        platen
        tuba
-       sunshine
        discord
        newsflash
        thunderbird
