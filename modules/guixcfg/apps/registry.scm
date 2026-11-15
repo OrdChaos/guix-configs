@@ -69,6 +69,7 @@
   #:use-module (guixcfg apps satty definition)
   #:use-module (guixcfg apps dupriman definition)
   #:use-module (guixcfg apps papers definition)
+  #:use-module (guixcfg apps sunshine definition)
   #:export (%applications))
 
 (define %applications
@@ -131,6 +132,7 @@
         %prismlauncher
         %musescore
         %papers
+        %sunshine
         %satty
         %dupriman))
 
