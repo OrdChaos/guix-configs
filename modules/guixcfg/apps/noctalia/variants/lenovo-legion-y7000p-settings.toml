@@ -280,7 +280,7 @@ type = "ordchaos/network-layer:status"
 
 [widget.taskbar]
 group_by_workspace = true
-show_all_outputs = true
+show_all_outputs = false
 
 [widget.tray]
 capsule = true

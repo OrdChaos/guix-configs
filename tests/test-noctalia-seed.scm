@@ -46,6 +46,10 @@
              (not (any (lambda (target)
                          (string-suffix? ".toml" target))
                        (map car %noctalia-xdg-value))))
+(test-assert "taskbar stays per-monitor (no cross-output merging)"
+             (and (string-contains %seed-text "show_all_outputs = false")
+                  (not (string-contains %seed-text "show_all_outputs = true"))))
+
 ;; ── 3. host seed variants（host 只做 logical selection）─────
 (define %lenovo-seed-text
   (read-file
