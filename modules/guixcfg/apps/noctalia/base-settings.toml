@@ -59,6 +59,8 @@ enable_daemon = true
 position = "top_right"
 position_vertical = "top_right"
 
+[plugin_settings."mdj2812/mihomo-control"]
+panel_placement = "attached"
 
 [plugins]
 enabled = [ "ordchaos/network-layer" ]
@@ -114,7 +116,7 @@ wallpaper_scheme = "m3-fruit-salad"
 
     [theme.templates]
     builtin_ids = [ "ghostty", "kcolorscheme", "niri", "qt", "starship" ]
-    community_ids = [ "obsidian", "vscode", "discord", "obs", "steam", "telegram" ]
+    community_ids = [ "discord", "telegram", "obsidian", "vscode", "steam", "obs" ]
 
         [theme.templates.user.gtk3]
         input_path = "$XDG_CONFIG_HOME/noctalia/templates/gtk3.css"
@@ -165,6 +167,10 @@ capsule = true
 [widget.session]
 capsule = true
 
+[widget.status]
+capsule = true
+type = "ordchaos/network-layer:status"
+
 [widget.taskbar]
 group_by_workspace = true
 show_all_outputs = true
@@ -178,8 +184,3 @@ pinned = [ "fcitx5" ]
 
 [widget.volume]
 capsule = true
-
-
-[widget.status]
-capsule = true
-type = "ordchaos/network-layer:status"
