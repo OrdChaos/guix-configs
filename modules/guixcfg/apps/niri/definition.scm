@@ -5,6 +5,11 @@
 ;;; + niri 公开配置（config.kdl 入口 + common.kdl 通用配置 + 可选
 ;;; configuration variants，本目录 colocate）。
 ;;;
+;;; 合成器包：virelith 的 niri-virtual-output——(inherit niri) + 上游
+;;; PR #3800（虚拟输出）backport 到 26.04 的补丁；二进制名、IPC、
+;;; wayland-session 与配置格式均与官方 niri 一致。profile 只装该
+;;; 派生包（单一 niri 实例）。
+;;;
 ;;; ── 注销 lifecycle（2026-08-24 决策记录）────────────────────
 ;;; 官方 home-niri-service-type 的 shepherd service 未设 respawn?
 ;;; （<shepherd-service> 默认 #t）——niri 退出会被 Home Shepherd
@@ -54,7 +59,7 @@
   #:use-module (gnu packages freedesktop) ;xdg-desktop-portal*
   #:use-module (gnu packages glib) ;dbus
   #:use-module (gnu packages gnome) ;xdg-desktop-portal-gnome
-  #:use-module (gnu packages window-management) ;niri
+  #:use-module (virelith packages niri) ;niri-virtual-output（PR #3800）
   #:use-module (gnu packages xorg) ;xwayland-satellite
   #:use-module (gnu services) ;service、service-type
   #:use-module (guix gexp) ;local-file、gexp、program-file
@@ -103,7 +108,8 @@
                     (let ((pid (primitive-fork)))
                       (if (zero? pid)
                           ;; child：exec niri（file-append 绝对路径）。
-                          (execl #$(file-append niri "/bin/niri") "niri"
+                          (execl #$(file-append niri-virtual-output "/bin/niri")
+                                 "niri"
                                  "--session")
                           (let* ((status (cdr (waitpid pid)))
                                  (code (if (status:term-sig status)
@@ -181,7 +187,7 @@ logout lifecycle: respawn? #f + wrapper that runs
                                   (service-extension home-profile-service-type
                                    (lambda (config)
                                      (list dbus
-                                           niri
+                                           niri-virtual-output
                                            xdg-desktop-portal
                                            xdg-desktop-portal-gnome
                                            xdg-desktop-portal-gtk

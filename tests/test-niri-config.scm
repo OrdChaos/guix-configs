@@ -8,6 +8,7 @@
 (use-modules (guix store) ;open-connection
              (guix monads)
              (guix derivations)
+             (guix packages) ;package-name、package?
              (guix gexp) ;plain-file
              (guix build utils) ;find-files
              (gnu home) ;home-environment
@@ -274,17 +275,19 @@
         (string-contains s "#o1777"))))
 
 ;; ── 10. niri validate：真实解析最终配置树（store 有二进制时）─
+(define (store-dirs-containing needle)
+  (or (false-if-exception
+       (scandir "/gnu/store" (lambda (d) (string-contains d needle))))
+      '()))
+
 (define (find-niri-binary)
-  "store 中 pinned niri-26.04 的可执行路径；不存在时返回 #f
+  "store 中 niri 的可执行路径；优先派生包 niri-virtual-output（含
+create-virtual 支持），其次 pinned niri-26.04。都不存在时返回 #f
 （测试跳过 validate 组，不依赖公网/构建）。"
-  (let ((candidates (or (false-if-exception (scandir "/gnu/store"
-                                                     (lambda (d)
-                                                       (string-contains d
-                                                        "-niri-26.04"))))
-                        '())))
-    (find (lambda (d)
-            (file-exists? (string-append "/gnu/store/" d "/bin/niri")))
-          candidates)))
+  (find (lambda (d)
+          (file-exists? (string-append "/gnu/store/" d "/bin/niri")))
+        (append (store-dirs-containing "-niri-virtual-output-26.04")
+                (store-dirs-containing "-niri-26.04"))))
 
 (define %niri-binary
   (and=> (find-niri-binary)
@@ -318,5 +321,27 @@
                                                     %vm-config-dir
                                                     "/config.kdl"))))
     (test-skip "pinned niri binary not in store; validate skipped"))
+
+;; ── 11. 单一 niri：profile 只装派生包 ───────────────────────
+(define %niri-profile-packages
+  (let* ((exts (service-type-extensions home-niri-session-service-type))
+         (ext (find (lambda (e)
+                      (eq? (service-extension-target e)
+                           home-profile-service-type))
+                    exts)))
+    (and ext
+         ((service-extension-compute ext) #t))))
+
+(test-assert
+ "niri session profile carries niri-virtual-output and no plain niri"
+ (and %niri-profile-packages
+      (find (lambda (p)
+              (and (package? p)
+                   (string=? (package-name p) "niri-virtual-output")))
+            %niri-profile-packages)
+      (not (find (lambda (p)
+                   (and (package? p)
+                        (string=? (package-name p) "niri")))
+                 %niri-profile-packages))))
 
 (test-end "niri-config")
