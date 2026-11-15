@@ -168,6 +168,9 @@ fill_mode = "crop"
     [wallpaper.monitors.Virtual-1]
     path = "~/.local/share/backgrounds/wallpaper.jpg"
 
+    [wallpaper.monitors.virtual]
+    path = "~/.local/share/backgrounds/wallpaper.jpg"
+
 [widget.battery]
 capsule = true
 

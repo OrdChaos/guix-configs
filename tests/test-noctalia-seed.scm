@@ -27,9 +27,11 @@
 ;; （/home/<user>——AGENT.md §13）与机器专属输出（eDP-1 等）。
 (test-assert "seed is portable (no absolute /home paths)"
              (not (string-contains %seed-text "/home/")))
-(test-assert "seed has no machine-specific monitor sections"
+(test-assert "seed has no machine-specific monitor sections (global 'virtual' excepted)"
              (and (not (string-contains %seed-text "eDP-"))
-                  (not (string-contains %seed-text "Virtual-"))))
+                  (not (string-contains %seed-text "Virtual-"))
+                  ;; 全局虚拟输出（common.kdl 定义，非机器专属）。
+                  (string-contains %seed-text "[wallpaper.monitors.virtual]")))
 
 ;; ── 2. No second configuration source ────────────────────────
 (define %noctalia-xdg-value
@@ -53,6 +55,11 @@
 
 (test-assert "lenovo seed carries the internal panel layout"
              (string-contains %lenovo-seed-text "eDP-1"))
+(test-assert "lenovo seed carries the global virtual output login box"
+             (and (string-contains %lenovo-seed-text
+                                   "lockscreen-login-box@virtual")
+                  (string-contains %lenovo-seed-text
+                                   "placement_width = 1829.0")))
 (test-assert "lenovo seed stays free of user absolute paths"
              (not (string-contains %lenovo-seed-text "/home/")))
 (test-assert "vm seed carries the Virtual-1 layout"

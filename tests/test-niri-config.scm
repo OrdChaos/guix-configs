@@ -344,4 +344,16 @@ create-virtual 支持），其次 pinned niri-26.04。都不存在时返回 #f
                         (string=? (package-name p) "niri")))
                  %niri-profile-packages))))
 
+
+;; ── 12. 全局虚拟输出（PR #3800）────────────────────────────
+(test-assert
+ "common.kdl declares the global 3200x2136 virtual output"
+ (and (string-contains %common-kdl "output \"virtual\"")
+      (string-contains %common-kdl "create-virtual")
+      (string-contains %common-kdl "mode \"3200x2136@60.000\"")
+      (string-contains %common-kdl "scale 1.75")))
+
+(test-assert
+ "virtual output is global (not duplicated in the host variant)"
+ (not (string-contains %host-kdl "output \"virtual\"")))
 (test-end "niri-config")

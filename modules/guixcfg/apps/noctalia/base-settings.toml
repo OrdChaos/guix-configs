@@ -137,6 +137,9 @@ fill_mode = "crop"
     [wallpaper.last]
     path = "~/.local/share/backgrounds/wallpaper.jpg"
 
+    [wallpaper.monitors.virtual]
+    path = "~/.local/share/backgrounds/wallpaper.jpg"
+
 [widget.battery]
 capsule = true
 
