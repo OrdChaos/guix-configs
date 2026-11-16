@@ -48,7 +48,7 @@
   #:use-module (gnu packages video) ;intel-media-driver（VAAPI iHD）
   #:use-module (gnu services) ;simple-service
   #:use-module (gnu services base) ;udev-rules-service
-  #:use-module (guix gexp) ;file-append、local-file、mixed-text-file、plain-file、program-file
+  #:use-module (guix gexp) ;file-append、local-file、plain-file、program-file
   #:use-module (guixcfg apps model)
   #:use-module (guixcfg security secrets) ;secret-decl、runtime-secret-target
   #:use-module (guixcfg system application-persistence)
@@ -122,23 +122,6 @@
        (apply execl #$(file-append sunshine "/bin/sunshine")
                 "sunshine" (cdr (command-line))))))
 
-;; XDG desktop shadow: Noctalia's launcher must go through the launcher
-;; (LD_LIBRARY_PATH for NVENC, LIBVA_DRIVERS_PATH for iHD).  Embed the
-;; absolute store path instead of relying on ~/.local/bin being in PATH.
-(define %sunshine-desktop
-  (mixed-text-file
-   "dev.lizardbyte.app.Sunshine.desktop"
-   "[Desktop Entry]\n"
-   "Categories=RemoteAccess;Network;\n"
-   "Comment=Self-hosted game stream host for Moonlight\n"
-   "Exec=" (file-append %sunshine-launcher "") "\n"
-   "Icon=dev.lizardbyte.app.Sunshine\n"
-   "StartupWMClass=dev.lizardbyte.app.Sunshine\n"
-   "Keywords=gamestream;stream;moonlight;remote play;\n"
-   "Name=Sunshine\n"
-   "Type=Application\n"
-   "Version=1.0\n"))
-
 (define %sunshine-libvirtualhid-udev-rule
   (file->udev-rule
    "61-sunshine-libvirtualhid.rules"
@@ -157,9 +140,7 @@
                                                           (list ".local/bin/sunshine-start-virtual"
                                                                 %sunshine-start-virtual)
                                                           (list ".local/share/sunshine/apps.json"
-                                                                %sunshine-apps-file)
-                                                          (list ".local/share/applications/dev.lizardbyte.app.Sunshine.desktop"
-                                                                %sunshine-desktop)))))
+                                                                %sunshine-apps-file)))))
                (system-services (list (udev-rules-service 'sunshine sunshine)
                                       (udev-rules-service
                                        'sunshine-libvirtualhid
