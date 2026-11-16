@@ -4,37 +4,14 @@
   },
   "apps": [
     {
-      "name": "Desktop",
+      "name": "Virtual Desktop",
       "image-path": "desktop.png",
       "prep-cmd": [
         {
-          "do": "niri msg action focus-monitor virtual",
-          "undo": "niri msg action focus-monitor eDP-1"
+          "do": "sh -c 'niri msg remove-virtual-output virtual 2>/dev/null; niri msg create-virtual-output --name virtual --width 3200 --height 2136 --refresh-rate 60 && niri msg output virtual scale 1.75 && niri msg output virtual position set 1829 0 && niri msg action focus-monitor virtual'",
+          "undo": "niri msg remove-virtual-output virtual"
         }
       ]
-    },
-    {
-      "name": "Low Res Desktop",
-      "image-path": "desktop.png",
-      "prep-cmd": [
-        {
-          "do": "xrandr --output HDMI-1 --mode 1920x1080",
-          "undo": "xrandr --output HDMI-1 --mode 1920x1200"
-        }
-      ]
-    },
-    {
-      "name": "Steam Big Picture",
-      "detached": [
-        "setsid steam steam://open/bigpicture"
-      ],
-      "prep-cmd": [
-        {
-          "do": "",
-          "undo": "setsid steam steam://close/bigpicture"
-        }
-      ],
-      "image-path": "steam.png"
     }
   ]
 }
