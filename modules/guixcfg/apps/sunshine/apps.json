@@ -8,7 +8,7 @@
       "image-path": "desktop.png",
       "prep-cmd": [
         {
-          "do": "sh -c 'niri msg remove-virtual-output virtual 2>/dev/null; niri msg create-virtual-output --name virtual --width 3200 --height 2136 --refresh-rate 60 && niri msg output virtual scale 1.75 && niri msg output virtual position set 1829 0 && niri msg action focus-monitor virtual'",
+          "do": "sunshine-start-virtual",
           "undo": "niri msg remove-virtual-output virtual"
         }
       ]

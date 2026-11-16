@@ -4,8 +4,9 @@
 ;;; 采集：niri 的虚拟输出通过 wlr-screencopy 暴露；原生进程没有
 ;;; Flatpak 的 Wayland security context，因此 niri 不会隐藏
 ;;; zwlr_screencopy_manager_v1。虚拟输出不再由 niri 声明（不持久化）：
-;;; apps.json 的 prep-cmd 在串流开始时 create-virtual-output、设置
-;;; scale/position、聚焦 virtual，undo 删除；Sunshine 正常退出/会话结束
+;;; apps.json 的 prep-cmd 调用 sunshine-start-virtual，按 Moonlight 请求的
+;;; SUNSHINE_CLIENT_WIDTH/HEIGHT/FPS 创建输出，scale 按 client width/1829
+;;; 适配后设置 position/focus，undo 删除；Sunshine 正常退出/会话结束
 ;;; 会执行 undo，niri 退出（重启/关机）则输出随 compositor 消失。
 ;;;
 ;;; 编码：构建关闭 CUDA/Vulkan（VAAPI 保留）；硬件编码走 NVENC 时
@@ -43,6 +44,7 @@
 
 (define-module (guixcfg apps sunshine definition)
   #:use-module (gnu home services) ;home-files-service-type
+  #:use-module (gnu packages bash) ;bash（运行 prep shell 脚本）
   #:use-module (gnu services) ;simple-service
   #:use-module (gnu services base) ;udev-rules-service
   #:use-module (guix gexp) ;file-append、local-file、plain-file、program-file
@@ -69,6 +71,13 @@
 
 (define %sunshine-apps-file
   (local-file "apps.json" "sunshine-apps.json"))
+
+(define %sunshine-start-virtual
+  (program-file
+   "sunshine-start-virtual"
+   #~(execl #$(file-append bash "/bin/bash") "bash"
+            #$(local-file "start-virtual-output.sh"
+                          "sunshine-start-virtual.sh"))))
 
 (define %sunshine-conf
   (plain-file
@@ -112,6 +121,8 @@
                                                     home-files-service-type
                                                     (list (list ".local/bin/sunshine"
                                                                 %sunshine-launcher)
+                                                          (list ".local/bin/sunshine-start-virtual"
+                                                                %sunshine-start-virtual)
                                                           (list ".local/share/sunshine/apps.json"
                                                                 %sunshine-apps-file)))))
                (system-services (list (udev-rules-service 'sunshine sunshine)
