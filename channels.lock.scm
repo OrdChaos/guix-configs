@@ -2,7 +2,7 @@
        (name 'guix)
        (url "https://codeberg.org/guix/guix.git")
        (branch "master")
-       (commit "f66a84a925f3dcd4533bee591193f24e056db1cd")
+       (commit "3927dc7e252ea381ada2c2f2f55a8897fb1816d3")
        (introduction
         (make-channel-introduction
          "9edb3f66fd807b096b48283debdcddccfea34bad"
