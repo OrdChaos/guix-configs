@@ -45,9 +45,10 @@
 (define-module (guixcfg apps sunshine definition)
   #:use-module (gnu home services) ;home-files-service-type
   #:use-module (gnu packages bash) ;bash（运行 prep shell 脚本）
+  #:use-module (gnu packages video) ;intel-media-driver（VAAPI iHD）
   #:use-module (gnu services) ;simple-service
   #:use-module (gnu services base) ;udev-rules-service
-  #:use-module (guix gexp) ;file-append、local-file、plain-file、program-file
+  #:use-module (guix gexp) ;file-append、local-file、mixed-text-file、plain-file、program-file
   #:use-module (guixcfg apps model)
   #:use-module (guixcfg security secrets) ;secret-decl、runtime-secret-target
   #:use-module (guixcfg system application-persistence)
@@ -83,19 +84,26 @@
             #$(local-file "start-virtual-output.sh"
                           "sunshine-start-virtual.sh"))))
 
-(define %sunshine-conf
+(define* (sunshine-conf #:key vaapi?)
   (plain-file
    "sunshine.conf"
    (string-append
     "capture = wlr\n"
     "output_name = virtual\n"
     "key_rightalt_to_key_win = enabled\n"
+    (if vaapi? "encoder = vaapi\n" "")
     "file_apps = "
     (user-profile-home-directory %primary-user)
     "/.local/share/sunshine/apps.json\n"
     "credentials_file = "
     %sunshine-credentials-target
     "\n")))
+
+(define %sunshine-conf
+  (sunshine-conf))
+
+(define %sunshine-conf-vaapi
+  (sunshine-conf #:vaapi? #t))
 
 (define %sunshine-launcher
   (program-file
@@ -107,8 +115,29 @@
        (setenv "LD_LIBRARY_PATH"
                (string-append "/run/current-system/profile/lib:"
                               (or (getenv "LD_LIBRARY_PATH") "")))
+       ;; VAAPI: point libva at the packaged Intel iHD driver.
+       (setenv "LIBVA_DRIVERS_PATH"
+               (string-append #$(file-append intel-media-driver "/lib/dri")
+                              ":" (or (getenv "LIBVA_DRIVERS_PATH") "")))
        (apply execl #$(file-append sunshine "/bin/sunshine")
                 "sunshine" (cdr (command-line))))))
+
+;; XDG desktop shadow: Noctalia's launcher must go through the launcher
+;; (LD_LIBRARY_PATH for NVENC, LIBVA_DRIVERS_PATH for iHD).  Embed the
+;; absolute store path instead of relying on ~/.local/bin being in PATH.
+(define %sunshine-desktop
+  (mixed-text-file
+   "dev.lizardbyte.app.Sunshine.desktop"
+   "[Desktop Entry]\n"
+   "Categories=RemoteAccess;Network;\n"
+   "Comment=Self-hosted game stream host for Moonlight\n"
+   "Exec=" (file-append %sunshine-launcher "") "\n"
+   "Icon=dev.lizardbyte.app.Sunshine\n"
+   "StartupWMClass=dev.lizardbyte.app.Sunshine\n"
+   "Keywords=gamestream;stream;moonlight;remote play;\n"
+   "Name=Sunshine\n"
+   "Type=Application\n"
+   "Version=1.0\n"))
 
 (define %sunshine-libvirtualhid-udev-rule
   (file->udev-rule
@@ -128,7 +157,9 @@
                                                           (list ".local/bin/sunshine-start-virtual"
                                                                 %sunshine-start-virtual)
                                                           (list ".local/share/sunshine/apps.json"
-                                                                %sunshine-apps-file)))))
+                                                                %sunshine-apps-file)
+                                                          (list ".local/share/applications/dev.lizardbyte.app.Sunshine.desktop"
+                                                                %sunshine-desktop)))))
                (system-services (list (udev-rules-service 'sunshine sunshine)
                                       (udev-rules-service
                                        'sunshine-libvirtualhid
@@ -140,4 +171,8 @@
                                                                 (exposure 'bind-directory)
                                                                 (lifecycle 'application-owned)
                                                                 (seeds (list (list "sunshine.conf"
-                                                                                   %sunshine-conf))))))))
+                                                                                   %sunshine-conf)))
+                                                                (seed-variants
+                                                                 `((laptop
+                                                                    . (("sunshine.conf"
+                                                                        ,%sunshine-conf-vaapi))))))))))
