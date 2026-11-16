@@ -48,7 +48,7 @@
                (home-packages (list sunshine))
                (home-services (list (simple-service 'sunshine-launcher
                                                     home-files-service-type
-                                                    (list (cons ".local/bin/sunshine"
+                                                    (list (list ".local/bin/sunshine"
                                                                 %sunshine-launcher)))))
                (system-services (list (udev-rules-service 'sunshine sunshine)))
                (persistence (list (application-persistence-rule (name 'config)
