@@ -14,7 +14,13 @@
 ;;;
 ;;; 输入：Sunshine 用 uinput/uhid；本 app 的系统贡献安装上游
 ;;; 60-sunshine.rules（GROUP="input" + TAG+="uaccess"，登录会话用户
-;;; 经 logind ACL 获得访问权）。
+;;; 经 logind ACL 获得访问权）。上游规则按旧名
+;;; "Sunshine (libvirtualhid)*" 匹配，当前 libvirtualhid 生成的设备名是
+;;; "libvirtualhid *"（Keyboard/Mouse/Mouse (Absolute)/Touchscreen/
+;;; Pen Tablet），匹配不上 → niri/libinput 打不开 event 节点（只有
+;;; root:input 0660），表现为只能看不能操作。因此额外安装一条按新名
+;;; 匹配的 uaccess 规则；已有的 uinput 设备需要 udevadm trigger 或重启
+;;; 才会拿到 ACL。
 ;;;
 ;;; persistence：~/.config/sunshine（sunshine.conf / apps.json /
 ;;; credentials / state）是 app-owned mutable state → 独立 backing，
@@ -43,6 +49,14 @@
        (apply execl #$(file-append sunshine "/bin/sunshine")
                 "sunshine" (cdr (command-line))))))
 
+(define %sunshine-libvirtualhid-udev-rule
+  (file->udev-rule
+   "61-sunshine-libvirtualhid.rules"
+   (plain-file "61-sunshine-libvirtualhid.rules"
+               (string-append
+                "SUBSYSTEM==\"input\", ATTRS{name}==\"libvirtualhid *\", "
+                "TAG+=\"uaccess\"\n"))))
+
 (define %sunshine
   (application (name 'sunshine)
                (home-packages (list sunshine))
@@ -50,7 +64,10 @@
                                                     home-files-service-type
                                                     (list (list ".local/bin/sunshine"
                                                                 %sunshine-launcher)))))
-               (system-services (list (udev-rules-service 'sunshine sunshine)))
+               (system-services (list (udev-rules-service 'sunshine sunshine)
+                                      (udev-rules-service
+                                       'sunshine-libvirtualhid
+                                       %sunshine-libvirtualhid-udev-rule)))
                (persistence (list (application-persistence-rule (name 'config)
                                                                 (backing "sunshine/config")
                                                                 (consumer ".config/sunshine")
