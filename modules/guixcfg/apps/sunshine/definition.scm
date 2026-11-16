@@ -55,6 +55,10 @@
   #:use-module (virelith packages sunshine)
   #:export (%sunshine))
 
+;;; Sunshine 的 password 是 util::hex(crypto::hash(password + salt))；
+;;; util::hex 默认 rev=false 从摘要最后一字节开始输出，即**字节倒序**
+;;; 的 SHA-256 digest，不是 sha256sum 的常规顺序。顺序写反会持续 401。
+
 (define %sunshine-credentials
   (secret-decl (name 'sunshine-credentials)
                (scope 'user)
