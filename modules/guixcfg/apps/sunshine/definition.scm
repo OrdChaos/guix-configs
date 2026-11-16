@@ -75,4 +75,7 @@
                                                                 (lifecycle 'application-owned)
                                                                 (seeds (list (list "sunshine.conf"
                                                                                    (local-file "sunshine.conf"
-                                                                                               "sunshine.conf")))))))))
+                                                                                               "sunshine.conf"))
+                                                                             (list "apps.json"
+                                                                                   (local-file "apps.json"
+                                                                                               "sunshine-apps.json")))))))))
