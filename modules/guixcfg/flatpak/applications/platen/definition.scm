@@ -8,5 +8,4 @@
   (flatpak-application (name 'platen)
                        (id "page.wisha.platen")
                        (remote 'flathub)
-                       (branch "stable")
-                       ))
+                       (branch "stable")))

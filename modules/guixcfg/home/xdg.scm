@@ -190,8 +190,7 @@
 ;; 设默认（交给 GIO 的候选与用户选择）；application/pdf 仍归 Papers
 ;; （%document-default-mime-types）。
 (define %doc-default-mime-types
-  '("application/msword"
-    "application/rtf"
+  '("application/msword" "application/rtf"
     "application/vnd.oasis.opendocument.text"
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
 
@@ -199,8 +198,7 @@
   '("application/vnd.ms-excel"
     "application/vnd.oasis.opendocument.spreadsheet"
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    "text/csv"
-    "text/tab-separated-values"))
+    "text/csv" "text/tab-separated-values"))
 
 (define %presentation-default-mime-types
   '("application/vnd.ms-powerpoint"

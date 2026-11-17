@@ -32,7 +32,8 @@
   #:use-module (guixcfg apps model) ;applications-secrets
   #:use-module (guixcfg system mihomo service) ;%mihomo-secrets、%mihomo-data-persistence-rule
   #:use-module (guixcfg system dns nm-dnsmasq) ;dnsmasq 专用账号配置
-  #:export (%vm-storage-policy %vm-services %vm-test-secrets %vm-persistence %vm-os))
+  #:export (%vm-storage-policy %vm-services %vm-test-secrets %vm-persistence
+                               %vm-os))
 
 ;; 保留 host 模块原有导出名；实际 policy 放在纯存储模块中，避免早期
 ;; disk-install 为取 policy 而加载完整 OS/UKI/channel 依赖。

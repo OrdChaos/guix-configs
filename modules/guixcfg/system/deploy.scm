@@ -320,8 +320,8 @@ ROOT 必须为绝对路径；CHANNELS-FILE 是仓库根相对文件名；SUBCOMM
   ;; 注释）。latest-channel-instances 只做 fetch + 认证，不实例化任何
   ;; 东西。
   (guix-time-machine-argv root %channels-lock-file
-                          `("repl" "tools/channel-lock.scm"
-                            "--" ,(string-append root "/" %channels-file))))
+                          `("repl" "tools/channel-lock.scm" "--"
+                            ,(string-append root "/" %channels-file))))
 
 (define (git-status-porcelain-argv root)
   `("git" "-C"

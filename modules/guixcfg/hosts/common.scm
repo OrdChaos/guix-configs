@@ -98,10 +98,8 @@ host 的 logical seed selection（(application-name . variant) alist），
 ;; directories; keeping two hand-maintained lists is how the SmartDNS backing
 ;; was missed.
 (define %common-machine-state-rules
-  (list %mihomo-data-persistence-rule
-        %smartdns-mode-persistence-rule
-        %noctalia-greeter-persistence-rule
-        %guix-root-cache-persistence-rule))
+  (list %mihomo-data-persistence-rule %smartdns-mode-persistence-rule
+        %noctalia-greeter-persistence-rule %guix-root-cache-persistence-rule))
 
 ;;; ── TTY login prompt 的强语义（docs/architecture/accounts-sessions.md）
 ;;; login: 出现 = interactive-session-ready 已过——mingetty 延迟到
@@ -127,27 +125,22 @@ host 的 logical seed selection（(application-name . variant) alist），
                                                                         svc))
                                            "tty1"))) gated)))
     no-tty1))
-(define* (host-persistence #:key
-                           (additional-machine-state-rules '())
+(define* (host-persistence #:key (additional-machine-state-rules '())
                            (seed-selections '())
                            (user (user-profile-name %primary-user)))
   "Single persistence set for a host: common machine state + host machine
 state + selected user directories + application state.  File systems and
 activation are both derived from this one value."
-  (let ((application-rules
-         (host-application-persistence-rules
-           #:seed-selections seed-selections)))
-    (persistence-set
-      (projections
-        (append
-          (machine-state-persistence-projections
-            (append %common-machine-state-rules
-                    additional-machine-state-rules))
-          (user-persistence-projections user)
-          (application-persistence-projections application-rules user))))))
+  (let ((application-rules (host-application-persistence-rules
+                            #:seed-selections seed-selections)))
+    (persistence-set (projections (append (machine-state-persistence-projections
+                                           (append %common-machine-state-rules
+                                            additional-machine-state-rules))
+                                          (user-persistence-projections user)
+                                          (application-persistence-projections
+                                           application-rules user))))))
 (define* (make-host-services #:key (network-services '())
-                             keep-root-generations
-                             persistence
+                             keep-root-generations persistence
                              (additional-system-services '()))
   "共享 system services 列表。NETWORK-SERVICES 是 host 的网络服务
  头（NetworkManager（dns=dnsmasq）+ 可选 wpa-supplicant）；
@@ -162,8 +155,8 @@ activation are both derived from this one value."
                         ;; mihomo TUN exclude-uid 引用；docs/architecture/dns.md）。
                         (nm-dnsmasq-account-service)
                         ;; GVfs 桌面 metadata（x-gvfs-hide/x-gvfs-trash → utab）。
-                        (gvfs-mount-metadata-service
-                         (persistence-set-file-systems persistence))
+                        (gvfs-mount-metadata-service (persistence-set-file-systems
+                                                      persistence))
                         ;; SmartDNS 是应用 resolver；与 mihomo 完全解耦。
                         (smartdns-service)
                         ;; Mihomo 系统透明代理（docs/architecture/mihomo.md）。
@@ -242,8 +235,7 @@ HOME-ENVIRONMENT 是挂入 system 的 Guix Home。"
                   ;; login gate：activation 关闭 + PAM gate。
                   (login-gate-services))))
 
-(define* (make-base-host-operating-system #:key host-name
-                                          persistence
+(define* (make-base-host-operating-system #:key host-name persistence
 
                                           user-services)
   "基础 OS：与最终 OS 完全相同，只是不含 account-databases 投影与

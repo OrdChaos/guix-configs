@@ -80,15 +80,15 @@
                        (remote 'flathub)
                        (branch "stable")
                        (seeds (list (list "data/ElyOffice/settings.json"
-                                          (plain-file "settings.json"
-                                                      "{}"))))))
+                                          (plain-file "settings.json" "{}"))))))
 
 (define %seeded-rule
   (car (flatpak-application-persistence-rules %seeded-app)))
 
 (test-equal "default rule carries declared seed targets"
             '("data/ElyOffice/settings.json")
-            (map car (application-persistence-rule-seeds %seeded-rule)))
+            (map car
+                 (application-persistence-rule-seeds %seeded-rule)))
 (test-assert "seeded default rule valid per generic engine"
              (valid-application-persistence-rule? %seeded-rule))
 

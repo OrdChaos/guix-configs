@@ -29,7 +29,8 @@
              (guix ui) ;load*
              (ice-9 match)
              (ice-9 pretty-print)
-             (srfi srfi-1)) ;every
+             (srfi srfi-1))
+ ;every
 
 ;; Channel files are evaluated in an isolated module exposing only these
 ;; bindings; mirrors %safe-channel-bindings in guix/scripts/pull.scm so a
@@ -55,21 +56,21 @@
      guix-channel?)))
 
 (define (usage)
-  (format (current-error-port)
-          "usage: channel-lock.scm -- CHANNELS-FILE~%")
+  (format (current-error-port) "usage: channel-lock.scm -- CHANNELS-FILE~%")
   (exit 1))
 
 (define (read-channels file)
   "Return the channels declared in FILE.  Fail closed when FILE does not
 evaluate to a non-empty list of channels."
-  (let ((result (load* file %safe-channel-bindings #:isolated? #t)))
-    (if (and (pair? result) (list? result) (every channel? result))
-        result
+  (let ((result (load* file %safe-channel-bindings
+                       #:isolated? #t)))
+    (if (and (pair? result)
+             (list? result)
+             (every channel? result)) result
         (begin
-         (format (current-error-port)
-                 "channel-lock: '~a' did not evaluate to a list of channels~%"
-                 file)
-         (exit 1)))))
+          (format (current-error-port)
+           "channel-lock: '~a' did not evaluate to a list of channels~%" file)
+          (exit 1)))))
 
 (define (channel->lock-sexp channel commit)
   "Return the channels.lock.scm sexp for CHANNEL resolved at COMMIT.  The
@@ -78,34 +79,37 @@ that COMMIT comes from the channel instance: the instance's channel
 record has no commit field."
   (let ((introduction (channel-introduction channel)))
     `(channel
-      (name ',(channel-name channel))
-      (url ,(channel-url channel))
-      (branch ,(channel-branch channel))
-      (commit ,commit)
-      ,@(if introduction
-            `((introduction
-               (make-channel-introduction
-                ,(channel-introduction-first-signed-commit introduction)
-                (openpgp-fingerprint
-                 ,(openpgp-format-fingerprint
-                   (channel-introduction-first-commit-signer
-                    introduction))))))
-            '()))))
+       (name ',(channel-name channel))
+       (url ,(channel-url channel))
+       (branch ,(channel-branch channel))
+       (commit ,commit)
+       ,@(if introduction
+             `((introduction (make-channel-introduction ,(channel-introduction-first-signed-commit
+                                                          introduction)
+                                                        (openpgp-fingerprint ,
+                                                                             (openpgp-format-fingerprint
+                                                                              (channel-introduction-first-commit-signer
+                                                                               introduction))))))
+             '()))))
 
 (define (main args)
   (let ((file (match args
-                (("--" file) file)
-                ((file) file)
+                (("--" file)
+                 file)
+                ((file)
+                 file)
                 (_ (usage)))))
-    (with-error-handling
-     (with-store store
-       (let ((instances (latest-channel-instances store
-                                                  (read-channels file))))
-         (pretty-print (cons 'list
-                             (map (lambda (instance)
-                                    (channel->lock-sexp
-                                     (channel-instance-channel instance)
-                                     (channel-instance-commit instance)))
-                                  instances))))))))
+    (with-error-handling (with-store store
+                                     (let ((instances (latest-channel-instances
+                                                       store
+                                                       (read-channels file))))
+                                       (pretty-print (cons 'list
+                                                           (map (lambda (instance)
+                                                                  (channel->lock-sexp
+                                                                   (channel-instance-channel
+                                                                    instance)
+                                                                   (channel-instance-commit
+                                                                    instance)))
+                                                                instances))))))))
 
 (main (cdr (command-line)))

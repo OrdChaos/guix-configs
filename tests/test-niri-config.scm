@@ -276,8 +276,9 @@
 
 ;; ── 10. niri validate：真实解析最终配置树（store 有二进制时）─
 (define (store-dirs-containing needle)
-  (or (false-if-exception
-       (scandir "/gnu/store" (lambda (d) (string-contains d needle))))
+  (or (false-if-exception (scandir "/gnu/store"
+                                   (lambda (d)
+                                     (string-contains d needle))))
       '()))
 
 (define (find-niri-binary)
@@ -327,10 +328,10 @@ create-virtual 支持），其次 pinned niri-26.04。都不存在时返回 #f
   (let* ((exts (service-type-extensions home-niri-session-service-type))
          (ext (find (lambda (e)
                       (eq? (service-extension-target e)
-                           home-profile-service-type))
-                    exts)))
+                           home-profile-service-type)) exts)))
     (and ext
-         ((service-extension-compute ext) #t))))
+         ((service-extension-compute ext)
+          #t))))
 
 (test-assert
  "niri session profile carries niri-virtual-output and no plain niri"
@@ -343,7 +344,6 @@ create-virtual 支持），其次 pinned niri-26.04。都不存在时返回 #f
                    (and (package? p)
                         (string=? (package-name p) "niri")))
                  %niri-profile-packages))))
-
 
 ;; ── 12. 虚拟输出由 Sunshine 管理（不持久化）────────────────
 (test-assert

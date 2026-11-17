@@ -34,7 +34,7 @@
                                   persistent-user-dir-consumer
                                   %persistent-user-dirs
                                   user-persistence-projections
-            user-persistence-file-systems
+                                  user-persistence-file-systems
                                   user-persistence-activation
                                   user-persistence-service))
 
@@ -100,39 +100,38 @@ HOME itself is restored to 0700 ownership on activation."
   (let ((home (string-append "/home/" user))
         (root (persist-mount-point "@persist-data-home")))
     (map (lambda (d)
-           (persistence-projection
-             (name (string->symbol
-                    (string-append "user-" (persistent-user-dir-backing d))))
-             (root root)
-             (backing (string-append user "/"
-                                     (persistent-user-dir-backing d)))
-             (consumer (string-append home "/"
-                                      (persistent-user-dir-consumer d)))
-             (exposure 'bind-directory)
-             (owner 'user)
-             (owner-user user)
-             (mode #f)
-             (options %persistent-home-mount-options)
-             (home home)
-             (home-mode #o700)
-             (seeds '())))
-         %persistent-user-dirs)))
+           (persistence-projection (name (string->symbol (string-append
+                                                          "user-"
+                                                          (persistent-user-dir-backing
+                                                           d))))
+                                   (root root)
+                                   (backing (string-append user "/"
+                                                           (persistent-user-dir-backing
+                                                            d)))
+                                   (consumer (string-append home "/"
+                                                            (persistent-user-dir-consumer
+                                                             d)))
+                                   (exposure 'bind-directory)
+                                   (owner 'user)
+                                   (owner-user user)
+                                   (mode #f)
+                                   (options %persistent-home-mount-options)
+                                   (home home)
+                                   (home-mode 448)
+                                   (seeds '()))) %persistent-user-dirs)))
 
 (define (user-persistence-file-systems user)
   "持久化用户数据的 bind mount 声明，由通用 persistence executor 派生。"
-  (persistence-set-file-systems
-    (persistence-set (projections
-                       (user-persistence-projections user)))))
+  (persistence-set-file-systems (persistence-set (projections (user-persistence-projections
+                                                               user)))))
 
 (define (user-persistence-activation user)
   "activation gexp：由通用 persistence executor 建立 backing、HOME
 中间层、consumer 挂载点，并把 /home/USER 恢复为 0700 user-owned。"
-  (persistence-set-activation
-    (persistence-set (projections
-                       (user-persistence-projections user)))))
+  (persistence-set-activation (persistence-set (projections (user-persistence-projections
+                                                             user)))))
 
 (define (user-persistence-service user)
   "把 selected user 持久化目录创建挂到系统 activation。"
-  (persistence-set-service
-    (persistence-set (projections
-                       (user-persistence-projections user)))))
+  (persistence-set-service (persistence-set (projections (user-persistence-projections
+                                                          user)))))

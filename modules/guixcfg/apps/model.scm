@@ -101,7 +101,8 @@ extension 贡献，canonical target 由 instantiate-missing-services
   "聚合 APPS 的全部 system services。"
   (append-map application-system-services apps))
 
-(define* (applications-persistence apps #:key (seed-selections '()))
+(define* (applications-persistence apps
+                                   #:key (seed-selections '()))
   "聚合 APPS 的全部 application persistence rules。SEED-SELECTIONS
 是 (application-name . variant) alist（host 的 logical selection）：
 命中的应用把 rule 的 base seeds 换成该变体的完整 seeds；未命中或
@@ -111,9 +112,8 @@ extension 贡献，canonical target 由 instantiate-missing-services
                                          (application-name app))))
                   (map (lambda (rule)
                          (application-persistence-rule-for-variant rule
-                                                                  variant))
-                       (application-persistence app))))
-              apps))
+                                                                   variant))
+                       (application-persistence app)))) apps))
 
 (define (applications-secrets apps)
   "聚合 APPS 的全部 secret declarations（ciphertext source 已由

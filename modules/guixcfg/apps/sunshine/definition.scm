@@ -78,26 +78,23 @@
   (local-file "apps.json" "sunshine-apps.json"))
 
 (define %sunshine-start-virtual
-  (program-file
-   "sunshine-start-virtual"
-   #~(execl #$(file-append bash "/bin/bash") "bash"
-            #$(local-file "start-virtual-output.sh"
-                          "sunshine-start-virtual.sh"))))
+  (program-file "sunshine-start-virtual"
+                #~(execl #$(file-append bash "/bin/bash") "bash"
+                         #$(local-file "start-virtual-output.sh"
+                                       "sunshine-start-virtual.sh"))))
 
 (define* (sunshine-conf #:key vaapi?)
-  (plain-file
-   "sunshine.conf"
-   (string-append
-    "capture = wlr\n"
-    "output_name = virtual\n"
-    "key_rightalt_to_key_win = enabled\n"
-    (if vaapi? "encoder = vaapi\n" "")
-    "file_apps = "
-    (user-profile-home-directory %primary-user)
-    "/.local/share/sunshine/apps.json\n"
-    "credentials_file = "
-    %sunshine-credentials-target
-    "\n")))
+  (plain-file "sunshine.conf"
+              (string-append "capture = wlr\n"
+                             "output_name = virtual\n"
+                             "key_rightalt_to_key_win = enabled\n"
+                             (if vaapi? "encoder = vaapi\n" "")
+                             "file_apps = "
+                             (user-profile-home-directory %primary-user)
+                             "/.local/share/sunshine/apps.json\n"
+                             "credentials_file = "
+                             %sunshine-credentials-target
+                             "\n")))
 
 (define %sunshine-conf
   (sunshine-conf))
@@ -106,54 +103,58 @@
   (sunshine-conf #:vaapi? #t))
 
 (define %sunshine-launcher
-  (program-file
-   "sunshine-launcher"
-   #~(begin
-       ;; FFmpeg dlopens libcuda.so.1 for NVENC; the proprietary driver's
-       ;; userspace libraries live in the system profile, which is not on
-       ;; the session loader path.  Prepend it; harmless when absent.
-       (setenv "LD_LIBRARY_PATH"
-               (string-append "/run/current-system/profile/lib:"
-                              (or (getenv "LD_LIBRARY_PATH") "")))
-       ;; VAAPI: point libva at the packaged Intel iHD driver.
-       (setenv "LIBVA_DRIVERS_PATH"
-               (string-append #$(file-append intel-media-driver "/lib/dri")
-                              ":" (or (getenv "LIBVA_DRIVERS_PATH") "")))
-       (apply execl #$(file-append sunshine "/bin/sunshine")
-                "sunshine" (cdr (command-line))))))
+  (program-file "sunshine-launcher"
+                #~(begin
+                    ;; FFmpeg dlopens libcuda.so.1 for NVENC; the proprietary driver's
+                    ;; userspace libraries live in the system profile, which is not on
+                    ;; the session loader path.  Prepend it; harmless when absent.
+                    (setenv "LD_LIBRARY_PATH"
+                            (string-append "/run/current-system/profile/lib:"
+                                           (or (getenv "LD_LIBRARY_PATH") "")))
+                    ;; VAAPI: point libva at the packaged Intel iHD driver.
+                    (setenv "LIBVA_DRIVERS_PATH"
+                            (string-append #$(file-append intel-media-driver
+                                                          "/lib/dri") ":"
+                                           (or (getenv "LIBVA_DRIVERS_PATH")
+                                               "")))
+                    (apply execl
+                           #$(file-append sunshine "/bin/sunshine") "sunshine"
+                           (cdr (command-line))))))
 
 (define %sunshine-libvirtualhid-udev-rule
-  (file->udev-rule
-   "61-sunshine-libvirtualhid.rules"
-   (plain-file "61-sunshine-libvirtualhid.rules"
-               (string-append
-                "SUBSYSTEM==\"input\", ATTRS{name}==\"libvirtualhid *\", "
-                "TAG+=\"uaccess\"\n"))))
+  (file->udev-rule "61-sunshine-libvirtualhid.rules"
+                   (plain-file "61-sunshine-libvirtualhid.rules"
+                               (string-append
+                                "SUBSYSTEM==\"input\", ATTRS{name}==\"libvirtualhid *\", "
+                                "TAG+=\"uaccess\"\n"))))
 
 (define %sunshine
   (application (name 'sunshine)
                (home-packages (list sunshine))
                (home-services (list (simple-service 'sunshine-managed-files
                                                     home-files-service-type
-                                                    (list (list ".local/bin/sunshine"
-                                                                %sunshine-launcher)
-                                                          (list ".local/bin/sunshine-start-virtual"
-                                                                %sunshine-start-virtual)
-                                                          (list ".local/share/sunshine/apps.json"
-                                                                %sunshine-apps-file)))))
+                                                    (list (list
+                                                           ".local/bin/sunshine"
+                                                           %sunshine-launcher)
+                                                          (list
+                                                           ".local/bin/sunshine-start-virtual"
+                                                           %sunshine-start-virtual)
+                                                          (list
+                                                           ".local/share/sunshine/apps.json"
+                                                           %sunshine-apps-file)))))
                (system-services (list (udev-rules-service 'sunshine sunshine)
-                                      (udev-rules-service
-                                       'sunshine-libvirtualhid
+                                      (udev-rules-service 'sunshine-libvirtualhid
                                        %sunshine-libvirtualhid-udev-rule)))
                (secrets (list %sunshine-credentials))
                (persistence (list (application-persistence-rule (name 'config)
-                                                                (backing "sunshine/config")
-                                                                (consumer ".config/sunshine")
+                                                                (backing
+                                                                 "sunshine/config")
+                                                                (consumer
+                                                                 ".config/sunshine")
                                                                 (exposure 'bind-directory)
                                                                 (lifecycle 'application-owned)
-                                                                (seeds (list (list "sunshine.conf"
-                                                                                   %sunshine-conf)))
-                                                                (seed-variants
-                                                                 `((laptop
-                                                                    . (("sunshine.conf"
-                                                                        ,%sunshine-conf-vaapi))))))))))
+                                                                (seeds (list (list
+                                                                              "sunshine.conf"
+                                                                              %sunshine-conf)))
+                                                                (seed-variants `
+                                                                 ((laptop ("sunshine.conf" ,%sunshine-conf-vaapi)))))))))

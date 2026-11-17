@@ -19,10 +19,10 @@
                   (every list? %fontconfig-snippets)))
 
 (define %policy-xml
-  (call-with-output-string
-   (lambda (port)
-     (for-each (lambda (snippet)
-                 (sxml->xml snippet port)) %fontconfig-snippets))))
+  (call-with-output-string (lambda (port)
+                             (for-each (lambda (snippet)
+                                         (sxml->xml snippet port))
+                                       %fontconfig-snippets))))
 
 (test-assert "sans-serif chain starts at MiSans"
              (string-contains %policy-xml "<family>MiSans</family>"))
@@ -32,8 +32,7 @@
 (test-assert "CSS UI generic names are rewritten"
              (and (string-contains %policy-xml
                                    "<string>ui-sans-serif</string>")
-                  (string-contains %policy-xml
-                                   "<string>ui-monospace</string>")
+                  (string-contains %policy-xml "<string>ui-monospace</string>")
                   (string-contains %policy-xml "mode=\"assign_replace\"")))
 
 (test-end "fonts-policy")

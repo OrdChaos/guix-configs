@@ -20,14 +20,13 @@
 (define-module (guixcfg system mihomo sources)
   #:use-module (guix gexp) ;local-file
   #:use-module (srfi srfi-9) ;define-record-type
-  #:export (<mihomo-source>
-            mihomo-source?
-            mihomo-source
-            mihomo-source-name
-            mihomo-source-kind
-            mihomo-source-secret-file
-            mihomo-source-target-name
-            %mihomo-sources))
+  #:export (<mihomo-source> mihomo-source?
+                            mihomo-source
+                            mihomo-source-name
+                            mihomo-source-kind
+                            mihomo-source-secret-file
+                            mihomo-source-target-name
+                            %mihomo-sources))
 
 (define-record-type <mihomo-source>
   (make-mihomo-source name kind secret-file target-name)
@@ -37,17 +36,16 @@
   (secret-file mihomo-source-secret-file)
   (target-name mihomo-source-target-name))
 
-(define* (mihomo-source name kind secret-file #:optional target-name)
+(define* (mihomo-source name kind secret-file
+                        #:optional target-name)
   "声明一个订阅源。KIND 为 'http（明文 URL）或 'file（明文 provider
 YAML 内容）；SECRET-FILE 是该源对应的 age 密文 local-file。TARGET-NAME
 不写时由 name/kind 派生，通常不需要显式给出。"
-  (make-mihomo-source
-   name
-   kind
-   secret-file
-   (or target-name
-       (string-append "mihomo-source-" name
-                      (if (eq? kind 'http) ".url" ".file")))))
+  (make-mihomo-source name kind secret-file
+                      (or target-name
+                          (string-append "mihomo-source-" name
+                                         (if (eq? kind
+                                                  'http) ".url" ".file")))))
 
 (define (validate-sources sources)
   (when (null? sources)
@@ -61,13 +59,16 @@ YAML 内容）；SECRET-FILE 是该源对应的 age 密文 local-file。TARGET-N
              (name (mihomo-source-name source))
              (kind (mihomo-source-kind source))
              (target (mihomo-source-target-name source)))
-        (unless (memq kind '(http file))
+        (unless (memq kind
+                      '(http file))
           (error "mihomo source has invalid kind" name kind))
-        (unless (and (string? name) (> (string-length name) 0))
+        (unless (and (string? name)
+                     (> (string-length name) 0))
           (error "mihomo source has empty name"))
         (when (member name names)
           (error "duplicate mihomo source name" name))
-        (unless (and (string? target) (> (string-length target) 0))
+        (unless (and (string? target)
+                     (> (string-length target) 0))
           (error "mihomo source has empty target-name" name))
         (when (member target targets)
           (error "duplicate mihomo source target-name" target))
@@ -78,16 +79,19 @@ YAML 内容）；SECRET-FILE 是该源对应的 age 密文 local-file。TARGET-N
 (define %mihomo-sources
   (list
    ;; 机场 HTTP 订阅。
-   (mihomo-source "kuromis" 'http
+   (mihomo-source "kuromis"
+                  'http
                   (local-file "secrets/kuromis.http.age" "kuromis.http.age"))
 
    ;; 本地 provider：age 明文是一份 provider YAML。
-   (mihomo-source "edge" 'file
-                  (local-file "secrets/ordchaos-edge.file.age" "ordchaos-edge.file.age"))
+   (mihomo-source "edge"
+                  'file
+                  (local-file "secrets/ordchaos-edge.file.age"
+                              "ordchaos-edge.file.age"))
 
    ;; 第二个 HTTP 源示例：
    ;; (mihomo-source "backup" 'http
-   ;;                (local-file "secrets/backup.url.age" "backup.url.age"))
+   ;; (local-file "secrets/backup.url.age" "backup.url.age"))
    ))
 
 (validate-sources %mihomo-sources)

@@ -66,7 +66,8 @@
 
 (define %vscode-token-decl
   (find (lambda (d)
-          (eq? 'vscode-connection-token (secret-decl-name d)))
+          (eq? 'vscode-connection-token
+               (secret-decl-name d)))
         (application-secrets %vscode-app)))
 
 (define %vscode-token-target
@@ -172,17 +173,18 @@
                   (file-system-device fs))
         (file-system-create-mount-point? fs))))
 
-(test-assert
- "VC3: directory mounts keep create-mount-point? #t"
- (let ((mounts (filter (lambda (f)
-                         (not (or (string-suffix? "/languagepacks.json"
-                                                  (file-system-mount-point f))
-                                  (string-suffix? "/clp"
-                                                  (file-system-mount-point f)))))
-                       %vscode-mounts)))
-   (and (= 4
-           (length mounts))
-        (every file-system-create-mount-point? mounts))))
+(test-assert "VC3: directory mounts keep create-mount-point? #t"
+             (let ((mounts (filter (lambda (f)
+                                     (not (or (string-suffix?
+                                               "/languagepacks.json"
+                                               (file-system-mount-point f))
+                                              (string-suffix? "/clp"
+                                                              (file-system-mount-point
+                                                               f)))))
+                                   %vscode-mounts)))
+               (and (= 4
+                       (length mounts))
+                    (every file-system-create-mount-point? mounts))))
 
 ;; ── VC4：repo-owned 声明式文件 ──────────────────────────────
 (test-assert "VC4: argv.json declared via home-files"
@@ -221,19 +223,20 @@
 
 ;; ── VC7：serve-web server 的 mutable state ───────────────────
 (test-assert "VC7: server-data is a bind-directory application-owned rule"
- (let ((r (rule-by-name 'server-data)))
-   (and r
-        (string=? "vscode/server-data"
-                  (application-persistence-rule-backing r))
-        (string=? ".local/share/vscode-server/data"
-                  (application-persistence-rule-consumer r))
-        (eq? 'bind-directory
-             (application-persistence-rule-exposure r))
-        (eq? 'application-owned
-             (application-persistence-rule-lifecycle r)))))
+             (let ((r (rule-by-name 'server-data)))
+               (and r
+                    (string=? "vscode/server-data"
+                              (application-persistence-rule-backing r))
+                    (string=? ".local/share/vscode-server/data"
+                              (application-persistence-rule-consumer r))
+                    (eq? 'bind-directory
+                         (application-persistence-rule-exposure r))
+                    (eq? 'application-owned
+                         (application-persistence-rule-lifecycle r)))))
 
 ;; ── VC8：无自动启动、无 launcher ────────────────────────────
-(test-assert "VC8: no launcher script is projected (official command is manual)"
+(test-assert
+ "VC8: no launcher script is projected (official command is manual)"
  (not (member ".local/bin/vscode-server"
               (vscode-home-file-targets))))
 
@@ -257,12 +260,13 @@ service type），所以按值形状匹配，而不是比较 kind。"
  (let ((p (package-named "vscode-with-extensions")))
    (and p
         (string=? %vscode-commit
-                  (assq-ref (package-properties p) 'vscode-web-commit)))))
+                  (assq-ref (package-properties p)
+                            'vscode-web-commit)))))
 
 (test-assert "VC8: VSCODE_WEB_TOKEN_FILE points at the runtime secret"
- (let ((v (vscode-env-ref "VSCODE_WEB_TOKEN_FILE")))
-   (and v
-        (string=? v %vscode-token-target))))
+             (let ((v (vscode-env-ref "VSCODE_WEB_TOKEN_FILE")))
+               (and v
+                    (string=? v %vscode-token-target))))
 
 ;; ── VC9：声明式 symlink + token 是 repository secret ─────────
 (test-assert
@@ -282,8 +286,10 @@ service type），所以按值形状匹配，而不是比较 kind。"
                        (secret-decl-name d)))
                 (application-secrets %vscode-app))))
    (and s
-        (eq? 'user (secret-decl-scope s))
-        (eq? 'ordinary (secret-decl-domain s))
+        (eq? 'user
+             (secret-decl-scope s))
+        (eq? 'ordinary
+             (secret-decl-domain s))
         (string=? "vscode-connection-token"
                   (secret-decl-target-name s)))))
 

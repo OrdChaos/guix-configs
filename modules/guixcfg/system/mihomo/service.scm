@@ -117,7 +117,7 @@
                                   (backing "mihomo/clash")
                                   (consumer "/var/lib/clash")
                                   (owner 'root)
-                                  (mode #o700)))
+                                  (mode 448)))
 ;; ────────────────────────────────────────────────────────────
 ;; runtime config materializer（只做 config composition，不下载订阅）
 ;; ────────────────────────────────────────────────────────────
@@ -163,50 +163,82 @@ shell；源明文绝不进 argv/environment/日志（成功日志只报路径）
                                                                              "cannot read template "
                                                                              #$%mihomo-template-file)))))
                                                   (source-specs '#$%mihomo-source-runtime-specs)
-                                                  (sources
-                                                   (map (lambda (spec)
-                                                          (match spec
-                                                            ((name kind path)
-                                                             (let ((content
-                                                                    (catch 'system-error
-                                                                      (lambda ()
-                                                                        (call-with-input-file path
-                                                                          get-string-all))
-                                                                      (lambda args
-                                                                        (fail! (string-append
-                                                                                "cannot read source secret "
-                                                                                path))))))
-                                                               (if (string=? kind "file")
-                                                                   (let ((target
-                                                                          (string-append
-                                                                           %mihomo-file-subscriptions-dir
-                                                                           "/" name ".yaml")))
-                                                                     (when (string-null? content)
-                                                                       (fail! (string-append
-                                                                               "empty file source "
-                                                                               name)))
-                                                                     (when (string-contains
-                                                                            content
-                                                                            (string #\nul))
-                                                                       (fail! (string-append
-                                                                               "file source contains NUL: "
-                                                                               name)))
-                                                                     (unless (file-exists?
-                                                                              %mihomo-file-subscriptions-dir)
-                                                                       (mkdir
-                                                                        %mihomo-file-subscriptions-dir)
-                                                                       (chmod
-                                                                        %mihomo-file-subscriptions-dir
-                                                                        #o700))
-                                                                     (atomic-write-file!
-                                                                      target
-                                                                      (lambda (port)
-                                                                        (display content
+                                                  (sources (map (lambda (spec)
+                                                                  (match spec
+                                                                    ((name
+                                                                      kind
+                                                                      path)
+                                                                     (let ((content
+                                                                            (catch 'system-error
+                                                                             (lambda ()
+                                                                               (call-with-input-file path
+                                                                                 get-string-all))
+                                                                             (lambda args
+                                                                               
+                                                                               (fail!
+                                                                                (string-append
+                                                                                 "cannot read source secret "
+                                                                                 path))))))
+                                                                       (if (string=?
+                                                                            kind
+                                                                            "file")
+                                                                           (let 
+                                                                                (
+                                                                                 (target
+                                                                                  (string-append
+                                                                                   %mihomo-file-subscriptions-dir
+                                                                                   "/"
+                                                                                   name
+                                                                                   ".yaml")))
+                                                                             (when 
+                                                                                   (string-null?
+                                                                                    content)
+                                                                               
+                                                                               (fail!
+                                                                                (string-append
+                                                                                 "empty file source "
+                                                                                 name)))
+                                                                             (when 
+                                                                                   (string-contains
+                                                                                    content
+                                                                                    
+                                                                                    (string
+                                                                                     #\nul))
+                                                                               
+                                                                               (fail!
+                                                                                (string-append
+                                                                                 "file source contains NUL: "
+                                                                                 name)))
+                                                                             (unless 
+                                                                                     (file-exists?
+                                                                                      %mihomo-file-subscriptions-dir)
+                                                                               
+                                                                               (mkdir
+                                                                                %mihomo-file-subscriptions-dir)
+                                                                               
+                                                                               (chmod
+                                                                                %mihomo-file-subscriptions-dir
+                                                                                #o700))
+                                                                             (atomic-write-file!
+                                                                              target
+                                                                              (lambda 
+                                                                                      (port)
+                                                                                
+                                                                                (display
+                                                                                 content
                                                                                  port)))
-                                                                     (chmod target #o600)
-                                                                     (list name kind target))
-                                                                   (list name kind content))))))
-                                                        source-specs)))
+                                                                             (chmod
+                                                                              target
+                                                                              #o600)
+                                                                             (list
+                                                                              name
+                                                                              kind
+                                                                              target))
+                                                                           (list
+                                                                            name
+                                                                            kind
+                                                                            content))))))
+                                                                source-specs)))
                                              (catch 'mihomo-config-error
                                                     (lambda ()
                                                       (let ((config (compose-mihomo-config
@@ -301,8 +333,8 @@ machine-state activation 只 mkdir 0755；本 activation 无论先后都最终
                                (chmod backing #o700)
                                (mkdir-p consumer)
                                (chmod consumer #o700)
-                               (let ((subscriptions
-                                      (string-append consumer "/subscriptions")))
+                               (let ((subscriptions (string-append consumer
+                                                     "/subscriptions")))
                                  (mkdir-p subscriptions)
                                  (chmod subscriptions #o700))))))
 

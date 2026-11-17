@@ -108,8 +108,8 @@
                     (let ((pid (primitive-fork)))
                       (if (zero? pid)
                           ;; child：exec niri（file-append 绝对路径）。
-                          (execl #$(file-append niri-virtual-output "/bin/niri")
-                                 "niri"
+                          (execl #$(file-append niri-virtual-output
+                                                "/bin/niri") "niri"
                                  "--session")
                           (let* ((status (cdr (waitpid pid)))
                                  (code (if (status:term-sig status)

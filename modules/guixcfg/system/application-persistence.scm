@@ -136,9 +136,10 @@ input——AGENT.md §12）。非法抛错（fail closed）。"
 混合状态）。host 只做 variant selection，不接触文件或路径
 （docs/architecture/applications.md（Host-agnostic boundary））。"
   (unless (list? variants)
-    (error "application persistence seed-variants must be an alist"
-           variants))
-  (let loop ((rest variants) (seen '()))
+    (error "application persistence seed-variants must be an alist" variants))
+  (let loop
+    ((rest variants)
+     (seen '()))
     (unless (null? rest)
       (let ((entry (car rest)))
         (unless (and (pair? entry)
@@ -151,8 +152,10 @@ input——AGENT.md §12）。非法抛错（fail closed）。"
         (unless (list? (cdr entry))
           (error "application persistence seed-variant seeds must be a list"
                  entry))
-        (for-each validate-seed-spec (cdr entry))
-        (loop (cdr rest) (cons (car entry) seen))))))
+        (for-each validate-seed-spec
+                  (cdr entry))
+        (loop (cdr rest)
+              (cons (car entry) seen))))))
 
 (define (forbidden-consumer? consumer)
   "CONSUMER 是否是禁止整体持久化的全局目录（精确匹配——任务契约
@@ -191,15 +194,13 @@ docs/architecture/persistence.md 与 secrets.md 的 flatpak 例子）。"
     (when (and (eq? exposure
                     'bind-file)
                (or (pair? (application-persistence-rule-seeds rule))
-                   (pair? (application-persistence-rule-seed-variants
-                           rule))))
+                   (pair? (application-persistence-rule-seed-variants rule))))
       (error
        "application persistence bind-file rule must not declare seeds or seed-variants"
        (application-persistence-rule-name rule)))
     (for-each validate-seed-spec
               (application-persistence-rule-seeds rule))
-    (validate-seed-variants
-     (application-persistence-rule-seed-variants rule))
+    (validate-seed-variants (application-persistence-rule-seed-variants rule))
     #t))
 
 (define (valid-application-persistence-rule? rule)
@@ -217,11 +218,10 @@ docs/architecture/persistence.md 与 secrets.md 的 flatpak 例子）。"
 （name/backing/consumer/exposure/lifecycle）一律不变。"
   (let ((chosen (and variant
                      (assq-ref (application-persistence-rule-seed-variants
-                                rule)
-                               variant))))
+                                rule) variant))))
     (if chosen
-        (application-persistence-rule (inherit rule) (seeds chosen))
-        rule)))
+        (application-persistence-rule (inherit rule)
+                                      (seeds chosen)) rule)))
 
 (define (application-persistence-projections rules user)
   "Convert application rules to generic persistence projections.  The
@@ -230,38 +230,37 @@ bind-file exposure are preserved."
   (let ((home (string-append "/home/" user)))
     (map (lambda (rule)
            (validate-application-persistence-rule rule)
-           (persistence-projection
-             (name (application-persistence-rule-name rule))
-             (root %application-persistence-root)
-             (backing (application-persistence-rule-backing rule))
-             (consumer (string-append home "/"
-                                      (application-persistence-rule-consumer
-                                       rule)))
-             (exposure (application-persistence-rule-exposure rule))
-             (owner 'user)
-             (owner-user user)
-             (mode #f)
-             (options %persistent-home-mount-options)
-             (home home)
-             (seeds (application-persistence-rule-seeds rule))))
-         rules)))
+           (persistence-projection (name (application-persistence-rule-name
+                                          rule))
+                                   (root %application-persistence-root)
+                                   (backing (application-persistence-rule-backing
+                                             rule))
+                                   (consumer (string-append home "/"
+                                                            (application-persistence-rule-consumer
+                                                             rule)))
+                                   (exposure (application-persistence-rule-exposure
+                                              rule))
+                                   (owner 'user)
+                                   (owner-user user)
+                                   (mode #f)
+                                   (options %persistent-home-mount-options)
+                                   (home home)
+                                   (seeds (application-persistence-rule-seeds
+                                           rule)))) rules)))
 
 (define (application-persistence-file-systems rules user)
   "RULES 的 bind mount 声明（/persist/data-app/<backing> →
 /home/<USER>/<consumer>），由通用 persistence executor 派生。"
-  (persistence-set-file-systems
-    (persistence-set (projections
-                       (application-persistence-projections rules user)))))
+  (persistence-set-file-systems (persistence-set (projections (application-persistence-projections
+                                                               rules user)))))
 
 (define (application-persistence-activation rules user)
   "activation gexp：由通用 persistence executor 创建 backing、consumer
 挂载点、ownership、seed-once；bind-file 语义与规则校验保持一致。"
-  (persistence-set-activation
-    (persistence-set (projections
-                       (application-persistence-projections rules user)))))
+  (persistence-set-activation (persistence-set (projections (application-persistence-projections
+                                                             rules user)))))
 
 (define (application-persistence-service rules user)
   "把 RULES 的 activation 挂到系统 activation。RULES 为空时返回 #f。"
-  (persistence-set-service
-    (persistence-set (projections
-                       (application-persistence-projections rules user)))))
+  (persistence-set-service (persistence-set (projections (application-persistence-projections
+                                                          rules user)))))

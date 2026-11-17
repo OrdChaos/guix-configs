@@ -122,31 +122,27 @@ string-count——它只数字符不数子串）。"
 
 (define (validate-source-value name kind raw)
   (let ((value (strip-one-trailing-newline raw)))
-    (when (string-contains value (string #\nul))
+    (when (string-contains value
+                           (string #\nul))
       (config-error (string-append "source " name " value contains NUL")))
     (when (or (string-contains value "\r")
               (string-contains value "\n"))
-      (config-error (string-append "source " name
-                                   " value contains CR/LF")))
+      (config-error (string-append "source " name " value contains CR/LF")))
     (cond
       ((string=? kind "http")
        (unless (or (string-prefix? "http://" value)
                    (string-prefix? "https://" value))
-         (config-error (string-append "source " name
-                                      " is not an http(s) URL")))
+         (config-error (string-append "source " name " is not an http(s) URL")))
        (when (string-any char-whitespace? value)
          (config-error (string-append "source " name
-                                      " URL contains whitespace")))
-       value)
+                                      " URL contains whitespace"))) value)
       ((string=? kind "file")
        (unless (string-prefix? (string-append %mihomo-data-directory "/")
                                value)
          (config-error (string-append "source " name
-                                      " file path must be under /var/lib/clash")))
-       value)
-      (else
-       (config-error (string-append "source " name
-                                    " has invalid kind: " kind))))))
+                        " file path must be under /var/lib/clash"))) value)
+      (else (config-error (string-append "source " name " has invalid kind: "
+                                         kind))))))
 
 (define (normalize-sources sources)
   (when (null? sources)
@@ -170,24 +166,33 @@ string-count——它只数字符不数子串）。"
           (_ (config-error "malformed subscription source record"))))))
 
 (define (http-provider-block name url)
-  (string-append
-   "  " name ":\n"
-   "    type: http\n"
-   "    url: \"" (yaml-double-quote-escape url) "\"\n"
-   "    path: \"./providers/" name ".yaml\"\n"
-   "    interval: 3600\n"
-   "    proxy: DIRECT\n"
-   "    health-check:\n"
-   "      enable: true\n"
-   "      interval: 600\n"
-   "      lazy: true\n"
-   "      url: https://www.gstatic.com/generate_204\n"))
+  (string-append "  "
+                 name
+                 ":\n"
+                 "    type: http\n"
+                 "    url: \""
+                 (yaml-double-quote-escape url)
+                 "\"\n"
+                 "    path: \"./providers/"
+                 name
+                 ".yaml\"\n"
+                 "    interval: 3600\n"
+                 "    proxy: DIRECT\n"
+                 "    health-check:\n"
+                 "      enable: true\n"
+                 "      interval: 600\n"
+                 "      lazy: true\n"
+                 "      url: https://www.gstatic.com/generate_204
+"))
 
 (define (file-provider-block name path)
-  (string-append
-   "  " name ":\n"
-   "    type: file\n"
-   "    path: \"" (yaml-double-quote-escape path) "\"\n"))
+  (string-append "  "
+                 name
+                 ":\n"
+                 "    type: file\n"
+                 "    path: \""
+                 (yaml-double-quote-escape path)
+                 "\"\n"))
 
 (define (provider-id name)
   "Provider name 与策略组名分开：组用用户可见的 <name>，provider 用
@@ -201,25 +206,26 @@ provider-<name>，避免同名组被 provider 遮蔽。"
                   ((name "http" url)
                    (http-provider-block (provider-id name) url))
                   ((name "file" path)
-                   (file-provider-block (provider-id name) path))))
-              sources)))
+                   (file-provider-block (provider-id name) path)))) sources)))
 
 (define (source-group-block name)
-  (string-append
-   "  - name: " name "\n"
-   "    type: select\n"
-   "    use: [" (provider-id name) "]\n"))
+  (string-append "  - name: "
+                 name
+                 "\n"
+                 "    type: select\n"
+                 "    use: ["
+                 (provider-id name)
+                 "]\n"))
 
 (define (group-block sources)
   (let* ((names (map car sources))
          (source-groups (map source-group-block names))
-         (top (string-append
-               "  - name: PROXY\n"
-               "    type: select\n"
-               "    proxies: ["
-               (string-join names ", ")
-               ", DIRECT]\n")))
-    (apply string-append (append source-groups (list top)))))
+         (top (string-append "  - name: PROXY\n" "    type: select\n"
+                             "    proxies: ["
+                             (string-join names ", ") ", DIRECT]\n")))
+    (apply string-append
+           (append source-groups
+                   (list top)))))
 
 (define* (compose-mihomo-config template sources
                                 #:optional (nm-dnsmasq-uid #f)
@@ -230,38 +236,37 @@ runtime config 文本。可选 NM-DNSMASQ-UID / SMARTDNS-UID（整数）
 启用两个 `tun.exclude-uid` 占位符替换；只给一个视为错误。违反契约时
 (throw 'mihomo-config-error MESSAGE) fail closed；不打印、不返回值
 之外地暴露源值。"
-  (let* ((template*
-          (cond
-            ((and nm-dnsmasq-uid smartdns-uid)
-             (for-each (lambda (placeholder name)
-                         (unless (= (count-substring template placeholder) 1)
-                           (config-error
-                            (string-append name
-                                           " uid placeholder must appear exactly once"))))
-                       (list %mihomo-nm-dnsmasq-uid-placeholder
-                             %mihomo-smartdns-uid-placeholder)
-                       '("nm-dnsmasq" "smartdns"))
-             (string-replace-substring
-              (string-replace-substring template
-                                        %mihomo-nm-dnsmasq-uid-placeholder
-                                        (number->string nm-dnsmasq-uid))
-              %mihomo-smartdns-uid-placeholder
-              (number->string smartdns-uid)))
-            ((or nm-dnsmasq-uid smartdns-uid)
-             (config-error
-              "both nm-dnsmasq and smartdns uids must be provided"))
-            (else template)))
+  (let* ((template* (cond
+                      ((and nm-dnsmasq-uid smartdns-uid)
+                       (for-each (lambda (placeholder name)
+                                   (unless (= (count-substring template
+                                                               placeholder) 1)
+                                     (config-error (string-append name
+                                                    " uid placeholder must appear exactly once"))))
+                                 (list %mihomo-nm-dnsmasq-uid-placeholder
+                                       %mihomo-smartdns-uid-placeholder)
+                                 '("nm-dnsmasq" "smartdns"))
+                       (string-replace-substring (string-replace-substring
+                                                  template
+                                                  %mihomo-nm-dnsmasq-uid-placeholder
+                                                  (number->string
+                                                   nm-dnsmasq-uid))
+                        %mihomo-smartdns-uid-placeholder
+                        (number->string smartdns-uid)))
+                      ((or nm-dnsmasq-uid smartdns-uid)
+                       (config-error
+                        "both nm-dnsmasq and smartdns uids must be provided"))
+                      (else template)))
          (sources* (normalize-sources sources)))
-    (unless (= (count-substring template* %mihomo-proxy-providers-placeholder) 1)
+    (unless (= (count-substring template* %mihomo-proxy-providers-placeholder)
+               1)
       (config-error "proxy-providers placeholder must appear exactly once"))
     (unless (= (count-substring template* %mihomo-proxy-groups-placeholder) 1)
       (config-error "proxy-groups placeholder must appear exactly once"))
-    (let* ((with-providers
-            (string-replace-substring template*
-             %mihomo-proxy-providers-placeholder
-             (provider-block sources*)))
-           (with-groups
-            (string-replace-substring with-providers
-             %mihomo-proxy-groups-placeholder
-             (group-block sources*))))
+    (let* ((with-providers (string-replace-substring template*
+                            %mihomo-proxy-providers-placeholder
+                            (provider-block sources*)))
+           (with-groups (string-replace-substring with-providers
+                         %mihomo-proxy-groups-placeholder
+                         (group-block sources*))))
       with-groups)))

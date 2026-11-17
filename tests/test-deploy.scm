@@ -289,10 +289,15 @@
 (test-equal "update resolves channels.scm with the pinned channel resolver"
             '("env" "GUILE_LOAD_PATH=/repo/modules"
               "GUILE_LOAD_COMPILED_PATH=/repo/modules"
-              "guix" "time-machine" "-C" "/repo/channels.lock.scm"
-              "--" "repl" "tools/channel-lock.scm"
-              "--" "/repo/channels.scm")
-            update-argv)
+              "guix"
+              "time-machine"
+              "-C"
+              "/repo/channels.lock.scm"
+              "--"
+              "repl"
+              "tools/channel-lock.scm"
+              "--"
+              "/repo/channels.scm") update-argv)
 
 (test-assert "update hands channels.scm to the resolver, not to time-machine"
              (and (equal? "/repo/channels.lock.scm"

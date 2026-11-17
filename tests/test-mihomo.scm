@@ -24,7 +24,6 @@
 
 (test-runner-current (test-runner-simple))
 
-
 (define %store
   (open-connection))
 
@@ -43,16 +42,13 @@
 (test-begin "mihomo")
 
 ;; ── M7：模板静态契约 ────────────────────────────────────────
-(test-assert "M7: provider/group and both resolver UID placeholders appear once"
-             (let ((text (template-text)))
-               (and (= (count-substring text
-                                        %mihomo-proxy-providers-placeholder) 1)
-                    (= (count-substring text
-                                        %mihomo-proxy-groups-placeholder) 1)
-                    (= (count-substring text
-                                        %mihomo-nm-dnsmasq-uid-placeholder) 1)
-                    (= (count-substring text
-                                        %mihomo-smartdns-uid-placeholder) 1))))
+(test-assert
+ "M7: provider/group and both resolver UID placeholders appear once"
+ (let ((text (template-text)))
+   (and (= (count-substring text %mihomo-proxy-providers-placeholder) 1)
+        (= (count-substring text %mihomo-proxy-groups-placeholder) 1)
+        (= (count-substring text %mihomo-nm-dnsmasq-uid-placeholder) 1)
+        (= (count-substring text %mihomo-smartdns-uid-placeholder) 1))))
 (test-assert "M7: no source URL or legacy placeholder in public template"
              (let ((text (template-text)))
                (and (not (string-contains text "@@MIHOMO_SUBSCRIPTION_URL@@"))
@@ -77,12 +73,11 @@
                                      (string-append "- "
                                       %mihomo-smartdns-uid-placeholder)))))
 (test-assert "M7: compose replaces both resolver UID placeholders"
-             (let ((config (compose-mihomo-config
-                            (template-text)
-                            '(("fixture" "file"
-                               "/var/lib/clash/fixture.yaml"))
-                            %nm-dnsmasq-uid
-                            %smartdns-uid)))
+             (let ((config (compose-mihomo-config (template-text)
+                                                  '(("fixture" "file"
+                                                     "/var/lib/clash/fixture.yaml"))
+                                                  %nm-dnsmasq-uid
+                                                  %smartdns-uid)))
                (and (not (string-contains config
                                           %mihomo-nm-dnsmasq-uid-placeholder))
                     (not (string-contains config
@@ -178,6 +173,5 @@
                  get-string-all)))
    (and (string-contains source "machine-state-persistence-rule-backing")
         (not (string-contains source "\"/mihomo/providers\"")))))
-
 
 (test-end "mihomo")

@@ -211,14 +211,18 @@ needed and the FFI-dependent flock path is bypassed entirely.
                              ;; account.  Verify the final databases before writing so
                              ;; such a collision fails closed instead of silently
                              ;; producing duplicate IDs.
-                             (define (assert-unique-account-ids entries get-id kind)
-                               (let loop ((entries entries) (seen '()))
+                             (define (assert-unique-account-ids entries get-id
+                                                                kind)
+                               (let loop
+                                 ((entries entries)
+                                  (seen '()))
                                  (when (pair? entries)
                                    (let ((id (get-id (car entries))))
                                      (when (member id seen)
                                        (error "duplicate account database ID"
                                               kind id))
-                                     (loop (cdr entries) (cons id seen))))))
+                                     (loop (cdr entries)
+                                           (cons id seen))))))
 
                              ;; /var/lib 是系统账号 home 的前置目录（上游在锁外创建）。
                              (mkdir-p "/var/lib")
@@ -233,7 +237,8 @@ needed and the FFI-dependent flock path is bypassed entirely.
                                           (assert-unique-account-ids
                                            group-entries group-entry-gid "GID")
                                           (assert-unique-account-ids
-                                           passwd-entries password-entry-uid "UID")
+                                           passwd-entries password-entry-uid
+                                           "UID")
                                           (let ((shadow-entries* (inject-credentials
                                                                   shadow-entries)))
                                             (write-group group-entries)

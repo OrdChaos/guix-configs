@@ -356,7 +356,6 @@
   (test-assert "readiness query failure: gate stays closed"
                (gate-closed? gate-dir)))
 
-
 ;; ── 6b. readiness service stopped → barrier retry → success ──
 
 (let ((sandbox (make-sandbox))
@@ -379,8 +378,7 @@
                                               (when (equal? argv
                                                             '("herd" "start"
                                                               "interactive-session-ready"))
-                                                (set! ready? #t))
-                                              0)
+                                                (set! ready? #t)) 0)
                               #:service-ready? (lambda (service)
                                                  ready?)
                               #:sleep-proc (lambda (s)
@@ -389,8 +387,7 @@
   (test-assert "barrier retry: gate reopened"
                (not (gate-closed? gate-dir)))
   (test-assert "barrier retry: barrier was started"
-               (member '("herd" "start" "interactive-session-ready")
-                       log)))
+               (member '("herd" "start" "interactive-session-ready") log)))
 
 ;; ── 7. 成功、Home 未变 → gate 重开、exit 0 ──
 

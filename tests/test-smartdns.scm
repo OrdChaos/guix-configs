@@ -43,8 +43,7 @@
                   (not (string-contains %smartdns-fixed-config-content
                                         "server 127.0.0.1"))))
 (test-assert "S2: dhcp config has no DoH"
-             (not (string-contains %smartdns-dhcp-config-content
-                                   "https://")))
+             (not (string-contains %smartdns-dhcp-config-content "https://")))
 (test-assert "S2: dhcp config uses dnsmasq only"
              (and (string-contains %smartdns-dhcp-config-content
                                    "server 127.0.0.1:15353")
@@ -52,10 +51,8 @@
                                         "server-https"))))
 (for-each (lambda (content)
             (test-assert "S3: loopback UDP/TCP bind + smartdns user"
-                         (and (string-contains content
-                                               "bind 127.0.0.1:53")
-                              (string-contains content
-                                               "bind-tcp 127.0.0.1:53")
+                         (and (string-contains content "bind 127.0.0.1:53")
+                              (string-contains content "bind-tcp 127.0.0.1:53")
                               (string-contains content
                                                (string-append "user "
                                                               %smartdns-user))))
@@ -63,8 +60,7 @@
                          (and (not (string-contains content "fallback"))
                               (not (string-contains content "domain-rules"))
                               (not (string-contains content "nameserver /")))))
-          (list %smartdns-fixed-config-content
-                %smartdns-dhcp-config-content))
+          (list %smartdns-fixed-config-content %smartdns-dhcp-config-content))
 
 ;; ── S4：账号稳定 UID/GID ───────────────────────────────────
 (define %os-services
@@ -78,11 +74,11 @@
              (let ((g (find (lambda (x)
                               (and (user-group? x)
                                    (string=? %smartdns-user
-                                             (user-group-name x))))
-                            %accounts)))
+                                             (user-group-name x)))) %accounts)))
                (and g
                     (user-group-system? g)
-                    (= %smartdns-gid (user-group-id g)))))
+                    (= %smartdns-gid
+                       (user-group-id g)))))
 (test-assert "S4: smartdns system account with explicit stable uid"
              (let ((u (find (lambda (x)
                               (and (user-account? x)
@@ -91,8 +87,10 @@
                             %accounts)))
                (and u
                     (user-account-system? u)
-                    (= %smartdns-uid (user-account-uid u))
-                    (string=? %smartdns-user (user-account-group u)))))
+                    (= %smartdns-uid
+                       (user-account-uid u))
+                    (string=? %smartdns-user
+                              (user-account-group u)))))
 
 ;; ── S5：mode persistence ───────────────────────────────────
 (test-assert "S5: mode rule is valid"
@@ -100,8 +98,7 @@
               %smartdns-mode-persistence-rule))
 (test-assert "S5: mode rule targets /var/lib/guixcfg-dns"
              (and (string=? (machine-state-persistence-rule-backing
-                             %smartdns-mode-persistence-rule)
-                            "guixcfg-dns")
+                             %smartdns-mode-persistence-rule) "guixcfg-dns")
                   (string=? (machine-state-persistence-rule-consumer
                              %smartdns-mode-persistence-rule)
                             %smartdns-state-directory)))
@@ -115,8 +112,8 @@
                                 #:target-type activation-service-type)))
 
 (define (gexp-source g)
-  (call-with-output-string
-    (lambda (p) (write (gexp->approximate-sexp g) p))))
+  (call-with-output-string (lambda (p)
+                             (write (gexp->approximate-sexp g) p))))
 
 (test-assert "S5: host persistence includes guixcfg-dns machine state"
              (let ((p (find (lambda (projection)
@@ -133,21 +130,21 @@
 ;; ── S6：service / Shepherd graph ───────────────────────────
 (define (find-service type-name)
   (find (lambda (svc)
-          (eq? type-name (service-type-name (service-kind svc))))
-        %os-services))
+          (eq? type-name
+               (service-type-name (service-kind svc)))) %os-services))
 
 (test-assert "S6: SmartDNS service present in %vm-os"
              (and (find-service 'smartdns) #t))
 
 (define %shepherd-services
-  (shepherd-configuration-services
-   (service-value (fold-services %os-services
-                                 #:target-type shepherd-root-service-type))))
+  (shepherd-configuration-services (service-value (fold-services %os-services
+                                                   #:target-type
+                                                   shepherd-root-service-type))))
 
 (define (shepherd-service-with-provision name)
   (find (lambda (s)
-          (memq name (shepherd-service-provision s)))
-        %shepherd-services))
+          (memq name
+                (shepherd-service-provision s))) %shepherd-services))
 
 (test-assert "S6: smartdns daemon and mode applier are provisioned"
              (and (shepherd-service-with-provision 'smartdns)
@@ -155,8 +152,7 @@
 (define %smartdns-svc
   (shepherd-service-with-provision 'smartdns))
 (test-assert "S6: smartdns start uses foreground + config path"
-             (let ((source (call-with-input-file
-                               "modules/guixcfg/system/dns/smartdns.scm"
+             (let ((source (call-with-input-file "modules/guixcfg/system/dns/smartdns.scm"
                              get-string-all)))
                (and (string-contains source "make-forkexec-constructor")
                     (string-contains source "/sbin/smartdns")
@@ -165,9 +161,7 @@
                     (string-contains source "%smartdns-runtime-config"))))
 (test-assert "S6: mode applier does not depend on smartdns restart cycle"
              (not (memq 'smartdns
-                        (shepherd-service-requirement
-                         (shepherd-service-with-provision
-                          'guixcfg-dns-mode)))))
+                        (shepherd-service-requirement (shepherd-service-with-provision 'guixcfg-dns-mode)))))
 
 ;; ── S7：generated runtime 真实执行 smoke test ──────────────
 (define %store
@@ -175,31 +169,28 @@
 
 (test-assert "S7: mode applier runtime executes --check"
              (let* ((drv (run-with-store %store
-                           (lower-object (smartdns-mode-program))))
-                    (out (if (string? drv)
-                             drv
+                                         (lower-object (smartdns-mode-program))))
+                    (out (if (string? drv) drv
                              (begin
-                               (build-derivations %store (list drv))
+                               (build-derivations %store
+                                                  (list drv))
                                (derivation->output-path drv)))))
                (zero? (system* out "--check"))))
 
 ;; ── S8/S9：无 CLI、默认链接、唯一 mutable 输入 ─────────────
 (test-assert "S8: activation creates a default fixed config link"
-             (let ((source (call-with-input-file
-                               "modules/guixcfg/system/dns/smartdns.scm"
+             (let ((source (call-with-input-file "modules/guixcfg/system/dns/smartdns.scm"
                              get-string-all)))
                (and (string-contains source "%smartdns-runtime-config")
                     (string-contains source "%smartdns-fixed-config")
                     (string-contains source "symlink"))))
 (test-assert "S8: no setuid/sudo custom CLI path"
-             (let ((source (call-with-input-file
-                               "modules/guixcfg/system/dns/smartdns.scm"
+             (let ((source (call-with-input-file "modules/guixcfg/system/dns/smartdns.scm"
                              get-string-all)))
                (and (not (string-contains source "setuid"))
                     (not (string-contains source "sudo")))))
 (test-assert "S9: mode applier reads mode file and writes run status"
-             (let ((source (call-with-input-file
-                               "modules/guixcfg/system/dns/smartdns.scm"
+             (let ((source (call-with-input-file "modules/guixcfg/system/dns/smartdns.scm"
                              get-string-all)))
                (and (string-contains source "%smartdns-mode-file")
                     (string-contains source "%smartdns-applied-file")

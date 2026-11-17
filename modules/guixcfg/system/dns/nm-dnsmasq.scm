@@ -95,7 +95,8 @@
   "10-listen-port.conf")
 
 (define %nm-dnsmasq-port-conf-content
-  (string-append "port=" (number->string %nm-dnsmasq-port) "\n"))
+  (string-append "port="
+                 (number->string %nm-dnsmasq-port) "\n"))
 
 (define %nm-dnsmasq-port-conf-file
   (plain-file %nm-dnsmasq-port-conf-name %nm-dnsmasq-port-conf-content))

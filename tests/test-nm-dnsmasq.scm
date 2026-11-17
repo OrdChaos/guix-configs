@@ -67,8 +67,7 @@ wiring assertions survive formatting reflows."
 (test-assert "N2: dnsmasq listens on the dedicated loopback port"
              (and (= %nm-dnsmasq-port 15353)
                   (string=? %nm-dnsmasq-port-conf-name "10-listen-port.conf")
-                  (string-contains %nm-dnsmasq-port-conf-content
-                                   "port=15353")))
+                  (string-contains %nm-dnsmasq-port-conf-content "port=15353")))
 
 ;; ── N3：专用账号/组 ─────────────────────────────────────────
 (define %accounts
@@ -118,6 +117,5 @@ wiring assertions survive formatting reflows."
                                  "(nm-dnsmasq-dnsmasq-configuration-files)")))))
           '("modules/guixcfg/hosts/vm.scm"
             "modules/guixcfg/hosts/lenovo-legion-y7000p.scm"))
-
 
 (test-end "nm-dnsmasq")

@@ -56,6 +56,7 @@
   #:use-module (guixcfg system machine-state-persistence) ;machine-state binds
   #:use-module (guixcfg system network-manager-persistence) ;saved connection profiles
   #:use-module (guixcfg system mihomo service) ;%mihomo-secrets、%mihomo-data-persistence-rule
+  #:use-module (guixcfg system tailscale service) ;Tailscale 客户端 + 首次入网
   #:use-module (guixcfg system dns nm-dnsmasq) ;dnsmasq 专用账号配置
   #:export (%lenovo-legion-y7000p-storage-policy
             %lenovo-legion-y7000p-application-configuration-selections
@@ -100,10 +101,17 @@
       (packages (cons %prime-run-wrapper
                       (home-environment-packages base))))))
 
+;; 虚拟组网（Tailscale 客户端 + 自建 Headscale 控制面/DERP）。
+;; login-server 是 host policy（同一 tailnet 的所有设备一致）；preauth
+;; key 是 profile 级 age secret（system/tailscale/service.scm）。
+(define %tailscale-login-server
+  "https://edge.ordchaos.eu.org:9443")
+
 ;; laptop 的 runtime secrets：mihomo（模块持有，所有设备共用）+
+;; tailscale（profile 级 reusable preauth key，仅首次入网）+
 ;; applications（registry 聚合）。无 VM 测试 sentinel（那是测试机专属）。
 (define %lenovo-legion-y7000p-secrets
-  (append %mihomo-secrets
+  (append %mihomo-secrets %tailscale-secrets
           (applications-secrets %applications)))
 
 ;; Machine-owned system state on the ephemeral root:
@@ -112,13 +120,12 @@
 ;;   - BlueZ pairing state (/var/lib/bluetooth).
 (define %laptop-additional-machine-state-rules
   (list %network-manager-connections-persistence-rule
-        %laptop-bluetooth-persistence-rule))
-
+        %laptop-bluetooth-persistence-rule %tailscale-data-persistence-rule))
 
 (define %laptop-persistence
-  (host-persistence
-    #:additional-machine-state-rules %laptop-additional-machine-state-rules
-    #:seed-selections %lenovo-legion-y7000p-seed-selections))
+  (host-persistence #:additional-machine-state-rules
+                    %laptop-additional-machine-state-rules
+                    #:seed-selections %lenovo-legion-y7000p-seed-selections))
 
 ;; Wine may exceed the inherited 4096 descriptor limit while streaming game
 ;; resources.  Set both limits so the graphical PAM session passes 65536 to
@@ -170,7 +177,13 @@
                                                           ;; BlueZ userspace（bluetoothd + org.bluez + udev）。
                                                           %laptop-bluetooth-services
                                                           ;; CUPS queue + HP LaserJet 1020 USB firmware loader.
-                                                          %laptop-printing-services))
+                                                          %laptop-printing-services
+                                                          ;; Tailscale 客户端 + 首次入网（profile 级 key）。
+                                                          (tailscale-services
+                                                           #:login-server
+                                                           %tailscale-login-server
+                                                           #:operator (user-profile-name
+                                                                       %primary-user))))
                            ;; Activation precedes Shepherd's mounts and NetworkManager startup.
                            (list (network-manager-connections-persistence-service)))
     (guix-service-type config =>

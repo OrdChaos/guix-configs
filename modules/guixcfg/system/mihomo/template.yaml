@@ -51,10 +51,30 @@ tun:
   exclude-uid:
     - @@MIHOMO_NM_DNSMASQ_UID@@
     - @@MIHOMO_SMARTDNS_UID@@
+  # Tailscale 与 mihomo 共存（两个 TUN，默认路由归 mihomo）：
+  #   - 100.64.0.0/10 是 tailnet 地址；路由层和 nftables 层都排除，
+  #     避免 auto-redirect 先把 TCP 抓进 mihomo；
+  #   - 41641 是 Tailscale WireGuard underlay 的固定端口，3478 是
+  #     DERP STUN；这些必须在 ip rule 层绕过 TUN，而不是只 DIRECT；
+  #   - 控制面/DERP 的 TCP 443 仍可进 TUN，但由下方 DOMAIN 规则直连。
+  route-exclude-address:
+    - 100.64.0.0/10
+  route-exclude-address-set:
+    - tailnet-direct
+  exclude-src-port:
+    - 41641
+  exclude-dst-port:
+    - 3478
 # 国内直连 / 国外代理。Loyalsoldier/clash-rules 的 release 分支每天由
 # CI 重新生成（当前约 29k stars）；payload 是 Clash domain 规则。
 # 文件放在 -d 根目录，避免额外创建 rules/ 子目录。
 rule-providers:
+  # 供 tun.route-exclude-address-set 使用的静态 tailnet 地址集。
+  tailnet-direct:
+    type: inline
+    behavior: ipcidr
+    payload:
+      - 100.64.0.0/10
   loyalsoldier-proxy:
     type: http
     behavior: domain
@@ -86,6 +106,10 @@ proxy-providers:
 proxy-groups:
 @@MIHOMO_PROXY_GROUPS@@
 rules:
+  # Tailscale tailnet 地址与自有控制面/DERP 直连。控制面域名与
+  # hosts/lenovo-legion-y7000p.scm 的 login-server 保持一致。
+  - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
+  - DOMAIN-SUFFIX,edge.ordchaos.eu.org,DIRECT
   - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve

@@ -111,8 +111,10 @@
              (let ((p (car (user-persistence-projections "user"))))
                (and (string=? "/home/user"
                               (persistence-projection-home p))
-                    (= #o700 (persistence-projection-home-mode p))
-                    (eq? 'user (persistence-projection-owner p))
+                    (= 448
+                       (persistence-projection-home-mode p))
+                    (eq? 'user
+                         (persistence-projection-owner p))
                     (string=? "user"
                               (persistence-projection-owner-user p)))))
 (test-assert "projection consumer is resolved under home"

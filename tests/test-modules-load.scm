@@ -207,38 +207,37 @@
 ;; 模块残留在 module 树里。
 (define %module-compile-output
   (string-append "/tmp/guixcfg-modules-compile-check-"
-                 (number->string (getpid))
-                 ".go"))
+                 (number->string (getpid)) ".go"))
 
 (test-assert "all modules compile and load without unbound-variable warnings"
-             (dynamic-wind
-               (lambda () #t)
-               (lambda ()
-                 (let ((warnings (open-output-string)))
-                   (let ((ok (every (lambda (name)
-                                      (catch #t
-                                             (lambda ()
-                                               (parameterize ((current-warning-port
-                                                               warnings))
-                                                 (compile-file
-                                                  (module-file name)
-                                                  #:to 'value
-                                                  #:output-file
-                                                  %module-compile-output))
-                                               #t)
-                                             (lambda (key . args)
-                                               (format (current-error-port)
-                                                "module compile failed: ~a (~a ~a)~%"
-                                                name key args) #f)))
-                                    %all-modules)))
-                     (let ((text (get-output-string warnings)))
-                       (when (string-contains text "unbound")
-                         (format (current-error-port) "~a" text))
-                       (and ok
-                            (not (string-contains text "unbound")))))))
-               (lambda ()
-                 (false-if-exception
-                  (delete-file %module-compile-output)))))
+             (dynamic-wind (lambda ()
+                             #t)
+                           (lambda ()
+                             (let ((warnings (open-output-string)))
+                               (let ((ok (every (lambda (name)
+                                                  (catch #t
+                                                         (lambda ()
+                                                           (parameterize ((current-warning-port
+                                                                           warnings))
+                                                             (compile-file (module-file
+                                                                            name)
+                                                              #:to 'value
+                                                              #:output-file
+                                                              %module-compile-output))
+                                                           #t)
+                                                         (lambda (key . args)
+                                                           (format (current-error-port)
+                                                            "module compile failed: ~a (~a ~a)~%"
+                                                            name key args) #f)))
+                                                %all-modules)))
+                                 (let ((text (get-output-string warnings)))
+                                   (when (string-contains text "unbound")
+                                     (format (current-error-port) "~a" text))
+                                   (and ok
+                                        (not (string-contains text "unbound")))))))
+                           (lambda ()
+                             (false-if-exception (delete-file
+                                                  %module-compile-output)))))
 
 ;; tools/*.scm 是 CLI 脚本（无 define-module）：脚本里的未绑定变量只有
 ;; 运行到对应分支才炸（实测教训：(unresolved) 曾在 disk-install 的

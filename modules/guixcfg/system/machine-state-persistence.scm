@@ -147,7 +147,8 @@ roots 下）。"
                (machine-state-persistence-rule-name rule))))
     (unless (memq lifecycle %allowed-lifecycles)
       (error "unsupported machine-state lifecycle"
-             (machine-state-persistence-rule-name rule) lifecycle)) #t))
+             (machine-state-persistence-rule-name rule) lifecycle))
+    #t))
 
 (define (valid-machine-state-persistence-rule? rule)
   "RULE 是否合法（不抛错版本，供测试/筛选）。"
@@ -163,39 +164,41 @@ ownership is represented explicitly; domain-specific ownership (mihomo
 0700, greeter 0750) remains in the owning module's activation."
   (map (lambda (rule)
          (validate-machine-state-persistence-rule rule)
-         (persistence-projection
-           (name (machine-state-persistence-rule-name rule))
-           (root %machine-state-root)
-           (backing (machine-state-persistence-rule-backing rule))
-           (consumer (machine-state-persistence-rule-consumer rule))
-           (exposure 'bind-directory)
-           (owner (machine-state-persistence-rule-owner rule))
-           (owner-user (machine-state-persistence-rule-owner-user rule))
-           (owner-group (machine-state-persistence-rule-owner-group rule))
-           (mode (machine-state-persistence-rule-mode rule))
-           (options #f)
-           (home #f)
-           (seeds '())))
-       rules))
+         (persistence-projection (name (machine-state-persistence-rule-name
+                                        rule))
+                                 (root %machine-state-root)
+                                 (backing (machine-state-persistence-rule-backing
+                                           rule))
+                                 (consumer (machine-state-persistence-rule-consumer
+                                            rule))
+                                 (exposure 'bind-directory)
+                                 (owner (machine-state-persistence-rule-owner
+                                         rule))
+                                 (owner-user (machine-state-persistence-rule-owner-user
+                                              rule))
+                                 (owner-group (machine-state-persistence-rule-owner-group
+                                               rule))
+                                 (mode (machine-state-persistence-rule-mode
+                                        rule))
+                                 (options #f)
+                                 (home #f)
+                                 (seeds '()))) rules))
 
 (define (machine-state-persistence-file-systems rules)
   "RULES 的 bind mount 声明（/persist/system/state/<backing> →
 <consumer>）。挂载点由 file-systems 阶段创建（create-mount-point?
 #t）；backing/consumer 由统一 persistence activation 准备。"
-  (persistence-set-file-systems
-    (persistence-set (projections
-                       (machine-state-persistence-projections rules)))))
+  (persistence-set-file-systems (persistence-set (projections (machine-state-persistence-projections
+                                                               rules)))))
 
 (define (machine-state-persistence-activation rules)
   "activation gexp：由通用 persistence executor 创建 backing 与 consumer
 （root-owned；只补缺失目录，不重建已有数据）。"
-  (persistence-set-activation
-    (persistence-set (projections
-                       (machine-state-persistence-projections rules)))))
+  (persistence-set-activation (persistence-set (projections (machine-state-persistence-projections
+                                                             rules)))))
 
 (define (machine-state-persistence-service rules)
   "把 RULES 的 backing/consumer 创建挂到系统 activation。RULES 为空时
 返回 #f（不产生无意义服务）。"
-  (persistence-set-service
-    (persistence-set (projections
-                       (machine-state-persistence-projections rules)))))
+  (persistence-set-service (persistence-set (projections (machine-state-persistence-projections
+                                                          rules)))))

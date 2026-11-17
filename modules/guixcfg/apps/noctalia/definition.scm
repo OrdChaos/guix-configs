@@ -77,8 +77,7 @@
               "noctalia-lenovo-legion-y7000p-settings.toml"))
 
 (define %noctalia-vm-settings-seed
-  (local-file "variants/vm-settings.toml"
-              "noctalia-vm-settings.toml"))
+  (local-file "variants/vm-settings.toml" "noctalia-vm-settings.toml"))
 
 (define %noctalia
   (application (name 'noctalia)
@@ -109,9 +108,8 @@
                                                                 (exposure 'bind-directory)
                                                                 (lifecycle 'application-owned)
                                                                 ;; seed-once：首次初始化 settings.toml；此后 repo 永不触碰。
-                                                                (seeds
-                                                                 (noctalia-settings-seed
-                                                                  %noctalia-base-settings-seed))
+                                                                (seeds (noctalia-settings-seed
+                                                                        %noctalia-base-settings-seed))
                                                                 (seed-variants
                                                                  (list (cons 'lenovo-legion-y7000p
                                                                              (noctalia-settings-seed

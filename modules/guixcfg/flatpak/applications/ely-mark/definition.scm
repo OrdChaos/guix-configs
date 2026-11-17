@@ -17,5 +17,4 @@
                        ;; seed-once 只在该沙箱还没有 settings.json 时写入，
                        ;; 之后用户修改永久生效，仓库不再拥有该文件。
                        (seeds (list (list "data/ElyOffice/settings.json"
-                                          (local-file
-                                           "settings.seed.json"))))))
+                                          (local-file "settings.seed.json"))))))

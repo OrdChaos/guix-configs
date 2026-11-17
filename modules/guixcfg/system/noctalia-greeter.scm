@@ -65,7 +65,7 @@
                                   (consumer %noctalia-greeter-state-dir)
                                   (owner 'named)
                                   (owner-user "greeter")
-                                  (mode #o750)))
+                                  (mode 488)))
 
 (define (noctalia-greeter-backing-ownership-activation)
   "activation gexp：只负责 persistence backing 侧

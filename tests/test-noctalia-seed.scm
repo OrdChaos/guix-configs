@@ -27,11 +27,12 @@
 ;; （/home/<user>——AGENT.md §13）与机器专属输出（eDP-1 等）。
 (test-assert "seed is portable (no absolute /home paths)"
              (not (string-contains %seed-text "/home/")))
-(test-assert "seed has no machine-specific monitor sections (global 'virtual' excepted)"
-             (and (not (string-contains %seed-text "eDP-"))
-                  (not (string-contains %seed-text "Virtual-"))
-                  ;; 全局虚拟输出（common.kdl 定义，非机器专属）。
-                  (string-contains %seed-text "[wallpaper.monitors.virtual]")))
+(test-assert
+ "seed has no machine-specific monitor sections (global 'virtual' excepted)"
+ (and (not (string-contains %seed-text "eDP-"))
+      (not (string-contains %seed-text "Virtual-"))
+      ;; 全局虚拟输出（common.kdl 定义，非机器专属）。
+      (string-contains %seed-text "[wallpaper.monitors.virtual]")))
 
 ;; ── 2. No second configuration source ────────────────────────
 (define %noctalia-xdg-value
@@ -73,7 +74,8 @@
 
 (define %state-rule
   (find (lambda (rule)
-          (eq? 'state (application-persistence-rule-name rule)))
+          (eq? 'state
+               (application-persistence-rule-name rule)))
         (application-persistence %noctalia)))
 
 (test-assert "noctalia declares the lenovo-legion-y7000p seed variant"
@@ -82,15 +84,16 @@
 (test-assert "noctalia declares the vm seed variant"
              (assq 'vm
                    (application-persistence-rule-seed-variants %state-rule)))
-(test-assert "selecting the lenovo-legion-y7000p variant swaps the seed source"
-             (not (equal? (application-persistence-rule-seeds
-                           (application-persistence-rule-for-variant
-                            %state-rule 'lenovo-legion-y7000p))
-                          (application-persistence-rule-seeds %state-rule))))
+(test-assert
+ "selecting the lenovo-legion-y7000p variant swaps the seed source"
+ (not (equal? (application-persistence-rule-seeds (application-persistence-rule-for-variant
+                                                   %state-rule
+                                                   'lenovo-legion-y7000p))
+              (application-persistence-rule-seeds %state-rule))))
 (test-assert "selecting the vm variant swaps the seed source"
-             (not (equal? (application-persistence-rule-seeds
-                           (application-persistence-rule-for-variant
-                            %state-rule 'vm))
+             (not (equal? (application-persistence-rule-seeds (application-persistence-rule-for-variant
+                                                               %state-rule
+                                                               'vm))
                           (application-persistence-rule-seeds %state-rule))))
 
 (test-end "noctalia-seed")

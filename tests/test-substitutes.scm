@@ -54,10 +54,8 @@
   (guix-configuration-substitute-urls %vm-guix-config))
 
 (define %expected-substitute-urls
-  '("https://cache-cdn.guix.moe"
-    "https://bordeaux.guix.gnu.org"
-    "https://mirror.sjtu.edu.cn/guix"
-    "https://ci.guix.gnu.org"
+  '("https://cache-cdn.guix.moe" "https://bordeaux.guix.gnu.org"
+    "https://mirror.sjtu.edu.cn/guix" "https://ci.guix.gnu.org"
     "https://substitutes.nonguix.org"))
 
 (test-begin "substitutes")
@@ -72,8 +70,7 @@
 
 ;; ── T-S7：稳定优先、origin 兜底 ────────────────────────────
 (test-equal "T-S7: cache priority is moe, bordeaux, SJTU, ci, then nonguix"
-  %expected-substitute-urls
-  %vm-substitute-urls)
+            %expected-substitute-urls %vm-substitute-urls)
 
 ;; ── T-S8：nonguix 信任材料 ─────────────────────────────────
 (test-assert "T-S8: nonguix-key.pub exists with the expected fingerprint"

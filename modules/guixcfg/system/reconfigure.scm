@@ -248,7 +248,8 @@ HOST 与 HOME-USER 由调用方显式传入（Blue 的 privilege handoff）。"
                                   ;; final probe.  The barrier itself only opens the
                                   ;; gate when every prerequisite succeeds.
                                   (let ((failed (find (lambda (svc)
-                                                        (not (service-ready? svc)))
+                                                        (not (service-ready?
+                                                              svc)))
                                                       %readiness-capabilities)))
                                     (when failed
                                       (run-command '("herd" "start"
