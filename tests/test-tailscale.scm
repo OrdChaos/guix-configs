@@ -10,8 +10,10 @@
              (guix derivations) ;build-derivations、derivation->output-path
              (gnu services) ;service、service-kind、service-value
              (gnu services shepherd) ;shepherd-service
+             (gnu system) ;operating-system-services
              (rosenthal services networking) ;tailscale-configuration getters
              (guixcfg system tailscale service)
+             (guixcfg hosts vm) ;%vm-os
              (guixcfg system machine-state-persistence)
              (guixcfg security secrets) ;secret-decl getters
              (ice-9 rdelim) ;read-line
@@ -65,7 +67,7 @@
 (test-assert "T1: tailscaled state dir and socket are stable paths"
              (let ((text (object->string (service-value %tailscaled-service))))
                (and (string-contains text %tailscale-state-directory)
-                    (string-contains text "/run/tailscale/tailscaled.sock"))))
+                    (string-contains text "/var/run/tailscale/tailscaled.sock"))))
 
 (test-assert
  "T1: tailscaled pins the WireGuard port used by mihomo exclusions"
@@ -286,4 +288,19 @@
                (and (zero? (system* script))
                     (equal? (read-fixture-argv)
                             (list "set" "--operator" %fixture-operator)))))
+
+;; ── VM profile wiring ───────────────────────────────────────
+(define %vm-os-services
+  (operating-system-services %vm-os))
+
+(define (vm-has-type? name)
+  (find (lambda (svc)
+          (and (service? svc)
+               (eq? name (service-type-name (service-kind svc)))))
+        %vm-os-services))
+
+(test-assert "T8: VM profile includes daemon, enrollment and operator"
+             (and (vm-has-type? 'tailscaled)
+                  (vm-has-type? 'tailscale-enroll)
+                  (vm-has-type? 'tailscale-operator)))
 (test-end "tailscale")

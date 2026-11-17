@@ -267,7 +267,7 @@ Headscale/Tailscale 控制面 URL（含端口）；其余参数是客户端偏�
                    (tailscale-configuration (state-directory
                                              %tailscale-state-directory)
                                             (socket
-                                             "/run/tailscale/tailscaled.sock")
+                                             "/var/run/tailscale/tailscaled.sock")
                                             (log-file
                                              "/var/log/tailscaled.log")
                                             (extra-options '("--port=41641"))))
