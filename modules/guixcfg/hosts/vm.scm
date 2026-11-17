@@ -31,6 +31,8 @@
   #:use-module (guixcfg apps registry) ;%applications（secret composition root）
   #:use-module (guixcfg apps model) ;applications-secrets
   #:use-module (guixcfg system mihomo service) ;%mihomo-secrets、%mihomo-data-persistence-rule
+  #:use-module (guixcfg system tailscale service) ;Tailscale 客户端 + 首次入网
+  #:use-module (guixcfg system tailscale config) ;%tailscale-login-server
   #:use-module (guixcfg system dns nm-dnsmasq) ;dnsmasq 专用账号配置
   #:export (%vm-storage-policy %vm-services %vm-test-secrets %vm-persistence
                                %vm-os))
@@ -67,7 +69,10 @@
   '((noctalia . vm)))
 
 (define %vm-persistence
-  (host-persistence #:seed-selections %vm-seed-selections))
+  (host-persistence
+   #:seed-selections %vm-seed-selections
+   #:additional-machine-state-rules
+   (list %tailscale-data-persistence-rule)))
 
 (define %vm-services
   (make-host-services
@@ -82,13 +87,21 @@
                                                                     (shepherd-requirement '()))))
    #:keep-root-generations (host-storage-policy-keep-root-generations
                             %vm-storage-policy)
-   #:persistence %vm-persistence))
+   #:persistence %vm-persistence
+   ;; VM profile 也启用 Tailscale：首次启动自动入网；入网后行为与
+   ;; laptop 一致（node identity 持久化 + 用户 up/down 开关）。
+   #:additional-system-services
+   (tailscale-services
+    #:login-server %tailscale-login-server
+    #:operator (user-profile-name %primary-user))))
 
 ;; 完整 user services（不含 account-databases 投影本身）。
 (define %vm-user-services
   (make-host-user-services #:system-services %vm-services
                            #:persistence %vm-persistence
-                           #:secrets (append %vm-test-secrets %mihomo-secrets
+                           #:secrets (append %vm-test-secrets
+                                             %mihomo-secrets
+                                             %tailscale-secrets
                                              (applications-secrets
                                               %applications))
                            #:home-environment (guix-home)))
