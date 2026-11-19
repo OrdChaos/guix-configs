@@ -239,7 +239,7 @@
 
 (test-assert "T6: NeedsLogin triggers up with file-based key"
              (let ((rc (run-enrollment
-                        "{\"BackendState\":\"NeedsLogin\",\"Self\":null}")))
+                        "{\n  \"BackendState\": \"NeedsLogin\",\n  \"Self\": {}\n}")))
                (and (zero? rc)
                     (member "up"
                             (read-fixture-argv))
@@ -254,7 +254,7 @@
 
 (test-assert "T6: already Stopped by user does not force up"
              (let ((rc (run-enrollment
-                        "{\"BackendState\":\"Stopped\",\"Self\":{\"ID\":\"fixture\"}}")))
+                        "{\n  \"BackendState\": \"Stopped\",\n  \"Self\": {\"ID\": \"fixture\"}\n}")))
                (and (zero? rc)
                     (null? (read-fixture-argv)))))
 
@@ -287,7 +287,7 @@
                (setenv "FAKE_ARGV" %fixture-argv)
                (and (zero? (system* script))
                     (equal? (read-fixture-argv)
-                            (list "set" "--operator" %fixture-operator)))))
+                            (list "set" (string-append "--operator=" %fixture-operator))))))
 
 ;; ── VM profile wiring ───────────────────────────────────────
 (define %vm-os-services

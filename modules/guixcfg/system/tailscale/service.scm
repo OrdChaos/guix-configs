@@ -140,6 +140,11 @@
                                  (close-pipe port) text))
                              (lambda args
                                "")))
+                    (define (status-state? text state)
+                      (or (string-contains
+                           text (string-append "\"BackendState\": \"" state "\""))
+                          (string-contains
+                           text (string-append "\"BackendState\":\"" state "\""))))
                     (define (run-up)
                       (let ((status (system* tailscale
                                              #$@(tailscale-up-arguments config))))
@@ -151,18 +156,14 @@
                       ((attempt 0))
                       (let ((status (status-json)))
                         (cond
-                          ((or (string-contains status
-                                                "\"BackendState\":\"NeedsLogin\"")
+                          ((or (status-state? status "NeedsLogin")
+                               (string-contains status "\"Self\": null")
                                (string-contains status "\"Self\":null"))
                            (run-up))
-                          ((or (string-contains status
-                                                "\"BackendState\":\"Running\"")
-                               (string-contains status
-                                                "\"BackendState\":\"Starting\""))
+                          ((or (status-state? status "Running")
+                               (status-state? status "Starting"))
                            (exit 0))
-                          ((and (string-contains status
-                                                 "\"BackendState\":\"Stopped\"")
-                                (not (string-contains status "\"Self\":null")))
+                          ((status-state? status "Stopped")
                            (exit 0))
                           ((< attempt 10)
                            (sleep 1)
@@ -209,8 +210,10 @@ root。tailscaled 刚启动时 socket 可能尚不可用，因此有界重试。
                       #$tailscale-command)
                     (let loop
                       ((attempt 0))
-                      (let ((status (system* tailscale "set" "--operator"
-                                             #$operator)))
+                      (let ((status
+                             (system* tailscale "set"
+                                      (string-append "--operator="
+                                                     #$operator))))
                         (if (zero? status)
                             (exit 0)
                             (if (< attempt 10)
