@@ -23,4 +23,4 @@
                #:bundle-sources (dsh-extension-sources '(tui))
                ;; Replaced with the hash reported by the first build.
                #:specs-hash (base32
-                             "0mrap02g2gxr844s4nncpvlncxsa5gjy43d7a55jjfjgjzi4mg65")))
+                             "0ivmc37fqj5n8ivgwn7z9py3kzryhb5af3fg0cw8jkwgb0jqz21k")))
