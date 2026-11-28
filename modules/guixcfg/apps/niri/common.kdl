@@ -110,8 +110,10 @@ window-rule {
     open-focused false
 }
 
-// Satty is a transient screenshot editor.  With no explicit floating position,
-// Niri places each new window at the center of the current working area.
+// Satty is a transient screenshot editor.  Region captures open it fullscreen
+// on the frozen frame (see the Screenshots binds), whole-output captures as a
+// floating window; with no explicit floating position Niri centers it in the
+// current working area.
 window-rule {
     match app-id=r#"^org\.satty\.satty$"#
     open-floating true
@@ -615,11 +617,18 @@ binds {
 
 
     // ── Screenshots ──────────────────────────────────────────────────────────
-    // Satty（apps/satty）接收 Grim 的无压缩 PPM 截图；Slurp 选择区域或
-    // 输出。取消选择时短路，不启动标注窗口。
+    // 先定格、再截取：按键瞬间 Grim 冻结当前输出，Satty 以全屏静态画面
+    // 呈现冻结帧，选区由 Satty 的 crop 工具在冻结帧上拖选——活动画面
+    // （例如正在播放的视频）不会在选区过程中继续变化。
+    //   Print / Mod+Shift+S  冻结当前输出 → Satty 全屏 crop 拖选 → 标注
+    //   Ctrl+Print           选择输出（Slurp）→ 捕获该输出 → 窗口内标注
+    //   Alt+Print            冻结整块布局 → 窗口内标注
+    // Satty 操作：拖选后按 Enter 确认选区（或直接选标注工具，crop 随之
+    // 确认；输出仍取选区），Enter 保存到 ~/Pictures/Screenshots 并复制到
+    // 剪贴板后退出；Esc 取消。
 
     Print {
-        spawn-sh "region=\"$(slurp)\" && [ -n \"$region\" ] && grim -g \"$region\" -t ppm - | satty --filename -"
+        spawn-sh "output=\"$(niri msg --json focused-output | jq -r .name)\" && grim -o \"$output\" -t ppm - | satty --filename - --fullscreen current-screen --initial-tool crop"
     }
 
     Ctrl+Print {
@@ -631,7 +640,7 @@ binds {
     }
 
     Mod+Shift+S {
-        spawn-sh "region=\"$(slurp)\" && [ -n \"$region\" ] && grim -g \"$region\" -t ppm - | satty --filename -"
+        spawn-sh "output=\"$(niri msg --json focused-output | jq -r .name)\" && grim -o \"$output\" -t ppm - | satty --filename - --fullscreen current-screen --initial-tool crop"
     }
 
 

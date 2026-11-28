@@ -351,4 +351,27 @@ create-virtual 支持），其次 pinned niri-26.04。都不存在时返回 #f
  (and (not (string-contains %common-kdl "output \"virtual\""))
       (not (string-contains %common-kdl "create-virtual"))
       (not (string-contains %host-kdl "output \"virtual\""))))
+
+;; ── 13. 截图：按键瞬间定格，选区在冻结帧上完成 ───────────────
+;; Print / Mod+Shift+S 先由 Grim 冻结当前输出，再交给 Satty 全屏呈现
+;; 冻结帧、用 crop 工具拖选；不得回到「在活动画面上用 slurp 拖选」的
+;; 旧流程（视频等内容会在选区期间继续变化）。
+(define (count-substring needle haystack)
+  (let loop ((start 0) (count 0))
+    (let ((idx (string-contains haystack needle start)))
+      (if idx
+          (loop (+ idx (string-length needle)) (+ count 1))
+          count))))
+
+(test-equal "region screenshot binds (Print, Mod+Shift+S) freeze then crop"
+            2
+            (count-substring "--initial-tool crop" %common-kdl))
+(test-equal "region screenshot binds (Print, Mod+Shift+S) show the frozen frame fullscreen"
+            2
+            (count-substring "--fullscreen current-screen" %common-kdl))
+(test-assert "region screenshot freezes the active output before selecting"
+             (string-contains %common-kdl
+                              "niri msg --json focused-output | jq -r .name"))
+(test-assert "region screenshot no longer drags on the live screen via slurp"
+             (not (string-contains %common-kdl "region=\"$(slurp)\"")))
 (test-end "niri-config")
